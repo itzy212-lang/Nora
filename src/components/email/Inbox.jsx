@@ -3,8 +3,7 @@ import sb from '../../supabaseClient';
 
 const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent'];
 
-// ── Draft with Ely overlay ─────────────────────────────────────────────────────
-// Uses fetch directly — no hook dependency that could crash on mount
+// ── Draft with Ely overlay ────────────────────────────────────────────────────
 function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -26,11 +25,10 @@ function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
       const data = await res.json();
       const reply = data.reply || data.text || 'Sorry, I could not generate a draft.';
       setMessages(prev => [...prev, { id: Date.now(), role: 'ely', content: reply }]);
-      // Try to extract a draft from the reply
-      const draftMatch = reply.match(/Subject:[\s\S]{10,}/) || reply.match(/Dear[\s\S]{30,}/);
+      const draftMatch = reply.match(/Dear[\s\S]{30,}/);
       if (draftMatch && !draft) setDraft(draftMatch[0]);
     } catch {
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ely', content: 'Could not connect to Ely. Please check your connection.' }]);
+      setMessages(prev => [...prev, { id: Date.now(), role: 'ely', content: 'Could not connect to Ely.' }]);
     }
     setLoading(false);
   };
@@ -43,9 +41,9 @@ function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
     await callEly(text);
   };
 
-  const handleSummarise = () => {
+  const handleAutoDraft = () => {
     if (!email) return;
-    const prompt = `Please draft a professional reply to this email.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\n\n${(email.body || email.body_preview || '').slice(0, 1000)}`;
+    const prompt = `Draft a professional reply to this email.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\n\n${stripHtml(email.body || email.body_preview || '').slice(0, 800)}`;
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: 'Please draft a reply to this email.' }]);
     callEly(prompt);
   };
@@ -53,63 +51,35 @@ function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: '90vw', maxWidth: 920, height: '86vh', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-        {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600 }}>✨ Draft with Ely</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>Re: {email?.subject}</div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleSummarise} disabled={loading} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8 }}>
-              ✨ Auto-draft reply
-            </button>
+            <button onClick={handleAutoDraft} disabled={loading} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8 }}>✨ Auto-draft reply</button>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer' }}>✕</button>
           </div>
         </div>
-
-        {/* Body: chat left, draft right */}
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', overflow: 'hidden' }}>
-
-          {/* Chat */}
           <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>
-              Chat with Ely
-            </div>
+            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Chat with Ely</div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {messages.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text3)', fontSize: 13 }}>
-                  Click "Auto-draft reply" above or type a request below.
-                </div>
-              )}
+              {messages.length === 0 && <div style={{ textAlign: 'center', padding: 24, color: 'var(--text3)', fontSize: 13 }}>Click "Auto-draft reply" or type a request below.</div>}
               {messages.map(msg => (
-                <div key={msg.id} style={{
-                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%',
-                  background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
-                  color: msg.role === 'user' ? '#fff' : 'var(--text)',
-                  padding: '9px 13px', borderRadius: 10, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-                }}>{msg.content}</div>
+                <div key={msg.id} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)', color: msg.role === 'user' ? '#fff' : 'var(--text)', padding: '9px 13px', borderRadius: 10, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
               ))}
               {loading && <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '9px 13px', borderRadius: 10, fontSize: 13, color: 'var(--text3)' }}>✨ Drafting…</div>}
               <div ref={endRef} />
             </div>
             <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
-              <input value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); }}}
-                placeholder="Adjust tone, add context…"
-                style={{ flex: 1, padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
+              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); }}} placeholder="Adjust tone, add context…" style={{ flex: 1, padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
               <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Send</button>
             </div>
           </div>
-
-          {/* Editable draft */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>
-              Draft — edit before sending
-            </div>
-            <textarea value={draft} onChange={e => setDraft(e.target.value)}
-              placeholder="Your draft will appear here. You can edit it before sending."
-              style={{ flex: 1, padding: '14px 16px', fontSize: 13, background: 'var(--bg2)', border: 'none', color: 'var(--text)', outline: 'none', resize: 'none', lineHeight: 1.75 }} />
+            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Draft — edit before sending</div>
+            <textarea value={draft} onChange={e => setDraft(e.target.value)} placeholder="Your draft will appear here. You can edit it before sending." style={{ flex: 1, padding: '14px 16px', fontSize: 13, background: 'var(--bg2)', border: 'none', color: 'var(--text)', outline: 'none', resize: 'none', lineHeight: 1.75 }} />
             <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Cancel</button>
               <button onClick={() => onUseDraft(draft)} disabled={!draft.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Use this draft →</button>
@@ -121,48 +91,108 @@ function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
   );
 }
 
-// ── Email row ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function stripHtml(html) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function isHtmlEmail(body) {
+  return body && (body.trim().startsWith('<') || body.includes('<html') || body.includes('<div') || body.includes('<p>'));
+}
+
+// ── Email body renderer — uses iframe for HTML emails ─────────────────────────
+function EmailBody({ email }) {
+  const body = email.body || '';
+  if (!body) {
+    return <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.8 }}>{email.body_preview || 'No content.'}</div>;
+  }
+  if (isHtmlEmail(body)) {
+    // Inject a base style to match the app theme
+    const styledHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${body}</body></html>`;
+    return (
+      <iframe
+        srcDoc={styledHtml}
+        sandbox="allow-same-origin allow-popups"
+        style={{ width: '100%', height: '100%', border: 'none', flex: 1 }}
+        title="email-body"
+      />
+    );
+  }
+  // Plain text
+  return (
+    <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
+      {body}
+    </div>
+  );
+}
+
+// ── Email row card ────────────────────────────────────────────────────────────
 function EmailRow({ email, selected, onClick }) {
   const unread  = !email.is_read;
   const replied = email.is_replied;
   const flagged = email.flagged;
-  const hasAtt  = !!(email.has_attachments);
+  const hasAtt  = !!email.has_attachments;
   const cat     = email.ai_category;
-  const catColour = { damage_claim: '#ef4444', urgent: '#ef4444', consent: '#22c55e', dissent: '#ef4444', legal: '#f59e0b' }[cat?.toLowerCase()] || null;
+  const catColour = {
+    damage_claim: '#ef4444', urgent: '#ef4444',
+    consent: '#22c55e', dissent: '#ef4444', legal: '#f59e0b',
+  }[cat?.toLowerCase()] || null;
 
   return (
     <div onClick={onClick} style={{
-      padding: '10px 14px', borderBottom: '1px solid var(--border)',
-      background: selected ? 'var(--blue-bg)' : unread ? 'var(--bg3)' : 'transparent',
-      cursor: 'pointer', borderLeft: `3px solid ${selected ? 'var(--blue)' : 'transparent'}`,
+      padding: '11px 14px',
+      borderBottom: '1px solid var(--border)',
+      // Lighter card on darker list background — copy Image 1 style
+      background: selected
+        ? 'var(--blue-bg)'
+        : unread
+        ? 'var(--bg2)'      // unread = lighter card
+        : 'var(--bg3)',     // read = slightly recessed
+      cursor: 'pointer',
+      borderLeft: `3px solid ${selected ? 'var(--blue)' : 'transparent'}`,
+      transition: 'background 0.1s',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-        <span style={{ fontSize: 13, fontWeight: unread ? 700 : 500, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
+        <span style={{
+          fontSize: 13, fontWeight: unread ? 700 : 500,
+          color: unread ? 'var(--text)' : 'var(--text2)',
+          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8,
+        }}>
           {email.sender_name || email.sender_email}
         </span>
-        <span style={{ fontSize: 10.5, color: 'var(--text3)', flexShrink: 0 }}>
-          {email.received_at ? new Date(email.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+          <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>
+            {email.received_at
+              ? new Date(email.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+              : ''}
+          </span>
+          {unread && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />}
+        </div>
       </div>
       <div style={{ fontSize: 12.5, fontWeight: unread ? 600 : 400, color: unread ? 'var(--text)' : 'var(--text2)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {email.subject}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <span style={{ fontSize: 11.5, color: 'var(--text3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {email.body_preview}
+          {stripHtml(email.body_preview || '')}
         </span>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
           {hasAtt  && <span title="Attachment" style={{ fontSize: 11 }}>📎</span>}
           {replied && <span title="Replied"    style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
           {flagged && <span title="Flagged"    style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
-          {catColour && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat}</span>}
+          {catColour && (
+            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {cat.replace(/_/g, ' ')}
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Email preview ─────────────────────────────────────────────────────────────
+// ── Email preview panel ───────────────────────────────────────────────────────
 function EmailPreview({ email, replyText, setReplyText, onOpenComposer, onDraftWithEly }) {
   if (!email) {
     return (
@@ -171,51 +201,62 @@ function EmailPreview({ email, replyText, setReplyText, onOpenComposer, onDraftW
       </div>
     );
   }
+  const isHtml = isHtmlEmail(email.body || '');
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-      {/* Compact header — aligned with left panel top */}
+      {/* Compact header */}
       <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 5, lineHeight: 1.3 }}>{email.subject}</div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 5, lineHeight: 1.3 }}>
+          {email.subject}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             <span style={{ fontWeight: 500, color: 'var(--text2)' }}>{email.sender_name || email.sender_email}</span>
             {email.sender_email && email.sender_name && <span> &lt;{email.sender_email}&gt;</span>}
-            {email.received_at && <span style={{ marginLeft: 8 }}>{new Date(email.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+            {email.received_at && (
+              <span style={{ marginLeft: 10 }}>
+                {new Date(email.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 12 }}>
-            <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12.5 }}>↩ Reply</button>
-            <button onClick={onDraftWithEly} className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12.5 }}>✨ Draft with Ely</button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8 }}>↩ Reply</button>
+            <button onClick={onDraftWithEly} className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 8 }}>✨ Draft with Ely</button>
           </div>
         </div>
       </div>
 
-      {/* Body — scrollable */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
-        <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap', maxWidth: 680 }}>
-          {email.body || email.body_preview || 'No content loaded.'}
-        </div>
+      {/* Body — iframe for HTML, pre-wrap for plain text */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: isHtml ? '#fff' : 'transparent' }}>
+        {isHtml ? (
+          <EmailBody email={email} />
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
+            <EmailBody email={email} />
+          </div>
+        )}
       </div>
 
       {/* Reply box */}
-      <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px', background: 'var(--bg3)', flexShrink: 0 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Reply</div>
+      <div style={{ borderTop: '1px solid var(--border)', padding: '10px 20px', background: 'var(--bg3)', flexShrink: 0 }}>
         <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
           placeholder="Type your reply…" rows={3}
-          style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', resize: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onDraftWithEly} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8 }}>✨ Draft with Ely</button>
-          <button onClick={() => onOpenComposer({
-            mode: 'reply', to: email.sender_email, toName: email.sender_name,
-            subject: `Re: ${email.subject || ''}`, body: replyText, replyToId: email.id,
-          })} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Open composer →</button>
+          <button
+            onClick={() => onOpenComposer?.({ mode: 'reply', to: email.sender_email, toName: email.sender_name, subject: `Re: ${email.subject || ''}`, body: replyText, replyToId: email.id })}
+            className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>
+            Open composer →
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Main Inbox ─────────────────────────────────────────────────────────────────
+// ── Main Inbox ────────────────────────────────────────────────────────────────
 export default function Inbox({ onOpenComposer }) {
   const [emails, setEmails]             = useState([]);
   const [loading, setLoading]           = useState(false);
@@ -280,20 +321,24 @@ export default function Inbox({ onOpenComposer }) {
   const unreadCount = emails.filter(e => !e.is_read).length;
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden' }}>
+    // Slightly darker outer background so cards stand out
+    <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', background: 'var(--bg)' }}>
       {showDraftEly && selectedEmail && (
         <DraftWithElyOverlay
           email={selectedEmail}
-          onUseDraft={(d) => { setReplyText(d); setShowDraftEly(false); }}
+          onUseDraft={d => { setReplyText(d); setShowDraftEly(false); }}
           onClose={() => setShowDraftEly(false)}
         />
       )}
 
       {/* ── Left panel ── */}
-      <div style={{ width: 340, minWidth: 280, maxWidth: 380, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', flexShrink: 0 }}>
-
+      <div style={{
+        width: 340, minWidth: 280, maxWidth: 380, display: 'flex', flexDirection: 'column',
+        borderRight: '1px solid var(--border)', flexShrink: 0,
+        background: 'var(--bg)',  // darker background behind cards
+      }}>
         {/* Toolbar */}
-        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0, background: 'var(--bg2)' }}>
           <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm"
             style={{ cursor: 'pointer', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
             ✎ Compose
@@ -303,19 +348,19 @@ export default function Inbox({ onOpenComposer }) {
           <div style={{ position: 'relative', flex: 1 }} ref={folderRef}>
             <button onClick={() => setFolderOpen(v => !v)} style={{
               width: '100%', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8,
-              background: 'var(--bg2)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer',
+              background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
             }}>
               <span>☰ {folder}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                {unreadCount > 0 && folder === 'Inbox' && (
+                {folder === 'Inbox' && unreadCount > 0 && (
                   <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 99, fontSize: 10, padding: '1px 5px', fontWeight: 700 }}>{unreadCount}</span>
                 )}
                 <span style={{ fontSize: 10, color: 'var(--text3)' }}>▾</span>
               </div>
             </button>
             {folderOpen && (
-              <div style={{ position: 'absolute', top: '110%', left: 0, right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', zIndex: 100, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+              <div style={{ position: 'absolute', top: '110%', left: 0, right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', zIndex: 100, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
                 {FOLDERS.map(f => (
                   <div key={f} onClick={() => { setFolder(f); setFolderOpen(false); }} style={{
                     padding: '9px 14px', fontSize: 13, cursor: 'pointer',
@@ -340,7 +385,7 @@ export default function Inbox({ onOpenComposer }) {
         </div>
 
         {/* Search + count */}
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg2)' }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text3)' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail…"
@@ -351,8 +396,8 @@ export default function Inbox({ onOpenComposer }) {
           </div>
         </div>
 
-        {/* Email list — SCROLLABLE */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        {/* Email list — SCROLLABLE, darker background so cards lift off it */}
+        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
             : filtered.length === 0
@@ -368,14 +413,16 @@ export default function Inbox({ onOpenComposer }) {
         </div>
       </div>
 
-      {/* ── Right panel: preview ── */}
-      <EmailPreview
-        email={selectedEmail}
-        replyText={replyText}
-        setReplyText={setReplyText}
-        onOpenComposer={onOpenComposer}
-        onDraftWithEly={() => setShowDraftEly(true)}
-      />
+      {/* ── Right panel: preview — lighter background ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg2)' }}>
+        <EmailPreview
+          email={selectedEmail}
+          replyText={replyText}
+          setReplyText={setReplyText}
+          onOpenComposer={onOpenComposer}
+          onDraftWithEly={() => setShowDraftEly(true)}
+        />
+      </div>
     </div>
   );
 }
