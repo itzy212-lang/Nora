@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+// Note: useRef already imported above — used in FirmTab (sigInputRef) and TemplatesTab (fileInputRef)
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 
@@ -180,14 +181,16 @@ function FirmTab() {
     addressLine1: '', addressLine2: '', city: '', postcode: '',
     tel: '', email: '', website: '',
   });
-  const [saved, setSaved] = useState(false);
+  const [sigB64, setSigB64]   = useState(null); // current signature image
+  const [saved, setSaved]     = useState(false);
   const [loading, setLoading] = useState(true);
+  const sigInputRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
       if (!sb) return;
       try {
-        const { data } = await sb.from('firm_settings').select('*').eq('user_id', currentUser?.id).single();
+        const { data } = await sb.from('firm_settings').select('*').limit(1).single();
         if (data) {
           setForm({
             firmName:      data.firm_name      || '',
@@ -201,6 +204,7 @@ function FirmTab() {
             email:         data.email          || '',
             website:       data.website        || '',
           });
+          if (data.signature_b64) setSigB64(data.signature_b64);
         }
       } catch {}
       setLoading(false);
@@ -232,6 +236,24 @@ function FirmTab() {
     } catch (err) { alert('Save failed: ' + err.message); }
   };
 
+  const handleSigUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const b64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+    setSigB64(b64);
+    await sb.from('firm_settings').update({ signature_b64: b64, updated_at: new Date().toISOString() }).eq('user_id', currentUser?.id);
+  };
+
+  const clearSignature = async () => {
+    setSigB64(null);
+    await sb.from('firm_settings').update({ signature_b64: null }).eq('user_id', currentUser?.id);
+  };
+
   const inp = { width: '100%', padding: '8px 11px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
 
   if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
@@ -255,9 +277,67 @@ function FirmTab() {
           <input value={form[key]} onChange={e => set(key, e.target.value)} placeholder={placeholder || ''} style={inp} />
         </div>
       ))}
+
       <button onClick={save} className="btn btn-primary" style={{ cursor: 'pointer', borderRadius: 99, marginTop: 4, justifyContent: 'center' }}>
         {saved ? '✓ Saved!' : 'Save firm details'}
       </button>
+
+      {/* Signature section */}
+      <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Email signature image</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
+          Upload a PNG or JPG of your signature. It will be appended to emails and included in generated documents.
+        </div>
+
+        {sigB64 ? (
+          <div>
+            {/* Preview on white background like a document */}
+            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px', marginBottom: 12, display: 'inline-block', maxWidth: '100%' }}>
+              <img
+                src={`data:image/png;base64,${sigB64}`}
+                alt="Signature"
+                style={{ maxWidth: 400, maxHeight: 120, display: 'block' }}
+                onError={e => { e.target.src = `data:image/jpeg;base64,${sigB64}`; }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input ref={sigInputRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: 'none' }} onChange={handleSigUpload} />
+              <button onClick={() => sigInputRef.current?.click()} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
+                ↑ Replace signature
+              </button>
+              <button onClick={clearSignature} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)' }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <input ref={sigInputRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: 'none' }} onChange={handleSigUpload} />
+            <button onClick={() => sigInputRef.current?.click()} style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
+              ↑ Upload signature image
+            </button>
+            <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 8 }}>PNG or JPG, ideally on a transparent background</div>
+          </div>
+        )}
+      </div>
+
+      {/* Signature preview — what it looks like in a document */}
+      {(form.surveyorName || form.firmName) && (
+        <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Signature preview</div>
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '20px 24px', color: '#222', fontFamily: 'Arial, sans-serif', fontSize: 13, lineHeight: 1.8 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{form.surveyorName}</div>
+            {form.qualifications && <div style={{ color: '#555' }}>{form.qualifications}</div>}
+            <hr style={{ border: 'none', borderTop: '2px solid #4f7fff', margin: '8px 0' }} />
+            <div style={{ fontWeight: 600 }}>{form.firmName}</div>
+            {(form.addressLine1 || form.addressLine2) && <div style={{ color: '#555' }}>{[form.addressLine1, form.addressLine2, form.city, form.postcode].filter(Boolean).join(', ')}</div>}
+            {form.tel   && <div style={{ color: '#555' }}>T: {form.tel}</div>}
+            {form.email && <div><a href={`mailto:${form.email}`} style={{ color: '#4f7fff' }}>{form.email}</a></div>}
+            {form.website && <div><a href={form.website} style={{ color: '#4f7fff' }}>{form.website}</a></div>}
+            {sigB64 && <img src={`data:image/png;base64,${sigB64}`} alt="sig" style={{ maxHeight: 60, marginTop: 8 }} onError={e => { e.target.src = `data:image/jpeg;base64,${sigB64}`; }} />}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -283,16 +363,66 @@ function AccountTab() {
 
 // ── Email settings tab ────────────────────────────────────────────────────────
 function EmailTab() {
+  const [account, setAccount] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!sb) return;
+      const { data } = await sb.from('email_accounts').select('*').limit(1).single();
+      setAccount(data);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const tokenExpiry = account?.token_expires_at ? new Date(account.token_expires_at) : null;
+  const tokenValid  = tokenExpiry && tokenExpiry > new Date();
+  const needsReconnect = account?.reconnect_required;
+  const statusColour = needsReconnect ? 'var(--red)' : tokenValid ? 'var(--green)' : 'var(--amber)';
+  const statusLabel  = needsReconnect ? 'Reconnection required' : tokenValid ? 'Connected & syncing' : 'Token expired';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Microsoft / Outlook</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 10 }}>Your Outlook account is connected and syncing.</div>
-        <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Reconnect account</button>
+      <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Microsoft / Outlook</div>
+        {loading ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Checking connection…</div>
+        ) : account ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusColour, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{account.email_address}</div>
+                <div style={{ fontSize: 11.5, color: statusColour, marginTop: 1 }}>{statusLabel}</div>
+              </div>
+            </div>
+            {tokenExpiry && (
+              <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>
+                Token expires: {tokenExpiry.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+            {account.last_token_error && (
+              <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 10px', background: 'var(--red-bg)', borderRadius: 8 }}>
+                ⚠️ {account.last_token_error}
+              </div>
+            )}
+            {needsReconnect && (
+              <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99, alignSelf: 'flex-start' }}>
+                Reconnect account
+              </button>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No email account connected.</div>
+        )}
       </div>
-      <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Email signature</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Signature is pulled from your firm details and appended automatically.</div>
+
+      <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Email signature</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
+          Your signature is built from your firm details (Firm tab) and attached automatically to outgoing emails. Upload a signature image in the Firm tab to include it.
+        </div>
       </div>
     </div>
   );
