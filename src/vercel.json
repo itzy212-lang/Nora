@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/ely-ai",
+      "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/ai_router"
+    },
+    {
+      "source": "/api/send-email",
+      "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/send_email_via_microsoft"
+    },
+    {
+      "source": "/api/config",
+      "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/get_config"
+    }
+  ]
+}
