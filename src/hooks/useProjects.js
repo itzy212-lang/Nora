@@ -16,11 +16,12 @@ export function useProjects() {
 
       const projectRows = rows || [];
 
-      // Load AOs
       if (projectRows.length > 0) {
         const ids = projectRows.map(p => p.id);
+
+        // Load adjoining owners
         const { data: aoRows } = await sb
-          .from('ao')
+          .from('adjoining_owners')
           .select('*')
           .in('project_id', ids);
         const aoMap = {};
@@ -40,25 +41,23 @@ export function useProjects() {
           docMap[d.project_id].push(d);
         });
 
-        // Load notices
-        const { data: noticeRows } = await sb
-          .from('notices')
-          .select('*')
-          .in('project_id', ids);
-        const noticeMap = {};
-        (noticeRows || []).forEach(n => {
-          if (!noticeMap[n.project_id]) noticeMap[n.project_id] = [];
-          noticeMap[n.project_id].push(n);
-        });
-
         const enriched = projectRows.map(p => ({
           ...p,
-          aos: (aoMap[p.id] || []).map((ao, i) => ({ ...ao, num: i + 1 })),
+          // Normalise field names so components use consistent keys
+          address:  p.bo_premise_address || p.name || '',
+          bo:       p.bo_1_name || p.bo || '',
+          bo_email: p.bo_1_email || '',
+          bo_phone: p.bo_phone || '',
+          // AOs from adjoining_owners table
+          aos: (aoMap[p.id] || []).map((ao, i) => ({
+            ...ao,
+            num:   i + 1,
+            label: `AO ${i + 1}`,
+          })),
           documents: docMap[p.id] || [],
-          notices: noticeMap[p.id] || [],
-          awards_list: [],
-          _t: new Date(p.created_at || 0).getTime(),
+          _t: p._t || new Date(p.created_at || 0).getTime(),
         }));
+
         dispatch({ type: 'SET_PROJECTS', payload: enriched });
         return enriched;
       }
@@ -66,47 +65,9 @@ export function useProjects() {
       dispatch({ type: 'SET_PROJECTS', payload: [] });
       return [];
     } catch (err) {
-      console.error('[useProjects] load failed:', err);
+      console.error('loadProjects error:', err);
       return [];
     }
-  }, [dispatch]);
-
-  const saveProject = useCallback(async (project) => {
-    if (!sb) return null;
-    try {
-      if (project.id) {
-        const { data, error } = await sb
-          .from('projects')
-          .update(project)
-          .eq('id', project.id)
-          .select('*')
-          .single();
-        if (error) throw error;
-        dispatch({ type: 'UPDATE_PROJECT', payload: data });
-        return data;
-      } else {
-        const { data, error } = await sb
-          .from('projects')
-          .insert(project)
-          .select('*')
-          .single();
-        if (error) throw error;
-        dispatch({ type: 'ADD_PROJECT', payload: { ...data, aos: [], documents: [], notices: [], awards_list: [], _t: Date.now() } });
-        return data;
-      }
-    } catch (err) {
-      console.error('[useProjects] save failed:', err);
-      throw err;
-    }
-  }, [dispatch]);
-
-  const deleteProject = useCallback(async (projectId) => {
-    if (!sb) return;
-    await sb.from('documents').delete().eq('project_id', projectId);
-    await sb.from('notices').delete().eq('project_id', projectId);
-    await sb.from('ao').delete().eq('project_id', projectId);
-    await sb.from('projects').delete().eq('id', projectId);
-    dispatch({ type: 'REMOVE_PROJECT', payload: projectId });
   }, [dispatch]);
 
   const setCurrentProject = useCallback((project) => {
@@ -114,16 +75,31 @@ export function useProjects() {
   }, [dispatch]);
 
   const clearCurrentProject = useCallback(() => {
-    dispatch({ type: 'CLEAR_CURRENT_PROJECT' });
+    dispatch({ type: 'SET_CURRENT_PROJECT', payload: null });
   }, [dispatch]);
 
-  return {
-    projects: state.projects,
-    currentProject: state.currentProject,
-    loadProjects,
-    saveProject,
-    deleteProject,
-    setCurrentProject,
-    clearCurrentProject,
-  };
+  const saveProject = useCallback(async (projectData) => {
+    if (!sb) return;
+    const { data, error } = await sb
+      .from('projects')
+      .upsert({
+        ...projectData,
+        bo_premise_address: projectData.address || projectData.bo_premise_address || '',
+        bo_1_name:          projectData.bo      || projectData.bo_1_name || '',
+      }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) throw error;
+    await loadProjects();
+    return data;
+  }, [loadProjects]);
+
+  const deleteProject = useCallback(async (id) => {
+    if (!sb) return;
+    const { error } = await sb.from('projects').delete().eq('id', id);
+    if (error) throw error;
+    await loadProjects();
+  }, [loadProjects]);
+
+  return { loadProjects, setCurrentProject, clearCurrentProject, saveProject, deleteProject };
 }
