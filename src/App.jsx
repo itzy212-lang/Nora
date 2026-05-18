@@ -18,6 +18,7 @@ import Inbox from './components/email/Inbox';
 import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
+import Calendar from './components/calendar/Calendar';
 
 // Stub views
 function StubView({ icon, title, subtitle }) {
@@ -38,11 +39,9 @@ export default function App() {
 
   const [authChecked, setAuthChecked] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
-  const [projectView, setProjectView] = useState(null); // null | 'list' | project object | 'new'
+  const [projectView, setProjectView] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Email composer state — portal rendered at top level
-  const [composerOpts, setComposerOpts] = useState(null); // null = closed
+  const [composerOpts, setComposerOpts] = useState(null);
 
   // Auth
   useEffect(() => {
@@ -92,13 +91,8 @@ export default function App() {
     }
   }, [setCurrentProject]);
 
-  const openComposer = useCallback((opts) => {
-    setComposerOpts(opts || { mode: 'compose' });
-  }, []);
-
-  const closeComposer = useCallback(() => {
-    setComposerOpts(null);
-  }, []);
+  const openComposer  = useCallback((opts) => setComposerOpts(opts || { mode: 'compose' }), []);
+  const closeComposer = useCallback(() => setComposerOpts(null), []);
 
   // Loading
   if (!authChecked) {
@@ -142,12 +136,12 @@ export default function App() {
         return <AwardReview />;
       case 'settings':
         return <Settings onNavigate={handleNavigate} />;
+      case 'calendar':
+        return <Calendar onOpenProject={handleOpenProject} />;
       case 'leads':
         return <StubView icon="🎯" title="Leads" subtitle="Track and manage incoming enquiries" />;
       case 'contacts':
         return <StubView icon="👥" title="Contacts" subtitle="Surveyors, clients, and solicitors" />;
-      case 'calendar':
-        return <StubView icon="📅" title="Calendar" subtitle="Deadlines, site visits, and hearings" />;
       case 'soc':
         return <StubView icon="🎙" title="SOC Dictation" subtitle="Record and transcribe schedules of condition" />;
       case 'notices':
@@ -173,10 +167,8 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Sidebar overlay (mobile) */}
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
-      {/* Sidebar */}
       <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{
         width: 216, minWidth: 216, background: 'var(--bg2)',
         borderRight: '1px solid var(--border)', display: 'flex',
@@ -189,7 +181,6 @@ export default function App() {
         />
       </div>
 
-      {/* Main */}
       <div className="main">
         <TopBar
           currentView={currentView}
@@ -201,7 +192,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Email composer portal — rendered at root level above everything */}
       {composerOpts && (
         <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />
       )}
