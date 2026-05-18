@@ -1,191 +1,111 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useEly } from '../../hooks/useEly';
-import { useApp } from '../../state/appStore';
-import ChatMessage from './ChatMessage';
-import VoiceInput from '../shared/VoiceInput';
-import { uid } from '../../utils/formatters';
+import { useState } from 'react';
+import sb from '../../supabaseClient';
 
-export default function ProjectChat({ project, onOpenComposer, onClose }) {
-  const { state } = useApp();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [sessions, setSessions] = useState([]); // list of saved sessions for this project
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
-  const { send, loading, sessionId, resetSession } = useEly({
-    surface: 'project_chat',
-    projectId: project?.id,
-  });
+export default function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'reset'
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const QUICK_TAGS = [
-    'Summarise this case',
-    'Draft a response letter',
-    'What are the next steps?',
-    'Check statutory deadlines',
-    'Review surveyor details',
-  ];
-
-  const startNew = useCallback(() => {
-    if (messages.length > 0) {
-      const id = uid();
-      setSessions(prev => [{
-        id,
-        name: messages[0]?.content?.slice(0, 40) || 'Session',
-        messages,
-        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-      }, ...prev]);
-    }
-    setMessages([]);
-    resetSession();
-  }, [messages, resetSession]);
-
-  const handleSend = useCallback(async (text) => {
-    const msg = (text || input).trim();
-    if (!msg || loading) return;
-    setInput('');
-    const userMsg = { id: uid(), role: 'user', content: msg };
-    setMessages(prev => [...prev, userMsg]);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || (!password && mode !== 'reset')) return;
+    setLoading(true);
+    setError('');
+    setMessage('');
     try {
-      const result = await send(msg, { projectId: project?.id });
-      setMessages(prev => [...prev, {
-        id: uid(),
-        role: 'ely',
-        content: result.reply,
-        draft: result.draft,
-        draftType: result.draftType,
-        suggestedActions: result.suggestedActions,
-      }]);
+      if (mode === 'login') {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onLogin(data.user);
+      } else if (mode === 'signup') {
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        setMessage('Check your email for a confirmation link.');
+      } else if (mode === 'reset') {
+        const { error } = await sb.auth.resetPasswordForEmail(email);
+        if (error) throw error;
+        setMessage('Password reset email sent.');
+      }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        id: uid(), role: 'ely',
-        content: `Error: ${err.message}`,
-      }]);
-    }
-  }, [input, loading, send, project]);
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div id="proj-chat-full" style={{
-      display: 'flex', position: 'fixed', inset: 0, zIndex: 260,
-      background: 'var(--bg)', flexDirection: 'column',
+    <div style={{
+      position: 'fixed', inset: 0, background: 'var(--bg)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
-      {/* Top bar */}
-      <div className="pch-topbar" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', flexShrink: 0 }}>
-        <button
-          style={{ display: 'none' }}
-          id="pch-sessions-btn"
-          className="btn btn-ghost btn-sm"
-          onClick={() => setSidebarOpen(v => !v)}
-        >
-          ☰
-        </button>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>← Back</button>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Chat — {project?.ref || 'Project'}
+      <div style={{
+        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--rxl)',
+        padding: 32, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#fff' }}>
+            E
           </div>
-          <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{project?.address || ''}</div>
-        </div>
-        <button className="btn btn-xs" onClick={startNew}>+ New</button>
-      </div>
-
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {/* Sessions sidebar */}
-        <div className={`pch-sidebar${sidebarOpen ? ' mob-open' : ''}`} style={{
-          width: 240, minWidth: 240, borderRight: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column', background: 'var(--bg2)', overflowY: 'auto',
-        }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: 11.5, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <span>Sessions</span>
-            <button className="btn btn-xs btn-ghost" onClick={startNew}>+ New</button>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Ely</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>Practice Assistant</div>
           </div>
-          {sessions.length === 0 ? (
-            <div style={{ padding: '18px 14px', fontSize: 12, color: 'var(--text3)' }}>No saved sessions yet</div>
-          ) : sessions.map(s => (
-            <div key={s.id} className="pch-session-item" onClick={() => { setMessages(s.messages); setSidebarOpen(false); }}>
-              <div className="pch-session-name">{s.name}</div>
-              <div className="pch-session-date">{s.date}</div>
-            </div>
-          ))}
         </div>
 
-        {/* Main chat */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {messages.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text3)' }}>
-                <div style={{ fontSize: 28, marginBottom: 10 }}>💬</div>
-                <div style={{ fontSize: 13 }}>Ask Ely about this project</div>
-                <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text3)' }}>
-                  Ely has full context on {project?.ref} — AOs, notices, correspondence, timeline.
-                </div>
-              </div>
-            )}
-            {messages.map(msg => (
-              <ChatMessage
-                key={msg.id}
-                msg={msg}
-                onUseDraft={(draft) => setInput(draft)}
-                onOpenInComposer={(draft) => onOpenComposer?.({ mode: 'compose', body: draft, projectId: project?.id })}
-              />
-            ))}
-            {loading && (
-              <div style={{ display: 'flex', gap: 4, padding: '10px 14px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 16, borderBottomLeftRadius: 4, alignSelf: 'flex-start' }}>
-                {[0, 1, 2].map(i => (
-                  <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)', animation: 'blink 1.2s infinite', animationDelay: `${i * 0.2}s` }} />
-                ))}
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 6 }}>
+          {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+          {mode === 'login' ? 'Welcome back to your practice assistant.' : mode === 'signup' ? 'Get started with party wall management.' : 'Enter your email to reset your password.'}
+        </p>
 
-          {/* Quick tags */}
-          <div style={{ padding: '8px 16px', display: 'flex', gap: 5, flexWrap: 'wrap', borderTop: '1px solid var(--border)' }}>
-            {QUICK_TAGS.map((tag, i) => (
-              <button key={i} className="btn btn-xs" style={{ borderRadius: 99 }} onClick={() => handleSend(tag)}>
-                {tag}
-              </button>
-            ))}
+        {error && (
+          <div style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 'var(--r)', padding: '10px 12px', fontSize: 12.5, marginBottom: 14 }}>
+            {error}
           </div>
+        )}
+        {message && (
+          <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green)', color: 'var(--green)', borderRadius: 'var(--r)', padding: '10px 12px', fontSize: 12.5, marginBottom: 14 }}>
+            {message}
+          </div>
+        )}
 
-          {/* Input */}
-          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg2)', flexShrink: 0 }}>
-            <div className="pch-input-row" style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 14, padding: '8px 10px' }}>
-              <VoiceInput onTranscript={(t) => { setInput(prev => prev ? prev + ' ' + t : t); textareaRef.current?.focus(); }} disabled={loading} />
-              <textarea
-                ref={textareaRef}
-                className="pch-textarea"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about this project..."
-                rows={1}
-                style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 13.5, color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', resize: 'none', maxHeight: 120, lineHeight: 1.55, padding: '3px 6px' }}
-                onInput={e => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                }}
-              />
-              <button className="ai-send-btn" onClick={() => handleSend()} disabled={loading || !input.trim()}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              </button>
+        <form onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label className="form-label">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
+          </div>
+          {mode !== 'reset' && (
+            <div className="form-row">
+              <label className="form-label">Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
-          </div>
+          )}
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '11px', fontSize: 13.5, marginTop: 8 }} disabled={loading}>
+            {loading ? 'Please wait…' : mode === 'login' ? 'Sign in →' : mode === 'signup' ? 'Create account →' : 'Send reset email'}
+          </button>
+        </form>
+
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {mode === 'login' && (
+            <>
+              <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'center' }} onClick={() => setMode('signup')}>
+                Don't have an account? Sign up
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'center' }} onClick={() => setMode('reset')}>
+                Forgot password?
+              </button>
+            </>
+          )}
+          {mode !== 'login' && (
+            <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'center' }} onClick={() => setMode('login')}>
+              ← Back to sign in
+            </button>
+          )}
         </div>
       </div>
     </div>
