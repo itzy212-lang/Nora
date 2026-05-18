@@ -1,159 +1,125 @@
-import { useState, useCallback } from 'react';
-import { useApp } from '../state/appStore';
-import sb from '../supabaseClient';
+// formatters.js — date/string utilities
 
-export function useEmails() {
-  const { state, dispatch } = useApp();
-  const [loading, setLoading] = useState(false);
-
-  const loadEmails = useCallback(async () => {
-    if (!sb) return;
-    setLoading(true);
-    try {
-      let res = await sb
-        .from('emails')
-        .select('*, email_attachments(*)')
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (res.error) {
-        res = await sb
-          .from('emails')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(200);
-      }
-
-      const rows = (res.data || []).map(normalizeEmail);
-      dispatch({ type: 'SET_EMAILS', payload: rows });
-      return rows;
-    } catch (err) {
-      console.error('[useEmails] load failed:', err);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [dispatch]);
-
-  const syncOutlook = useCallback(async () => {
-    if (!sb) return;
-    try {
-      const { data, error } = await sb.functions.invoke('sync_outlook', {
-        body: { user_id: state.currentUser?.email || state.currentUser?.id },
-      });
-      if (error) throw error;
-      await loadEmails();
-      return data;
-    } catch (err) {
-      console.error('[useEmails] sync failed:', err);
-      throw err;
-    }
-  }, [state.currentUser, loadEmails]);
-
-  const markRead = useCallback(async (emailId) => {
-    dispatch({
-      type: 'UPDATE_EMAIL',
-      payload: { id: emailId, external_id: emailId, read: true, is_read: true },
-    });
-    if (sb) {
-      await sb.from('emails').update({ is_read: true }).eq('external_id', emailId).catch(() => {});
-    }
-  }, [dispatch]);
-
-  const markReplied = useCallback(async (emailId) => {
-    const repliedAt = new Date().toISOString();
-    dispatch({
-      type: 'UPDATE_EMAIL',
-      payload: { external_id: emailId, is_replied: true, replied_at: repliedAt },
-    });
-    if (sb) {
-      await sb.from('emails').update({ is_replied: true, replied_at: repliedAt })
-        .eq('external_id', emailId).catch(() => {});
-    }
-  }, [dispatch]);
-
-  const deleteEmail = useCallback(async (emailId) => {
-    if (!sb) return;
-    try {
-      await sb.from('emails').delete().eq('id', emailId);
-      dispatch({
-        type: 'SET_EMAILS',
-        payload: state.emails.filter(e => e.id !== emailId),
-      });
-    } catch (err) {
-      console.error('[useEmails] delete failed:', err);
-    }
-  }, [dispatch, state.emails]);
-
-  const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId }) => {
-    const res = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject, body, user_id: userId, attachments }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Email send failed');
-    }
-    return data;
-  }, []);
-
-  return {
-    emails: state.emails,
-    loading,
-    loadEmails,
-    syncOutlook,
-    markRead,
-    markReplied,
-    deleteEmail,
-    sendEmail,
-  };
+export function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 }
 
-function normalizeEmail(row) {
-  const t = new Date(row.received_at || row.sent_at || row.created_at || 0).getTime();
-  return {
-    ...row,
-    id: row.id,
-    external_id: row.external_id || row.id,
-    from: row.sender_name || row.from_email || 'Unknown',
-    from_email: row.from_email || '',
-    subject: row.subject || '(No subject)',
-    preview: row.body_preview || row.preview || '',
-    body: row.body || '',
-    read: row.is_read || false,
-    unread: !row.is_read,
-    time: formatEmailTime(row.received_at || row.sent_at || row.created_at),
-    _t: t,
-    attachments: row.email_attachments || row.attachments || [],
-    flagged: isUrgentEmail(row),
-    channel: row.channel || 'email',
-    project_id: row.project_id || null,
-  };
+export function fmt(d) {
+  return d ? fmtLongDate(d) : '--';
 }
 
-function formatEmailTime(date) {
+export function fmtLongDate(d) {
+  if (!d) return '--';
+  const date = new Date(d);
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export function fmtShort(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export function daysUntil(d) {
+  if (!d) return 9999;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((new Date(d) - today) / 86400000);
+}
+
+export function initials(n) {
+  return n ? n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?';
+}
+
+export function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function ordinalDay(n) {
+  n = Number(n);
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+export function projectAddress(p) {
+  if (!p) return '';
+  return p.address || p.bo_address || '';
+}
+
+export function getProjColour(p) {
+  const aos = p.aos || [];
+  if (aos.some(ao => ['notice_expired', 's10_expired', '104b_triggered'].includes(ao.status))) return 'c-red';
+  if (aos.some(ao => ['dissented', 'surveyor_appointed', 'award_in_progress'].includes(ao.status))) return 'c-amber';
+  if (!aos.length || aos.every(ao => !ao.status || ao.status === 'awaiting')) return 'c-grey';
+  return 'c-green';
+}
+
+export function getAOStatus(ao) {
+  const statusMap = {
+    awaiting: { label: 'Awaiting notice', colour: 's-grey' },
+    details_added: { label: 'Details added', colour: 's-grey' },
+    notice_served: { label: 'Notice served', colour: 's-blue' },
+    consented: { label: 'Consented', colour: 's-green' },
+    dissented: { label: 'Dissented', colour: 's-amber' },
+    surveyor_appointed: { label: 'Surveyor appointed', colour: 's-amber' },
+    award_in_progress: { label: 'Award in progress', colour: 's-amber' },
+    award_served: { label: 'Award served', colour: 's-green' },
+    notice_expired: { label: 'Notice expired', colour: 's-red' },
+    s10_expired: { label: 'S10 expired', colour: 's-red' },
+    '104b_triggered': { label: '104B triggered', colour: 's-red' },
+    complete: { label: 'Complete', colour: 's-green' },
+  };
+  return statusMap[ao.status] || { label: ao.status || 'Unknown', colour: 's-grey' };
+}
+
+export function formatEmailTime(date) {
   if (!date) return '';
   const d = new Date(date);
   const now = new Date();
   const diffMs = now - d;
   const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) {
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return d.toLocaleDateString('en-GB', { weekday: 'short' });
-  } else {
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  }
+  if (diffDays === 0) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return d.toLocaleDateString('en-GB', { weekday: 'short' });
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function isUrgentEmail(e) {
-  const s = (e.subject || '').toLowerCase();
-  const b = (e.body_preview || e.preview || '').toLowerCase();
-  return (
-    s.includes('urgent') || s.includes('damage') || s.includes('emergency') ||
-    b.includes('structural damage') || b.includes('urgent')
-  );
+export function renderMarkdown(text) {
+  if (!text) return '';
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^---+$/gm, '<hr>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^\* (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*?<\/li>\n?)+/gs, match => `<ul>${match}</ul>`);
+  html = html.split('\n').map(line => {
+    if (!line.trim()) return '';
+    if (/^<(h[123]|ul|ol|li|blockquote|hr|pre|code)/.test(line)) return line;
+    return `<p>${line}</p>`;
+  }).join('');
+  return html;
 }
