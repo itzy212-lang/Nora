@@ -1,105 +1,159 @@
-import { useApp } from '../../state/appStore';
-import { useProjects } from '../../hooks/useProjects';
-import { getProjColour, fmtShort } from '../../utils/formatters';
+import { useState, useCallback } from 'react';
+import { useApp } from '../state/appStore';
+import sb from '../supabaseClient';
 
-export default function Dashboard({ onNavigate, onOpenProject }) {
-  const { state } = useApp();
-  const { projects, emails } = state;
+export function useEmails() {
+  const { state, dispatch } = useApp();
+  const [loading, setLoading] = useState(false);
 
-  const activeProjects = projects.filter(p => p.status !== 'complete');
-  const urgentAOs = projects.reduce((sum, p) =>
-    sum + (p.aos || []).filter(ao => ['notice_expired', 's10_expired', '104b_triggered'].includes(ao.status)).length, 0);
-  const unreadEmails = emails.filter(e => !e.read).length;
-  const recentEmails = [...emails].sort((a, b) => b._t - a._t).slice(0, 4);
-  const recentProjects = [...projects].sort((a, b) => (b._t || 0) - (a._t || 0)).slice(0, 4);
+  const loadEmails = useCallback(async () => {
+    if (!sb) return;
+    setLoading(true);
+    try {
+      let res = await sb
+        .from('emails')
+        .select('*, email_attachments(*)')
+        .order('created_at', { ascending: false })
+        .limit(200);
 
+      if (res.error) {
+        res = await sb
+          .from('emails')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+      }
+
+      const rows = (res.data || []).map(normalizeEmail);
+      dispatch({ type: 'SET_EMAILS', payload: rows });
+      return rows;
+    } catch (err) {
+      console.error('[useEmails] load failed:', err);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [dispatch]);
+
+  const syncOutlook = useCallback(async () => {
+    if (!sb) return;
+    try {
+      const { data, error } = await sb.functions.invoke('sync_outlook', {
+        body: { user_id: state.currentUser?.email || state.currentUser?.id },
+      });
+      if (error) throw error;
+      await loadEmails();
+      return data;
+    } catch (err) {
+      console.error('[useEmails] sync failed:', err);
+      throw err;
+    }
+  }, [state.currentUser, loadEmails]);
+
+  const markRead = useCallback(async (emailId) => {
+    dispatch({
+      type: 'UPDATE_EMAIL',
+      payload: { id: emailId, external_id: emailId, read: true, is_read: true },
+    });
+    if (sb) {
+      await sb.from('emails').update({ is_read: true }).eq('external_id', emailId).catch(() => {});
+    }
+  }, [dispatch]);
+
+  const markReplied = useCallback(async (emailId) => {
+    const repliedAt = new Date().toISOString();
+    dispatch({
+      type: 'UPDATE_EMAIL',
+      payload: { external_id: emailId, is_replied: true, replied_at: repliedAt },
+    });
+    if (sb) {
+      await sb.from('emails').update({ is_replied: true, replied_at: repliedAt })
+        .eq('external_id', emailId).catch(() => {});
+    }
+  }, [dispatch]);
+
+  const deleteEmail = useCallback(async (emailId) => {
+    if (!sb) return;
+    try {
+      await sb.from('emails').delete().eq('id', emailId);
+      dispatch({
+        type: 'SET_EMAILS',
+        payload: state.emails.filter(e => e.id !== emailId),
+      });
+    } catch (err) {
+      console.error('[useEmails] delete failed:', err);
+    }
+  }, [dispatch, state.emails]);
+
+  const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId }) => {
+    const res = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, body, user_id: userId, attachments }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Email send failed');
+    }
+    return data;
+  }, []);
+
+  return {
+    emails: state.emails,
+    loading,
+    loadEmails,
+    syncOutlook,
+    markRead,
+    markReplied,
+    deleteEmail,
+    sendEmail,
+  };
+}
+
+function normalizeEmail(row) {
+  const t = new Date(row.received_at || row.sent_at || row.created_at || 0).getTime();
+  return {
+    ...row,
+    id: row.id,
+    external_id: row.external_id || row.id,
+    from: row.sender_name || row.from_email || 'Unknown',
+    from_email: row.from_email || '',
+    subject: row.subject || '(No subject)',
+    preview: row.body_preview || row.preview || '',
+    body: row.body || '',
+    read: row.is_read || false,
+    unread: !row.is_read,
+    time: formatEmailTime(row.received_at || row.sent_at || row.created_at),
+    _t: t,
+    attachments: row.email_attachments || row.attachments || [],
+    flagged: isUrgentEmail(row),
+    channel: row.channel || 'email',
+    project_id: row.project_id || null,
+  };
+}
+
+function formatEmailTime(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) {
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return d.toLocaleDateString('en-GB', { weekday: 'short' });
+  } else {
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+}
+
+function isUrgentEmail(e) {
+  const s = (e.subject || '').toLowerCase();
+  const b = (e.body_preview || e.preview || '').toLowerCase();
   return (
-    <div>
-      {/* Stats */}
-      <div className="stat-row">
-        <div className="stat-card">
-          <div className="stat-label">Active projects</div>
-          <div className="stat-val">{activeProjects.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label s-red">Urgent items</div>
-          <div className="stat-val s-red">{urgentAOs}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Unread emails</div>
-          <div className="stat-val">{unreadEmails}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Pipeline</div>
-          <div className="stat-val">£{projects.reduce((s, p) => s + parseFloat(p.fee || 0), 0).toFixed(0)}</div>
-        </div>
-      </div>
-
-      {/* Widget grid */}
-      <div className="wgrid">
-        {/* Quick actions */}
-        <div className="widget w4">
-          <div className="wtitle">⚡ Quick actions</div>
-          <div className="qa" onClick={() => onNavigate('chat')}>
-            <span>✨</span>Ask Ely
-          </div>
-          <div className="qa" onClick={() => onOpenProject('new')}>
-            <span>📁</span>New project
-          </div>
-          <div className="qa" onClick={() => onNavigate('inbox')}>
-            <span>📨</span>Inbox {unreadEmails > 0 && <span className="nav-badge">{unreadEmails}</span>}
-          </div>
-          <div className="qa" onClick={() => onNavigate('awards')}>
-            <span>🏆</span>Review award
-          </div>
-        </div>
-
-        {/* Recent projects */}
-        <div className="widget w8">
-          <div className="wtitle">
-            📁 Recent projects
-            <span style={{ color: 'var(--blue)', cursor: 'pointer', fontWeight: 400 }} onClick={() => onNavigate('projects')}>All →</span>
-          </div>
-          {recentProjects.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No projects yet.</div>
-          ) : (
-            recentProjects.map(p => (
-              <div key={p.id} className="proj-card" style={{ marginBottom: 8 }} onClick={() => onOpenProject(p)}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{p.ref}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{(p.address || '').slice(0, 40)}</div>
-                  </div>
-                  <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{fmtShort(p.created_at)}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Recent emails */}
-        <div className="widget w12">
-          <div className="wtitle">
-            📨 Recent messages
-            <span style={{ color: 'var(--blue)', cursor: 'pointer', fontWeight: 400 }} onClick={() => onNavigate('inbox')}>All →</span>
-          </div>
-          {recentEmails.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No messages yet.</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-              {recentEmails.map(e => (
-                <div key={e.id} className="mail-item" onClick={() => onNavigate('inbox')} style={{ marginBottom: 0 }}>
-                  <div className="mail-item-top">
-                    <div className="mail-item-from">{e.from}</div>
-                    <div className="mail-item-time">{e.time}</div>
-                  </div>
-                  <div className="mail-item-subject">{e.subject}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    s.includes('urgent') || s.includes('damage') || s.includes('emergency') ||
+    b.includes('structural damage') || b.includes('urgent')
   );
 }
