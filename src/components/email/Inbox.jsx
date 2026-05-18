@@ -3,19 +3,68 @@ import sb from '../../supabaseClient';
 
 const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent'];
 
-// ── Draft with Ely overlay ────────────────────────────────────────────────────
-function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function stripHtml(html) {
+  if (!html) return '';
+  return html.replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function isHtmlEmail(body) {
+  return body && (body.trim().startsWith('<') || body.includes('<html') || body.includes('<div') || body.includes('<p>'));
+}
+function fmtDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Email body renderer (iframe for HTML) ────────────────────────────────────
+function EmailBody({ email }) {
+  const body = email.body || '';
+  if (!body) return <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.8 }}>{email.body_preview || 'No content.'}</div>;
+  if (isHtmlEmail(body)) {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${body}</body></html>`;
+    return <iframe srcDoc={html} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none', flex: 1 }} title="email-body" />;
+  }
+  return <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{body}</div>;
+}
+
+// ── Ely draft panel (right side of reply overlay) ────────────────────────────
+// Reads the full thread and auto-summarises on open
+function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
-  const [draft, setDraft]       = useState('');
   const [loading, setLoading]   = useState(false);
   const endRef = useRef(null);
+  const hasAutoRun = useRef(false);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const callEly = async (text) => {
-    if (!text.trim() || loading) return;
+  // Auto-read thread and draft on open
+  useEffect(() => {
+    if (hasAutoRun.current || !email) return;
+    hasAutoRun.current = true;
+
+    const threadSummary = threadEmails.length > 1
+      ? threadEmails
+          .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
+          .map(e => `--- ${fmtDate(e.received_at)} | From: ${e.sender_name || e.sender_email} ---\n${stripHtml(e.body || e.body_preview || '').slice(0, 600)}`)
+          .join('\n\n')
+      : stripHtml(email.body || email.body_preview || '').slice(0, 1200);
+
+    const prompt = threadEmails.length > 1
+      ? `I need to reply to this email thread (${threadEmails.length} emails). Please read the full thread and draft a professional reply to the most recent message.\n\nFULL THREAD:\n${threadSummary}`
+      : `Please read this email and draft a professional reply.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\nDate: ${fmtDate(email.received_at)}\n\n${threadSummary}`;
+
+    callEly(prompt, true);
+  }, [email, threadEmails]); // eslint-disable-line
+
+  const callEly = async (text, isAuto = false) => {
+    if (loading) return;
     setLoading(true);
+    if (!isAuto) setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
+    else setMessages([{ id: 0, role: 'system', content: `📧 Reading ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'}…` }]);
+
     try {
       const res = await fetch('/api/ely-ai', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -23,90 +72,203 @@ function DraftWithElyOverlay({ email, onUseDraft, onClose }) {
       });
       const data = await res.json();
       const reply = data.reply || data.text || 'Could not generate a draft.';
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ely', content: reply }]);
-      const m = reply.match(/Dear[\s\S]{30,}/);
-      if (m && !draft) setDraft(m[0]);
+
+      if (isAuto) {
+        setMessages([{ id: 1, role: 'ely', content: reply }]);
+      } else {
+        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: reply }]);
+      }
+
+      // Extract draft text — look for the actual email draft
+      const draftMatch = reply.match(/Subject:[\s\S]{5,}/) ||
+                         reply.match(/Dear[\s\S]{20,}/) ||
+                         reply.match(/Hi[\s\S]{20,}/);
+      if (draftMatch) onUseDraft(draftMatch[0], false); // soft update — don't close panel
     } catch {
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ely', content: 'Could not connect to Ely.' }]);
+      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: 'Could not connect to Ely. Please try again.' }]);
     }
     setLoading(false);
   };
 
-  const handleSend = async () => {
-    const text = input.trim(); if (!text || loading) return;
+  const handleSend = () => {
+    const text = input.trim();
+    if (!text || loading) return;
     setInput('');
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
-    await callEly(text);
+    callEly(text);
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '90vw', maxWidth: 920, height: '86vh', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>✨ Draft with Ely</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>Re: {email?.subject}</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => {
-              const prompt = `Draft a professional reply.\nFrom: ${email?.sender_name || email?.sender_email}\nSubject: ${email?.subject}\n\n${stripHtml(email?.body || email?.body_preview || '').slice(0, 800)}`;
-              setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: 'Please draft a reply.' }]);
-              callEly(prompt);
-            }} disabled={loading} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Auto-draft</button>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+    <div style={{ width: '46%', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--bg3)' }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>✨ Draft with Ely</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
+            {threadEmails.length > 1 ? `Reading thread (${threadEmails.length} emails)` : 'Reading email'}
           </div>
         </div>
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Chat with Ely</div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {messages.length === 0 && <div style={{ textAlign: 'center', padding: 24, color: 'var(--text3)', fontSize: 13 }}>Click "Auto-draft" or type a request below.</div>}
-              {messages.map(msg => (
-                <div key={msg.id} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)', color: msg.role === 'user' ? '#fff' : 'var(--text)', padding: '9px 13px', borderRadius: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-              ))}
-              {loading && <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '9px 13px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>✨ Drafting…</div>}
-              <div ref={endRef} />
-            </div>
-            <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
-              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); }}} placeholder="Adjust tone, add context…" style={{ flex: 1, padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
-              <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Send</button>
-            </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer' }}>✕</button>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {messages.map(msg => (
+          <div key={msg.id} style={{
+            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '92%',
+            background: msg.role === 'user' ? 'var(--blue)' : msg.role === 'system' ? 'var(--bg2)' : 'var(--bg2)',
+            color: msg.role === 'user' ? '#fff' : 'var(--text)',
+            border: msg.role === 'system' ? '1px solid var(--border)' : 'none',
+            padding: '10px 13px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.65, whiteSpace: 'pre-wrap',
+          }}>{msg.content}</div>
+        ))}
+        {loading && (
+          <div style={{ alignSelf: 'flex-start', background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 12.5, color: 'var(--text3)' }}>
+            ✨ Reading & drafting…
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Draft — edit before sending</div>
-            <textarea value={draft} onChange={e => setDraft(e.target.value)} placeholder="Your draft appears here. Edit freely before sending." style={{ flex: 1, padding: '14px 16px', fontSize: 13, background: 'var(--bg2)', border: 'none', color: 'var(--text)', outline: 'none', resize: 'none', lineHeight: 1.75 }} />
-            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
-              <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Cancel</button>
-              <button onClick={() => onUseDraft(draft)} disabled={!draft.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>Use this draft →</button>
-            </div>
-          </div>
-        </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); }}}
+          placeholder="Adjust tone, change something…"
+          style={{ flex: 1, padding: '8px 10px', fontSize: 12.5, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
+        <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12 }}>Send</button>
       </div>
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function stripHtml(html) {
-  if (!html) return '';
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function isHtmlEmail(body) {
-  return body && (body.trim().startsWith('<') || body.includes('<html') || body.includes('<div') || body.includes('<p>'));
+// ── Full-page Reply Overlay ───────────────────────────────────────────────────
+function ReplyOverlay({ email, mode, threadEmails, onSend, onClose }) {
+  const [to, setTo]           = useState(email?.sender_email || '');
+  const [cc, setCc]           = useState(mode === 'replyAll'
+    ? (Array.isArray(email?.to_emails) ? email.to_emails.map(r => r.email || r).filter(e => e !== email?.sender_email).join(', ') : email?.to_email || '')
+    : '');
+  const [subject, setSubject] = useState(`Re: ${email?.subject || ''}`);
+  const [body, setBody]       = useState('');
+  const [showEly, setShowEly] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!to.trim() || !body.trim()) return;
+    setSending(true);
+    try {
+      await onSend({ to, cc, subject, body, replyToId: email?.id });
+    } catch {}
+    setSending(false);
+    onClose();
+  };
+
+  // Soft-update body from Ely without closing the panel
+  const handleElyDraft = (draft, close = false) => {
+    setBody(draft);
+    if (close) setShowEly(false);
+  };
+
+  const inp = { width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 1100, margin: '24px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, display: 'flex', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
+
+        {/* ── Compose side ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+              {mode === 'replyAll' ? '↩↩ Reply All' : '↩ Reply'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!showEly && (
+                <button onClick={() => setShowEly(true)} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+                  ✨ Draft with Ely
+                </button>
+              )}
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+          </div>
+
+          {/* Fields */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Original email context */}
+            <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Replying to</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text)' }}>{email?.sender_name || email?.sender_email}</span>
+                {' · '}{fmtDate(email?.received_at)}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{email?.subject}</div>
+            </div>
+
+            {[
+              { label: 'To', val: to, set: setTo, readOnly: false },
+              { label: 'CC', val: cc, set: setCc, readOnly: false },
+              { label: 'Subject', val: subject, set: setSubject, readOnly: false },
+            ].map(({ label, val, set }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right' }}>{label}</div>
+                <input value={val} onChange={e => set(e.target.value)} style={{ ...inp }} />
+              </div>
+            ))}
+
+            {/* Body */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
+              <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right', paddingTop: 8 }}>Body</div>
+              <textarea value={body} onChange={e => setBody(e.target.value)}
+                placeholder="Type your reply here, or use ✨ Draft with Ely on the right…"
+                style={{ ...inp, flex: 1, minHeight: 220, resize: 'vertical', lineHeight: 1.7 }} />
+            </div>
+
+            {/* Thread context */}
+            {threadEmails.length > 1 && (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none' }}>
+                  Show thread ({threadEmails.length} emails)
+                </summary>
+                <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                  {[...threadEmails].sort((a, b) => new Date(b.received_at) - new Date(a.received_at)).map((e, i) => (
+                    <div key={e.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: i < threadEmails.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 2 }}>
+                        {e.sender_name || e.sender_email} · {fmtDate(e.received_at)}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                        {stripHtml(e.body || e.body_preview || '').slice(0, 200)}…
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+            <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
+            <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>
+              {sending ? 'Sending…' : '↩ Send reply'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Ely panel (half) — slides in ── */}
+        {showEly && (
+          <ElyDraftPanel
+            email={email}
+            threadEmails={threadEmails}
+            onUseDraft={handleElyDraft}
+            onClose={() => setShowEly(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
-// ── Email body renderer ───────────────────────────────────────────────────────
-function EmailBody({ email }) {
-  const body = email.body || '';
-  if (!body) return <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.8 }}>{email.body_preview || 'No content.'}</div>;
-  if (isHtmlEmail(body)) {
-    const styledHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${body}</body></html>`;
-    return <iframe srcDoc={styledHtml} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none', flex: 1 }} title="email-body" />;
-  }
-  return <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{body}</div>;
-}
-
-// ── Email row card — CURVED, with checkbox + delete X ────────────────────────
+// ── Email row card ────────────────────────────────────────────────────────────
 function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
   const unread  = !email.is_read;
   const replied = email.is_replied;
@@ -116,47 +278,38 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
   const catColour = { damage_claim: '#ef4444', urgent: '#ef4444', consent: '#22c55e', dissent: '#ef4444', legal: '#f59e0b' }[cat?.toLowerCase()] || null;
 
   return (
-    <div style={{ margin: '6px 10px', position: 'relative' }}>
-      {/* Curved card */}
-      <div
-        onClick={() => onSelect(email)}
-        style={{
-          background: selected ? 'var(--blue-bg)' : unread ? 'var(--bg2)' : 'var(--bg3)',
-          border: `1px solid ${selected ? 'var(--blue)' : 'var(--border)'}`,
-          borderRadius: 14, padding: '10px 12px 10px 36px',
-          cursor: 'pointer', transition: 'border-color 0.12s, background 0.12s',
-          boxShadow: unread ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
-        }}
+    <div style={{ margin: '5px 10px', position: 'relative' }}>
+      <div onClick={() => onSelect(email)} style={{
+        background: selected ? 'var(--blue-bg)' : unread ? 'var(--bg2)' : 'var(--bg3)',
+        border: `1px solid ${selected ? 'var(--blue)' : 'var(--border)'}`,
+        borderRadius: 14, padding: '10px 12px 10px 36px',
+        cursor: 'pointer', transition: 'border-color 0.12s',
+        boxShadow: unread ? '0 1px 5px rgba(0,0,0,0.07)' : 'none',
+      }}
         onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = 'var(--border2)'; }}
         onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = 'var(--border)'; }}
       >
-        {/* Checkbox — top left inside card */}
-        <div
-          onClick={e => { e.stopPropagation(); onCheck(email.id); }}
-          style={{
-            position: 'absolute', left: 10, top: 12,
-            width: 16, height: 16, borderRadius: 4, cursor: 'pointer',
-            border: `1.5px solid ${checked ? 'var(--blue)' : 'var(--border2)'}`,
-            background: checked ? 'var(--blue)' : 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}
-        >
-          {checked && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+        {/* Checkbox */}
+        <div onClick={e => { e.stopPropagation(); onCheck(email.id); }} style={{
+          position: 'absolute', left: 10, top: 13,
+          width: 16, height: 16, borderRadius: 4, cursor: 'pointer',
+          border: `1.5px solid ${checked ? 'var(--blue)' : 'var(--border2)'}`,
+          background: checked ? 'var(--blue)' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {checked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
         </div>
 
-        {/* Delete X — top right */}
-        <button
-          onClick={e => { e.stopPropagation(); onDelete(email.id); }}
-          style={{
-            position: 'absolute', right: 8, top: 8,
-            background: 'none', border: 'none', color: 'var(--text3)',
-            fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px',
-            borderRadius: 4, opacity: 0.5,
-          }}
+        {/* Delete X */}
+        <button onClick={e => { e.stopPropagation(); onDelete(email.id); }} style={{
+          position: 'absolute', right: 7, top: 8,
+          background: 'none', border: 'none', color: 'var(--text3)',
+          fontSize: 13, cursor: 'pointer', padding: '2px 4px', borderRadius: 4, opacity: 0.4,
+        }}
           onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--red)'; }}
-          onMouseLeave={e => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.color = 'var(--text3)'; }}
-          title="Delete"
-        >✕</button>
+          onMouseLeave={e => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.color = 'var(--text3)'; }}>
+          ✕
+        </button>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, paddingRight: 16 }}>
           <span style={{ fontSize: 13, fontWeight: unread ? 700 : 500, color: unread ? 'var(--text)' : 'var(--text2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
@@ -166,7 +319,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
             <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>
               {email.received_at ? new Date(email.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
             </span>
-            {unread && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />}
+            {unread && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)' }} />}
           </div>
         </div>
         <div style={{ fontSize: 12.5, fontWeight: unread ? 600 : 400, color: unread ? 'var(--text)' : 'var(--text2)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 16 }}>
@@ -176,11 +329,11 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
           <span style={{ fontSize: 11.5, color: 'var(--text3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {stripHtml(email.body_preview || '')}
           </span>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
-            {hasAtt  && <span title="Attachment" style={{ fontSize: 11 }}>📎</span>}
-            {replied && <span title="Replied" style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
-            {flagged && <span title="Flagged" style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
-            {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600, whiteSpace: 'nowrap' }}>{cat.replace(/_/g,' ')}</span>}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            {hasAtt  && <span style={{ fontSize: 11 }}>📎</span>}
+            {replied && <span style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
+            {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
+            {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
           </div>
         </div>
       </div>
@@ -189,58 +342,61 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
 }
 
 // ── Email preview panel ───────────────────────────────────────────────────────
-function EmailPreview({ email, replyText, setReplyText, replyMode, setReplyMode, onOpenComposer, onDraftWithEly }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly }) {
+  const [replyDropOpen, setReplyDropOpen] = useState(false);
+  const dropRef = useRef(null);
+
+  useEffect(() => {
+    const h = e => { if (dropRef.current && !dropRef.current.contains(e.target)) setReplyDropOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
   if (!email) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 13 }}>
-        Select an email to read
-      </div>
-    );
+    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 13 }}>Select an email to read</div>;
   }
 
-  // Build reply-all recipients string
-  const toEmails = Array.isArray(email.to_emails)
-    ? email.to_emails.map(r => r.email || r).filter(Boolean).join(', ')
-    : email.to_email || '';
-  const replyAllTo = [email.sender_email, toEmails].filter(Boolean).join(', ');
   const isHtml = isHtmlEmail(email.body || '');
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-      {/* Header — curved card style */}
+      {/* Header */}
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             <span style={{ fontWeight: 500, color: 'var(--text2)' }}>{email.sender_name || email.sender_email}</span>
             {email.sender_email && email.sender_name && <span> &lt;{email.sender_email}&gt;</span>}
-            {email.received_at && <span style={{ marginLeft: 10 }}>{new Date(email.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+            {email.received_at && <span style={{ marginLeft: 10 }}>{fmtDate(email.received_at)}</span>}
           </div>
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            {/* Reply / Reply All dropdown */}
-            <div style={{ position: 'relative', display: 'flex' }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+            {/* Reply dropdown button */}
+            <div style={{ position: 'relative' }} ref={dropRef}>
               <button
-                onClick={() => { setReplyMode('reply'); setReplyText(''); }}
-                style={{ padding: '5px 12px', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', fontWeight: 500 }}>
-                ↩ Reply
+                onClick={() => setReplyDropOpen(v => !v)}
+                style={{ padding: '6px 14px', border: '1px solid var(--border)', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                ↩ Reply <span style={{ fontSize: 10, color: 'var(--text3)' }}>▾</span>
               </button>
-              <button
-                onClick={() => { setReplyMode('replyAll'); setReplyText(''); }}
-                title="Reply All"
-                style={{ padding: '5px 8px', border: '1px solid var(--border)', borderRadius: '0 8px 8px 0', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 11, cursor: 'pointer' }}>
-                ↩↩ All
-              </button>
+              {replyDropOpen && (
+                <div style={{ position: 'absolute', top: '110%', right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', zIndex: 100, minWidth: 150, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+                  <div onClick={() => { setReplyDropOpen(false); onOpenReply('reply'); }}
+                    style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    ↩ <span>Reply</span>
+                  </div>
+                  <div onClick={() => { setReplyDropOpen(false); onOpenReply('replyAll'); }}
+                    style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid var(--border)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    ↩↩ <span>Reply All</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <button onClick={onDraftWithEly} className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 8 }}>✨ Draft with Ely</button>
+            <button onClick={() => onDraftWithEly('reply')} className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>
           </div>
         </div>
-        {/* To line — show if reply all */}
-        {replyMode === 'replyAll' && toEmails && (
-          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text3)' }}>
-            <span style={{ fontWeight: 600 }}>To: </span>{email.sender_email}
-            {toEmails && <span>  <span style={{ fontWeight: 600 }}>CC: </span>{toEmails}</span>}
-          </div>
-        )}
       </div>
 
       {/* Body */}
@@ -250,56 +406,28 @@ function EmailPreview({ email, replyText, setReplyText, replyMode, setReplyMode,
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
-
-      {/* Reply box — curved */}
-      <div style={{ borderTop: '1px solid var(--border)', padding: '12px 20px', background: 'var(--bg3)', flexShrink: 0 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-          {replyMode === 'replyAll' ? `Reply All — to ${replyAllTo.slice(0, 60)}${replyAllTo.length > 60 ? '…' : ''}` : 'Reply'}
-        </div>
-        <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
-          placeholder={replyMode === 'replyAll' ? 'Type your reply to all…' : 'Type your reply…'}
-          rows={3}
-          style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', outline: 'none', resize: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onDraftWithEly} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 8 }}>✨ Draft with Ely</button>
-          <button
-            onClick={() => onOpenComposer?.({
-              mode: replyMode === 'replyAll' ? 'replyAll' : 'reply',
-              to: email.sender_email,
-              toName: email.sender_name,
-              cc: replyMode === 'replyAll' ? toEmails : '',
-              subject: `Re: ${email.subject || ''}`,
-              body: replyText,
-              replyToId: email.id,
-            })}
-            className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8 }}>
-            Open composer →
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
 
 // ── Main Inbox ────────────────────────────────────────────────────────────────
 export default function Inbox({ onOpenComposer }) {
-  const [emails, setEmails]             = useState([]);
-  const [loading, setLoading]           = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState(null);
-  const [folder, setFolder]             = useState('Inbox');
-  const [folderOpen, setFolderOpen]     = useState(false);
-  const [search, setSearch]             = useState('');
-  const [replyText, setReplyText]       = useState('');
-  const [replyMode, setReplyMode]       = useState('reply'); // 'reply' | 'replyAll'
-  const [showDraftEly, setShowDraftEly] = useState(false);
-  const [syncing, setSyncing]           = useState(false);
-  const [checkedIds, setCheckedIds]     = useState(new Set());
+  const [emails, setEmails]              = useState([]);
+  const [loading, setLoading]            = useState(false);
+  const [selectedEmail, setSelectedEmail]= useState(null);
+  const [threadEmails, setThreadEmails]  = useState([]);
+  const [folder, setFolder]              = useState('Inbox');
+  const [folderOpen, setFolderOpen]      = useState(false);
+  const [search, setSearch]              = useState('');
+  const [syncing, setSyncing]            = useState(false);
+  const [checkedIds, setCheckedIds]      = useState(new Set());
+  const [replyOverlay, setReplyOverlay]  = useState(null); // null | { mode: 'reply'|'replyAll' }
   const folderRef = useRef(null);
 
   useEffect(() => {
-    const handler = e => { if (folderRef.current && !folderRef.current.contains(e.target)) setFolderOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const h = e => { if (folderRef.current && !folderRef.current.contains(e.target)) setFolderOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
   const loadEmails = useCallback(async () => {
@@ -321,25 +449,43 @@ export default function Inbox({ onOpenComposer }) {
 
   useEffect(() => { loadEmails(); }, [loadEmails]);
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try { await fetch('/api/sync-emails', { method: 'POST' }); await loadEmails(); } catch {}
-    setSyncing(false);
-  };
+  // Load thread when email selected
+  const loadThread = useCallback(async (email) => {
+    if (!sb || !email.thread_id) { setThreadEmails([email]); return; }
+    try {
+      const { data } = await sb.from('emails').select('*')
+        .eq('thread_id', email.thread_id)
+        .order('received_at', { ascending: true });
+      setThreadEmails(data && data.length > 0 ? data : [email]);
+    } catch { setThreadEmails([email]); }
+  }, []);
 
   const handleSelect = async (email) => {
     setSelectedEmail(email);
-    setReplyText('');
-    setReplyMode('reply');
+    loadThread(email);
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
       setEmails(prev => prev.map(e => e.id === email.id ? { ...e, is_read: true } : e));
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleOpenReply = (mode) => setReplyOverlay({ mode });
+  const handleDraftWithEly = (mode) => setReplyOverlay({ mode, openEly: true });
+
+  const handleSendReply = async ({ to, cc, subject, body, replyToId }) => {
     if (!sb) return;
-    if (!window.confirm('Delete this email?')) return;
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      // Insert as a sent email (actual send goes via existing send_email RPC)
+      await sb.rpc('send_email_via_microsoft', { to_email: to, cc_email: cc || null, subject, body, reply_to_message_id: replyToId || null }).catch(() => {});
+      // Also mark the original as replied
+      if (replyToId) await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
+      setEmails(prev => prev.map(e => e.id === replyToId ? { ...e, is_replied: true } : e));
+    } catch (err) { console.error('Send reply error:', err); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!sb || !window.confirm('Delete this email?')) return;
     await sb.from('emails').delete().eq('id', id);
     setEmails(prev => prev.filter(e => e.id !== id));
     if (selectedEmail?.id === id) setSelectedEmail(null);
@@ -347,37 +493,19 @@ export default function Inbox({ onOpenComposer }) {
   };
 
   const handleMassDelete = async () => {
-    if (!sb || checkedIds.size === 0) return;
-    if (!window.confirm(`Delete ${checkedIds.size} email${checkedIds.size > 1 ? 's' : ''}?`)) return;
+    if (!sb || checkedIds.size === 0 || !window.confirm(`Delete ${checkedIds.size} emails?`)) return;
     await sb.from('emails').delete().in('id', [...checkedIds]);
     setEmails(prev => prev.filter(e => !checkedIds.has(e.id)));
     if (checkedIds.has(selectedEmail?.id)) setSelectedEmail(null);
     setCheckedIds(new Set());
   };
 
-  const toggleCheck = (id) => {
-    setCheckedIds(prev => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (checkedIds.size === filtered.length) {
-      setCheckedIds(new Set());
-    } else {
-      setCheckedIds(new Set(filtered.map(e => e.id)));
-    }
-  };
+  const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const filtered = emails.filter(e => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return (e.sender_name || '').toLowerCase().includes(q)
-      || (e.sender_email || '').toLowerCase().includes(q)
-      || (e.subject || '').toLowerCase().includes(q)
-      || (e.body_preview || '').toLowerCase().includes(q);
+    return (e.sender_name || '').toLowerCase().includes(q) || (e.sender_email || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q);
   });
 
   const unreadCount = emails.filter(e => !e.is_read).length;
@@ -385,11 +513,16 @@ export default function Inbox({ onOpenComposer }) {
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', background: 'var(--bg)' }}>
-      {showDraftEly && selectedEmail && (
-        <DraftWithElyOverlay
+
+      {/* Reply overlay */}
+      {replyOverlay && selectedEmail && (
+        <ReplyOverlay
           email={selectedEmail}
-          onUseDraft={d => { setReplyText(d); setShowDraftEly(false); }}
-          onClose={() => setShowDraftEly(false)}
+          mode={replyOverlay.mode}
+          threadEmails={threadEmails}
+          initialOpenEly={replyOverlay.openEly}
+          onSend={handleSendReply}
+          onClose={() => setReplyOverlay(null)}
         />
       )}
 
@@ -398,16 +531,11 @@ export default function Inbox({ onOpenComposer }) {
 
         {/* Toolbar */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0, background: 'var(--bg2)' }}>
-          <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm"
-            style={{ cursor: 'pointer', borderRadius: 99, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99, display: 'flex', alignItems: 'center', gap: 5 }}>
             ✎ Compose
           </button>
           <div style={{ position: 'relative', flex: 1 }} ref={folderRef}>
-            <button onClick={() => setFolderOpen(v => !v)} style={{
-              width: '100%', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99,
-              background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-            }}>
+            <button onClick={() => setFolderOpen(v => !v)} style={{ width: '100%', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
               <span>☰ {folder}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 {folder === 'Inbox' && unreadCount > 0 && <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 99, fontSize: 10, padding: '1px 5px', fontWeight: 700 }}>{unreadCount}</span>}
@@ -417,12 +545,7 @@ export default function Inbox({ onOpenComposer }) {
             {folderOpen && (
               <div style={{ position: 'absolute', top: '110%', left: 0, right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', zIndex: 100, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
                 {FOLDERS.map(f => (
-                  <div key={f} onClick={() => { setFolder(f); setFolderOpen(false); }} style={{
-                    padding: '9px 14px', fontSize: 13, cursor: 'pointer',
-                    background: folder === f ? 'var(--blue-bg)' : 'transparent',
-                    color: folder === f ? 'var(--blue)' : 'var(--text)', fontWeight: folder === f ? 600 : 400,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  }}>
+                  <div key={f} onClick={() => { setFolder(f); setFolderOpen(false); }} style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', background: folder === f ? 'var(--blue-bg)' : 'transparent', color: folder === f ? 'var(--blue)' : 'var(--text)', fontWeight: folder === f ? 600 : 400, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     {f}
                     {f === 'Inbox' && unreadCount > 0 && <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 99, fontSize: 10, padding: '1px 5px', fontWeight: 700 }}>{unreadCount}</span>}
                   </div>
@@ -430,12 +553,12 @@ export default function Inbox({ onOpenComposer }) {
               </div>
             )}
           </div>
-          <button onClick={handleSync} disabled={syncing} style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'none', color: 'var(--text2)', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={async () => { setSyncing(true); try { await fetch('/api/sync-emails', { method: 'POST' }); await loadEmails(); } catch {} setSyncing(false); }} disabled={syncing} style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'none', color: 'var(--text2)', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
             {syncing ? '…' : '↻'}
           </button>
         </div>
 
-        {/* Search + bulk action bar */}
+        {/* Search + bulk */}
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg2)' }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text3)' }}>🔍</span>
@@ -444,61 +567,35 @@ export default function Inbox({ onOpenComposer }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {/* Select all checkbox */}
-              <div onClick={toggleSelectAll} style={{
-                width: 16, height: 16, borderRadius: 4, cursor: 'pointer',
-                border: `1.5px solid ${allChecked ? 'var(--blue)' : 'var(--border2)'}`,
-                background: allChecked ? 'var(--blue)' : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                {allChecked && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+              <div onClick={() => setCheckedIds(allChecked ? new Set() : new Set(filtered.map(e => e.id)))} style={{ width: 16, height: 16, borderRadius: 4, cursor: 'pointer', border: `1.5px solid ${allChecked ? 'var(--blue)' : 'var(--border2)'}`, background: allChecked ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {allChecked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread · {filtered.length} shown</span>
             </div>
             {checkedIds.size > 0 && (
-              <button onClick={handleMassDelete} style={{
-                padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer',
-                background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)',
-                fontWeight: 600,
-              }}>
+              <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
                 🗑 Delete {checkedIds.size}
               </button>
             )}
           </div>
         </div>
 
-        {/* Email list — SCROLLABLE */}
+        {/* Email list */}
         <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4, paddingBottom: 8 }}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
             : filtered.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No emails in {folder}</div>
             : filtered.map(email => (
-              <EmailRow
-                key={email.id}
-                email={email}
-                selected={selectedEmail?.id === email.id}
-                checked={checkedIds.has(email.id)}
-                onSelect={handleSelect}
-                onCheck={toggleCheck}
-                onDelete={handleDelete}
-              />
+              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} />
             ))
           }
         </div>
       </div>
 
-      {/* ── Right panel: preview — curved container ── */}
+      {/* ── Right panel ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg2)' }}>
-        <EmailPreview
-          email={selectedEmail}
-          replyText={replyText}
-          setReplyText={setReplyText}
-          replyMode={replyMode}
-          setReplyMode={setReplyMode}
-          onOpenComposer={onOpenComposer}
-          onDraftWithEly={() => setShowDraftEly(true)}
-        />
+        <EmailPreview email={selectedEmail} onOpenReply={handleOpenReply} onDraftWithEly={handleDraftWithEly} />
       </div>
     </div>
   );
