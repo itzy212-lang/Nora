@@ -67,7 +67,12 @@ export default function Sidebar({ currentView, onNavigate, onClose }) {
 
       {/* Theme toggle at bottom */}
       <div style={{ marginTop: 'auto', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
-       ;
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={() => {
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            document.body.classList.toggle('light', newTheme === 'light');
           }}
         >
           {theme === 'light' ? '🌙 Dark mode' : '☀️ Light mode'}
