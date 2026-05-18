@@ -106,7 +106,7 @@ function DayDetail({ dateStr, events, onAddTask, onOpenProject }) {
     .sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
 
   return (
-    <div style={{ marginTop: 12, padding: '16px 20px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16 }}>
+    <div style={{ marginTop: 12, padding: '16px 20px', background: '#fcfcfc', border: '1px solid #ececec', borderRadius: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{fmtDayFull(dateStr)}</div>
         <button onClick={() => onAddTask(dateStr)} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add</button>
@@ -121,7 +121,7 @@ function DayDetail({ dateStr, events, onAddTask, onOpenProject }) {
             style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,
               padding: '10px 12px', borderRadius: 10, marginBottom: 8,
-              background: 'var(--bg3)', cursor: ev.projectId ? 'pointer' : 'default',
+              background: '#f7f7f7', cursor: ev.projectId ? 'pointer' : 'default',
               borderLeft: `3px solid ${cfg.colour}`,
             }}>
             <div style={{ flex: 1 }}>
@@ -159,7 +159,7 @@ function WeekView({ currentDate, events, onDayClick, selectedDate }) {
         const dayEvts = events.filter(e => e.date === dateStr);
         return (
           <div key={dateStr} onClick={() => onDayClick(dateStr)} style={{
-            background: 'var(--bg2)', border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? 'var(--border2)' : 'var(--border)'}`,
+            background: '#fafafa', border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? '#d9d9d9' : '#ececec'}`,
             borderRadius: 12, padding: 10, height: 140, overflow: 'hidden', cursor: 'pointer',
           }}>
             <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--blue)' : 'var(--text3)', marginBottom: 6 }}>
@@ -188,7 +188,7 @@ function DayView({ currentDate, events, onAddTask }) {
   const hours = Array.from({ length: 14 }, (_, i) => i + 7);
 
   return (
-    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+    <div style={{ background: '#fcfcfc', border: '1px solid #ececec', borderRadius: 16, overflow: 'hidden' }}>
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{fmtDayFull(dateStr)}</div>
         <button onClick={() => onAddTask(dateStr)} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add</button>
@@ -337,8 +337,8 @@ export default function Calendar({ onOpenProject }) {
             return (
               <div key={date} onClick={() => handleDayClick(date)} style={{
                 height: 120, /* FIXED equal height — matches old layout */
-                background: 'var(--bg2)',
-                border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? 'var(--border2)' : 'var(--border)'}`,
+                background: '#fafafa',
+                border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? '#d9d9d9' : '#ececec'}`,
                 borderRadius: 10, padding: '6px 7px',
                 cursor: 'pointer', overflow: 'hidden',
                 opacity: faded ? 0.35 : 1,
@@ -414,7 +414,7 @@ export default function Calendar({ onOpenProject }) {
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14, padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14, padding: '10px 14px', background: '#fcfcfc', border: '1px solid #ececec', borderRadius: 10 }}>
         {[['consent_deadline','Deadline'],['soc','SOC'],['meeting','Meeting/Call'],['todo','Task'],['notice_served','Notice served'],['site_visit','Site visit']].map(([k, lbl]) => {
           const cfg = EVENT_TYPES[k];
           return (
