@@ -1,238 +1,294 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
+import { useEmails } from '../../hooks/useEmails';
+import DraftWithEly from './DraftWithEly';
+import { uid, escapeHtml } from '../../utils/formatters';
 import sb from '../../supabaseClient';
 
-export default function Settings({ onNavigate }) {
-  const { state, dispatch } = useApp();
-  const { settings, currentUser } = state;
-  const [activeTab, setActiveTab] = useState('profile');
-  const [form, setForm] = useState({ ...settings });
-  const [msStatus, setMsStatus] = useState('');
-  const [saved, setSaved] = useState(false);
+function buildSignatureHTML(settings) {
+  const name = settings.sigName || settings.name || '';
+  const quals = settings.sigQuals || settings.title || '';
+  const phone = settings.sigPhone || settings.phone || settings.mobile || '';
+  const email = settings.sigEmail || settings.email || '';
+  const address = settings.sigAddress || settings.address || '';
+  const logo = settings.sigFirmLogoData || settings.logoData || '';
+  let html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;border-top:1px solid #e5e7eb;margin-top:24px;padding-top:14px">';
+  if (name) html += `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${escapeHtml(name)}</div>`;
+  if (quals) html += `<div style="font-size:12px;color:#555;margin-bottom:10px">${escapeHtml(quals)}</div>`;
+  if (logo) html += `<div style="margin-bottom:10px"><img src="${logo}" style="max-height:50px;max-width:180px;object-fit:contain"></div>`;
+  const lines = [phone && `Tel | ${escapeHtml(phone)}`, email && `Email | ${escapeHtml(email)}`, address && escapeHtml(address)].filter(Boolean);
+  if (lines.length) html += `<div style="font-size:12.5px;color:#333;line-height:1.9">${lines.map(l => `<div>${l}</div>`).join('')}</div>`;
+  html += '</div>';
+  return html;
+}
 
+export default function EmailComposer({ opts = {}, onClose, onSent }) {
+  const { state } = useApp();
+  const { sendEmail, markReplied } = useEmails();
+  const { settings, currentUser, projects, emails } = state;
+
+  // opts: { mode, to, subject, body, projectId, replyToEmailId, threadId, originalEmail, followUp }
+  const [to, setTo] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const [includeSig, setIncludeSig] = useState(true);
+  const [createFollowUp, setCreateFollowUp] = useState(false);
+  const [draftNote, setDraftNote] = useState('Draft not saved');
+  const [status, setStatus] = useState('');
+  const [sending, setSending] = useState(false);
+  const [showDraftWithEly, setShowDraftWithEly] = useState(false);
+  const [toSuggestions, setToSuggestions] = useState([]);
+  const [dirty, setDirty] = useState(false);
+  const replyInfoRef = useRef({});
+  const fileInputRef = useRef(null);
+
+  // On opts change, populate fields
   useEffect(() => {
-    setForm({ ...settings });
-  }, [settings]);
+    if (!opts) return;
+    setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
+    setSubject(opts.subject || (opts.originalEmail ? `RE: ${opts.originalEmail.subject || ''}` : ''));
+    setBody(opts.body || (opts.originalEmail && opts.prefillGreeting !== false ? `Hi ${opts.originalEmail.from || ''},\n\n` : ''));
+    setProjectId(opts.projectId || '');
+    setCreateFollowUp(!!opts.followUp);
+    setDirty(false);
+    setDraftNote('Draft not saved');
+    setAttachments([]);
+    replyInfoRef.current = {
+      replyToEmailId: opts.replyToEmailId || '',
+      threadId: opts.threadId || uid(),
+      original: opts.originalEmail || null,
+      mode: opts.mode || 'compose',
+    };
+  }, [opts]);
 
-  useEffect(() => {
-    checkMicrosoftConnection();
-  }, [currentUser]);
-
-  const checkMicrosoftConnection = async () => {
-    if (!sb || !currentUser) return;
-    try {
-      const { data } = await sb
-        .from('email_accounts')
-        .select('access_token, token_expires_at')
-        .eq('provider', 'outlook')
-        .eq('user_id', currentUser.email || currentUser.id)
-        .limit(1)
-        .maybeSingle();
-      if (data?.access_token) {
-        const expired = data.token_expires_at && new Date(data.token_expires_at) < new Date();
-        setMsStatus(expired ? 'Token expired — reconnect' : 'Connected ✓');
-      } else {
-        setMsStatus('Not connected');
+  const handleToInput = (val) => {
+    setTo(val);
+    setDirty(true);
+    if (val.length < 2) { setToSuggestions([]); return; }
+    const q = val.toLowerCase();
+    const seen = {};
+    const candidates = [];
+    // Search contacts + email senders
+    emails.slice(0, 200).forEach(e => {
+      const addr = e.from_email || '';
+      const name = e.from || '';
+      if (!addr || seen[addr]) return;
+      if (name.toLowerCase().includes(q) || addr.toLowerCase().includes(q)) {
+        seen[addr] = true;
+        candidates.push({ name, email: addr });
       }
-    } catch { setMsStatus('Unknown'); }
+    });
+    setToSuggestions(candidates.slice(0, 6));
   };
 
-  const saveSettings = () => {
-    dispatch({ type: 'SET_SETTINGS', payload: form });
-    if (form.theme !== settings.theme) dispatch({ type: 'SET_THEME', payload: form.theme });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const connectMicrosoft = () => {
-    // Microsoft OAuth flow — redirect to auth endpoint
-    const clientId = import.meta.env.VITE_MS_CLIENT_ID || '';
-    const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
-    const scope = encodeURIComponent('https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send offline_access');
-    if (!clientId) {
-      alert('Microsoft client ID not configured. Contact your administrator.');
-      return;
-    }
-    window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}`;
-  };
-
-  const handleLogoUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setForm(f => ({ ...f, logoData: ev.target.result }));
-    reader.readAsDataURL(file);
+  const handleFileAttach = (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setAttachments(prev => [...prev, {
+          name: file.name, type: file.type, size: file.size,
+          data: ev.target.result,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
     e.target.value = '';
   };
 
-  const TABS = ['profile', 'signature', 'email', 'billing', 'theme'];
+  const handleSend = useCallback(async () => {
+    if (!to.trim()) { alert('Add a recipient first.'); return; }
+    if (!body.trim()) { alert('Write a message first.'); return; }
+    const userEmail = currentUser?.email || '';
+    if (!userEmail) { alert('No logged-in user found. Please log in first.'); return; }
+
+    setSending(true);
+    setStatus('Sending via Outlook…');
+    try {
+      const sigHtml = includeSig ? buildSignatureHTML(settings) : '';
+      const htmlBody = escapeHtml(body).replace(/\n/g, '<br>') + sigHtml;
+      await sendEmail({
+        to: to.trim(),
+        subject: subject.trim() || '(No subject)',
+        body: htmlBody,
+        userId: userEmail,
+        attachments: attachments.map(a => ({ name: a.name, type: a.type, data: a.data })),
+      });
+      // Mark original as replied
+      const { replyToEmailId } = replyInfoRef.current;
+      if (replyToEmailId) markReplied(replyToEmailId);
+      setStatus('Sent ✓');
+      setDirty(false);
+      setTimeout(() => { onSent?.(); onClose?.(); }, 500);
+    } catch (err) {
+      setStatus('Send failed');
+      alert(err.message || 'Email send failed.');
+    } finally {
+      setSending(false);
+    }
+  }, [to, subject, body, includeSig, settings, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
+
+  const handleClose = () => {
+    if (dirty) {
+      const action = window.prompt('Type DISCARD to discard, or CANCEL to keep editing.', 'CANCEL');
+      if (!action || !/^discard$/i.test(action)) return;
+    }
+    onClose?.();
+  };
+
+  const project = projects.find(p => p.id === projectId);
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div className="tabs">
-        {TABS.map(tab => (
-          <div key={tab} className={`tab${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)} style={{ textTransform: 'capitalize' }}>
-            {tab}
-          </div>
-        ))}
+    <div className="email-composer-overlay open">
+      <div className="email-composer-header">
+        <button className="btn btn-sm btn-ghost" onClick={handleClose}>← Back</button>
+        <div style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
+          {replyInfoRef.current.mode === 'reply' ? 'Reply email' : 'Compose email'}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{status}</div>
       </div>
 
-      {activeTab === 'profile' && (
-        <div className="card">
-          <div className="card-title">Profile</div>
+      <div className="email-composer-body">
+        <div className="email-composer-fields">
           <div className="two-col">
-            <div className="form-row"><label className="form-label">Full name</label><input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Title / qualifications</label><input value={form.title || ''} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Firm / company</label><input value={form.firm || ''} onChange={e => setForm(f => ({ ...f, firm: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Role</label>
-              <select value={form.role || 'partywall'} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-                <option value="partywall">Party Wall Surveyor</option>
-                <option value="building">Building Surveyor</option>
-                <option value="pm">Project Manager</option>
-                <option value="architect">Architect</option>
-                <option value="contractor">Contractor</option>
-              </select>
+            {/* To field */}
+            <div className="form-row" style={{ position: 'relative' }}>
+              <label className="form-label">To</label>
+              <input
+                value={to}
+                onChange={e => handleToInput(e.target.value)}
+                placeholder="Name or email address"
+                autoComplete="off"
+              />
+              {toSuggestions.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--r)', maxHeight: 180, overflowY: 'auto', boxShadow: 'var(--shadow)' }}>
+                  {toSuggestions.map((c, i) => (
+                    <div
+                      key={i}
+                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12.5, borderBottom: '1px solid var(--border)' }}
+                      onMouseEnter={e => e.target.style.background = 'var(--bg4)'}
+                      onMouseLeave={e => e.target.style.background = ''}
+                      onMouseDown={(e) => { e.preventDefault(); setTo(c.email); setToSuggestions([]); }}
+                    >
+                      <strong>{c.name || c.email}</strong>
+                      {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="form-row"><label className="form-label">Phone</label><input value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Mobile</label><input value={form.mobile || ''} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Email</label><input value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Website</label><input value={form.website || ''} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} /></div>
-          </div>
-          <div className="form-row"><label className="form-label">Address</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
-          <div className="form-row">
-            <label className="form-label">Logo</label>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {form.logoData && <img src={form.logoData} style={{ maxHeight: 38, maxWidth: 78, objectFit: 'contain', border: '1px solid var(--border)', borderRadius: 6 }} alt="Logo" />}
-              <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-                Upload logo <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
-              </label>
-              {form.logoData && <button className="btn btn-xs btn-ghost" onClick={() => setForm(f => ({ ...f, logoData: '' }))}>Remove</button>}
-            </div>
-          </div>
-          <div className="form-row">
-            <label className="form-label">Brand colour</label>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <input type="color" value={form.brandColour || '#4f7fff'} onChange={e => setForm(f => ({ ...f, brandColour: e.target.value }))} style={{ width: 40, height: 34, padding: 2 }} />
-              <span style={{ fontSize: 12, color: 'var(--text3)' }}>{form.brandColour || '#4f7fff'}</span>
+            <div className="form-row">
+              <label className="form-label">Subject</label>
+              <input value={subject} onChange={e => { setSubject(e.target.value); setDirty(true); }} />
             </div>
           </div>
-        </div>
-      )}
 
-      {activeTab === 'signature' && (
-        <div className="card">
-          <div className="card-title">Email signature</div>
-          <div className="two-col">
-            <div className="form-row"><label className="form-label">Name</label><input value={form.sigName || form.name || ''} onChange={e => setForm(f => ({ ...f, sigName: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Qualifications</label><input value={form.sigQuals || ''} onChange={e => setForm(f => ({ ...f, sigQuals: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Phone</label><input value={form.sigPhone || form.phone || ''} onChange={e => setForm(f => ({ ...f, sigPhone: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Email</label><input value={form.sigEmail || form.email || ''} onChange={e => setForm(f => ({ ...f, sigEmail: e.target.value }))} /></div>
-          </div>
-          <div className="form-row"><label className="form-label">Address</label><input value={form.sigAddress || form.address || ''} onChange={e => setForm(f => ({ ...f, sigAddress: e.target.value }))} /></div>
-          <div className="form-row"><label className="form-label">Disclaimer</label><textarea value={form.sigDisclaimer || ''} onChange={e => setForm(f => ({ ...f, sigDisclaimer: e.target.value }))} rows={2} /></div>
           <div className="form-row">
-            <label className="form-label">Firm logo for signature</label>
-            <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-              Upload <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const r = new FileReader();
-                r.onload = ev => setForm(f => ({ ...f, sigFirmLogoData: ev.target.result }));
-                r.readAsDataURL(file);
-                e.target.value = '';
-              }} />
-            </label>
-            {form.sigFirmLogoData && <img src={form.sigFirmLogoData} style={{ maxHeight: 38, maxWidth: 78, objectFit: 'contain', marginLeft: 10 }} alt="" />}
+            <label className="form-label">Draft</label>
+            <textarea
+              value={body}
+              onChange={e => { setBody(e.target.value); setDirty(true); }}
+              style={{ maxHeight: 'none', minHeight: 300, resize: 'vertical' }}
+              placeholder="Write your email..."
+              spellCheck
+            />
           </div>
-        </div>
-      )}
 
-      {activeTab === 'email' && (
-        <div className="card">
-          <div className="card-title">📨 Email connections</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: 'var(--r)', marginBottom: 10 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: msStatus.includes('Connected') ? 'var(--green)' : 'var(--amber)', flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Microsoft Outlook</div>
-              <div style={{ fontSize: 10.5, color: 'var(--text3)', marginTop: 3 }}>{msStatus || 'Checking…'}</div>
-            </div>
-            <button className="btn btn-sm btn-primary" onClick={connectMicrosoft}>
-              {msStatus.includes('Connected') ? 'Reconnect' : 'Connect Outlook'}
-            </button>
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6 }}>
-            Connect your Outlook account to send and receive emails directly within Ely.
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'billing' && (
-        <div className="card">
-          <div className="card-title">Billing & fees</div>
-          <div className="two-col">
-            <div className="form-row"><label className="form-label">Standard fee (£)</label><input value={form.fee || ''} onChange={e => setForm(f => ({ ...f, fee: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Hourly rate (£)</label><input value={form.hourlyRate || ''} onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">SOC fee (£)</label><input value={form.socFee || ''} onChange={e => setForm(f => ({ ...f, socFee: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Agreed fee (£)</label><input value={form.agreedFee || ''} onChange={e => setForm(f => ({ ...f, agreedFee: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Bank name</label><input value={form.bankName || ''} onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Sort code</label><input value={form.sortCode || ''} onChange={e => setForm(f => ({ ...f, sortCode: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Account no</label><input value={form.accountNo || ''} onChange={e => setForm(f => ({ ...f, accountNo: e.target.value }))} /></div>
-            <div className="form-row"><label className="form-label">Payment terms (days)</label><input type="number" value={form.paymentTerms || 14} onChange={e => setForm(f => ({ ...f, paymentTerms: parseInt(e.target.value) || 14 }))} /></div>
-          </div>
-          <div className="toggle-row">
-            <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>VAT registered</span>
-            <label className="toggle">
-              <input type="checkbox" checked={!!form.vatRegistered} onChange={e => setForm(f => ({ ...f, vatRegistered: e.target.checked }))} />
-              <span className="tslider" />
-            </label>
-          </div>
-          {form.vatRegistered && (
-            <div className="form-row" style={{ marginTop: 10 }}><label className="form-label">VAT rate (%)</label><input type="number" value={form.vatRate || 20} onChange={e => setForm(f => ({ ...f, vatRate: parseInt(e.target.value) || 20 }))} /></div>
+          {includeSig && (
+            <div style={{ margin: '0 0 8px 0', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg4)', fontSize: 12 }}
+              dangerouslySetInnerHTML={{ __html: buildSignatureHTML(settings) }}
+            />
           )}
-        </div>
-      )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={includeSig} onChange={e => setIncludeSig(e.target.checked)} />
+              Include signature
+            </label>
+          </div>
 
-      {activeTab === 'theme' && (
-        <div className="card">
-          <div className="card-title">Appearance</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {['dark', 'light', 'system'].map(t => (
-              <div
-                key={t}
-                id={`theme-${t}-opt`}
-                onClick={() => setForm(f => ({ ...f, theme: t }))}
-                style={{
-                  padding: '14px 18px', border: `2px solid ${form.theme === t ? 'var(--blue)' : 'var(--border)'}`,
-                  borderRadius: 'var(--rl)', cursor: 'pointer', textAlign: 'center', flex: 1,
-                  background: form.theme === t ? 'var(--blue-bg)' : 'var(--bg4)',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <div style={{ fontSize: 22, marginBottom: 6 }}>{t === 'dark' ? '🌙' : t === 'light' ? '☀️' : '🖥'}</div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, textTransform: 'capitalize' }}>{t}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+              <input type="checkbox" checked={createFollowUp} onChange={e => setCreateFollowUp(e.target.checked)} />
+              Create follow-up task
+            </label>
+            {project && (
+              <span className="ch-badge" style={{ background: 'var(--purple-bg)', color: 'var(--purple)' }}>
+                {project.ref} · {(project.address || '').slice(0, 20)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Original email preview */}
+        {replyInfoRef.current.original && (
+          <>
+            <hr className="email-composer-divider" />
+            <div className="email-composer-original-label">Original email</div>
+            <div className="email-composer-preview"
+              dangerouslySetInnerHTML={{ __html: replyInfoRef.current.original.body || replyInfoRef.current.original.preview || '' }}
+            />
+          </>
+        )}
+
+        {/* Attachments */}
+        <div style={{ paddingTop: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {attachments.map((att, i) => (
+              <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11.5, color: 'var(--text2)' }}>
+                📎 {att.name} <span style={{ color: 'var(--text3)' }}>{Math.round(att.size / 1024)}kb</span>
+                <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '0 0 0 4px', fontSize: 13 }}>×</button>
               </div>
             ))}
           </div>
+          <input type="file" multiple ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileAttach} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>📎 External file</button>
+          </div>
         </div>
-      )}
 
-      {/* Save button */}
-      <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
-        <button className="btn btn-primary" onClick={saveSettings} style={{ flex: 1, justifyContent: 'center' }}>
-          {saved ? '✓ Saved!' : 'Save settings'}
-        </button>
+        {/* Actions */}
+        <div className="email-composer-actions">
+          <div className="email-composer-meta">
+            <span className="email-composer-dot" />
+            <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>{draftNote}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" onClick={() => setShowDraftWithEly(true)}>✨ Draft with Ely</button>
+            <button className="btn btn-amber" onClick={() => setDraftNote('Draft saved')}>Save draft</button>
+            <button className="btn btn-primary" onClick={handleSend} disabled={sending}>
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {currentUser && (
-        <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', fontSize: 12, color: 'var(--text3)' }}>
-          Logged in as: {currentUser.email}
-          {' '}
-          <button className="btn btn-xs btn-danger" onClick={async () => {
-            if (sb) await sb.auth.signOut();
-            window.location.reload();
-          }}>Log out</button>
-        </div>
+      {/* Draft with Ely panel */}
+      {showDraftWithEly && (
+        <DraftWithEly
+          email={replyInfoRef.current.original}
+          threadId={replyInfoRef.current.threadId}
+          projectId={projectId}
+          onUseDraft={(draft) => {
+            setBody(draft);
+            setDirty(true);
+            setShowDraftWithEly(false);
+          }}
+          onClose={() => setShowDraftWithEly(false)}
+        />
       )}
     </div>
   );
+}
+
+// CSS for the overlay
+const style = document.createElement('style');
+style.textContent = `
+.email-composer-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: none; flex-direction: column; }
+.email-composer-overlay.open { display: flex; }
+`;
+if (!document.getElementById('email-composer-style')) {
+  style.id = 'email-composer-style';
+  document.head.appendChild(style);
 }
