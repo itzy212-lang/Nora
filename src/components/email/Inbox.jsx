@@ -98,7 +98,7 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
   };
 
   return (
-    <div style={{ width: '46%', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--bg3)' }}>
+    <div style={{ width: '42%', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--bg3)' }}>
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div>
@@ -173,7 +173,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 1100, margin: '24px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, display: 'flex', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
+      <div style={{ width: '100%', maxWidth: 1300, margin: '10px 16px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, display: 'flex', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
 
         {/* ── Compose side ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -220,7 +220,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose }) {
               <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right', paddingTop: 8 }}>Body</div>
               <textarea value={body} onChange={e => setBody(e.target.value)}
                 placeholder="Type your reply here, or use ✨ Draft with Ely on the right…"
-                style={{ ...inp, flex: 1, minHeight: 220, resize: 'vertical', lineHeight: 1.7 }} />
+                style={{ ...inp, flex: 1, minHeight: 320, resize: 'vertical', lineHeight: 1.7 }} />
             </div>
 
             {/* Thread context */}
