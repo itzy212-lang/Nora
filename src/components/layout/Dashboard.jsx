@@ -2,11 +2,11 @@ import { useState, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import { fmtShort } from '../../utils/formatters';
 
-const CARD_STYLE = {
+const dashboardCardStyle = {
   background: '#ffffff',
-  border: '1px solid #e7eaf0',
+  border: '1px solid #e5e7eb',
   borderRadius: 18,
-  boxShadow: '0 4px 16px rgba(15, 23, 42, 0.06)',
+  boxShadow: '0 4px 14px rgba(15, 23, 42, 0.06)',
 };
 
 function StatCard({ label, value, colour }) {
@@ -19,10 +19,9 @@ function StatCard({ label, value, colour }) {
     default: { val: 'var(--text)' },
   };
   const c = colours[colour] || colours.default;
-
   return (
     <div style={{
-      ...CARD_STYLE,
+      ...dashboardCardStyle,
       padding: '18px 20px',
       flex: 1,
       minWidth: 0,
@@ -44,6 +43,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const [briefing, setBriefing] = useState('');
   const [briefingLoading, setBriefingLoading] = useState(false);
 
+  // ── Stats ──────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status !== 'complete').length;
 
   const unpaidInvoices = invoices
@@ -63,31 +63,29 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .filter(l => l.status !== 'lost')
     .reduce((s, l) => s + parseFloat(l.fee || 0), 0);
 
+  // ── Cash flow ──────────────────────────────────────────
   const now = Date.now();
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-
   const paidThisMonth = invoices
     .filter(inv => inv.status === 'paid' && inv.paidAt >= monthStart.getTime())
     .reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
-
   const unpaidTotal = invoices
     .filter(inv => inv.status === 'unpaid' || inv.status === 'sent')
     .reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
-
   const overdue = invoices
     .filter(inv => (inv.status === 'unpaid' || inv.status === 'sent') && inv.dueAt && inv.dueAt < now)
     .reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
-
   const uninvoicedPipeline = feePipeline;
 
+  // ── Leads (for widget) ─────────────────────────────────
   const activeLeads = [...leads]
     .filter(l => l.status === 'new' || l.status === 'contacted')
     .sort((a, b) => (a._t || 0) - (b._t || 0))
     .slice(0, 5);
 
+  // ── Next 14 days ──────────────────────────────────────
   const in14 = now + 14 * 86400000;
   const upcoming = [];
-
   projects.forEach(p => {
     (p.aos || []).forEach(ao => {
       if (ao.consentDeadline) {
@@ -110,9 +108,9 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
       }
     });
   });
-
   upcoming.sort((a, b) => a.date - b.date);
 
+  // Group by day label
   const dayGroups = [];
   upcoming.forEach(item => {
     const d = new Date(item.date);
@@ -122,6 +120,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     else dayGroups.push({ label, items: [item] });
   });
 
+  // ── Morning briefing ───────────────────────────────────
   const refreshBriefing = useCallback(async () => {
     setBriefingLoading(true);
     setBriefing('');
@@ -131,11 +130,9 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
         .slice(0, 10)
         .map(p => `${p.ref}: ${p.address}, status: ${p.status}`)
         .join('\n');
-
       const deadlineSummary = upcoming.slice(0, 5)
         .map(u => `${u.label} on ${new Date(u.date).toLocaleDateString('en-GB')}`)
         .join('\n');
-
       const res = await fetch('/api/ely-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +142,6 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
           context: { projSummary, deadlineSummary, leadCount: activeLeads.length },
         }),
       });
-
       const data = await res.json();
       setBriefing(data.reply || 'No briefing available.');
     } catch {
@@ -159,16 +155,23 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   return (
     <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16, background: '#f1f3f6', minHeight: '100%' }}>
 
+      {/* ── Row 1: 5 stat cards ── */}
       <div style={{ display: 'flex', gap: 14 }}>
-        <StatCard label="Active projects" value={activeProjects} colour="blue" />
-        <StatCard label="Unpaid invoices" value={fmt(unpaidInvoices)} colour="amber" />
-        <StatCard label="Needs attention" value={needsAttention} colour="red" />
-        <StatCard label="Fee pipeline" value={fmt(feePipeline)} colour="green" />
-        <StatCard label="Lead pipeline" value={fmt(leadPipeline)} colour="purple" />
+        <StatCard label="Active projects"  value={activeProjects}   colour="blue"  />
+        <StatCard label="Unpaid invoices"  value={fmt(unpaidInvoices)} colour="amber" />
+        <StatCard label="Needs attention"  value={needsAttention}   colour="red"   />
+        <StatCard label="Fee pipeline"     value={fmt(feePipeline)} colour="green" />
+        <StatCard label="Lead pipeline"    value={fmt(leadPipeline)} colour="purple" />
       </div>
 
+      {/* ── Row 2: Morning briefing (75%) + Cash flow (25%) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 14 }}>
-        <div style={{ ...CARD_STYLE, padding: '16px 20px' }}>
+
+        {/* Morning briefing */}
+        <div style={{
+          ...dashboardCardStyle,
+          padding: '16px 20px',
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               ✨ Morning Briefing
@@ -185,22 +188,28 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
             </button>
           </div>
           <div style={{ fontSize: 13, color: briefing ? 'var(--text2)' : 'var(--text3)', lineHeight: 1.65, minHeight: 60, fontStyle: briefing ? 'normal' : 'italic' }}>
-            {briefingLoading ? 'Generating your briefing…' : briefing || 'Click refresh for your AI morning briefing…'}
+            {briefingLoading
+              ? 'Generating your briefing…'
+              : briefing || 'Click refresh for your AI morning briefing…'}
           </div>
         </div>
 
-        <div style={{ ...CARD_STYLE, padding: '16px 20px' }}>
+        {/* Cash flow */}
+        <div style={{
+          ...dashboardCardStyle,
+          padding: '16px 20px',
+        }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
             💰 Cash Flow
           </div>
           {[
-            { label: 'Paid this month', val: fmt(paidThisMonth), colour: 'var(--green)' },
-            { label: 'Unpaid invoices', val: fmt(unpaidTotal), colour: 'var(--amber)' },
-            { label: 'Overdue', val: fmt(overdue), colour: 'var(--red)' },
+            { label: 'Paid this month',    val: fmt(paidThisMonth),    colour: 'var(--green)' },
+            { label: 'Unpaid invoices',    val: fmt(unpaidTotal),      colour: 'var(--amber)' },
+            { label: 'Overdue',            val: fmt(overdue),          colour: 'var(--red)'   },
           ].map(({ label, val, colour }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #edf0f4', fontSize: 12.5 }}>
               <span style={{ color: 'var(--text2)' }}>{label}</span>
-              <span style={{ fontWeight: 600, color }}>{val}</span>
+              <span style={{ fontWeight: 600, color: colour }}>{val}</span>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0 0', fontSize: 13 }}>
@@ -210,8 +219,14 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
         </div>
       </div>
 
+      {/* ── Row 3: Leads (30%) + Next 14 days (70%) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
-        <div style={{ ...CARD_STYLE, padding: '16px 20px' }}>
+
+        {/* Leads */}
+        <div style={{
+          ...dashboardCardStyle,
+          padding: '16px 20px',
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               🎯 Leads
@@ -258,7 +273,11 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
           })}
         </div>
 
-        <div style={{ ...CARD_STYLE, padding: '16px 20px', overflowY: 'auto', maxHeight: 340 }}>
+        {/* Next 14 days */}
+        <div style={{
+          ...dashboardCardStyle,
+          padding: '16px 20px', overflowY: 'auto', maxHeight: 340,
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               📅 Next 14 Days
@@ -299,7 +318,9 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
                     <span style={{ fontSize: 10.5, color: 'var(--text3)', flexShrink: 0 }}>{item.ref}</span>
                   )}
                   {item.projectId && (
-                    <span style={{ fontSize: 10.5, color: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}>
+                    <span
+                      style={{ fontSize: 10.5, color: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}
+                    >
                       open
                     </span>
                   )}
