@@ -64,11 +64,11 @@ const card = (extra = {}) => ({ background: 'var(--bg2)', border: '1px solid var
 
 const modalInput = {
   width: '100%',
-  padding: '8px 10px',
-  fontSize: 13,
-  background: 'var(--bg2)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
+  padding: '10px 12px',
+  fontSize: 13.5,
+  background: '#f8fafc',
+  border: '1px solid #dde3ea',
+  borderRadius: 12,
   color: 'var(--text)',
   outline: 'none',
   boxSizing: 'border-box',
@@ -77,21 +77,46 @@ const modalInput = {
 function ModalShell({ title, children, onClose }) {
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(15, 23, 42, 0.45)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      position: 'fixed',
+      inset: 0,
+      zIndex: 500,
+      background: 'rgba(15, 23, 42, 0.48)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
     }}>
       <div style={{
-        width: 580, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto',
-        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 18,
-        boxShadow: '0 18px 45px rgba(15, 23, 42, 0.25)',
+        width: 760,
+        maxWidth: 'calc(100vw - 40px)',
+        maxHeight: '88vh',
+        overflowY: 'auto',
+        background: '#eef1f5',
+        border: '1px solid #d9dee7',
+        borderRadius: 18,
+        boxShadow: '0 22px 55px rgba(15, 23, 42, 0.28)',
       }}>
         <div style={{
-          padding: '14px 18px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: '18px 24px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
         }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6b7280',
+              fontSize: 24,
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
         </div>
         {children}
       </div>
@@ -102,7 +127,7 @@ function ModalShell({ title, children, onClose }) {
 function Field({ label, children }) {
   return (
     <div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 500, color: '#334155', marginBottom: 5 }}>{label}</div>
       {children}
     </div>
   );
@@ -112,6 +137,8 @@ function ProjectEditModal({ project, onSave, onClose }) {
   const [form, setForm] = useState({
     bo_1_name: project.bo_1_name || project.bo || '',
     bo_1_email: project.bo_1_email || project.bo_email || '',
+    bo_2_name: project.bo_2_name || '',
+    bo_2_email: project.bo_2_email || '',
     bo_premise_address: project.bo_premise_address || project.address || '',
     works: project.works || '',
     fee: project.fee || '',
@@ -129,35 +156,187 @@ function ProjectEditModal({ project, onSave, onClose }) {
 
   return (
     <ModalShell title="Edit project" onClose={onClose}>
-      <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label="Building owner"><input value={form.bo_1_name} onChange={e => set('bo_1_name', e.target.value)} style={modalInput} /></Field>
-        <Field label="BO email"><input value={form.bo_1_email} onChange={e => set('bo_1_email', e.target.value)} style={modalInput} /></Field>
-        <Field label="BO premise address"><textarea value={form.bo_premise_address} onChange={e => set('bo_premise_address', e.target.value)} rows={2} style={{ ...modalInput, resize: 'vertical' }} /></Field>
-        <Field label="Works"><textarea value={form.works} onChange={e => set('works', e.target.value)} rows={2} style={{ ...modalInput, resize: 'vertical' }} /></Field>
-        <Field label="Fee"><input value={form.fee} onChange={e => set('fee', e.target.value)} style={modalInput} /></Field>
-        <Field label="Status">
-          <select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}>
-            <option value="active">Active</option>
-            <option value="complete">Complete</option>
-            <option value="on_hold">On hold</option>
-            <option value="dispute">Dispute</option>
-          </select>
-        </Field>
-        <Field label="Role">
-          <select value={form.role} onChange={e => set('role', e.target.value)} style={modalInput}>
-            <option value="BO">Building Owner's Surveyor</option>
-            <option value="AO">Adjoining Owner's Surveyor</option>
-            <option value="AGREED">Agreed Surveyor</option>
-          </select>
-        </Field>
-        <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99, opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : 'Save changes'}</button>
+      <div style={{ padding: '0 24px 24px' }}>
+
+        <div style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '0.7px',
+          margin: '4px 0 12px',
+        }}>
+          Your role on this project
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
+          {[
+            ['BO', "Building Owner Surveyor", 'Acting for the BO'],
+            ['AO', "Adjoining Owner Surveyor", 'Acting for the AO'],
+            ['AGREED', "Agreed Surveyor", 'Acting for both sides'],
+          ].map(([value, label, sub]) => {
+            const active = form.role === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => set('role', value)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: 14,
+                  border: active ? '1px solid var(--blue)' : '1px solid #dde3ea',
+                  background: active ? 'var(--blue-bg)' : '#ffffff',
+                  color: active ? 'var(--blue)' : '#111827',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 11.5, color: active ? 'var(--blue)' : '#94a3b8', marginTop: 2 }}>{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '0.7px',
+          margin: '18px 0 10px',
+          paddingTop: 16,
+          borderTop: '1px solid #d9dee7',
+        }}>
+          Premise address
+        </div>
+
+        <div style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
+          <Field label="Premise address">
+            <textarea
+              value={form.bo_premise_address}
+              onChange={e => set('bo_premise_address', e.target.value)}
+              rows={2}
+              style={{ ...modalInput, resize: 'vertical' }}
+            />
+          </Field>
+        </div>
+
+        <div style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '0.7px',
+          margin: '18px 0 10px',
+          paddingTop: 16,
+          borderTop: '1px solid #d9dee7',
+        }}>
+          Building owner
+        </div>
+
+        <div style={{
+          background: '#f8fafc',
+          border: '1px solid #dde3ea',
+          borderRadius: 16,
+          padding: 16,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 14,
+        }}>
+          <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+            Owner 1
+          </div>
+          <Field label="Full name">
+            <input value={form.bo_1_name} onChange={e => set('bo_1_name', e.target.value)} style={modalInput} />
+          </Field>
+          <Field label="Email">
+            <input value={form.bo_1_email} onChange={e => set('bo_1_email', e.target.value)} style={modalInput} />
+          </Field>
+        </div>
+
+        <div style={{
+          background: '#f8fafc',
+          border: '1px solid #dde3ea',
+          borderRadius: 16,
+          padding: 16,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 18,
+        }}>
+          <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+            Owner 2 optional, joint owner
+          </div>
+          <Field label="Full name">
+            <input value={form.bo_2_name || ''} onChange={e => set('bo_2_name', e.target.value)} style={modalInput} />
+          </Field>
+          <Field label="Email, e-signature if joint">
+            <input value={form.bo_2_email || ''} onChange={e => set('bo_2_email', e.target.value)} style={modalInput} />
+          </Field>
+        </div>
+
+        <div style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '0.7px',
+          margin: '18px 0 10px',
+          paddingTop: 16,
+          borderTop: '1px solid #d9dee7',
+        }}>
+          Project details
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Field label="Reference">
+            <input value={project.ref || ''} disabled style={{ ...modalInput, color: '#94a3b8' }} />
+          </Field>
+          <Field label="Status">
+            <select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}>
+              <option value="active">Active</option>
+              <option value="complete">Complete</option>
+              <option value="on_hold">On hold</option>
+              <option value="dispute">Dispute</option>
+            </select>
+          </Field>
+          <div style={{ gridColumn: '1/-1' }}>
+            <Field label="Works description">
+              <textarea value={form.works} onChange={e => set('works', e.target.value)} rows={3} style={{ ...modalInput, resize: 'vertical' }} />
+            </Field>
+          </div>
+          <div style={{ gridColumn: '1/-1' }}>
+            <Field label="Projected fee">
+              <input
+                value={form.fee}
+                onChange={e => set('fee', e.target.value)}
+                placeholder="Leave blank if no fee set"
+                style={modalInput}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 10,
+          marginTop: 18,
+          paddingTop: 18,
+          borderTop: '1px solid #d9dee7',
+        }}>
+          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99, padding: '8px 18px' }}>
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99, padding: '8px 18px', opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
         </div>
       </div>
     </ModalShell>
   );
-}
 
 function AOEditModal({ ao, title, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -385,12 +564,21 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
   const projColour = getProjectColour(currentProject);
 
   const handleSaveProjectEdit = useCallback(async (form) => {
+    const feeText = String(form.fee ?? '').trim();
+
+    if (feeText && Number.isNaN(Number(feeText))) {
+      alert('Fee must be a number, or left blank.');
+      throw new Error('Invalid fee value');
+    }
+
     const update = {
       bo_1_name: form.bo_1_name || '',
       bo_1_email: form.bo_1_email || '',
+      bo_2_name: form.bo_2_name || '',
+      bo_2_email: form.bo_2_email || '',
       bo_premise_address: form.bo_premise_address || '',
       works: form.works || '',
-      fee: form.fee || '',
+      fee: feeText === '' ? null : Number(feeText),
       status: form.status || 'active',
       role: form.role || 'BO',
     };
