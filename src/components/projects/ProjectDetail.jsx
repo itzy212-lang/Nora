@@ -62,6 +62,37 @@ function getProjectColour(project) {
 
 const card = (extra = {}) => ({ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, ...extra });
 
+async function updateProjectSafely(projectId, payload) {
+  let cleanPayload = { ...payload };
+  let lastError = null;
+
+  for (let i = 0; i < 12; i++) {
+    const { data, error } = await sb
+      .from('projects')
+      .update(cleanPayload)
+      .eq('id', projectId)
+      .select('*')
+      .single();
+
+    if (!error) return data;
+
+    lastError = error;
+    const message = error.message || '';
+    const missingColumn = message.match(/Could not find the '([^']+)' column/)?.[1];
+
+    if (missingColumn && Object.prototype.hasOwnProperty.call(cleanPayload, missingColumn)) {
+      const nextPayload = { ...cleanPayload };
+      delete nextPayload[missingColumn];
+      cleanPayload = nextPayload;
+      continue;
+    }
+
+    throw error;
+  }
+
+  throw lastError || new Error('Could not save project.');
+}
+
 const modalInput = {
   width: '100%',
   padding: '10px 12px',
@@ -611,20 +642,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
   const handleSaveProjectEdit = useCallback(async (form) => {
     const feeValue = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
+    const serviceAddress = form.bo_service_address || form.bo_premise_address || null;
+
     const payload = {
       ref: form.ref || null,
       role: form.role || 'BO',
       surveyor_role: form.role || 'BO',
       bo_premise_address: form.bo_premise_address || null,
-      address: form.bo_premise_address || null,
-      bo_service_address: form.bo_service_address || form.bo_premise_address || null,
-      bo_1_service_address: form.bo_service_address || form.bo_premise_address || null,
+      bo_service_address: serviceAddress,
+      bo_1_service_address: serviceAddress,
       bo_1_name: form.bo_1_name || null,
-      bo: form.bo_1_name || null,
       bo_1_email: form.bo_1_email || null,
-      bo_email: form.bo_1_email || null,
       bo_1_phone: form.bo_1_phone || null,
-      bo_phone: form.bo_1_phone || null,
       bo_2_name: form.bo_2_name || null,
       bo_2_email: form.bo_2_email || null,
       bo_2_phone: form.bo_2_phone || null,
@@ -633,15 +662,19 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       status: form.status || 'active',
     };
 
-    const { data, error } = await sb
-      .from('projects')
-      .update(payload)
-      .eq('id', project.id)
-      .select('*')
-      .single();
-
-    if (error) throw new Error('Could not save project: ' + error.message);
-    setProject(prev => ({ ...prev, ...payload, ...(data || {}) }));
+    try {
+      const data = await updateProjectSafely(project.id, payload);
+      setProject(prev => ({
+        ...prev,
+        ...payload,
+        ...(data || {}),
+        address: payload.bo_premise_address || prev.address || '',
+        bo: payload.bo_1_name || prev.bo || '',
+        bo_email: payload.bo_1_email || prev.bo_email || '',
+      }));
+    } catch (error) {
+      throw new Error('Could not save project: ' + (error.message || 'Unknown error'));
+    }
   }, [project.id]);
 
   const handleSaveAO = useCallback(async (form, existingAO = null) => {
