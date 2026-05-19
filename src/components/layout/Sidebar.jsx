@@ -125,22 +125,7 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
               );
             })}
 
-            {/* + Invoice button directly under Finance section */}
-            {section === 'FINANCE' && (
-              <div
-                onClick={() => { onRaiseInvoice?.(); onClose?.(); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '7px 16px 9px', fontSize: 12.5,
-                  color: 'var(--blue)', cursor: 'pointer', userSelect: 'none',
-                }}
-                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-              >
-                <span style={{ fontSize: 13, width: 18, textAlign: 'center', flexShrink: 0 }}>＋</span>
-                <span style={{ fontWeight: 500 }}>Raise Invoice</span>
-              </div>
-            )}
+
           </div>
         ))}
       </nav>
