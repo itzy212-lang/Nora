@@ -1,0 +1,309 @@
+import React, { useState, useEffect } from 'react';
+
+const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
+
+export default function InvoiceModal({ invoice, nextNumber, settings, projects, onSave, onClose }) {
+  const isEdit = !!invoice;
+
+  const [form, setForm] = useState({
+    invoice_number: invoice?.invoice_number || nextNumber || 1601,
+    invoice_date: invoice?.invoice_date || new Date().toISOString().split('T')[0],
+    due_date: invoice?.due_date || '',
+    // Billing party is always the Building Owner
+    bill_to_name: invoice?.bill_to_name || '',
+    bill_to_address: invoice?.bill_to_address || '',
+    // Property the works relate to (may differ if acting for AO)
+    property_address: invoice?.property_address || '',
+    project_id: invoice?.project_id || '',
+    role: invoice?.role || 'BO', // BO or AO — affects address label
+    items: invoice?.items || DEFAULT_ITEMS,
+    vat_rate: invoice?.vat_rate ?? (settings?.vat_rate || 0),
+    notes: invoice?.notes || '',
+    status: invoice?.status || 'unpaid',
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  // Recalculate totals when items or vat change
+  const subtotal = form.items.reduce((s, it) => s + (parseFloat(it.unitPrice) || 0) * (parseFloat(it.qty) || 0), 0);
+  const vatAmount = subtotal * (form.vat_rate / 100);
+  const total = subtotal + vatAmount;
+
+  // Auto-fill due date based on payment terms
+  useEffect(() => {
+    if (!form.due_date && form.invoice_date) {
+      const terms = settings?.payment_terms || 0;
+      const d = new Date(form.invoice_date);
+      d.setDate(d.getDate() + terms);
+      setForm(f => ({ ...f, due_date: d.toISOString().split('T')[0] }));
+    }
+  }, [form.invoice_date, settings?.payment_terms]);
+
+  const setField = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  const setItem = (idx, key, val) => {
+    const items = form.items.map((it, i) => {
+      if (i !== idx) return it;
+      const updated = { ...it, [key]: val };
+      updated.total = (parseFloat(updated.unitPrice) || 0) * (parseFloat(updated.qty) || 0);
+      return updated;
+    });
+    setField('items', items);
+  };
+
+  const addItem = () => setField('items', [...form.items, { description: '', qty: 1, unitPrice: '', total: 0 }]);
+  const removeItem = (idx) => setField('items', form.items.filter((_, i) => i !== idx));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        subtotal,
+        vat_amount: vatAmount,
+        total,
+      });
+      onClose();
+    } catch (e) {
+      alert('Error saving invoice: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fmt = (n) => `£${Number(n).toFixed(2)}`;
+
+  return (
+    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={styles.modal}>
+        <div style={styles.header}>
+          <h2 style={styles.title}>{isEdit ? `Edit Invoice-${form.invoice_number}` : 'Raise Invoice'}</h2>
+          <button onClick={onClose} style={styles.closeBtn}>✕</button>
+        </div>
+
+        <div style={styles.body}>
+          {/* Invoice meta */}
+          <div style={styles.row3}>
+            <div style={styles.field}>
+              <label style={styles.label}>Invoice Number</label>
+              <input style={styles.input} value={form.invoice_number}
+                onChange={e => setField('invoice_number', e.target.value)} />
+            </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Invoice Date</label>
+              <input style={styles.input} type="date" value={form.invoice_date}
+                onChange={e => setField('invoice_date', e.target.value)} />
+            </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Due Date</label>
+              <input style={styles.input} type="date" value={form.due_date}
+                onChange={e => setField('due_date', e.target.value)} />
+            </div>
+          </div>
+
+          {/* Role selector */}
+          <div style={styles.roleNote}>
+            <span style={styles.label}>Acting as: </span>
+            <select style={{ ...styles.input, width: 'auto', display: 'inline' }}
+              value={form.role} onChange={e => setField('role', e.target.value)}>
+              <option value="BO">Building Owner Surveyor</option>
+              <option value="AO">Adjoining Owner Surveyor</option>
+            </select>
+            {form.role === 'AO' && (
+              <span style={styles.roleHint}> — Invoice still addressed to the Building Owner</span>
+            )}
+          </div>
+
+          {/* Billing party — always BO */}
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>Bill To (Building Owner)</div>
+            <div style={styles.row2}>
+              <div style={styles.field}>
+                <label style={styles.label}>Client Name</label>
+                <input style={styles.input} value={form.bill_to_name} placeholder="Client / Company name"
+                  onChange={e => setField('bill_to_name', e.target.value)} />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>Building Owner's Address</label>
+                <input style={styles.input} value={form.bill_to_address} placeholder="BO address"
+                  onChange={e => setField('bill_to_address', e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Works property */}
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>In Respect Of</div>
+            <div style={styles.field}>
+              <label style={styles.label}>
+                {form.role === 'AO' ? 'Notifiable Works at (Adjoining Property)' : 'Property / Works Address'}
+              </label>
+              <input style={styles.input} value={form.property_address}
+                placeholder="Address where works are being carried out"
+                onChange={e => setField('property_address', e.target.value)} />
+            </div>
+            {projects?.length > 0 && (
+              <div style={styles.field}>
+                <label style={styles.label}>Link to Project (optional)</label>
+                <select style={styles.input} value={form.project_id}
+                  onChange={e => setField('project_id', e.target.value)}>
+                  <option value="">— No project linked —</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.reference} — {p.address}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Line items */}
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>Line Items</div>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.th, width: '50%' }}>Description</th>
+                  <th style={styles.th}>Qty</th>
+                  <th style={styles.th}>Unit Price</th>
+                  <th style={styles.th}>Total</th>
+                  <th style={styles.th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {form.items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.td}>
+                      <input style={styles.tableInput} value={item.description}
+                        placeholder="e.g. Party Wall Act 1996 — Surveyor's fees"
+                        onChange={e => setItem(idx, 'description', e.target.value)} />
+                    </td>
+                    <td style={styles.td}>
+                      <input style={{ ...styles.tableInput, textAlign: 'center' }} value={item.qty} type="number" min="1"
+                        onChange={e => setItem(idx, 'qty', e.target.value)} />
+                    </td>
+                    <td style={styles.td}>
+                      <input style={{ ...styles.tableInput, textAlign: 'right' }} value={item.unitPrice}
+                        placeholder="0.00" type="number" step="0.01"
+                        onChange={e => setItem(idx, 'unitPrice', e.target.value)} />
+                    </td>
+                    <td style={{ ...styles.td, textAlign: 'right', color: '#1a1a2e' }}>
+                      {fmt(item.total)}
+                    </td>
+                    <td style={styles.td}>
+                      {form.items.length > 1 && (
+                        <button onClick={() => removeItem(idx)} style={styles.removeBtn}>✕</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button onClick={addItem} style={styles.addItemBtn}>+ Add line item</button>
+          </div>
+
+          {/* Totals */}
+          <div style={styles.totalsBlock}>
+            <div style={styles.totalRow}>
+              <span>Subtotal</span><span>{fmt(subtotal)}</span>
+            </div>
+            <div style={styles.totalRow}>
+              <span>
+                VAT
+                <select style={styles.vatSelect} value={form.vat_rate}
+                  onChange={e => setField('vat_rate', parseFloat(e.target.value))}>
+                  <option value={0}>0%</option>
+                  <option value={5}>5%</option>
+                  <option value={20}>20%</option>
+                </select>
+              </span>
+              <span>{fmt(vatAmount)}</span>
+            </div>
+            <div style={{ ...styles.totalRow, ...styles.grandTotal }}>
+              <span>Total Due</span><span>{fmt(total)}</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div style={styles.field}>
+            <label style={styles.label}>Notes (optional)</label>
+            <textarea style={{ ...styles.input, height: 60, resize: 'vertical' }}
+              value={form.notes} placeholder="Payment instructions, additional notes..."
+              onChange={e => setField('notes', e.target.value)} />
+          </div>
+        </div>
+
+        <div style={styles.footer}>
+          <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Invoice'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+    zIndex: 1000, overflowY: 'auto', padding: '24px 16px',
+  },
+  modal: {
+    background: '#fff', borderRadius: 12, width: '100%', maxWidth: 780,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '20px 24px', borderBottom: '1px solid #e8e8f0',
+  },
+  title: { margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' },
+  closeBtn: {
+    background: 'none', border: 'none', fontSize: 18, cursor: 'pointer',
+    color: '#666', padding: '4px 8px', borderRadius: 6,
+  },
+  body: { padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 },
+  footer: {
+    padding: '16px 24px', borderTop: '1px solid #e8e8f0',
+    display: 'flex', justifyContent: 'flex-end', gap: 10,
+  },
+  row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 },
+  field: { display: 'flex', flexDirection: 'column', gap: 4 },
+  label: { fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' },
+  input: {
+    border: '1px solid #dde0ee', borderRadius: 8, padding: '8px 12px',
+    fontSize: 14, color: '#1a1a2e', outline: 'none', width: '100%', boxSizing: 'border-box',
+  },
+  section: { display: 'flex', flexDirection: 'column', gap: 10 },
+  sectionTitle: { fontSize: 13, fontWeight: 700, color: '#3d5a99', borderBottom: '1px solid #e8e8f0', paddingBottom: 6 },
+  roleNote: { display: 'flex', alignItems: 'center', gap: 8, background: '#f0f4ff', borderRadius: 8, padding: '10px 14px' },
+  roleHint: { fontSize: 12, color: '#3d5a99', fontStyle: 'italic' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', borderBottom: '2px solid #e8e8f0', textAlign: 'left' },
+  td: { padding: '6px 4px', borderBottom: '1px solid #f0f0f8', verticalAlign: 'middle' },
+  tableInput: {
+    width: '100%', border: '1px solid #dde0ee', borderRadius: 6,
+    padding: '6px 8px', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  },
+  removeBtn: { background: 'none', border: 'none', color: '#cc4444', cursor: 'pointer', fontSize: 14 },
+  addItemBtn: {
+    marginTop: 8, background: 'none', border: '1px dashed #3d5a99', borderRadius: 8,
+    color: '#3d5a99', padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  },
+  totalsBlock: {
+    marginLeft: 'auto', width: 280, display: 'flex', flexDirection: 'column', gap: 6,
+    background: '#f8f9fe', borderRadius: 10, padding: '12px 16px',
+  },
+  totalRow: { display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#444', alignItems: 'center' },
+  grandTotal: { borderTop: '2px solid #3d5a99', paddingTop: 8, fontWeight: 700, fontSize: 16, color: '#1a1a2e' },
+  vatSelect: { border: '1px solid #dde0ee', borderRadius: 6, padding: '2px 6px', fontSize: 12, marginLeft: 8 },
+  cancelBtn: {
+    padding: '9px 20px', borderRadius: 8, border: '1px solid #dde0ee',
+    background: '#fff', color: '#555', cursor: 'pointer', fontSize: 14,
+  },
+  saveBtn: {
+    padding: '9px 24px', borderRadius: 8, border: 'none',
+    background: '#3d5a99', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600,
+  },
+};
