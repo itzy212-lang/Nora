@@ -11,6 +11,10 @@
     {
       "source": "/api/config",
       "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/get_config"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
