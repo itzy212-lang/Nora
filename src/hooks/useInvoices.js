@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import sb from '../supabaseClient';
 
 export function useInvoices() {
   const [invoices, setInvoices] = useState([]);
@@ -9,7 +9,7 @@ export function useInvoices() {
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from('invoices')
         .select('*')
         .order('invoice_number', { ascending: false });
@@ -25,7 +25,7 @@ export function useInvoices() {
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
   const createInvoice = async (invoiceData) => {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('invoices')
       .insert([invoiceData])
       .select()
@@ -36,7 +36,7 @@ export function useInvoices() {
   };
 
   const updateInvoice = async (id, updates) => {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('invoices')
       .update(updates)
       .eq('id', id)
@@ -52,7 +52,7 @@ export function useInvoices() {
   };
 
   const deleteInvoice = async (id) => {
-    const { error } = await supabase.from('invoices').delete().eq('id', id);
+    const { error } = await sb.from('invoices').delete().eq('id', id);
     if (error) throw error;
     setInvoices(prev => prev.filter(inv => inv.id !== id));
   };
