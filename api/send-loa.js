@@ -35,12 +35,12 @@ export default async function handler(req, res) {
     }));
 
     const fields = [];
-    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, anchor_string: 'BO_1_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4, width: 33, height: 5 });
-    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, anchor_string: 'BO_1_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4, width: 23, height: 5 });
+    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 10, y: 80 }, width: 33, height: 5, anchor_string: 'BO_1_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
+    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 50, y: 80 }, width: 23, height: 5, anchor_string: 'BO_1_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
 
     if (recipients.length >= 2) {
-      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, anchor_string: 'BO_2_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4, width: 33, height: 5 });
-      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, anchor_string: 'BO_2_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4, width: 23, height: 5 });
+      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 10, y: 90 }, width: 33, height: 5, anchor_string: 'BO_2_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
+      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 50, y: 90 }, width: 23, height: 5, anchor_string: 'BO_2_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
     }
 
     const createPayload = {
