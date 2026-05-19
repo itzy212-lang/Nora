@@ -129,16 +129,18 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
             </div>
           </div>
 
-          {/* Role selector */}
+          {/* Role selector — BO default, AO optional */}
           <div style={styles.roleNote}>
-            <span style={styles.label}>Acting as: </span>
-            <select style={{ ...styles.input, width: 'auto', display: 'inline' }}
-              value={form.role} onChange={e => setField('role', e.target.value)}>
-              <option value="BO">Building Owner Surveyor</option>
-              <option value="AO">Adjoining Owner Surveyor</option>
-            </select>
+            <span style={{ fontSize: 13, color: '#555' }}>
+              Acting as <strong>Building Owner's Surveyor</strong> — invoice goes to the BO
+            </span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: 12.5, color: '#3d5a99', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={form.role === 'AO'}
+                onChange={e => setField('role', e.target.checked ? 'AO' : 'BO')} />
+              Acting for AO
+            </label>
             {form.role === 'AO' && (
-              <span style={styles.roleHint}> — Invoice still addressed to the Building Owner</span>
+              <span style={styles.roleHint}>Invoice still addressed to the Building Owner</span>
             )}
           </div>
 
