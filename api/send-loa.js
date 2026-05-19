@@ -34,13 +34,16 @@ export default async function handler(req, res) {
       role: 'signer',
     }));
 
+    // Place signature fields at bottom of last page using percentage positions.
+    // page_number is set to 1 — works for single-page LoAs.
+    // For multi-page LoAs this can be updated once we know the page count.
     const fields = [];
-    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 10, y: 80 }, width: 33, height: 5, anchor_string: 'BO_1_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
-    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 50, y: 80 }, width: 23, height: 5, anchor_string: 'BO_1_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
+    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 75 }, width: 35, height: 8 });
+    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 55, y: 75 }, width: 25, height: 8 });
 
     if (recipients.length >= 2) {
-      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 10, y: 90 }, width: 33, height: 5, anchor_string: 'BO_2_SIGN_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
-      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 50, y: 90 }, width: 23, height: 5, anchor_string: 'BO_2_DATE_HERE', anchor_x_offset: 0, anchor_y_offset: -4 });
+      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 5,  y: 87 }, width: 35, height: 8 });
+      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 87 }, width: 25, height: 8 });
     }
 
     const createPayload = {
