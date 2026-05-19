@@ -2,7 +2,6 @@ import { useApp } from '../../state/appStore';
 
 // Load saved theme on startup
 const savedTheme = localStorage.getItem('ely-theme') || 'light';
-
 if (savedTheme === 'light') {
   document.body.classList.add('light');
 } else {
@@ -32,7 +31,7 @@ const NAV = [
   {
     section: 'FINANCE',
     items: [
-      { id: 'invoices', icon: '💰', label: 'Accounting' },
+      { id: 'accounting', icon: '💰', label: 'Accounting' },
     ],
   },
   {
@@ -43,7 +42,7 @@ const NAV = [
   },
 ];
 
-export default function Sidebar({ currentView, onNavigate, onClose }) {
+export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClose }) {
   const { state } = useApp();
   const { settings, leads = [], emails = [] } = state;
 
@@ -59,69 +58,29 @@ export default function Sidebar({ currentView, onNavigate, onClose }) {
   const isLight = document.body.classList.contains('light');
 
   return (
-    <aside
-      style={{
-        width: '100%',
-        height: '100%',
-        background: 'var(--bg2)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-      }}
-    >
+    <aside style={{
+      width: '100%', height: '100%', background: 'var(--bg2)',
+      borderRight: '1px solid var(--border)', display: 'flex',
+      flexDirection: 'column', overflowY: 'auto',
+    }}>
 
       {/* Firm header */}
-      <div
-        style={{
-          padding: '18px 16px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 11,
-        }}
-      >
-        <div
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 9,
-            background: 'var(--blue)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#fff',
-            flexShrink: 0,
-          }}
-        >
+      <div style={{
+        padding: '18px 16px 16px', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', gap: 11,
+      }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 9, background: 'var(--blue)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
+        }}>
           {firmInitial}
         </div>
-
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 13.5,
-              fontWeight: 600,
-              color: 'var(--text)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {firmName}
           </div>
-
-          <div
-            style={{
-              fontSize: 11.5,
-              color: 'var(--text3)',
-              marginTop: 1,
-            }}
-          >
-            {role}
-          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>{role}</div>
         </div>
       </div>
 
@@ -129,122 +88,76 @@ export default function Sidebar({ currentView, onNavigate, onClose }) {
       <nav style={{ flex: 1, padding: '8px 0' }}>
         {NAV.map(({ section, items }) => (
           <div key={section}>
-
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                color: 'var(--text3)',
-                padding: '14px 16px 5px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.7px',
-              }}
-            >
+            <div style={{
+              fontSize: 10, fontWeight: 600, color: 'var(--text3)',
+              padding: '14px 16px 5px', textTransform: 'uppercase', letterSpacing: '0.7px',
+            }}>
               {section}
             </div>
 
             {items.map(({ id, icon, label, badge }) => {
               const count = badge ? badges[badge] : 0;
-              const active = currentView === id;
+              // accounting nav item should be active for both 'accounting' and 'invoices'
+              const active = currentView === id || (id === 'accounting' && currentView === 'invoices');
 
               return (
-                <div
-                  key={id}
-                  onClick={() => {
-                    onNavigate(id);
-                    onClose?.();
-                  }}
+                <div key={id}
+                  onClick={() => { onNavigate(id); onClose?.(); }}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '9px 16px',
-                    fontSize: 13.5,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 16px', fontSize: 13.5,
                     fontWeight: active ? 500 : 400,
                     color: active ? 'var(--blue)' : 'var(--text2)',
                     background: active ? 'var(--blue-bg)' : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background 0.12s, color 0.12s',
-                    userSelect: 'none',
+                    cursor: 'pointer', transition: 'background 0.12s, color 0.12s', userSelect: 'none',
                   }}
-                  onMouseEnter={e => {
-                    if (!active) {
-                      e.currentTarget.style.background = 'var(--bg3)';
-                      e.currentTarget.style.color = 'var(--text)';
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!active) {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'var(--text2)';
-                    }
-                  }}
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg3)'; e.currentTarget.style.color = 'var(--text)'; } }}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; } }}
                 >
-                  <span
-                    style={{
-                      fontSize: 15,
-                      width: 18,
-                      textAlign: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {icon}
-                  </span>
-
-                  <span style={{ flex: 1 }}>
-                    {label}
-                  </span>
-
+                  <span style={{ fontSize: 15, width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                  <span style={{ flex: 1 }}>{label}</span>
                   {count > 0 && (
-                    <span
-                      style={{
-                        background: 'var(--red)',
-                        color: '#fff',
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        padding: '1px 6px',
-                        borderRadius: 99,
-                        minWidth: 18,
-                        textAlign: 'center',
-                      }}
-                    >
+                    <span style={{ background: 'var(--red)', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '1px 6px', borderRadius: 99, minWidth: 18, textAlign: 'center' }}>
                       {count}
                     </span>
                   )}
                 </div>
               );
             })}
+
+            {/* + Invoice button directly under Finance section */}
+            {section === 'FINANCE' && (
+              <div
+                onClick={() => { onRaiseInvoice?.(); onClose?.(); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 16px 9px', fontSize: 12.5,
+                  color: 'var(--blue)', cursor: 'pointer', userSelect: 'none',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                <span style={{ fontSize: 13, width: 18, textAlign: 'center', flexShrink: 0 }}>＋</span>
+                <span style={{ fontWeight: 500 }}>Raise Invoice</span>
+              </div>
+            )}
           </div>
         ))}
       </nav>
 
       {/* Theme toggle */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderTop: '1px solid var(--border)',
-        }}
-      >
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
         <button
           className="btn btn-ghost btn-sm"
-          style={{
-            width: '100%',
-            justifyContent: 'center',
-            cursor: 'pointer',
-          }}
+          style={{ width: '100%', justifyContent: 'center', cursor: 'pointer' }}
           onClick={() => {
             const currentlyLight = document.body.classList.contains('light');
             const newTheme = currentlyLight ? 'dark' : 'light';
-
             document.body.classList.toggle('light', newTheme === 'light');
-
-            // Persist theme
             localStorage.setItem('ely-theme', newTheme);
           }}
         >
-          {isLight
-            ? '🌙 Dark mode'
-            : '☀️ Light mode'}
+          {isLight ? '🌙 Dark mode' : '☀️ Light mode'}
         </button>
       </div>
     </aside>
