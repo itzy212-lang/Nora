@@ -6,12 +6,12 @@ function uid() { return Math.random().toString(36).slice(2); }
 
 const ACTIONS = ['Record only', 'Record pre-existing defect', 'Monitor', 'Further investigation required'];
 
-export default function SOC({ onOpenComposer }) {
+export default function SOC({ onOpenComposer, defaultProjectId }) {
   const { state } = useApp();
   const projects = state.projects || [];
 
-  const [phase, setPhase] = useState('setup');
-  const [projectId, setProjectId] = useState('');
+  const [phase, setPhase] = useState(defaultProjectId ? 'recording' : 'setup');
+  const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [transcript, setTranscript] = useState('');
   const [fullTranscript, setFullTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
