@@ -66,57 +66,28 @@ const modalInput = {
   width: '100%',
   padding: '10px 12px',
   fontSize: 13.5,
-  background: '#f8fafc',
-  border: '1px solid #dde3ea',
+  background: '#fff',
+  border: '1px solid #dfe3ea',
   borderRadius: 12,
   color: 'var(--text)',
   outline: 'none',
   boxSizing: 'border-box',
 };
 
+const modalSection = {
+  background: '#fff',
+  border: '1px solid #e5e7eb',
+  borderRadius: 18,
+  padding: 16,
+};
+
 function ModalShell({ title, children, onClose }) {
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 500,
-      background: 'rgba(15, 23, 42, 0.48)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-    }}>
-      <div style={{
-        width: 760,
-        maxWidth: 'calc(100vw - 40px)',
-        maxHeight: '88vh',
-        overflowY: 'auto',
-        background: '#eef1f5',
-        border: '1px solid #d9dee7',
-        borderRadius: 18,
-        boxShadow: '0 22px 55px rgba(15, 23, 42, 0.28)',
-      }}>
-        <div style={{
-          padding: '18px 24px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>{title}</div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6b7280',
-              fontSize: 24,
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
-          >
-            ×
-          </button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(15, 23, 42, 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+      <div style={{ width: 760, maxWidth: '96vw', maxHeight: '88vh', overflowY: 'auto', background: '#eef1f5', border: '1px solid #d8dde6', borderRadius: 22, boxShadow: '0 24px 70px rgba(15, 23, 42, 0.35)' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#eef1f5', padding: '18px 22px 12px', borderBottom: '1px solid #d8dde6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text3)', cursor: 'pointer', fontSize: 24, lineHeight: 1 }}>×</button>
         </div>
         {children}
       </div>
@@ -124,293 +95,268 @@ function ModalShell({ title, children, onClose }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children, hint }) {
   return (
     <div>
-      <div style={{ fontSize: 12.5, fontWeight: 500, color: '#334155', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 5 }}>{label}</div>
+      {hint && <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.4, marginBottom: 6 }}>{hint}</div>}
       {children}
     </div>
   );
 }
 
 function ProjectEditModal({ project, onSave, onClose }) {
+  const initialPremise = project.bo_premise_address || project.address || '';
+  const initialService = project.bo_service_address || project.bo_1_service_address || project.bo_address || initialPremise;
+  const [sameAddress, setSameAddress] = useState(!initialService || initialService === initialPremise);
   const [form, setForm] = useState({
+    role: project.role || project.surveyor_role || 'BO',
+    bo_premise_address: initialPremise,
+    bo_service_address: initialService,
     bo_1_name: project.bo_1_name || project.bo || '',
     bo_1_email: project.bo_1_email || project.bo_email || '',
+    bo_1_phone: project.bo_1_phone || project.bo_phone || '',
     bo_2_name: project.bo_2_name || '',
     bo_2_email: project.bo_2_email || '',
-    bo_premise_address: project.bo_premise_address || project.address || '',
-    works: project.works || '',
-    fee: project.fee || '',
+    bo_2_phone: project.bo_2_phone || '',
+    ref: project.ref || '',
     status: project.status || 'active',
-    role: project.role || project.surveyor_role || 'BO',
+    works: project.works || '',
+    fee: project.fee ?? '',
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  const setPremise = value => {
+    setForm(f => ({ ...f, bo_premise_address: value, bo_service_address: sameAddress ? value : f.bo_service_address }));
+  };
+
+  const toggleSame = checked => {
+    setSameAddress(checked);
+    if (checked) set('bo_service_address', form.bo_premise_address);
+  };
+
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(form); onClose(); }
-    finally { setSaving(false); }
+    try {
+      await onSave({ ...form, bo_service_address: sameAddress ? form.bo_premise_address : form.bo_service_address });
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Could not save project.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <ModalShell title="Edit project" onClose={onClose}>
-      <div style={{ padding: '0 24px 24px' }}>
-
-        <div style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: '#94a3b8',
-          textTransform: 'uppercase',
-          letterSpacing: '0.7px',
-          margin: '4px 0 12px',
-        }}>
-          Your role on this project
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
-          {[
-            ['BO', "Building Owner Surveyor", 'Acting for the BO'],
-            ['AO', "Adjoining Owner Surveyor", 'Acting for the AO'],
-            ['AGREED', "Agreed Surveyor", 'Acting for both sides'],
-          ].map(([value, label, sub]) => {
-            const active = form.role === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => set('role', value)}
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  borderRadius: 14,
-                  border: active ? '1px solid var(--blue)' : '1px solid #dde3ea',
-                  background: active ? 'var(--blue-bg)' : '#ffffff',
-                  color: active ? 'var(--blue)' : '#111827',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</div>
-                <div style={{ fontSize: 11.5, color: active ? 'var(--blue)' : '#94a3b8', marginTop: 2 }}>{sub}</div>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 8 }}>Your role on this project</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { value: 'BO', title: 'Building Owner Surveyor', sub: 'Acting for the BO' },
+              { value: 'AO', title: 'Adjoining Owner Surveyor', sub: 'Acting for the AO' },
+            ].map(opt => (
+              <button key={opt.value} onClick={() => set('role', opt.value)} style={{ textAlign: 'left', padding: '13px 15px', borderRadius: 14, border: form.role === opt.value ? '1px solid var(--blue)' : '1px solid #e5e7eb', background: form.role === opt.value ? 'var(--blue-bg)' : '#fff', cursor: 'pointer' }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>● {opt.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{opt.sub}</div>
               </button>
-            );
-          })}
-        </div>
-
-        <div style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: '#94a3b8',
-          textTransform: 'uppercase',
-          letterSpacing: '0.7px',
-          margin: '18px 0 10px',
-          paddingTop: 16,
-          borderTop: '1px solid #d9dee7',
-        }}>
-          Premise address
-        </div>
-
-        <div style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
-          <Field label="Premise address">
-            <textarea
-              value={form.bo_premise_address}
-              onChange={e => set('bo_premise_address', e.target.value)}
-              rows={2}
-              style={{ ...modalInput, resize: 'vertical' }}
-            />
-          </Field>
-        </div>
-
-        <div style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: '#94a3b8',
-          textTransform: 'uppercase',
-          letterSpacing: '0.7px',
-          margin: '18px 0 10px',
-          paddingTop: 16,
-          borderTop: '1px solid #d9dee7',
-        }}>
-          Building owner
-        </div>
-
-        <div style={{
-          background: '#f8fafc',
-          border: '1px solid #dde3ea',
-          borderRadius: 16,
-          padding: 16,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-          marginBottom: 14,
-        }}>
-          <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-            Owner 1
+            ))}
           </div>
-          <Field label="Full name">
-            <input value={form.bo_1_name} onChange={e => set('bo_1_name', e.target.value)} style={modalInput} />
-          </Field>
-          <Field label="Email">
-            <input value={form.bo_1_email} onChange={e => set('bo_1_email', e.target.value)} style={modalInput} />
-          </Field>
         </div>
 
-        <div style={{
-          background: '#f8fafc',
-          border: '1px solid #dde3ea',
-          borderRadius: 16,
-          padding: 16,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-          marginBottom: 18,
-        }}>
-          <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-            Owner 2 optional, joint owner
-          </div>
-          <Field label="Full name">
-            <input value={form.bo_2_name || ''} onChange={e => set('bo_2_name', e.target.value)} style={modalInput} />
-          </Field>
-          <Field label="Email, e-signature if joint">
-            <input value={form.bo_2_email || ''} onChange={e => set('bo_2_email', e.target.value)} style={modalInput} />
-          </Field>
-        </div>
-
-        <div style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: '#94a3b8',
-          textTransform: 'uppercase',
-          letterSpacing: '0.7px',
-          margin: '18px 0 10px',
-          paddingTop: 16,
-          borderTop: '1px solid #d9dee7',
-        }}>
-          Project details
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Field label="Reference">
-            <input value={project.ref || ''} disabled style={{ ...modalInput, color: '#94a3b8' }} />
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}>
-              <option value="active">Active</option>
-              <option value="complete">Complete</option>
-              <option value="on_hold">On hold</option>
-              <option value="dispute">Dispute</option>
-            </select>
-          </Field>
-          <div style={{ gridColumn: '1/-1' }}>
-            <Field label="Works description">
-              <textarea value={form.works} onChange={e => set('works', e.target.value)} rows={3} style={{ ...modalInput, resize: 'vertical' }} />
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Premise and service address</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field label="Premise address" hint="The property where the works are taking place.">
+              <textarea rows={2} value={form.bo_premise_address} onChange={e => setPremise(e.target.value)} style={{ ...modalInput, resize: 'vertical' }} />
             </Field>
-          </div>
-          <div style={{ gridColumn: '1/-1' }}>
-            <Field label="Projected fee">
-              <input
-                value={form.fee}
-                onChange={e => set('fee', e.target.value)}
-                placeholder="Leave blank if no fee set"
-                style={modalInput}
-              />
-            </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={sameAddress} onChange={e => toggleSame(e.target.checked)} />
+              Service address is the same as the premise address
+            </label>
+            {!sameAddress && (
+              <Field label="Service / correspondence address" hint="Use this only if correspondence should go somewhere else, for example a different home address, company registered office, or managing agent address.">
+                <textarea rows={2} value={form.bo_service_address} onChange={e => set('bo_service_address', e.target.value)} style={{ ...modalInput, resize: 'vertical' }} />
+              </Field>
+            )}
           </div>
         </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 10,
-          marginTop: 18,
-          paddingTop: 18,
-          borderTop: '1px solid #d9dee7',
-        }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99, padding: '8px 18px' }}>
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99, padding: '8px 18px', opacity: saving ? 0.7 : 1 }}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Building owner details</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>Owner 1</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Full name"><input value={form.bo_1_name} onChange={e => set('bo_1_name', e.target.value)} style={modalInput} /></Field>
+                <Field label="Email"><input value={form.bo_1_email} onChange={e => set('bo_1_email', e.target.value)} style={modalInput} /></Field>
+                <Field label="Phone"><input value={form.bo_1_phone} onChange={e => set('bo_1_phone', e.target.value)} style={modalInput} /></Field>
+              </div>
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>Owner 2 optional</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Full name"><input value={form.bo_2_name} onChange={e => set('bo_2_name', e.target.value)} style={modalInput} /></Field>
+                <Field label="Email"><input value={form.bo_2_email} onChange={e => set('bo_2_email', e.target.value)} style={modalInput} /></Field>
+                <Field label="Phone"><input value={form.bo_2_phone} onChange={e => set('bo_2_phone', e.target.value)} style={modalInput} /></Field>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </ModalShell>
-  );
 
-function AOEditModal({ ao, title, onSave, onClose }) {
-  const [form, setForm] = useState({
-    num: ao?.num || '',
-    name: ao?.name || '',
-    name2: ao?.name2 || '',
-    premise: ao?.premise || ao?.reg_addr || ao?.address || '',
-    email: ao?.email || '',
-    email2: ao?.email2 || '',
-    phone: ao?.phone || '',
-    status: ao?.status || 'details_added',
-    agreed_surveyor: !!ao?.agreed_surveyor,
-    notice_served_date: aoNotice(ao || {}),
-    consent_deadline: aoConsent(ao || {}),
-    s10_deadline: aoS10(ao || {}),
-    surv_name: aoSurvName(ao || {}),
-    surv_firm: aoSurvFirm(ao || {}),
-    surv_email: aoSurvEmail(ao || {}),
-    surv_phone: aoSurvPhone(ao || {}),
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Project details</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Reference"><input value={form.ref} onChange={e => set('ref', e.target.value)} style={modalInput} /></Field>
+            <Field label="Status"><select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}><option value="active">Active</option><option value="complete">Complete</option><option value="on_hold">On hold</option><option value="dispute">Dispute</option></select></Field>
+            <div style={{ gridColumn: '1 / -1' }}><Field label="Works description"><textarea rows={3} value={form.works} onChange={e => set('works', e.target.value)} style={{ ...modalInput, resize: 'vertical' }} /></Field></div>
+            <Field label="Projected fee"><input value={form.fee} onChange={e => set('fee', e.target.value)} style={modalInput} /></Field>
+          </div>
+        </div>
 
-  const handleSave = async () => {
-    if (!form.name.trim() && !form.premise.trim()) {
-      alert('Please enter at least an AO name or address.');
-      return;
-    }
-    setSaving(true);
-    try { await onSave(form); onClose(); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <ModalShell title={title} onClose={onClose}>
-      <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label="AO number"><input value={form.num} onChange={e => set('num', e.target.value)} style={modalInput} /></Field>
-        <Field label="Status">
-          <select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}>
-            <option value="details_added">Details added</option>
-            <option value="notice_served">Notice served</option>
-            <option value="consent">Consent</option>
-            <option value="dissent">Dissent</option>
-            <option value="s10">S.10</option>
-            <option value="complete">Complete</option>
-          </select>
-        </Field>
-        <Field label="AO name"><input value={form.name} onChange={e => set('name', e.target.value)} style={modalInput} /></Field>
-        <Field label="Second AO name"><input value={form.name2} onChange={e => set('name2', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO email"><input value={form.email} onChange={e => set('email', e.target.value)} style={modalInput} /></Field>
-        <Field label="Second AO email"><input value={form.email2} onChange={e => set('email2', e.target.value)} style={modalInput} /></Field>
-        <Field label="Phone"><input value={form.phone} onChange={e => set('phone', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO premise / address"><textarea value={form.premise} onChange={e => set('premise', e.target.value)} rows={2} style={{ ...modalInput, resize: 'vertical' }} /></Field>
-        <Field label="Notice served"><input type="date" value={form.notice_served_date || ''} onChange={e => set('notice_served_date', e.target.value)} style={modalInput} /></Field>
-        <Field label="Consent deadline"><input type="date" value={form.consent_deadline || ''} onChange={e => set('consent_deadline', e.target.value)} style={modalInput} /></Field>
-        <Field label="S.10 deadline"><input type="date" value={form.s10_deadline || ''} onChange={e => set('s10_deadline', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO surveyor name"><input value={form.surv_name} onChange={e => set('surv_name', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO surveyor firm"><input value={form.surv_firm} onChange={e => set('surv_firm', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO surveyor email"><input value={form.surv_email} onChange={e => set('surv_email', e.target.value)} style={modalInput} /></Field>
-        <Field label="AO surveyor phone"><input value={form.surv_phone} onChange={e => set('surv_phone', e.target.value)} style={modalInput} /></Field>
-        <label style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={form.agreed_surveyor} onChange={e => set('agreed_surveyor', e.target.checked)} />
-          I am the Agreed Surveyor for this AO
-        </label>
-        <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 2 }}>
           <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99, opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : 'Save AO'}</button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>{saving ? 'Saving…' : 'Save changes'}</button>
         </div>
       </div>
     </ModalShell>
   );
 }
 
-function AOCard({ ao, onOpenComposer, onGenerateAOLOA, loaLoading, onEditAO }) {
+function AOEditModal({ ao, mode, onSave, onClose }) {
+  const isNew = mode === 'add';
+  const initialPremise = aoAddress(ao || {});
+  const initialService = (ao && (ao.service_address || ao.serviceAddress || ao.reg_addr)) || initialPremise;
+  const [sameAddress, setSameAddress] = useState(!initialService || initialService === initialPremise);
+  const [form, setForm] = useState({
+    premise: initialPremise,
+    service_address: initialService,
+    name: ao?.name || '',
+    email: ao?.email || '',
+    phone: ao?.phone || '',
+    name2: ao?.name2 || '',
+    email2: ao?.email2 || '',
+    phone2: ao?.phone2 || '',
+    status: ao?.status || 'details_added',
+    consent_deadline: aoConsent(ao || {}),
+    notice_served_date: aoNotice(ao || {}),
+    s10_deadline: aoS10(ao || {}),
+    surv_name: aoSurvName(ao || {}),
+    surv_firm: aoSurvFirm(ao || {}),
+    surv_email: aoSurvEmail(ao || {}),
+    surv_phone: aoSurvPhone(ao || {}),
+    third_surveyor_name: ao?.third_surveyor_name || ao?.thirdSurveyorName || '',
+    third_surveyor_firm: ao?.third_surveyor_firm || ao?.thirdSurveyorFirm || '',
+    third_surveyor_email: ao?.third_surveyor_email || ao?.thirdSurveyorEmail || '',
+    third_surveyor_phone: ao?.third_surveyor_phone || ao?.thirdSurveyorPhone || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const setPremise = value => setForm(f => ({ ...f, premise: value, service_address: sameAddress ? value : f.service_address }));
+  const toggleSame = checked => {
+    setSameAddress(checked);
+    if (checked) set('service_address', form.premise);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({ ...form, service_address: sameAddress ? form.premise : form.service_address });
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Could not save AO.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={isNew ? 'Add adjoining owner' : 'Edit adjoining owner'} onClose={onClose}>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Premise and service address</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field label="Premise address" hint="The adjoining property relevant to the party wall matter.">
+              <textarea rows={2} value={form.premise} onChange={e => setPremise(e.target.value)} style={{ ...modalInput, resize: 'vertical' }} />
+            </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={sameAddress} onChange={e => toggleSame(e.target.checked)} />
+              Service address is the same as the premise address
+            </label>
+            {!sameAddress && (
+              <Field label="Service / correspondence address" hint="Use this only if the adjoining owner should be served or contacted at a different address.">
+                <textarea rows={2} value={form.service_address} onChange={e => set('service_address', e.target.value)} style={{ ...modalInput, resize: 'vertical' }} />
+              </Field>
+            )}
+          </div>
+        </div>
+
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Adjoining owner details</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>Owner 1</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Full name"><input value={form.name} onChange={e => set('name', e.target.value)} style={modalInput} /></Field>
+                <Field label="Email"><input value={form.email} onChange={e => set('email', e.target.value)} style={modalInput} /></Field>
+                <Field label="Phone"><input value={form.phone} onChange={e => set('phone', e.target.value)} style={modalInput} /></Field>
+              </div>
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>Owner 2 optional</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Full name"><input value={form.name2} onChange={e => set('name2', e.target.value)} style={modalInput} /></Field>
+                <Field label="Email"><input value={form.email2} onChange={e => set('email2', e.target.value)} style={modalInput} /></Field>
+                <Field label="Phone"><input value={form.phone2} onChange={e => set('phone2', e.target.value)} style={modalInput} /></Field>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Notice and status</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Status"><select value={form.status} onChange={e => set('status', e.target.value)} style={modalInput}><option value="details_added">Details added</option><option value="notice_served">Notice served</option><option value="consent">Consent</option><option value="dissent">Dissent</option><option value="s10">S.10</option></select></Field>
+            <Field label="Notice served date"><input type="date" value={form.notice_served_date || ''} onChange={e => set('notice_served_date', e.target.value)} style={modalInput} /></Field>
+            <Field label="Consent deadline"><input type="date" value={form.consent_deadline || ''} onChange={e => set('consent_deadline', e.target.value)} style={modalInput} /></Field>
+            <Field label="S.10 deadline"><input type="date" value={form.s10_deadline || ''} onChange={e => set('s10_deadline', e.target.value)} style={modalInput} /></Field>
+          </div>
+        </div>
+
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>AO surveyor details</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Surveyor name"><input value={form.surv_name} onChange={e => set('surv_name', e.target.value)} style={modalInput} /></Field>
+            <Field label="Firm"><input value={form.surv_firm} onChange={e => set('surv_firm', e.target.value)} style={modalInput} /></Field>
+            <Field label="Email"><input value={form.surv_email} onChange={e => set('surv_email', e.target.value)} style={modalInput} /></Field>
+            <Field label="Phone"><input value={form.surv_phone} onChange={e => set('surv_phone', e.target.value)} style={modalInput} /></Field>
+          </div>
+        </div>
+
+        <div style={modalSection}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Third surveyor details</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Third surveyor name"><input value={form.third_surveyor_name} onChange={e => set('third_surveyor_name', e.target.value)} style={modalInput} /></Field>
+            <Field label="Firm"><input value={form.third_surveyor_firm} onChange={e => set('third_surveyor_firm', e.target.value)} style={modalInput} /></Field>
+            <Field label="Email"><input value={form.third_surveyor_email} onChange={e => set('third_surveyor_email', e.target.value)} style={modalInput} /></Field>
+            <Field label="Phone"><input value={form.third_surveyor_phone} onChange={e => set('third_surveyor_phone', e.target.value)} style={modalInput} /></Field>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 2 }}>
+          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>{saving ? 'Saving…' : 'Save changes'}</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+
+function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, loaLoading }) {
   const colour    = getAOColour(ao);
   const address   = aoAddress(ao);
   const cd        = aoConsent(ao);
@@ -540,135 +486,36 @@ function ProjectChat({ project, onOpenComposer }) {
   );
 }
 
-export default function ProjectDetail({ project, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
+export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
   const [tab, setTab] = useState('details');
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [loaLoading, setLoaLoading] = useState(null);
-  const [localProject, setLocalProject] = useState(project);
+  const [project, setProject] = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
-  const [aoModal, setAoModal] = useState(null);
+  const [editingAO, setEditingAO] = useState(null);
+  const [showAddAO, setShowAddAO] = useState(false);
 
-  useEffect(() => { setLocalProject(project); }, [project]);
-
-  const currentProject = localProject || project;
+  useEffect(() => { setProject(initialProject); }, [initialProject]);
 
   const { generateDocument, sendForSignature } = useDocumentGenerator();
 
-  const address    = currentProject.address  || currentProject.bo_premise_address || '';
-  const bo         = currentProject.bo       || currentProject.bo_1_name || '';
-  const boEmail    = currentProject.bo_email || currentProject.bo_1_email || '';
-  const works      = currentProject.works    || '';
-  const aos        = currentProject.aos      || [];
-  const docs       = currentProject.documents || [];
-  const projColour = getProjectColour(currentProject);
-
-  const handleSaveProjectEdit = useCallback(async (form) => {
-    const feeText = String(form.fee ?? '').trim();
-
-    if (feeText && Number.isNaN(Number(feeText))) {
-      alert('Fee must be a number, or left blank.');
-      throw new Error('Invalid fee value');
-    }
-
-    const update = {
-      bo_1_name: form.bo_1_name || '',
-      bo_1_email: form.bo_1_email || '',
-      bo_2_name: form.bo_2_name || '',
-      bo_2_email: form.bo_2_email || '',
-      bo_premise_address: form.bo_premise_address || '',
-      works: form.works || '',
-      fee: feeText === '' ? null : Number(feeText),
-      status: form.status || 'active',
-      role: form.role || 'BO',
-    };
-
-    const { error } = await sb
-      .from('projects')
-      .update(update)
-      .eq('id', currentProject.id);
-
-    if (error) {
-      console.error('save project edit', error);
-      alert('Could not save project: ' + error.message);
-      throw error;
-    }
-
-    setLocalProject(prev => ({
-      ...prev,
-      ...update,
-      bo: update.bo_1_name,
-      bo_email: update.bo_1_email,
-      address: update.bo_premise_address,
-    }));
-  }, [currentProject.id]);
-
-  const normaliseAOForSave = (form, existing = {}) => ({
-    ...existing,
-    id: existing.id || `ao_${Date.now()}`,
-    num: form.num || existing.num || ((currentProject.aos || []).length + 1),
-    name: form.name || '',
-    name2: form.name2 || '',
-    premise: form.premise || '',
-    address: form.premise || '',
-    email: form.email || '',
-    email2: form.email2 || '',
-    phone: form.phone || '',
-    status: form.status || 'details_added',
-    agreed_surveyor: !!form.agreed_surveyor,
-    notice_served_date: form.notice_served_date || '',
-    noticeServedDate: form.notice_served_date || '',
-    consent_deadline: form.consent_deadline || '',
-    consentDeadline: form.consent_deadline || '',
-    s10_deadline: form.s10_deadline || '',
-    s10Deadline: form.s10_deadline || '',
-    surv_name: form.surv_name || '',
-    surveyorName: form.surv_name || '',
-    surv_firm: form.surv_firm || '',
-    surveyorFirm: form.surv_firm || '',
-    surv_email: form.surv_email || '',
-    surveyorEmail: form.surv_email || '',
-    surv_phone: form.surv_phone || '',
-    surveyorPhone: form.surv_phone || '',
-  });
-
-  const handleSaveAO = useCallback(async (form) => {
-    const aosNow = currentProject.aos || [];
-    let nextAos;
-
-    if (aoModal?.mode === 'edit') {
-      nextAos = aosNow.map((item, idx) => {
-        const sameById = aoModal.ao?.id && item.id === aoModal.ao.id;
-        const sameByIndex = idx === aoModal.index;
-        return sameById || sameByIndex ? normaliseAOForSave(form, item) : item;
-      });
-    } else {
-      nextAos = [...aosNow, normaliseAOForSave(form, { num: aosNow.length + 1 })];
-    }
-
-    const { error } = await sb
-      .from('projects')
-      .update({ aos: nextAos })
-      .eq('id', currentProject.id);
-
-    if (error) {
-      console.error('save AO', error);
-      alert('Could not save AO: ' + error.message);
-      throw error;
-    }
-
-    setLocalProject(prev => ({ ...prev, aos: nextAos }));
-  }, [currentProject, aoModal]);
-
+  const address    = project.address  || project.bo_premise_address || '';
+  const bo         = project.bo       || project.bo_1_name || '';
+  const boEmail    = project.bo_email || project.bo_1_email || '';
+  const works      = project.works    || '';
+  const aos        = project.aos      || [];
+  const docs       = project.documents || [];
+  const projColour = getProjectColour(project);
 
   const roleLabel = (() => {
-    const r = (currentProject.role || currentProject.surveyor_role || 'BO').toUpperCase();
+    const r = (project.role || project.surveyor_role || 'BO').toUpperCase();
     if (r === 'AO') return "Adjoining Owner's Surveyor";
     if (r === 'AS' || r === 'AGREED') return 'Agreed Surveyor';
     return "Building Owner's Surveyor";
   })();
 
-  const stageIndex = currentProject.status === 'complete' ? 4
+  const stageIndex = project.status === 'complete' ? 4
     : aos.some(ao => ['consent','dissent','s10'].includes((ao.status||'').toLowerCase())) ? 2
     : aos.some(ao => aoNotice(ao) || (ao.status||'').toLowerCase() === 'notice_served') ? 1
     : 0;
@@ -686,9 +533,9 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
     if (tab !== 'emails' || !sb) return;
     setEmailsLoading(true);
     sb.from('emails').select('id,subject,sender_name,sender_email,received_at,is_read,body_preview')
-      .eq('project_id', currentProject.id).order('received_at', { ascending: false }).limit(50)
+      .eq('project_id', project.id).order('received_at', { ascending: false }).limit(50)
       .then(({ data }) => { setEmails(data || []); setEmailsLoading(false); });
-  }, [tab, currentProject.id]);
+  }, [tab, project.id]);
 
   // ── BO LoA — send for signature ────────────────────────────
   const handleGenerateBOLOA = useCallback(async () => {
@@ -704,12 +551,12 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
         templateKey:     'loa_bo',
         mergeData,
         fileName,
-        projectId:       currentProject.id,
+        projectId:       project.id,
         appointmentType: 'bo_loa',
         signers: [
           { name: bo, email: boEmail },
-          ...(currentProject.bo_2_name && currentProject.bo_2_email
-            ? [{ name: currentProject.bo_2_name, email: currentProject.bo_2_email }]
+          ...(project.bo_2_name && project.bo_2_email
+            ? [{ name: project.bo_2_name, email: project.bo_2_email }]
             : []),
         ],
       });
@@ -742,7 +589,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
         templateKey:     'loa_ao',
         mergeData,
         fileName,
-        projectId:       currentProject.id,
+        projectId:       project.id,
         appointmentType: isAgreed ? 'ao_agreed_surveyor_loa' : 'ao_loa',
         signers: [
           { name: ao.name, email: aoEmail },
@@ -761,9 +608,97 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
     }
   }, [sendForSignature, project]);
 
+
+  const handleSaveProjectEdit = useCallback(async (form) => {
+    const feeValue = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
+    const payload = {
+      ref: form.ref || null,
+      role: form.role || 'BO',
+      surveyor_role: form.role || 'BO',
+      bo_premise_address: form.bo_premise_address || null,
+      address: form.bo_premise_address || null,
+      bo_service_address: form.bo_service_address || form.bo_premise_address || null,
+      bo_1_service_address: form.bo_service_address || form.bo_premise_address || null,
+      bo_1_name: form.bo_1_name || null,
+      bo: form.bo_1_name || null,
+      bo_1_email: form.bo_1_email || null,
+      bo_email: form.bo_1_email || null,
+      bo_1_phone: form.bo_1_phone || null,
+      bo_phone: form.bo_1_phone || null,
+      bo_2_name: form.bo_2_name || null,
+      bo_2_email: form.bo_2_email || null,
+      bo_2_phone: form.bo_2_phone || null,
+      works: form.works || null,
+      fee: Number.isFinite(feeValue) ? feeValue : null,
+      status: form.status || 'active',
+    };
+
+    const { data, error } = await sb
+      .from('projects')
+      .update(payload)
+      .eq('id', project.id)
+      .select('*')
+      .single();
+
+    if (error) throw new Error('Could not save project: ' + error.message);
+    setProject(prev => ({ ...prev, ...payload, ...(data || {}) }));
+  }, [project.id]);
+
+  const handleSaveAO = useCallback(async (form, existingAO = null) => {
+    const currentAOs = project.aos || [];
+    const newAO = {
+      ...(existingAO || {}),
+      id: existingAO?.id || `ao-${Date.now()}`,
+      num: existingAO?.num || currentAOs.length + 1,
+      premise: form.premise || '',
+      address: form.premise || '',
+      reg_addr: form.service_address || form.premise || '',
+      service_address: form.service_address || form.premise || '',
+      name: form.name || '',
+      email: form.email || '',
+      phone: form.phone || '',
+      name2: form.name2 || '',
+      email2: form.email2 || '',
+      phone2: form.phone2 || '',
+      status: form.status || 'details_added',
+      notice_served_date: form.notice_served_date || '',
+      noticeServedDate: form.notice_served_date || '',
+      consent_deadline: form.consent_deadline || '',
+      consentDeadline: form.consent_deadline || '',
+      s10_deadline: form.s10_deadline || '',
+      s10Deadline: form.s10_deadline || '',
+      surv_name: form.surv_name || '',
+      surveyorName: form.surv_name || '',
+      surv_firm: form.surv_firm || '',
+      surveyorFirm: form.surv_firm || '',
+      surv_email: form.surv_email || '',
+      surveyorEmail: form.surv_email || '',
+      surv_phone: form.surv_phone || '',
+      surveyorPhone: form.surv_phone || '',
+      third_surveyor_name: form.third_surveyor_name || '',
+      third_surveyor_firm: form.third_surveyor_firm || '',
+      third_surveyor_email: form.third_surveyor_email || '',
+      third_surveyor_phone: form.third_surveyor_phone || '',
+    };
+
+    const updatedAOs = existingAO
+      ? currentAOs.map(a => (a.id && existingAO.id ? a.id === existingAO.id : a.num === existingAO.num) ? newAO : a)
+      : [...currentAOs, newAO];
+
+    const { data, error } = await sb
+      .from('projects')
+      .update({ aos: updatedAOs })
+      .eq('id', project.id)
+      .select('*')
+      .single();
+
+    if (error) throw new Error('Could not save adjoining owner: ' + error.message);
+    setProject(prev => ({ ...prev, aos: updatedAOs, ...(data || {}) }));
+  }, [project]);
+
   const handleRaiseInvoice = useCallback(() => {
     if (onRaiseInvoice) {
-      onRaiseInvoice({ property_address: address, bill_to_name: bo, bill_to_address: currentProject.bo_address || '', role: (currentProject.role || 'BO').toUpperCase() === 'AO' ? 'AO' : 'BO', project_id: currentProject.id });
+      onRaiseInvoice({ property_address: address, bill_to_name: bo, bill_to_address: project.bo_address || '', role: (project.role || 'BO').toUpperCase() === 'AO' ? 'AO' : 'BO', project_id: project.id });
     }
   }, [onRaiseInvoice, project, address, bo]);
 
@@ -780,18 +715,25 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
     <div style={{ padding: '0 24px 32px' }}>
       {showProjectEdit && (
         <ProjectEditModal
-          project={currentProject}
+          project={project}
           onSave={handleSaveProjectEdit}
           onClose={() => setShowProjectEdit(false)}
         />
       )}
-
-      {aoModal && (
+      {showAddAO && (
         <AOEditModal
-          title={aoModal.mode === 'edit' ? 'Edit adjoining owner' : 'Add adjoining owner'}
-          ao={aoModal.ao || { num: (currentProject.aos || []).length + 1 }}
-          onSave={handleSaveAO}
-          onClose={() => setAoModal(null)}
+          mode="add"
+          ao={{}}
+          onSave={(form) => handleSaveAO(form, null)}
+          onClose={() => setShowAddAO(false)}
+        />
+      )}
+      {editingAO && (
+        <AOEditModal
+          mode="edit"
+          ao={editingAO}
+          onSave={(form) => handleSaveAO(form, editingAO)}
+          onClose={() => setEditingAO(null)}
         />
       )}
       {/* Top bar */}
@@ -816,7 +758,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 18, alignItems: 'start' }}>
           <div>
             <div style={{ ...card({ padding: '18px 20px', marginBottom: 16 }) }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14, lineHeight: 1.4 }}>{currentProject.ref} — {bo} — {address}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14, lineHeight: 1.4 }}>{project.ref} — {bo} — {address}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px', marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Role</div>
@@ -824,7 +766,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
                 </div>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Status</div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: projColour }}>{currentProject.status || 'active'}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: projColour }}>{project.status || 'active'}</span>
                 </div>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Building owner</div>
@@ -860,14 +802,14 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Adjoining owners</div>
-                <button className="btn btn-sm btn-primary" onClick={() => setAoModal({ mode: 'add', ao: null, index: null })} style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add AO</button>
+                <button className="btn btn-sm btn-primary" onClick={() => setShowAddAO(true)} style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add AO</button>
               </div>
               {aos.length === 0
                 ? <div style={{ ...card({ padding: '20px', textAlign: 'center' }) }}><div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No adjoining owners recorded yet.</div></div>
                 : aos.map((ao, i) => {
                   const aoKey = `ao-${ao.id || ao.num || ao.name || i}`;
                   return (
-                    <AOCard key={ao.id || i} ao={ao} onOpenComposer={onOpenComposer} onGenerateAOLOA={handleGenerateAOLOA} loaLoading={loaLoading === aoKey} onEditAO={() => setAoModal({ mode: 'edit', ao, index: i })} />
+                    <AOCard key={ao.id || i} ao={ao} onOpenComposer={onOpenComposer} onGenerateAOLOA={handleGenerateAOLOA} onEditAO={setEditingAO} loaLoading={loaLoading === aoKey} />
                   );
                 })
               }
@@ -912,10 +854,10 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
                 <button onClick={handleRaiseInvoice} style={{ padding: '4px 12px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)' }}>💰 Raise invoice</button>
               </div>
               {[
-                { label: 'Projected',   val: fmtGBP(currentProject.fee),         colour: 'var(--text)' },
-                { label: 'Invoiced',    val: fmtGBP(currentProject.fee_invoiced), colour: parseFloat(currentProject.fee_invoiced) > 0 ? 'var(--blue)' : 'var(--red)' },
-                { label: 'Paid',        val: fmtGBP(currentProject.fee_paid),     colour: parseFloat(currentProject.fee_paid) > 0 ? 'var(--green)' : 'var(--text3)' },
-                { label: 'Outstanding', val: fmtGBP((parseFloat(currentProject.fee_invoiced)||0) - (parseFloat(currentProject.fee_paid)||0)), colour: 'var(--amber)' },
+                { label: 'Projected',   val: fmtGBP(project.fee),         colour: 'var(--text)' },
+                { label: 'Invoiced',    val: fmtGBP(project.fee_invoiced), colour: parseFloat(project.fee_invoiced) > 0 ? 'var(--blue)' : 'var(--red)' },
+                { label: 'Paid',        val: fmtGBP(project.fee_paid),     colour: parseFloat(project.fee_paid) > 0 ? 'var(--green)' : 'var(--text3)' },
+                { label: 'Outstanding', val: fmtGBP((parseFloat(project.fee_invoiced)||0) - (parseFloat(project.fee_paid)||0)), colour: 'var(--amber)' },
               ].map(({ label, val, colour }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
                   <span style={{ color: 'var(--text2)' }}>{label}</span>
@@ -931,7 +873,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
       {tab === 'emails' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-            <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }} onClick={() => onOpenComposer?.({ mode: 'compose', projectId: currentProject.id })}>+ Compose</button>
+            <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }} onClick={() => onOpenComposer?.({ mode: 'compose', projectId: project.id })}>+ Compose</button>
           </div>
           <div style={{ ...card() }}>
             {emailsLoading
