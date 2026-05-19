@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import sb from '../../supabaseClient';
 
-// ── Field helpers — matches actual JSONB structure from old app ───────────────
+// ── Field helpers ─────────────────────────────────────────────────────────────
 const aoAddress   = ao => ao.premise   || ao.reg_addr   || ao.address || '';
 const aoSurvName  = ao => ao.surv_name  || ao.surveyorName  || '';
 const aoSurvFirm  = ao => ao.surv_firm  || ao.surveyorFirm  || '';
@@ -28,19 +28,15 @@ function fmtGBP(v) {
   return `£${(parseFloat(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 0 })}`;
 }
 
-// ── Colour logic using correct field names ────────────────────────────────────
 function getAOColour(ao) {
   const st = (ao.status || '').toLowerCase();
   if (st === 'consent') return '#22c55e';
   if (st === 'dissent' || st === 's10') return '#ef4444';
-  const cd = aoConsent(ao);
-  const sd = aoS10(ao);
-  const now = Date.now();
-  if ((cd && new Date(cd).getTime() < now) || (sd && sd && new Date(sd).getTime() < now)) return '#ef4444';
-  if (cd || aoNotice(ao)) return '#22c55e';
-  if (st === 'notice_served' || st === 'details_added') return '#22c55e';
-  if (aoAddress(ao)) return '#a855f7'; // has details but no notice
-  return '#9ca3af'; // grey
+  const cd = aoConsent(ao); const sd = aoS10(ao); const now = Date.now();
+  if ((cd && new Date(cd).getTime() < now) || (sd && new Date(sd).getTime() < now)) return '#ef4444';
+  if (cd || aoNotice(ao) || st === 'notice_served' || st === 'details_added') return '#22c55e';
+  if (aoAddress(ao)) return '#a855f7';
+  return '#9ca3af';
 }
 
 function getProjectColour(project) {
@@ -49,33 +45,25 @@ function getProjectColour(project) {
   const now = Date.now();
   const hasOverdue = aos.some(ao => {
     const cd = aoConsent(ao); const sd = aoS10(ao); const st = (ao.status || '').toLowerCase();
-    if (cd && new Date(cd).getTime() < now && st !== 'consent' && st !== 'dissent') return true;
-    if (sd && new Date(sd).getTime() < now) return true;
-    return false;
+    return (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) ||
+           (sd && new Date(sd).getTime() < now);
   });
   if (hasOverdue) return '#ef4444';
-  const hasNotice = aos.some(ao => aoNotice(ao) || aoConsent(ao) || ['notice_served'].includes((ao.status || '').toLowerCase()));
-  if (hasNotice) return '#22c55e';
-  const hasDetails = aos.some(ao => aoAddress(ao));
-  if (hasDetails) return '#a855f7';
+  if (aos.some(ao => aoNotice(ao) || aoConsent(ao) || (ao.status||'').toLowerCase() === 'notice_served')) return '#22c55e';
+  if (aos.some(ao => aoAddress(ao))) return '#a855f7';
   return '#9ca3af';
 }
 
-// ── Card style helper ─────────────────────────────────────────────────────────
 const card = (extra = {}) => ({
-  background: 'var(--bg2)',
-  border: '1px solid var(--border)',
-  borderRadius: 16,
-  ...extra,
+  background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, ...extra,
 });
 
 // ── AO Card ───────────────────────────────────────────────────────────────────
 function AOCard({ ao, onOpenComposer }) {
-  const colour  = getAOColour(ao);
-  const address = aoAddress(ao);
-  const name2   = aoName2(ao);
-  const cd      = aoConsent(ao);
-  const days    = daysUntil(cd);
+  const colour    = getAOColour(ao);
+  const address   = aoAddress(ao);
+  const cd        = aoConsent(ao);
+  const days      = daysUntil(cd);
   const survName  = aoSurvName(ao);
   const survFirm  = aoSurvFirm(ao);
   const survEmail = aoSurvEmail(ao);
@@ -89,38 +77,21 @@ function AOCard({ ao, onOpenComposer }) {
   return (
     <div style={{ ...card({ marginBottom: 12, overflow: 'hidden' }) }}>
       <div style={{ display: 'flex' }}>
-        {/* Colour stripe */}
         <div style={{ width: 5, background: colour, borderRadius: '16px 0 0 16px', flexShrink: 0 }} />
-
         <div style={{ flex: 1, padding: '14px 16px' }}>
-          {/* Name & status */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: colour }}>
                 AO{ao.num} — {(ao.name || '').toUpperCase()}
               </div>
-              {name2 && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{name2}</div>}
+              {aoName2(ao) && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{aoName2(ao)}</div>}
             </div>
-            {statusLabel && (
-              <span style={{ fontSize: 12, fontWeight: 600, color: colour, flexShrink: 0, paddingLeft: 8 }}>{statusLabel}</span>
-            )}
+            {statusLabel && <span style={{ fontSize: 12, fontWeight: 600, color: colour, paddingLeft: 8 }}>{statusLabel}</span>}
           </div>
 
-          {/* Address */}
-          {address && (
-            <div style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4 }}>
-              {address}
-            </div>
-          )}
+          {address && <div style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4 }}>{address}</div>}
+          {ao.phone && <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 6 }}>📞 {ao.phone}</div>}
 
-          {/* Phone */}
-          {ao.phone && (
-            <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-              📞 {ao.phone}
-            </div>
-          )}
-
-          {/* Consent deadline countdown */}
           {cd && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, margin: '6px 0',
@@ -132,30 +103,22 @@ function AOCard({ ao, onOpenComposer }) {
             </div>
           )}
 
-          {/* Agreed surveyor toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-            <div style={{
-              width: 32, height: 18, borderRadius: 9, cursor: 'pointer', position: 'relative', flexShrink: 0,
-              background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)',
-            }}>
+            <div style={{ width: 32, height: 18, borderRadius: 9, cursor: 'pointer', position: 'relative', flexShrink: 0, background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)' }}>
               <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: ao.agreed_surveyor ? 16 : 2, transition: 'left 0.15s' }} />
             </div>
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>I am the Agreed Surveyor for this AO</span>
           </div>
 
-          {/* AO Surveyor block */}
           {(survName || survFirm) && (
             <div style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>AO Surveyor</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--blue)', lineHeight: 1.5 }}>
-                {survName}{survFirm ? ` — ${survFirm}` : ''}
-              </div>
-              {survEmail && <div style={{ fontSize: 12, color: 'var(--blue)',  marginTop: 3 }}>{survEmail}</div>}
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--blue)', lineHeight: 1.5 }}>{survName}{survFirm ? ` — ${survFirm}` : ''}</div>
+              {survEmail && <div style={{ fontSize: 12, color: 'var(--blue)', marginTop: 3 }}>{survEmail}</div>}
               {survPhone && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>📞 {survPhone}</div>}
             </div>
           )}
 
-          {/* Action buttons */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             {['Consent', 'Dissent'].map(a => (
               <button key={a} style={{
@@ -186,69 +149,10 @@ function AOCard({ ao, onOpenComposer }) {
   );
 }
 
-// ── SOC Modal ─────────────────────────────────────────────────────────────────
-function SOCModal({ project, onClose }) {
-  const [messages, setMessages] = useState([{
-    id: 0, role: 'ely',
-    content: `Ready to dictate the Schedule of Condition for ${project.ref}.\n\nTell me the room you're in and describe what you see — I'll structure it as we go.\n\nStart with: "Room 1 — [room name]"`
-  }]);
-  const [input, setInput] = useState('');
-  const endRef = useRef(null);
-  const { send, loading } = useEly({ surface: 'soc_dictation', projectId: project.id });
-
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput('');
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
-    try {
-      const result = await send(text);
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: result.reply }]);
-    } catch {
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: 'Something went wrong. Please try again.' }]);
-    }
-  }, [input, loading, send]);
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 680, maxWidth: '95vw', height: '80vh', ...card({ display: 'flex', flexDirection: 'column', overflow: 'hidden' }) }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>🎙️ SOC Dictation</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{project.ref} — {project.address}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>✕</button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {messages.map(msg => (
-            <div key={msg.id} style={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%',
-              background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
-              color: msg.role === 'user' ? '#fff' : 'var(--text)',
-              padding: '10px 14px', borderRadius: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-            }}>{msg.content}</div>
-          ))}
-          {loading && <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>✨ Processing…</div>}
-          <div ref={endRef} />
-        </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
-          <textarea value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
-            placeholder="Dictate room observations…" rows={2}
-            style={{ flex: 1, padding: '9px 12px', fontSize: 13, resize: 'none', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', outline: 'none' }} />
-          <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', alignSelf: 'flex-end' }}>Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Project Chat tab ──────────────────────────────────────────────────────────
+// ── Project Chat ───────────────────────────────────────────────────────────────
 function ProjectChat({ project, onOpenComposer }) {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput]       = useState('');
   const endRef = useRef(null);
   const { send, loading } = useEly({ surface: 'project_chat', projectId: project.id });
 
@@ -304,28 +208,33 @@ function ProjectChat({ project, onOpenComposer }) {
   );
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-export default function ProjectDetail({ project, onBack, onOpenComposer }) {
-  const [tab, setTab]       = useState('details');
-  const [showSOC, setShowSOC] = useState(false);
-  const [emails, setEmails]   = useState([]);
+// ── Main ───────────────────────────────────────────────────────────────────────
+export default function ProjectDetail({ project, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
+  const [tab, setTab]             = useState('details');
+  const [emails, setEmails]       = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
 
-  const address  = project.address  || project.bo_premise_address || '';
-  const bo       = project.bo       || project.bo_1_name || '';
-  const boEmail  = project.bo_email || project.bo_1_email || '';
-  const works    = project.works    || '';
-  const aos      = project.aos      || [];
-  const docs     = project.documents || [];
+  const address    = project.address  || project.bo_premise_address || '';
+  const bo         = project.bo       || project.bo_1_name || '';
+  const boEmail    = project.bo_email || project.bo_1_email || '';
+  const works      = project.works    || '';
+  const aos        = project.aos      || [];
+  const docs       = project.documents || [];
   const projColour = getProjectColour(project);
 
-  // Stage
+  // Role label from project data
+  const roleLabel = (() => {
+    const r = (project.role || project.surveyor_role || 'BO').toUpperCase();
+    if (r === 'AO') return "Adjoining Owner's Surveyor";
+    if (r === 'AS' || r === 'AGREED') return 'Agreed Surveyor';
+    return "Building Owner's Surveyor";
+  })();
+
   const stageIndex = project.status === 'complete' ? 4
     : aos.some(ao => ['consent','dissent','s10'].includes((ao.status||'').toLowerCase())) ? 2
     : aos.some(ao => aoNotice(ao) || (ao.status||'').toLowerCase() === 'notice_served') ? 1
     : 0;
 
-  // Upcoming deadlines
   const upcoming = [];
   aos.forEach(ao => {
     const cd = aoConsent(ao);
@@ -346,6 +255,24 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
       .then(({ data }) => { setEmails(data || []); setEmailsLoading(false); });
   }, [tab, project.id]);
 
+  // Raise invoice — pre-populate with project data
+  const handleRaiseInvoice = useCallback(() => {
+    if (onRaiseInvoice) {
+      onRaiseInvoice({
+        property_address: address,
+        bill_to_name: bo,
+        bill_to_address: project.bo_address || '',
+        role: (project.role || 'BO').toUpperCase() === 'AO' ? 'AO' : 'BO',
+        project_id: project.id,
+      });
+    }
+  }, [onRaiseInvoice, project, address, bo]);
+
+  // Open SOC — passes project to SOC page
+  const handleOpenSOC = useCallback(() => {
+    onOpenSOC?.(project);
+  }, [onOpenSOC, project]);
+
   const TABS = [
     { id: 'details',   label: 'Details'   },
     { id: 'emails',    label: 'Emails'    },
@@ -355,13 +282,11 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
 
   return (
     <div style={{ padding: '0 24px 32px' }}>
-      {showSOC && <SOCModal project={project} onClose={() => setShowSOC(false)} />}
 
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0 14px' }}>
         <button onClick={onBack} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 16px', borderRadius: 99,
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 99,
           border: '1px solid var(--border)', background: 'var(--bg2)',
           color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontWeight: 500,
         }}>← Back</button>
@@ -379,8 +304,8 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20, gap: 2 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '8px 18px', fontSize: 13, border: 'none', cursor: 'pointer',
-            background: 'none', fontWeight: tab === t.id ? 600 : 400,
+            padding: '8px 18px', fontSize: 13, border: 'none', cursor: 'pointer', background: 'none',
+            fontWeight: tab === t.id ? 600 : 400,
             color: tab === t.id ? 'var(--blue)' : 'var(--text2)',
             borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent',
             marginBottom: -1,
@@ -388,13 +313,12 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
         ))}
       </div>
 
-      {/* ── DETAILS: two-column ── */}
+      {/* ── DETAILS ── */}
       {tab === 'details' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 18, alignItems: 'start' }}>
 
           {/* LEFT */}
           <div>
-            {/* Project header */}
             <div style={{ ...card({ padding: '18px 20px', marginBottom: 16 }) }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14, lineHeight: 1.4 }}>
                 {project.ref} — {bo} — {address}
@@ -402,7 +326,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px', marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Role</div>
-                  <span style={{ fontSize: 12.5, padding: '3px 10px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 500 }}>Building Owner's Surveyor</span>
+                  <span style={{ fontSize: 12.5, padding: '3px 10px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 500 }}>{roleLabel}</span>
                 </div>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Status</div>
@@ -412,7 +336,9 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Building owner</div>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{bo}</div>
                   {boEmail && <div style={{ fontSize: 12.5, color: 'var(--blue)', marginTop: 2 }}>{boEmail}</div>}
-                  <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', marginTop: 6, fontSize: 12, borderRadius: 99 }}>📧 Send BO LoA</button>
+                  <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', marginTop: 6, fontSize: 12, borderRadius: 99 }}>
+                    📄 Send BO LoA
+                  </button>
                 </div>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Address</div>
@@ -425,6 +351,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
                   </div>
                 )}
               </div>
+
               {/* Stage bar */}
               <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
                 {STAGES.map((s, i) => (
@@ -440,7 +367,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
             </div>
 
             {/* AOs */}
-            <div style={{ marginBottom: 4 }}>
+            <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Adjoining owners</div>
                 <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add AO</button>
@@ -457,7 +384,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
           {/* RIGHT SIDEBAR */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-            {/* Upcoming & tasks */}
+            {/* Upcoming */}
             <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>📅 Upcoming & tasks</div>
@@ -477,9 +404,9 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
               }
             </div>
 
-            {/* SOC Dictation */}
+            {/* SOC — navigates to full SOC page with project pre-selected */}
             <div style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }}
-              onClick={() => setShowSOC(true)}
+              onClick={handleOpenSOC}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--purple)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
             >
@@ -487,7 +414,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
                 <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--purple-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎙️</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>SOC Dictation</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Dictate conditions · generate DOCX</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Dictate conditions · generate PDF</div>
                 </div>
                 <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
               </div>
@@ -497,14 +424,15 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
             <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Financials</div>
-                <button style={{ padding: '4px 12px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)' }}>
-                  💰 Raise invoice
-                </button>
+                <button onClick={handleRaiseInvoice} style={{
+                  padding: '4px 12px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                  background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)',
+                }}>💰 Raise invoice</button>
               </div>
               {[
-                { label: 'Projected',   val: fmtGBP(project.fee),          colour: 'var(--text)' },
-                { label: 'Invoiced',    val: fmtGBP(project.fee_invoiced),  colour: parseFloat(project.fee_invoiced) > 0 ? 'var(--blue)' : 'var(--red)' },
-                { label: 'Paid',        val: fmtGBP(project.fee_paid),      colour: parseFloat(project.fee_paid) > 0 ? 'var(--green)' : 'var(--text3)' },
+                { label: 'Projected',   val: fmtGBP(project.fee),         colour: 'var(--text)' },
+                { label: 'Invoiced',    val: fmtGBP(project.fee_invoiced), colour: parseFloat(project.fee_invoiced) > 0 ? 'var(--blue)' : 'var(--red)' },
+                { label: 'Paid',        val: fmtGBP(project.fee_paid),     colour: parseFloat(project.fee_paid) > 0 ? 'var(--green)' : 'var(--text3)' },
                 { label: 'Outstanding', val: fmtGBP((parseFloat(project.fee_invoiced)||0) - (parseFloat(project.fee_paid)||0)), colour: 'var(--amber)' },
               ].map(({ label, val, colour }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
@@ -517,7 +445,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
         </div>
       )}
 
-      {/* ── EMAILS TAB ── */}
+      {/* ── EMAILS ── */}
       {tab === 'emails' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -544,7 +472,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
         </div>
       )}
 
-      {/* ── DOCUMENTS TAB ── */}
+      {/* ── DOCUMENTS ── */}
       {tab === 'documents' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -570,7 +498,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer }) {
         </div>
       )}
 
-      {/* ── CHAT TAB ── */}
+      {/* ── CHAT ── */}
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
     </div>
   );
