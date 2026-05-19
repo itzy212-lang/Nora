@@ -38,12 +38,12 @@ export default async function handler(req, res) {
     // page_number is set to 1 — works for single-page LoAs.
     // For multi-page LoAs this can be updated once we know the page count.
     const fields = [];
-    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 75 }, width: 35, height: 8 });
-    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 55, y: 75 }, width: 25, height: 8 });
+    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 75, width: 35, height: 8 } });
+    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 55, y: 75, width: 25, height: 8 } });
 
     if (recipients.length >= 2) {
-      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 5,  y: 87 }, width: 35, height: 8 });
-      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 87 }, width: 25, height: 8 });
+      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 5,  y: 87, width: 35, height: 8 } });
+      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 87, width: 25, height: 8 } });
     }
 
     const createPayload = {
