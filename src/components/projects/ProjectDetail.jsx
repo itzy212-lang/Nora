@@ -749,7 +749,7 @@ export default function ProjectDetail({ project, onBack, onOpenComposer, onRaise
               ].map(({ label, val, colour }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
                   <span style={{ color: 'var(--text2)' }}>{label}</span>
-                  <span style={{ fontWeight: 600, color }}>{val}</span>
+                  <span style={{ fontWeight: 600, color : colour }}>{val}</span>
                 </div>
               ))}
             </div>
