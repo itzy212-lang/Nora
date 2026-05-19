@@ -19,6 +19,7 @@ import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
 import Calendar from './components/calendar/Calendar';
+import Accounting from './components/accounting/Accounting';
 
 // Stub views
 function StubView({ icon, title, subtitle }) {
@@ -42,6 +43,7 @@ export default function App() {
   const [projectView, setProjectView] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [composerOpts, setComposerOpts] = useState(null);
+  const [showRaiseInvoice, setShowRaiseInvoice] = useState(false);
 
   // Auth
   useEffect(() => {
@@ -119,6 +121,11 @@ export default function App() {
           project={projectView}
           onBack={() => { setProjectView(null); clearCurrentProject(); }}
           onOpenComposer={openComposer}
+          onRaiseInvoice={() => {
+            setCurrentView('accounting');
+            setProjectView(null);
+            setShowRaiseInvoice(true);
+          }}
         />
       );
     }
@@ -138,6 +145,15 @@ export default function App() {
         return <Settings onNavigate={handleNavigate} />;
       case 'calendar':
         return <Calendar onOpenProject={handleOpenProject} />;
+      case 'accounting':
+        return (
+          <Accounting
+            projects={state.projects || []}
+            settings={settings || {}}
+            autoOpenInvoice={showRaiseInvoice}
+            onInvoiceOpened={() => setShowRaiseInvoice(false)}
+          />
+        );
       case 'leads':
         return <StubView icon="🎯" title="Leads" subtitle="Track and manage incoming enquiries" />;
       case 'contacts':
@@ -146,8 +162,6 @@ export default function App() {
         return <StubView icon="🎙" title="SOC Dictation" subtitle="Record and transcribe schedules of condition" />;
       case 'notices':
         return <StubView icon="📋" title="Notices" subtitle="Draft and manage party wall notices" />;
-      case 'invoices':
-        return <StubView icon="💰" title="Invoices" subtitle="Billing and fee management" />;
       default:
         return <Dashboard onNavigate={handleNavigate} onOpenProject={handleOpenProject} />;
     }
@@ -177,6 +191,10 @@ export default function App() {
         <Sidebar
           currentView={currentView}
           onNavigate={handleNavigate}
+          onRaiseInvoice={() => {
+            setCurrentView('accounting');
+            setShowRaiseInvoice(true);
+          }}
           onClose={() => setSidebarOpen(false)}
         />
       </div>
