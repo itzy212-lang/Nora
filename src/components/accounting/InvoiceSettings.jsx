@@ -80,8 +80,7 @@ export default function InvoiceSettings() {
           </div>
           <div style={styles.field}>
             <label style={styles.label}>Invoice Prefix</label>
-            <input style={styles.input} value="Invoice-" disabled
-              style={{ ...styles.input, background: '#f5f5f8', color: '#aaa' }} />
+            <input style={{ ...styles.input, background: '#f5f5f8', color: '#aaa' }} value="Invoice-" disabled />
             <span style={styles.hint}>Format: Invoice-1601, Invoice-1602 etc.</span>
           </div>
         </div>
@@ -90,7 +89,7 @@ export default function InvoiceSettings() {
       {/* Bank details */}
       <div style={styles.group}>
         <div style={styles.groupTitle}>Bank Details</div>
-        <div style={styles.hint} style={{ ...styles.hint, marginBottom: 12 }}>
+        <div style={{ ...styles.hint, marginBottom: 12 }}>
           These appear on every invoice footer automatically
         </div>
         <div style={styles.row2}>
