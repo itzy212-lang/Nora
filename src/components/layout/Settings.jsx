@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-// Note: useRef already imported above — used in FirmTab (sigInputRef) and TemplatesTab (fileInputRef)
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
+import InvoiceSettings from '../accounting/InvoiceSettings';
 
-const TABS = ['Firm', 'Templates', 'Email', 'Account'];
+const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account'];
 
 const TEMPLATE_LABELS = {
   loa_bo:                    'LoA — Building Owner',
@@ -38,7 +38,7 @@ function fmtDate(d) {
 function TemplatesTab() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [uploading, setUploading] = useState(null); // template_key being uploaded
+  const [uploading, setUploading] = useState(null);
   const [message, setMessage]     = useState('');
   const fileInputRef = useRef(null);
   const activeKey    = useRef(null);
@@ -87,7 +87,6 @@ function TemplatesTab() {
     setUploading(activeKey.current);
     setMessage('');
     try {
-      // Read as base64
       const b64 = await new Promise((res, rej) => {
         const reader = new FileReader();
         reader.onload  = () => res(reader.result.split(',')[1]);
@@ -128,7 +127,6 @@ function TemplatesTab() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Show all known templates, including ones not yet in DB */}
         {Object.entries(TEMPLATE_LABELS).map(([key, defaultLabel]) => {
           const tpl = templates.find(t => t.template_key === key);
           const isUploading = uploading === key;
@@ -138,20 +136,15 @@ function TemplatesTab() {
               padding: '12px 16px', background: 'var(--bg3)',
               border: '1px solid var(--border)', borderRadius: 12,
             }}>
-              {/* Icon */}
               <div style={{ width: 36, height: 36, borderRadius: 8, background: tpl ? 'var(--blue-bg)' : 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
                 {tpl ? '📄' : '⬜'}
               </div>
-
-              {/* Label + filename */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{tpl?.label || defaultLabel}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
                   {tpl ? `${tpl.filename} · ${fmtSize(tpl.file_size)} · Updated ${fmtDate(tpl.updated_at)}` : 'No file uploaded yet'}
                 </div>
               </div>
-
-              {/* Buttons */}
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 {tpl && (
                   <button onClick={() => handleDownload(tpl)}
@@ -181,7 +174,7 @@ function FirmTab() {
     addressLine1: '', addressLine2: '', city: '', postcode: '',
     tel: '', email: '', website: '',
   });
-  const [sigB64, setSigB64]   = useState(null); // current signature image
+  const [sigB64, setSigB64]   = useState(null);
   const [saved, setSaved]     = useState(false);
   const [loading, setLoading] = useState(true);
   const sigInputRef = useRef(null);
@@ -282,46 +275,31 @@ function FirmTab() {
         {saved ? '✓ Saved!' : 'Save firm details'}
       </button>
 
-      {/* Signature section */}
       <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Email signature image</div>
         <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
           Upload a PNG or JPG of your signature. It will be appended to emails and included in generated documents.
         </div>
-
         {sigB64 ? (
           <div>
-            {/* Preview on white background like a document */}
             <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px', marginBottom: 12, display: 'inline-block', maxWidth: '100%' }}>
-              <img
-                src={`data:image/png;base64,${sigB64}`}
-                alt="Signature"
-                style={{ maxWidth: 400, maxHeight: 120, display: 'block' }}
-                onError={e => { e.target.src = `data:image/jpeg;base64,${sigB64}`; }}
-              />
+              <img src={`data:image/png;base64,${sigB64}`} alt="Signature" style={{ maxWidth: 400, maxHeight: 120, display: 'block' }} onError={e => { e.target.src = `data:image/jpeg;base64,${sigB64}`; }} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input ref={sigInputRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: 'none' }} onChange={handleSigUpload} />
-              <button onClick={() => sigInputRef.current?.click()} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
-                ↑ Replace signature
-              </button>
-              <button onClick={clearSignature} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)' }}>
-                Remove
-              </button>
+              <button onClick={() => sigInputRef.current?.click()} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>↑ Replace signature</button>
+              <button onClick={clearSignature} style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)' }}>Remove</button>
             </div>
           </div>
         ) : (
           <div>
             <input ref={sigInputRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: 'none' }} onChange={handleSigUpload} />
-            <button onClick={() => sigInputRef.current?.click()} style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
-              ↑ Upload signature image
-            </button>
+            <button onClick={() => sigInputRef.current?.click()} style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>↑ Upload signature image</button>
             <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 8 }}>PNG or JPG, ideally on a transparent background</div>
           </div>
         )}
       </div>
 
-      {/* Signature preview — what it looks like in a document */}
       {(form.surveyorName || form.firmName) && (
         <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Signature preview</div>
@@ -346,7 +324,6 @@ function FirmTab() {
 function AccountTab() {
   const { state } = useApp();
   const { currentUser } = state;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
@@ -376,11 +353,11 @@ function EmailTab() {
     load();
   }, []);
 
-  const tokenExpiry = account?.token_expires_at ? new Date(account.token_expires_at) : null;
-  const tokenValid  = tokenExpiry && tokenExpiry > new Date();
+  const tokenExpiry    = account?.token_expires_at ? new Date(account.token_expires_at) : null;
+  const tokenValid     = tokenExpiry && tokenExpiry > new Date();
   const needsReconnect = account?.reconnect_required;
-  const statusColour = needsReconnect ? 'var(--red)' : tokenValid ? 'var(--green)' : 'var(--amber)';
-  const statusLabel  = needsReconnect ? 'Reconnection required' : tokenValid ? 'Connected & syncing' : 'Token expired';
+  const statusColour   = needsReconnect ? 'var(--red)' : tokenValid ? 'var(--green)' : 'var(--amber)';
+  const statusLabel    = needsReconnect ? 'Reconnection required' : tokenValid ? 'Connected & syncing' : 'Token expired';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -403,26 +380,16 @@ function EmailTab() {
               </div>
             )}
             {account.last_token_error && (
-              <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 10px', background: 'var(--red-bg)', borderRadius: 8 }}>
-                ⚠️ {account.last_token_error}
-              </div>
-            )}
-            {needsReconnect && (
-              <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99, alignSelf: 'flex-start' }}>
-                Reconnect account
-              </button>
+              <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 10px', background: 'var(--red-bg)', borderRadius: 8 }}>⚠️ {account.last_token_error}</div>
             )}
           </div>
         ) : (
           <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No email account connected.</div>
         )}
       </div>
-
       <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Email signature</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
-          Your signature is built from your firm details (Firm tab) and attached automatically to outgoing emails. Upload a signature image in the Firm tab to include it.
-        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Your signature is built from your firm details (Firm tab) and attached automatically to outgoing emails.</div>
       </div>
     </div>
   );
@@ -436,7 +403,6 @@ export default function Settings() {
     <div style={{ padding: '24px 28px', maxWidth: 700 }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Settings</div>
 
-      {/* Tab bar */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, gap: 2 }}>
         {TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
@@ -452,6 +418,7 @@ export default function Settings() {
       {activeTab === 'Firm'      && <FirmTab />}
       {activeTab === 'Templates' && <TemplatesTab />}
       {activeTab === 'Email'     && <EmailTab />}
+      {activeTab === 'Invoice'   && <InvoiceSettings />}
       {activeTab === 'Account'   && <AccountTab />}
     </div>
   );
