@@ -28,6 +28,8 @@ export default async function handler(req, res) {
     const recipientsWithIds = recipients.map((r, i) => ({
       id: i === 0 ? 'temp_1' : 'temp_2',
       name: r.name,
+      first_name: r.first_name,
+      last_name: r.last_name,
       email: r.email,
       role: 'signer',
     }));
@@ -99,7 +101,13 @@ function normaliseRecipients(input) {
   return input.filter(s => s && s.email).map(s => {
     const email = String(s.email).trim();
     const name  = String(s.name || deriveNameFromEmail(email)).trim();
-    return { name, email };
+    const parts = name.split(' ');
+    return {
+      name,
+      first_name: parts[0] || name,
+      last_name: parts.slice(1).join(' ') || '',
+      email,
+    };
   }).filter(s => s.email && s.name);
 }
 
