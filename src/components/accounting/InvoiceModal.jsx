@@ -2,6 +2,27 @@ import React, { useState, useEffect } from 'react';
 
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
+async function polishDescription(text) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: `You are helping a party wall surveyor write professional invoice line item descriptions.
+
+Improve the following invoice line item description: fix spelling, grammar, and make it sound professional and suitable for a formal invoice from a party wall surveyor. Keep it concise. Return ONLY the improved description text with no explanation, quotes, or preamble.
+
+Description to improve: "${text}"`
+      }]
+    })
+  });
+  const data = await response.json();
+  return data.content?.[0]?.text?.trim() || text;
+}
+
 export default function InvoiceModal({ invoice, nextNumber, settings, projects, onSave, onClose }) {
   const isEdit = !!invoice;
 
@@ -9,13 +30,11 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
     invoice_number: invoice?.invoice_number || nextNumber || 1601,
     invoice_date: invoice?.invoice_date || new Date().toISOString().split('T')[0],
     due_date: invoice?.due_date || '',
-    // Billing party is always the Building Owner
     bill_to_name: invoice?.bill_to_name || '',
     bill_to_address: invoice?.bill_to_address || '',
-    // Property the works relate to (may differ if acting for AO)
     property_address: invoice?.property_address || '',
     project_id: invoice?.project_id || '',
-    role: invoice?.role || 'BO', // BO or AO — affects address label
+    role: invoice?.role || 'BO',
     items: invoice?.items || DEFAULT_ITEMS,
     vat_rate: invoice?.vat_rate ?? (settings?.vat_rate || 0),
     notes: invoice?.notes || '',
@@ -23,13 +42,13 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
   });
 
   const [saving, setSaving] = useState(false);
+  // Track which line items are currently being polished by AI
+  const [polishing, setPolishing] = useState({});
 
-  // Recalculate totals when items or vat change
   const subtotal = form.items.reduce((s, it) => s + (parseFloat(it.unitPrice) || 0) * (parseFloat(it.qty) || 0), 0);
   const vatAmount = subtotal * (form.vat_rate / 100);
   const total = subtotal + vatAmount;
 
-  // Auto-fill due date based on payment terms
   useEffect(() => {
     if (!form.due_date && form.invoice_date) {
       const terms = settings?.payment_terms || 0;
@@ -51,18 +70,27 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
     setField('items', items);
   };
 
+  const handlePolish = async (idx) => {
+    const currentText = form.items[idx]?.description;
+    if (!currentText?.trim()) return;
+    setPolishing(p => ({ ...p, [idx]: true }));
+    try {
+      const improved = await polishDescription(currentText);
+      setItem(idx, 'description', improved);
+    } catch (e) {
+      console.error('AI polish failed:', e);
+    } finally {
+      setPolishing(p => ({ ...p, [idx]: false }));
+    }
+  };
+
   const addItem = () => setField('items', [...form.items, { description: '', qty: 1, unitPrice: '', total: 0 }]);
   const removeItem = (idx) => setField('items', form.items.filter((_, i) => i !== idx));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave({
-        ...form,
-        subtotal,
-        vat_amount: vatAmount,
-        total,
-      });
+      await onSave({ ...form, subtotal, vat_amount: vatAmount, total });
       onClose();
     } catch (e) {
       alert('Error saving invoice: ' + e.message);
@@ -114,7 +142,7 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
             )}
           </div>
 
-          {/* Billing party — always BO */}
+          {/* Billing party */}
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Bill To (Building Owner)</div>
             <div style={styles.row2}>
@@ -173,20 +201,47 @@ export default function InvoiceModal({ invoice, nextNumber, settings, projects, 
                 {form.items.map((item, idx) => (
                   <tr key={idx}>
                     <td style={styles.td}>
-                      <input style={styles.tableInput} value={item.description}
-                        placeholder="e.g. Party Wall Act 1996 — Surveyor's fees"
-                        onChange={e => setItem(idx, 'description', e.target.value)} />
+                      {/* Description input + AI polish button */}
+                      <div style={styles.descWrapper}>
+                        <input
+                          style={styles.tableInput}
+                          value={item.description}
+                          placeholder="e.g. party wall fees for 2 storey extension"
+                          onChange={e => setItem(idx, 'description', e.target.value)}
+                        />
+                        <button
+                          onClick={() => handlePolish(idx)}
+                          disabled={polishing[idx] || !item.description?.trim()}
+                          style={{
+                            ...styles.polishBtn,
+                            ...(polishing[idx] ? styles.polishBtnActive : {}),
+                            ...((!item.description?.trim()) ? styles.polishBtnDisabled : {}),
+                          }}
+                          title="Ask AI to improve this description"
+                        >
+                          {polishing[idx] ? (
+                            <span style={styles.spinner}>⟳</span>
+                          ) : (
+                            '✨'
+                          )}
+                        </button>
+                      </div>
+                      {/* AI hint text */}
+                      {!item.description?.trim() && (
+                        <div style={styles.aiHint}>Type a description, then click ✨ to polish it</div>
+                      )}
                     </td>
                     <td style={styles.td}>
-                      <input style={{ ...styles.tableInput, textAlign: 'center' }} value={item.qty} type="number" min="1"
+                      <input style={{ ...styles.tableInput, textAlign: 'center', width: 60 }}
+                        value={item.qty} type="number" min="1"
                         onChange={e => setItem(idx, 'qty', e.target.value)} />
                     </td>
                     <td style={styles.td}>
-                      <input style={{ ...styles.tableInput, textAlign: 'right' }} value={item.unitPrice}
-                        placeholder="0.00" type="number" step="0.01"
+                      <input style={{ ...styles.tableInput, textAlign: 'right', width: 90 }}
+                        value={item.unitPrice} placeholder="0.00" type="number" step="0.01"
                         onChange={e => setItem(idx, 'unitPrice', e.target.value)} />
                     </td>
-                    <td style={{ ...styles.td, textAlign: 'right', color: '#1a1a2e' }}>
+                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>
                       {fmt(item.total)}
                     </td>
                     <td style={styles.td}>
@@ -258,23 +313,14 @@ const styles = {
     padding: '20px 24px', borderBottom: '1px solid #e8e8f0',
   },
   title: { margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' },
-  closeBtn: {
-    background: 'none', border: 'none', fontSize: 18, cursor: 'pointer',
-    color: '#666', padding: '4px 8px', borderRadius: 6,
-  },
+  closeBtn: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#666', padding: '4px 8px', borderRadius: 6 },
   body: { padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 },
-  footer: {
-    padding: '16px 24px', borderTop: '1px solid #e8e8f0',
-    display: 'flex', justifyContent: 'flex-end', gap: 10,
-  },
+  footer: { padding: '16px 24px', borderTop: '1px solid #e8e8f0', display: 'flex', justifyContent: 'flex-end', gap: 10 },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: { fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' },
-  input: {
-    border: '1px solid #dde0ee', borderRadius: 8, padding: '8px 12px',
-    fontSize: 14, color: '#1a1a2e', outline: 'none', width: '100%', boxSizing: 'border-box',
-  },
+  input: { border: '1px solid #dde0ee', borderRadius: 8, padding: '8px 12px', fontSize: 14, color: '#1a1a2e', outline: 'none', width: '100%', boxSizing: 'border-box' },
   section: { display: 'flex', flexDirection: 'column', gap: 10 },
   sectionTitle: { fontSize: 13, fontWeight: 700, color: '#3d5a99', borderBottom: '1px solid #e8e8f0', paddingBottom: 6 },
   roleNote: { display: 'flex', alignItems: 'center', gap: 8, background: '#f0f4ff', borderRadius: 8, padding: '10px 14px' },
@@ -282,28 +328,26 @@ const styles = {
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', borderBottom: '2px solid #e8e8f0', textAlign: 'left' },
   td: { padding: '6px 4px', borderBottom: '1px solid #f0f0f8', verticalAlign: 'middle' },
-  tableInput: {
-    width: '100%', border: '1px solid #dde0ee', borderRadius: 6,
-    padding: '6px 8px', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  // Description field wrapper — input + AI button side by side
+  descWrapper: { display: 'flex', gap: 6, alignItems: 'center' },
+  tableInput: { flex: 1, border: '1px solid #dde0ee', borderRadius: 6, padding: '6px 8px', fontSize: 13, outline: 'none', boxSizing: 'border-box', minWidth: 0 },
+  // AI polish button
+  polishBtn: {
+    flexShrink: 0, width: 32, height: 32, border: '1px solid #c8d4f0',
+    borderRadius: 7, background: '#f0f4ff', cursor: 'pointer',
+    fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s',
   },
+  polishBtnActive: { background: '#e0e8ff', borderColor: '#3d5a99', animation: 'spin 1s linear infinite' },
+  polishBtnDisabled: { opacity: 0.35, cursor: 'not-allowed' },
+  spinner: { display: 'inline-block', animation: 'spin 0.8s linear infinite', fontSize: 16 },
+  aiHint: { fontSize: 10, color: '#bbb', marginTop: 3, paddingLeft: 2 },
   removeBtn: { background: 'none', border: 'none', color: '#cc4444', cursor: 'pointer', fontSize: 14 },
-  addItemBtn: {
-    marginTop: 8, background: 'none', border: '1px dashed #3d5a99', borderRadius: 8,
-    color: '#3d5a99', padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-  },
-  totalsBlock: {
-    marginLeft: 'auto', width: 280, display: 'flex', flexDirection: 'column', gap: 6,
-    background: '#f8f9fe', borderRadius: 10, padding: '12px 16px',
-  },
+  addItemBtn: { marginTop: 8, background: 'none', border: '1px dashed #3d5a99', borderRadius: 8, color: '#3d5a99', padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  totalsBlock: { marginLeft: 'auto', width: 280, display: 'flex', flexDirection: 'column', gap: 6, background: '#f8f9fe', borderRadius: 10, padding: '12px 16px' },
   totalRow: { display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#444', alignItems: 'center' },
   grandTotal: { borderTop: '2px solid #3d5a99', paddingTop: 8, fontWeight: 700, fontSize: 16, color: '#1a1a2e' },
   vatSelect: { border: '1px solid #dde0ee', borderRadius: 6, padding: '2px 6px', fontSize: 12, marginLeft: 8 },
-  cancelBtn: {
-    padding: '9px 20px', borderRadius: 8, border: '1px solid #dde0ee',
-    background: '#fff', color: '#555', cursor: 'pointer', fontSize: 14,
-  },
-  saveBtn: {
-    padding: '9px 24px', borderRadius: 8, border: 'none',
-    background: '#3d5a99', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600,
-  },
+  cancelBtn: { padding: '9px 20px', borderRadius: 8, border: '1px solid #dde0ee', background: '#fff', color: '#555', cursor: 'pointer', fontSize: 14 },
+  saveBtn: { padding: '9px 24px', borderRadius: 8, border: 'none', background: '#3d5a99', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 },
 };
