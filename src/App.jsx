@@ -20,8 +20,8 @@ import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
 import Calendar from './components/calendar/Calendar';
 import Accounting from './components/accounting/Accounting';
+import SOC from './components/soc/SOC';
 
-// Stub views
 function StubView({ icon, title, subtitle }) {
   return (
     <div className="empty" style={{ padding: '60px 20px' }}>
@@ -38,41 +38,30 @@ export default function App() {
   const { loadProjects, setCurrentProject, clearCurrentProject } = useProjects();
   const { loadEmails } = useEmails();
 
-  const [authChecked, setAuthChecked] = useState(false);
-  const [currentView, setCurrentView] = useState('dashboard');
-  const [projectView, setProjectView] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [composerOpts, setComposerOpts] = useState(null);
-  const [showRaiseInvoice, setShowRaiseInvoice] = useState(false);
+  const [authChecked, setAuthChecked]       = useState(false);
+  const [currentView, setCurrentView]       = useState('dashboard');
+  const [projectView, setProjectView]       = useState(null);
+  const [sidebarOpen, setSidebarOpen]       = useState(false);
+  const [composerOpts, setComposerOpts]     = useState(null);
+  const [invoiceProject, setInvoiceProject] = useState(null); // project data to pre-fill invoice
+  const [socProjectId, setSocProjectId]     = useState(null); // project to pre-select in SOC
 
   // Auth
   useEffect(() => {
     if (!sb) { setAuthChecked(true); return; }
-
     sb.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        dispatch({ type: 'SET_USER', payload: session.user });
-      }
+      if (session?.user) dispatch({ type: 'SET_USER', payload: session.user });
       setAuthChecked(true);
     });
-
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        dispatch({ type: 'SET_USER', payload: session.user });
-      } else if (event === 'SIGNED_OUT') {
-        dispatch({ type: 'SET_USER', payload: null });
-      }
+      if (session?.user) dispatch({ type: 'SET_USER', payload: session.user });
+      else if (event === 'SIGNED_OUT') dispatch({ type: 'SET_USER', payload: null });
     });
-
     return () => subscription.unsubscribe();
   }, [dispatch]);
 
-  // Load data on auth
   useEffect(() => {
-    if (currentUser) {
-      loadProjects();
-      loadEmails();
-    }
+    if (currentUser) { loadProjects(); loadEmails(); }
   }, [currentUser?.id]);
 
   const handleNavigate = useCallback((view) => {
@@ -96,7 +85,21 @@ export default function App() {
   const openComposer  = useCallback((opts) => setComposerOpts(opts || { mode: 'compose' }), []);
   const closeComposer = useCallback(() => setComposerOpts(null), []);
 
-  // Loading
+  // Raise invoice — from sidebar or from project
+  const handleRaiseInvoice = useCallback((projectData = null) => {
+    setInvoiceProject(projectData);
+    setCurrentView('accounting');
+    setProjectView(null);
+  }, []);
+
+  // Open SOC — from project (pre-selects project) or from sidebar
+  const handleOpenSOC = useCallback((project = null) => {
+    setSocProjectId(project?.id || null);
+    setCurrentView('soc');
+    setProjectView(null);
+    clearCurrentProject();
+  }, [clearCurrentProject]);
+
   if (!authChecked) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
@@ -108,24 +111,19 @@ export default function App() {
     );
   }
 
-  // Login gate
   if (!currentUser) {
     return <LoginScreen onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
   }
 
   const renderContent = () => {
-    // Project detail view
     if (currentView === 'projects' && projectView && projectView !== 'list' && projectView !== 'new') {
       return (
         <ProjectDetail
           project={projectView}
           onBack={() => { setProjectView(null); clearCurrentProject(); }}
           onOpenComposer={openComposer}
-          onRaiseInvoice={() => {
-            setCurrentView('accounting');
-            setProjectView(null);
-            setShowRaiseInvoice(true);
-          }}
+          onRaiseInvoice={handleRaiseInvoice}
+          onOpenSOC={handleOpenSOC}
         />
       );
     }
@@ -150,31 +148,34 @@ export default function App() {
           <Accounting
             projects={state.projects || []}
             settings={settings || {}}
-            autoOpenInvoice={showRaiseInvoice}
-            onInvoiceOpened={() => setShowRaiseInvoice(false)}
+            defaultInvoiceData={invoiceProject}
+            onInvoiceOpened={() => setInvoiceProject(null)}
+          />
+        );
+      case 'soc':
+        return (
+          <SOC
+            onOpenComposer={openComposer}
+            defaultProjectId={socProjectId}
+            key={socProjectId} // remount when project changes
           />
         );
       case 'leads':
         return <StubView icon="🎯" title="Leads" subtitle="Track and manage incoming enquiries" />;
       case 'contacts':
         return <StubView icon="👥" title="Contacts" subtitle="Surveyors, clients, and solicitors" />;
-      case 'soc':
-        return <StubView icon="🎙" title="SOC Dictation" subtitle="Record and transcribe schedules of condition" />;
       case 'notices':
-        return <StubView icon="📋" title="Notices" subtitle="Draft and manage party wall notices" />;
+        return <StubView icon="📋" title="Notices" subtitle="Coming soon" />;
       default:
         return <Dashboard onNavigate={handleNavigate} onOpenProject={handleOpenProject} />;
     }
   };
 
-  // Chat view is full-screen — no shell
   if (currentView === 'chat') {
     return (
       <>
         <MainChat onOpenComposer={openComposer} />
-        {composerOpts && (
-          <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />
-        )}
+        {composerOpts && <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />}
       </>
     );
   }
@@ -182,7 +183,6 @@ export default function App() {
   return (
     <div className="app">
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
-
       <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{
         width: 216, minWidth: 216, background: 'var(--bg2)',
         borderRight: '1px solid var(--border)', display: 'flex',
@@ -191,28 +191,15 @@ export default function App() {
         <Sidebar
           currentView={currentView}
           onNavigate={handleNavigate}
-          onRaiseInvoice={() => {
-            setCurrentView('accounting');
-            setShowRaiseInvoice(true);
-          }}
+          onRaiseInvoice={() => handleRaiseInvoice(null)}
           onClose={() => setSidebarOpen(false)}
         />
       </div>
-
       <div className="main">
-        <TopBar
-          currentView={currentView}
-          onMenuToggle={() => setSidebarOpen(v => !v)}
-          onNavigate={handleNavigate}
-        />
-        <div className="content">
-          {renderContent()}
-        </div>
+        <TopBar currentView={currentView} onMenuToggle={() => setSidebarOpen(v => !v)} onNavigate={handleNavigate} />
+        <div className="content">{renderContent()}</div>
       </div>
-
-      {composerOpts && (
-        <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />
-      )}
+      {composerOpts && <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />}
     </div>
   );
 }
