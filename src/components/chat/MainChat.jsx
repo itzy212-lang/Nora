@@ -5,9 +5,10 @@ import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
 
-function isDraftRequest(text = '') {
+function isDraftRequest(text = '', hasPreviousDraft = false) {
   const s = text.toLowerCase();
-  return [
+
+  const draftWords = [
     'draft',
     'write',
     'email',
@@ -16,57 +17,97 @@ function isDraftRequest(text = '') {
     'covering',
     'respond',
     'reply',
-  ].some(w => s.includes(w));
+    'wording',
+    'whatsapp',
+    'text message',
+  ];
+
+  const editWords = [
+    'change',
+    'amend',
+    'revise',
+    'rewrite',
+    'update',
+    'make it',
+    'add',
+    'remove',
+    'replace',
+    'shorter',
+    'firmer',
+    'softer',
+    'more formal',
+    'less formal',
+  ];
+
+  if (draftWords.some(word => s.includes(word))) return true;
+  if (hasPreviousDraft && editWords.some(word => s.includes(word))) return true;
+
+  return false;
 }
 
-function isProceed(text = '') {
-  const s = text.trim().toLowerCase();
-  return [
-    'proceed',
-    'go ahead',
-    'continue',
-    'yes',
-    'yes please',
-    'draft it',
-    'write it',
-    'prepare it',
-    'do it',
-    'send it',
-  ].some(x => s === x || s.includes(x));
-}
-
-function tidyBrief(raw = '') {
+function stripDraftFromBrief(raw = '') {
   let text = String(raw || '').trim();
+
+  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z]/i, /\bHi\s+[A-Z]/i, /\bHello\s+[A-Z]/i];
+  const positions = markers
+    .map(rx => {
+      const match = text.match(rx);
+      return match ? match.index : -1;
+    })
+    .filter(index => index >= 0);
+
+  if (positions.length) text = text.slice(0, Math.min(...positions)).trim();
+
+  return text
+    .replace(/Here(?:'s| is)\s+the\s+draft[\s\S]*$/i, '')
+    .replace(/Here(?:'s| is)\s+my\s+draft[\s\S]*$/i, '')
+    .replace(/Draft\s*:[\s\S]*$/i, '')
+    .trim();
+}
+
+function formatBrief(raw = '', fallback = '') {
+  let text = stripDraftFromBrief(raw || fallback);
 
   text = text
     .replace(/FACTUAL POSITION\s*:/gi, '\n• Factual position: ')
     .replace(/LEGAL POSITION\s*:/gi, '\n• Legal position: ')
     .replace(/STRATEGIC OBJECTIVE\s*:/gi, '\n• Strategic objective: ')
-    .replace(/Here is the draft for your review[\s\S]*$/i, '')
-    .replace(/Subject\s*:[\s\S]*$/i, '')
+    .replace(/UNDERSTANDING\s*:/gi, '\n• Understanding: ')
+    .replace(/NEXT STEP\s*:/gi, '\n• Next step: ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  if (!text.toLowerCase().includes('do you want me to proceed')) {
-    text += '\n\nDo you want me to proceed with the clean draft, or make any changes first?';
-  }
+  if (!text) text = 'I have prepared the draft below as a separate copyable message.';
 
   return text;
 }
 
-function extractLikelyDraft(raw = '') {
-  return normaliseDraftText(raw);
+function extractDraftFromResult(result = {}) {
+  const direct = result.draft || result.documentText || '';
+  if (direct && normaliseDraftText(direct)) return normaliseDraftText(direct);
+
+  const reply = result.reply || result.replyText || '';
+  const extracted = normaliseDraftText(reply);
+
+  const hasDraftShape =
+    /^Subject\s*:/im.test(extracted) ||
+    /^Dear\s+/im.test(extracted) ||
+    /^Hi\s+/im.test(extracted) ||
+    /^Hello\s+/im.test(extracted);
+
+  return hasDraftShape ? extracted : '';
 }
 
 export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [chatList, setChatList] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
-  const [pendingDraftRequest, setPendingDraftRequest] = useState(null);
+  const [lastDraft, setLastDraft] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -114,16 +155,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
     if (messages.length > 0) {
       const id = uid();
-
       setChatList(prev => [
         {
           id,
           name: messages[0]?.content?.slice(0, 40) || 'Chat',
           messages,
-          date: new Date().toLocaleDateString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-          }),
+          date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
         },
         ...prev,
       ]);
@@ -131,7 +168,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
     setMessages([]);
     setInput('');
-    setPendingDraftRequest(null);
+    setLastDraft('');
     resetSession();
     setActiveChatId(null);
   }, [messages, resetSession, stopVoice]);
@@ -149,224 +186,134 @@ export default function MainChat({ onOpenComposer, onClose }) {
       return;
     }
 
-    onOpenComposer?.({
-      mode: 'compose',
-      ...(draftOrOptions || {}),
-    });
+    onOpenComposer?.({ mode: 'compose', ...(draftOrOptions || {}) });
   }, [onOpenComposer]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-
     if (!text || loading) return;
 
     stopVoice();
     setInput('');
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    const userMsg = {
-      id: uid(),
-      role: 'user',
-      content: text,
-    };
-
+    const userMsg = { id: uid(), role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
 
-    const proceeding = pendingDraftRequest && isProceed(text);
-    const originalRequest = proceeding ? pendingDraftRequest.request : text;
-
     try {
-      const result = await send(
-        proceeding
-          ? `${originalRequest}\n\nNow produce the clean final draft only. Do not include analysis, headings, explanation, factual position, legal position, strategic objective, or commentary. Include only the actual draft text, with line breaks and paragraphs preserved.`
-          : text,
-        {
-          mainChatWorkflow: proceeding ? 'final_draft_only' : 'brief_then_confirm',
-          context: {
-            mainChatInstruction: proceeding
-              ? 'Return only the final clean draft. No commentary. No analysis. No explanation.'
-              : 'If this is a drafting request, first respond only with a short elegant understanding summary and ask whether to proceed. Do not include the full draft yet.',
-          },
-        }
+      const wantsDraft = isDraftRequest(text, !!lastDraft);
+
+      const result = await send(text, {
+        mainChatWorkflow: wantsDraft ? 'brief_and_draft_separate_bubbles' : 'general',
+        context: {
+          previousDraft: lastDraft || null,
+          mainChatInstruction: wantsDraft
+            ? 'For drafting or editing requests, return a short understanding/feedback response and also return the clean draft separately if possible. The draft must contain only the final draft text with paragraph breaks preserved.'
+            : null,
+        },
+      });
+
+      const draftText = wantsDraft ? extractDraftFromResult(result) : '';
+      const briefText = formatBrief(
+        result.reply || result.replyText || '',
+        wantsDraft ? 'I have prepared the draft below as a separate copyable message.' : ''
       );
 
-      const raw = result.draft || result.reply || '';
-      const draftText = extractLikelyDraft(raw);
+      const nextMessages = [];
 
-      let elyMsg;
-
-      if (proceeding) {
-        elyMsg = {
+      if (briefText) {
+        nextMessages.push({
           id: uid(),
           role: 'ely',
-          content: draftText || raw,
-          draft: draftText || raw,
+          content: briefText,
+          messageType: wantsDraft ? 'brief' : 'general',
+          suggestedActions: result.suggestedActions,
+          recipient: result.recipient,
+          selectedAO: result.selectedAO,
+          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+        });
+      }
+
+      if (draftText) {
+        nextMessages.push({
+          id: uid(),
+          role: 'ely',
+          content: draftText,
+          draft: draftText,
           draftType: result.draftType || 'email',
           messageType: 'draft',
           suggestedActions: [],
           recipient: result.recipient,
           selectedAO: result.selectedAO,
           projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
-        };
-
-        setPendingDraftRequest(null);
-      } else if (isDraftRequest(text)) {
-        elyMsg = {
-          id: uid(),
-          role: 'ely',
-          content: tidyBrief(result.reply || raw),
-          messageType: 'brief',
-          suggestedActions: ['Proceed', 'Make changes first'],
-          recipient: result.recipient,
-          selectedAO: result.selectedAO,
-          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
-        };
-
-        setPendingDraftRequest({
-          request: text,
-          createdAt: Date.now(),
         });
-      } else {
-        elyMsg = {
-          id: uid(),
-          role: 'ely',
-          content: result.reply,
-          draft: result.draft,
-          draftType: result.draftType,
-          suggestedActions: result.suggestedActions,
-          recipient: result.recipient,
-          selectedAO: result.selectedAO,
-          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
-        };
+
+        setLastDraft(draftText);
       }
 
-      setMessages(prev => [...prev, elyMsg]);
+      if (!nextMessages.length) {
+        nextMessages.push({ id: uid(), role: 'ely', content: result.reply || 'Done.' });
+      }
+
+      setMessages(prev => [...prev, ...nextMessages]);
     } catch (err) {
       setMessages(prev => [
         ...prev,
-        {
-          id: uid(),
-          role: 'ely',
-          content: `Sorry, I couldn't process that. ${err.message}`,
-        },
+        { id: uid(), role: 'ely', content: `Sorry, I couldn't process that. ${err.message}` },
       ]);
     }
-  }, [input, loading, send, stopVoice, state.currentProject, pendingDraftRequest]);
+  }, [input, loading, send, stopVoice, state.currentProject, lastDraft]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSend();
     }
   };
 
   const handleVoice = (transcript) => {
-    if (!voiceBaseRef.current) {
-      voiceBaseRef.current = input.trim();
-    }
-
+    if (!voiceBaseRef.current) voiceBaseRef.current = input.trim();
     const base = voiceBaseRef.current;
-    const next = base ? `${base} ${transcript}` : transcript;
-
-    setInput(next);
-
+    setInput(base ? `${base} ${transcript}` : transcript);
     requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
   };
 
-  const handleTextChange = (e) => {
+  const handleTextChange = (event) => {
     voiceBaseRef.current = '';
-    setInput(e.target.value);
+    setInput(event.target.value);
   };
 
   return (
     <div id="main-chat-overlay" className="ai-full-screen">
       <div className="ai-full-top">
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ display: 'none' }}
-          id="ai-full-mob-btn"
-          onClick={() => setSidebarOpen(v => !v)}
-        >
-          ☰
-        </button>
+        <button className="btn btn-ghost btn-sm" style={{ display: 'none' }} id="ai-full-mob-btn" onClick={() => setSidebarOpen(v => !v)}>☰</button>
 
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: 'var(--blue)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 13,
-            flexShrink: 0,
-          }}
-        >
-          ✨
-        </div>
+        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✨</div>
 
         <div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Ely</div>
-          <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-            Practice Assistant
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)' }}>Practice Assistant</div>
         </div>
 
-        <button
-          className="btn btn-sm"
-          style={{ marginLeft: 'auto' }}
-          onClick={startNewChat}
-        >
-          + New chat
-        </button>
+        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startNewChat}>+ New chat</button>
 
-        <button
-          className="main-chat-close-btn"
-          onClick={closeToDashboard}
-          title="Close chat"
-          aria-label="Close chat"
-          type="button"
-        >
-          ×
-        </button>
+        <button className="main-chat-close-btn" onClick={closeToDashboard} title="Close chat" aria-label="Close chat" type="button">×</button>
       </div>
 
       <div className="ai-full-body">
         <div className={`ai-full-sidebar${sidebarOpen ? ' mob-open' : ''}`}>
           <div className="ai-full-sidebar-hdr">
             <span>History</span>
-
-            <button
-              className="btn btn-xs btn-ghost"
-              onClick={startNewChat}
-            >
-              + New
-            </button>
+            <button className="btn btn-xs btn-ghost" onClick={startNewChat}>+ New</button>
           </div>
 
           {chatList.length === 0 ? (
-            <div
-              style={{
-                padding: '20px 14px',
-                fontSize: 12,
-                color: 'var(--text3)',
-                textAlign: 'center',
-              }}
-            >
-              No previous chats
-            </div>
+            <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>No previous chats</div>
           ) : (
             chatList.map(chat => (
-              <div
-                key={chat.id}
-                className={`ai-sess-item${activeChatId === chat.id ? ' active' : ''}`}
-                onClick={() => loadChat(chat)}
-              >
+              <div key={chat.id} className={`ai-sess-item${activeChatId === chat.id ? ' active' : ''}`} onClick={() => loadChat(chat)}>
                 <div className="ai-sess-name">{chat.name}</div>
                 <div className="ai-sess-date">{chat.date}</div>
               </div>
@@ -377,42 +324,25 @@ export default function MainChat({ onOpenComposer, onClose }) {
         <div className="ai-full-main">
           <div className="ai-full-msgs">
             {messages.length === 0 ? (
-              <WelcomeScreen
-                onSend={(text) => {
-                  setInput(text);
-                  requestAnimationFrame(resizeTextarea);
-                }}
-                userName={state.currentUser?.email?.split('@')[0] || state.settings.name}
-              />
+              <WelcomeScreen onSend={(text) => { setInput(text); requestAnimationFrame(resizeTextarea); }} userName={state.currentUser?.email?.split('@')[0] || state.settings.name} />
             ) : (
               messages.map(msg => (
                 <ChatMessage
                   key={msg.id}
                   msg={msg}
-                  onUseDraft={(draft) => {
-                    setInput(draft);
-                    requestAnimationFrame(resizeTextarea);
-                  }}
+                  onUseDraft={(draft) => { setInput(draft); requestAnimationFrame(resizeTextarea); }}
                   onOpenInComposer={handleOpenInComposer}
                 />
               ))
             )}
 
             {loading && <TypingIndicator />}
-
             <div ref={messagesEndRef} />
           </div>
 
           <div className="ai-full-input">
-            <div
-              className="ai-input-row main-chat-input-row"
-              style={{ alignItems: 'flex-end' }}
-            >
-              <VoiceInput
-                onTranscript={handleVoice}
-                disabled={loading}
-                stopSignal={voiceStopSignal}
-              />
+            <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
+              <VoiceInput onTranscript={handleVoice} disabled={loading} stopSignal={voiceStopSignal} />
 
               <textarea
                 ref={textareaRef}
@@ -420,131 +350,37 @@ export default function MainChat({ onOpenComposer, onClose }) {
                 value={input}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder={pendingDraftRequest ? 'Type “proceed”, or tell Ely what to change first...' : 'Ask Ely anything about party wall, your projects, or drafting...'}
+                placeholder="Ask Ely anything about party wall, your projects, or drafting..."
                 rows={1}
-                style={{
-                  minHeight: 38,
-                  maxHeight: 140,
-                  overflowY: 'hidden',
-                  resize: 'none',
-                  lineHeight: 1.5,
-                }}
+                style={{ minHeight: 38, maxHeight: 140, overflowY: 'hidden', resize: 'none', lineHeight: 1.5 }}
               />
 
-              <button
-                className="main-chat-send-btn"
-                onClick={handleSend}
-                disabled={loading || !input.trim()}
-                type="button"
-                aria-label="Send message"
-                title="Send"
-              >
-                <svg
-                  width="19"
-                  height="19"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.25"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+              <button className="main-chat-send-btn" onClick={handleSend} disabled={loading || !input.trim()} type="button" aria-label="Send message" title="Send">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 2L11 13" />
                   <path d="M22 2L15 22L11 13L2 9L22 2Z" />
                 </svg>
               </button>
             </div>
 
-            <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>
-              AI can make mistakes. Always verify professional advice.
-            </div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>AI can make mistakes. Always verify professional advice.</div>
           </div>
         </div>
       </div>
 
       <style>{`
-        .main-chat-close-btn {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 0;
-          background: transparent;
-          color: var(--text3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 22px;
-          line-height: 1;
-          cursor: pointer;
-          margin-left: 6px;
-          padding: 0;
-        }
-
-        .main-chat-close-btn:hover {
-          background: var(--bg3);
-          color: var(--text);
-        }
-
-        .main-chat-send-btn {
-          width: 42px;
-          height: 42px;
-          border-radius: 50%;
-          border: 0;
-          background: var(--blue);
-          color: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          flex-shrink: 0;
-          padding: 0;
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.24);
-        }
-
-        .main-chat-send-btn:disabled {
-          opacity: 0.45;
-          cursor: not-allowed;
-          box-shadow: none;
-        }
-
-        .main-chat-input-row .voice-btn {
-          width: 38px !important;
-          height: 38px !important;
-          background: transparent !important;
-          border: 0 !important;
-          box-shadow: none !important;
-          color: #9ca3af !important;
-        }
-
-        .main-chat-input-row .voice-btn.listening {
-          color: #ef4444 !important;
-        }
-
-        .main-chat-input-row .voice-btn svg,
-        .main-chat-input-row .voice-btn svg * {
-          stroke-width: 1.65 !important;
-        }
-
-        .main-chat-input-row .voice-btn:hover {
-          color: #6b7280 !important;
-        }
-
-        .main-chat-input-row .voice-btn.listening:hover {
-          color: #dc2626 !important;
-        }
-
-        .chat-msg.ely.draft-only {
-          background: #ffffff;
-          border: 1px solid var(--border);
-        }
-
-        .ely-md ul {
-          margin: 8px 0 8px 18px;
-        }
-
-        .ely-md li {
-          margin: 4px 0;
-        }
+        .main-chat-close-btn { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: var(--text3); display: flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; cursor: pointer; margin-left: 6px; padding: 0; }
+        .main-chat-close-btn:hover { background: var(--bg3); color: var(--text); }
+        .main-chat-send-btn { width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--blue); color: #ffffff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; padding: 0; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.24); }
+        .main-chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+        .main-chat-input-row .voice-btn { width: 38px !important; height: 38px !important; background: transparent !important; border: 0 !important; box-shadow: none !important; color: #9ca3af !important; }
+        .main-chat-input-row .voice-btn.listening, .main-chat-input-row .voice-btn.recording { color: #ef4444 !important; }
+        .main-chat-input-row .voice-btn svg, .main-chat-input-row .voice-btn svg * { stroke-width: 1.65 !important; }
+        .main-chat-input-row .voice-btn:hover { color: #6b7280 !important; }
+        .main-chat-input-row .voice-btn.listening:hover, .main-chat-input-row .voice-btn.recording:hover { color: #dc2626 !important; }
+        .chat-msg.ely.draft-only { background: #ffffff; border: 1px solid var(--border); }
+        .ely-md ul { margin: 8px 0 8px 18px; }
+        .ely-md li { margin: 4px 0; }
       `}</style>
     </div>
   );
@@ -555,13 +391,7 @@ function TypingIndicator() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>
       <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>✨</div>
       <div style={{ display: 'flex', gap: 4, padding: '10px 14px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 16, borderBottomLeftRadius: 4 }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)',
-            animation: 'blink 1.2s infinite',
-            animationDelay: `${i * 0.2}s`,
-          }} />
-        ))}
+        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)', animation: 'blink 1.2s infinite', animationDelay: `${i * 0.2}s` }} />)}
       </div>
       <style>{`@keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }`}</style>
     </div>
@@ -569,7 +399,7 @@ function TypingIndicator() {
 }
 
 function WelcomeScreen({ onSend, userName }) {
-  const SUGGESTIONS = [
+  const suggestions = [
     'What are my active party wall cases?',
     'Draft a section 10 consent letter',
     'What are the current statutory timescales?',
@@ -582,15 +412,9 @@ function WelcomeScreen({ onSend, userName }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
       <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 16 }}>✨</div>
       <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Hello{userName ? `, ${userName}` : ''}!</h2>
-      <p style={{ color: 'var(--text2)', fontSize: 13.5, marginBottom: 28, maxWidth: 400, lineHeight: 1.6 }}>
-        I'm Ely, your party wall practice assistant. I can help with legal questions, drafting documents, searching your emails, and managing your cases.
-      </p>
+      <p style={{ color: 'var(--text2)', fontSize: 13.5, marginBottom: 28, maxWidth: 400, lineHeight: 1.6 }}>I'm Ely, your party wall practice assistant. I can help with legal questions, drafting documents, searching your emails, and managing your cases.</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 540 }}>
-        {SUGGESTIONS.map((s, i) => (
-          <button key={i} className="btn btn-sm" onClick={() => onSend(s)} style={{ borderRadius: 99 }}>
-            {s}
-          </button>
-        ))}
+        {suggestions.map((suggestion, i) => <button key={i} className="btn btn-sm" onClick={() => onSend(suggestion)} style={{ borderRadius: 99 }}>{suggestion}</button>)}
       </div>
     </div>
   );
