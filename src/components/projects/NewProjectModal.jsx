@@ -306,7 +306,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
         appointment_role: form.role,
         status: 'active',
 
-        appointment_address: appointmentAddress || null,
+
         appointment_name: appointmentName || null,
 
         bo_premise_address: boPremise || null,
