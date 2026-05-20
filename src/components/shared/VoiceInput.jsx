@@ -1,35 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-function collapseRepeatedWords(text = '') {
-  const words = String(text).replace(/\s+/g, ' ').trim().split(' ');
+function normaliseSpaces(text = '') {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function wordKey(word = '') {
+  return String(word || '')
+    .toLowerCase()
+    .replace(/[.,!?;:()[\]{}"“”‘’]/g, '')
+    .trim();
+}
+
+function removeImmediateWordRepeats(text = '') {
+  const words = normaliseSpaces(text).split(' ').filter(Boolean);
   const out = [];
 
   for (const word of words) {
-    const previous = out[out.length - 1] || '';
-    if (previous.toLowerCase() === word.toLowerCase()) continue;
+    const prev = out[out.length - 1];
+    if (prev && wordKey(prev) === wordKey(word)) continue;
     out.push(word);
   }
 
   return out.join(' ');
 }
 
-function collapseRepeatedPhrases(text = '') {
-  let cleaned = collapseRepeatedWords(text);
+function removeRepeatedTail(text = '') {
+  let cleaned = removeImmediateWordRepeats(text);
 
-  // Stops mobile speech recognition repeatedly appending the same short phrase.
-  for (let size = 2; size <= 8; size++) {
-    const words = cleaned.split(/\s+/).filter(Boolean);
+  for (let phraseSize = 2; phraseSize <= 12; phraseSize++) {
+    const words = cleaned.split(' ').filter(Boolean);
+    if (words.length < phraseSize * 2) continue;
+
     const out = [];
+    let i = 0;
 
-    for (let i = 0; i < words.length; i++) {
-      const current = words.slice(i, i + size).join(' ').toLowerCase();
-      const next = words.slice(i + size, i + size * 2).join(' ').toLowerCase();
+    while (i < words.length) {
+      const phrase = words.slice(i, i + phraseSize).map(wordKey).join(' ');
+      const nextPhrase = words.slice(i + phraseSize, i + phraseSize * 2).map(wordKey).join(' ');
 
-      if (current && current === next) {
-        out.push(...words.slice(i, i + size));
-        i += size;
+      if (phrase && phrase === nextPhrase) {
+        out.push(...words.slice(i, i + phraseSize));
+        i += phraseSize * 2;
       } else {
         out.push(words[i]);
+        i += 1;
       }
     }
 
@@ -39,147 +53,206 @@ function collapseRepeatedPhrases(text = '') {
   return cleaned;
 }
 
+function mergeSpeechResult(previous = '', next = '') {
+  const prev = normaliseSpaces(previous);
+  const rawNext = normaliseSpaces(next);
+
+  if (!rawNext) return prev;
+  if (!prev) return removeRepeatedTail(rawNext);
+
+  const cleanedNext = removeRepeatedTail(rawNext);
+
+  if (cleanedNext.toLowerCase().startsWith(prev.toLowerCase())) {
+    return removeRepeatedTail(cleanedNext);
+  }
+
+  if (prev.toLowerCase().includes(cleanedNext.toLowerCase())) {
+    return removeRepeatedTail(prev);
+  }
+
+  const prevWords = prev.split(' ').filter(Boolean);
+  const nextWords = cleanedNext.split(' ').filter(Boolean);
+  const maxOverlap = Math.min(prevWords.length, nextWords.length, 20);
+
+  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+    const prevTail = prevWords.slice(-overlap).map(wordKey).join(' ');
+    const nextHead = nextWords.slice(0, overlap).map(wordKey).join(' ');
+
+    if (prevTail && prevTail === nextHead) {
+      return removeRepeatedTail([...prevWords, ...nextWords.slice(overlap)].join(' '));
+    }
+  }
+
+  return removeRepeatedTail(`${prev} ${cleanedNext}`);
+}
+
 export default function VoiceInput({
   onTranscript,
   disabled = false,
   stopSignal = 0,
 }) {
-  const [listening, setListening] = useState(false);
+  const [recording, setRecording] = useState(false);
 
   const recognitionRef = useRef(null);
-  const listeningRef = useRef(false);
+  const recordingRef = useRef(false);
   const manualStopRef = useRef(false);
-  const finalTranscriptRef = useRef('');
-  const lastEmittedRef = useRef('');
+  const committedTranscriptRef = useRef('');
+  const lastRawTranscriptRef = useRef('');
+  const restartTimerRef = useRef(null);
 
-  const stopListening = useCallback(() => {
+  const stopRecording = useCallback(() => {
     manualStopRef.current = true;
-    listeningRef.current = false;
-    finalTranscriptRef.current = '';
-    lastEmittedRef.current = '';
+    recordingRef.current = false;
+    committedTranscriptRef.current = '';
+    lastRawTranscriptRef.current = '';
+
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
 
     try {
       recognitionRef.current?.stop();
     } catch {}
 
-    setListening(false);
+    setRecording(false);
   }, []);
 
   useEffect(() => {
     if (!stopSignal) return;
-    stopListening();
-  }, [stopSignal, stopListening]);
+    stopRecording();
+  }, [stopSignal, stopRecording]);
 
   useEffect(() => {
     return () => {
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+
       try {
         recognitionRef.current?.stop();
       } catch {}
     };
   }, []);
 
-  const startListening = useCallback(() => {
-    if (disabled) return;
-
+  const startRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert('Voice input is not supported in this browser. Try Chrome.');
+      alert('Voice input is not supported in this browser. Please use Chrome.');
       return;
     }
-
-    manualStopRef.current = false;
-    listeningRef.current = true;
-    finalTranscriptRef.current = '';
-    lastEmittedRef.current = '';
 
     const recognition = new SpeechRecognition();
 
     recognition.lang = 'en-GB';
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      let interimTranscript = '';
-      let finalTranscript = finalTranscriptRef.current;
+      let finalPart = '';
+      let interimPart = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const transcript = event.results[i]?.[0]?.transcript || '';
 
         if (event.results[i].isFinal) {
-          finalTranscript += `${transcript} `;
+          finalPart += ` ${transcript}`;
         } else {
-          interimTranscript += transcript;
+          interimPart += ` ${transcript}`;
         }
       }
 
-      finalTranscriptRef.current = finalTranscript;
+      const rawChunk = normaliseSpaces(`${finalPart} ${interimPart}`);
+      if (!rawChunk) return;
 
-      const combined = collapseRepeatedPhrases(`${finalTranscript}${interimTranscript}`.trim());
+      if (rawChunk === lastRawTranscriptRef.current && !finalPart) return;
+      lastRawTranscriptRef.current = rawChunk;
 
-      if (combined && combined !== lastEmittedRef.current) {
-        lastEmittedRef.current = combined;
+      let nextTranscript;
 
-        onTranscript?.(combined, {
-          listening: true,
-          interim: interimTranscript,
-          final: collapseRepeatedPhrases(finalTranscript.trim()),
-        });
+      if (finalPart.trim()) {
+        nextTranscript = mergeSpeechResult(committedTranscriptRef.current, finalPart);
+        committedTranscriptRef.current = nextTranscript;
+      } else {
+        nextTranscript = mergeSpeechResult(committedTranscriptRef.current, interimPart);
       }
+
+      nextTranscript = removeRepeatedTail(nextTranscript);
+
+      onTranscript?.(nextTranscript, {
+        recording: true,
+        interim: removeRepeatedTail(interimPart),
+        final: committedTranscriptRef.current,
+      });
     };
 
     recognition.onend = () => {
-      if (listeningRef.current && !manualStopRef.current && !disabled) {
-        try {
-          recognition.start();
-          return;
-        } catch {}
+      if (!recordingRef.current || manualStopRef.current || disabled) {
+        setRecording(false);
+        return;
       }
 
-      listeningRef.current = false;
-      setListening(false);
+      restartTimerRef.current = setTimeout(() => {
+        if (!recordingRef.current || manualStopRef.current || disabled) return;
+
+        try {
+          recognition.start();
+        } catch {}
+      }, 250);
     };
 
     recognition.onerror = () => {
-      if (listeningRef.current && !manualStopRef.current && !disabled) {
-        try {
-          recognition.stop();
-        } catch {}
-      } else {
-        setListening(false);
+      if (!recordingRef.current || manualStopRef.current || disabled) {
+        setRecording(false);
+        return;
       }
+
+      try {
+        recognition.stop();
+      } catch {}
     };
 
     recognitionRef.current = recognition;
 
     try {
       recognition.start();
-      setListening(true);
+      setRecording(true);
     } catch {
-      listeningRef.current = false;
-      setListening(false);
+      recordingRef.current = false;
+      setRecording(false);
     }
   }, [disabled, onTranscript]);
 
-  const toggle = useCallback(() => {
+  const startRecording = useCallback(() => {
     if (disabled) return;
 
-    if (listeningRef.current || listening) {
-      stopListening();
+    manualStopRef.current = false;
+    recordingRef.current = true;
+    committedTranscriptRef.current = '';
+    lastRawTranscriptRef.current = '';
+
+    startRecognition();
+  }, [disabled, startRecognition]);
+
+  const toggleRecording = useCallback(() => {
+    if (disabled) return;
+
+    if (recordingRef.current || recording) {
+      stopRecording();
       return;
     }
 
-    startListening();
-  }, [disabled, listening, startListening, stopListening]);
+    startRecording();
+  }, [disabled, recording, startRecording, stopRecording]);
 
   return (
     <button
       type="button"
-      className={`voice-btn${listening ? ' listening' : ''}`}
-      onClick={toggle}
+      className={`voice-btn${recording ? ' listening recording' : ''}`}
+      onClick={toggleRecording}
       disabled={disabled}
-      title={listening ? 'Stop recording' : 'Voice input'}
-      aria-label={listening ? 'Stop recording' : 'Voice input'}
+      title={recording ? 'Stop recording' : 'Voice input'}
+      aria-label={recording ? 'Stop recording' : 'Voice input'}
       style={{
         width: 38,
         height: 38,
@@ -189,7 +262,7 @@ export default function VoiceInput({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: listening ? '#ef4444' : '#9ca3af',
+        color: recording ? '#ef4444' : '#9ca3af',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
         flexShrink: 0,
@@ -206,7 +279,7 @@ export default function VoiceInput({
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M12 3.5a3 3 0 0 0-3 3v5.5a3 3 0 0 0 6 0V6.5a3 3 0 0 0-3-3z" />
+        <path d="M12 3.5a3 3 0 0 0-3 3V12a3 3 0 0 0 6 0V6.5a3 3 0 0 0-3-3z" />
         <path d="M19 11.5v.5a7 7 0 0 1-14 0v-.5" />
         <path d="M12 19v3" />
         <path d="M8.5 22h7" />
