@@ -175,9 +175,8 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
         setMessages(prev => [...prev, newMsg]);
       }
 
-      if (draft) {
-        setWorkingDraft(draft);
-      }
+      // Always update working draft with latest draft
+      if (draft) setWorkingDraft(draft);
     } catch (err) {
       setMessages(prev => [...prev, {
         id: Date.now() + 1, role: 'ely',
@@ -236,22 +235,27 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {workingDraft && (
-            <button
-              onClick={() => onSendWithDraft({
-                to: email?.sender_email || '',
-                subject: `Re: ${email?.subject || ''}`,
-                body: workingDraft,
-              })}
-              style={{
-                padding: '7px 18px', borderRadius: 99, border: 'none',
-                background: 'var(--blue)', color: '#fff', fontSize: 13,
-                fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              ↩ Send this email
-            </button>
-          )}
+          {(() => {
+            // Get the latest draft from messages or workingDraft
+            const latestDraft = workingDraft || 
+              [...messages].reverse().find(m => m.role === 'ely' && m.draft)?.draft || '';
+            return latestDraft ? (
+              <button
+                onClick={() => onSendWithDraft({
+                  to: email?.sender_email || '',
+                  subject: `Re: ${email?.subject || ''}`,
+                  body: latestDraft,
+                })}
+                style={{
+                  padding: '7px 18px', borderRadius: 99, border: 'none',
+                  background: 'var(--blue)', color: '#fff', fontSize: 13,
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                ↩ Send this email
+              </button>
+            ) : null;
+          })()}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
       </div>
@@ -312,20 +316,23 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
                     )}
                     {msg.draft && (
                       <div style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue)', borderRadius: 10, overflow: 'hidden' }}>
-                        <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--blue)', background: 'rgba(79,127,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--blue)', background: 'rgba(79,127,255,0.1)' }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Draft reply</span>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button onClick={() => navigator.clipboard.writeText(msg.draft)}
-                              style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, border: '1px solid var(--blue)', background: 'transparent', color: 'var(--blue)', cursor: 'pointer' }}>
-                              Copy
-                            </button>
-                            <button onClick={() => setWorkingDraft(msg.draft)}
-                              style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, border: 'none', background: 'var(--blue)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
-                              Set as working draft
-                            </button>
-                          </div>
                         </div>
                         <div style={{ padding: '10px 13px', fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{msg.draft}</div>
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', background: 'rgba(79,127,255,0.05)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button onClick={() => navigator.clipboard.writeText(msg.draft)}
+                            style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--blue)', background: 'transparent', color: 'var(--blue)', cursor: 'pointer' }}>
+                            Copy
+                          </button>
+                          <button onClick={() => {
+                            setWorkingDraft(msg.draft);
+                            onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: msg.draft });
+                          }}
+                            style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: 'none', background: 'var(--blue)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                            ↩ Send this
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
