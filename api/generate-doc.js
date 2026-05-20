@@ -12,45 +12,89 @@ function getSupabase() {
 }
 
 // ── PDF CONVERSION via API2PDF ────────────────────────────────
-async function convertDocxToPdf(storagePath, fileName) {
+async function convertDocxToPdf(storagePath, fileName, docxBuffer) {
   const apiKey = process.env.API2PDF_API_KEY;
   if (!apiKey) {
-    console.warn('[generate-doc] API2PDF_API_KEY not set — skipping PDF conversion.');
+    console.error('[generate-doc] API2PDF_API_KEY not set — cannot convert to PDF.');
     return null;
   }
-  try {
-    const supabase = getSupabase();
-    const { data: signedData, error: signedErr } = await supabase.storage
-      .from('documents')
-      .createSignedUrl(storagePath, 120);
 
-    if (signedErr || !signedData?.signedUrl) {
-      console.error('[generate-doc] Could not create signed URL:', signedErr?.message);
-      return null;
+  const pdfFileName = (fileName || 'document').replace(/\.docx$/i, '.pdf');
+
+  // Try 1: Use Supabase signed URL (preferred)
+  if (storagePath) {
+    try {
+      const supabase = getSupabase();
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(storagePath, 300);
+
+      if (signedErr || !signedData?.signedUrl) {
+        console.warn('[generate-doc] Signed URL failed:', signedErr?.message, '— trying fallback');
+      } else {
+        const res = await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf', {
+          method: 'POST',
+          headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: signedData.signedUrl, fileName: pdfFileName }),
+        });
+        const data = await res.json();
+        if (res.ok && data.FileUrl) {
+          console.log('[generate-doc] PDF via signed URL succeeded');
+          const pdfRes = await fetch(data.FileUrl);
+          const pdfBuf = await pdfRes.arrayBuffer();
+          return Buffer.from(pdfBuf).toString('base64');
+        }
+        console.warn('[generate-doc] API2PDF (signed URL) error:', res.status, JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn('[generate-doc] Signed URL path failed:', err.message);
     }
-
-    const res = await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf', {
-      method: 'POST',
-      headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: signedData.signedUrl,
-        fileName: (fileName || 'document').replace(/\.docx$/i, '.pdf')
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok || !data.FileUrl) {
-      console.error('[generate-doc] API2PDF error:', res.status, JSON.stringify(data));
-      return null;
-    }
-
-    const pdfRes = await fetch(data.FileUrl);
-    const pdfBuf = await pdfRes.arrayBuffer();
-    return Buffer.from(pdfBuf).toString('base64');
-  } catch (err) {
-    console.error('[generate-doc] PDF conversion exception:', err.message);
-    return null;
   }
+
+  // Try 2: Upload DOCX directly to a temporary public Supabase URL
+  if (docxBuffer) {
+    try {
+      const supabase = getSupabase();
+      const tempPath = `temp/${Date.now()}_${pdfFileName.replace('.pdf', '.docx')}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('documents')
+        .upload(tempPath, docxBuffer, {
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          upsert: true,
+        });
+
+      if (!uploadErr) {
+        const { data: signedData } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(tempPath, 300);
+
+        if (signedData?.signedUrl) {
+          const res = await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf', {
+            method: 'POST',
+            headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: signedData.signedUrl, fileName: pdfFileName }),
+          });
+          const data = await res.json();
+          if (res.ok && data.FileUrl) {
+            console.log('[generate-doc] PDF via temp upload succeeded');
+            const pdfRes = await fetch(data.FileUrl);
+            const pdfBuf = await pdfRes.arrayBuffer();
+            // Clean up temp file
+            supabase.storage.from('documents').remove([tempPath]).catch(() => {});
+            return Buffer.from(pdfBuf).toString('base64');
+          }
+          console.error('[generate-doc] API2PDF (temp upload) error:', res.status, JSON.stringify(data));
+        }
+      } else {
+        console.error('[generate-doc] Temp upload failed:', uploadErr.message);
+      }
+    } catch (err) {
+      console.error('[generate-doc] Temp upload path failed:', err.message);
+    }
+  }
+
+  console.error('[generate-doc] All PDF conversion attempts failed');
+  return null;
 }
 
 // ── SUPABASE STORAGE UPLOAD ───────────────────────────────────
@@ -162,10 +206,8 @@ export default async function handler(req, res) {
       console.warn('[generate-doc] Storage/DB failed (non-fatal):', storeErr.message);
     }
 
-    // Convert to PDF for Firma signing
-    const pdfB64 = storagePath
-      ? await convertDocxToPdf(storagePath, fileName)
-      : null;
+    // Convert to PDF for Firma signing — pass buffer as fallback
+    const pdfB64 = await convertDocxToPdf(storagePath, fileName, buffer);
 
     return res.status(200).json({
       success: true,
