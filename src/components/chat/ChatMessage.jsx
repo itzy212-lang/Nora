@@ -4,19 +4,24 @@ import DraftCard from './DraftCard';
 
 function stripHtml(html = '') {
   const div = document.createElement('div');
-  div.innerHTML = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<\/div>/gi, '\n');
+  div.innerHTML = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n');
+
   return div.innerText || div.textContent || '';
 }
 
 export function normaliseDraftText(raw = '') {
-  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  let text = String(raw || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
 
   if (!text) return '';
 
-  // Remove markdown fences if the model produced them.
   text = text.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim();
 
-  // Keep only the actual draft where possible.
   const draftMarkers = [
     /\bSubject\s*:/i,
     /\bDear\s+[A-Z]/i,
@@ -26,23 +31,20 @@ export function normaliseDraftText(raw = '') {
 
   const positions = draftMarkers
     .map(rx => {
-      const m = text.match(rx);
-      return m ? m.index : -1;
+      const match = text.match(rx);
+      return match ? match.index : -1;
     })
-    .filter(i => i >= 0);
+    .filter(index => index >= 0);
 
   if (positions.length) {
-    const first = Math.min(...positions);
-    text = text.slice(first).trim();
+    text = text.slice(Math.min(...positions)).trim();
   }
 
-  // Remove AI explanation sections if they somehow remain before the draft.
   text = text
     .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
     .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
     .trim();
 
-  // Add missing line breaks around common email structure.
   text = text
     .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
     .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
@@ -72,6 +74,7 @@ async function copyToClipboard(text) {
     textarea.style.position = 'fixed';
     textarea.style.left = '-9999px';
     textarea.style.whiteSpace = 'pre-wrap';
+
     document.body.appendChild(textarea);
     textarea.focus();
     textarea.select();
@@ -96,6 +99,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   const rawDraft = msg.draft || msg.documentText || (isDraftOnly ? replyText : '');
   const draftText = normaliseDraftText(rawDraft);
   const actionText = draftText || stripHtml(renderMarkdown(replyText));
+
   const showActions = !isUser && actionText.trim().length > 0 && (isDraftOnly || msg.draft);
 
   const handleCopy = async () => {
@@ -113,6 +117,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     if (!body) return;
 
     const subjectMatch = body.match(/^Subject\s*:\s*(.+)$/im);
+
     const bodyWithoutSubject = subjectMatch
       ? body.replace(/^Subject\s*:\s*.+\n*/im, '').trim()
       : body;
@@ -208,18 +213,21 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
 
       {msg.suggestedActions?.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          {msg.suggestedActions.map((a, i) => (
-            <span key={i} style={{
-              fontSize: 11,
-              padding: '3px 9px',
-              borderRadius: 99,
-              cursor: 'pointer',
-              border: '1px solid var(--border)',
-              background: 'var(--bg4)',
-              color: 'var(--text2)',
-              transition: 'all 0.15s',
-            }}>
-              {a}
+          {msg.suggestedActions.map((action, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize: 11,
+                padding: '3px 9px',
+                borderRadius: 99,
+                cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: 'var(--bg4)',
+                color: 'var(--text2)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {action}
             </span>
           ))}
         </div>
