@@ -37,13 +37,20 @@ export default async function handler(req, res) {
     // Place signature fields at bottom of last page using percentage positions.
     // page_number is set to 1 — works for single-page LoAs.
     // For multi-page LoAs this can be updated once we know the page count.
+    // Anchor strings match text rendered into the PDF by buildLOAPlaceholders
+    const isAO = appointment_type === 'ao_loa' || appointment_type === 'ao_agreed_surveyor_loa';
+    const anchor1Date = isAO ? 'AO_1_DATE_HERE' : 'BO_1_DATE_HERE';
+    const anchor1Sign = isAO ? 'AO_1_SIGN_HERE' : 'BO_1_SIGN_HERE';
+    const anchor2Date = isAO ? 'AO_2_DATE_HERE' : 'BO_2_DATE_HERE';
+    const anchor2Sign = isAO ? 'AO_2_SIGN_HERE' : 'BO_2_SIGN_HERE';
+
     const fields = [];
-    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 75, width: 35, height: 8 } });
-    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 55, y: 75, width: 25, height: 8 } });
+    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 76, width: 30, height: 5 }, anchor_string: anchor1Date, anchor_x_offset: 0, anchor_y_offset: 0 });
+    fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 83, width: 35, height: 8 }, anchor_string: anchor1Sign, anchor_x_offset: 0, anchor_y_offset: 0 });
 
     if (recipients.length >= 2) {
-      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 5,  y: 87, width: 35, height: 8 } });
-      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 87, width: 25, height: 8 } });
+      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 76, width: 30, height: 5 }, anchor_string: anchor2Date, anchor_x_offset: 0, anchor_y_offset: 0 });
+      fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 83, width: 35, height: 8 }, anchor_string: anchor2Sign, anchor_x_offset: 0, anchor_y_offset: 0 });
     }
 
     const createPayload = {
