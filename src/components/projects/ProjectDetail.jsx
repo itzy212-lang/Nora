@@ -113,19 +113,18 @@ function getAppointmentAddress(project) {
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
 
-  if (role === 'AO') {
-    return aoAddress(primaryAO) || project.appointment_address || project.address || project.bo_premise_address || '';
-  }
-
-  return project.appointment_address || project.address || project.bo_premise_address || '';
+  if (project.appointment_address) return project.appointment_address;
+  if (role === 'AO') return aoAddress(primaryAO) || project.address || project.bo_premise_address || '';
+  return project.address || project.bo_premise_address || '';
 }
 
 function getAppointmentName(project) {
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
 
-  if (role === 'AO') return primaryAO?.name || project.appointment_name || '';
-  return project.appointment_name || project.bo || project.bo_1_name || '';
+  if (project.appointment_name) return project.appointment_name;
+  if (role === 'AO') return primaryAO?.name || '';
+  return project.bo || project.bo_1_name || '';
 }
 
 const card = (extra = {}) => ({
@@ -837,7 +836,7 @@ function AOCard({
   onServeNotice,
   loaLoading,
 }) {
-  const isAOAppointment = projectRole === 'AO' || !!ao.appointed_by_me;
+  const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
   const colour = getAOColour(ao, projectRole);
   const address = aoAddress(ao);
   const cd = aoConsent(ao);
@@ -1420,6 +1419,52 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     });
   }, [onRaiseInvoice, project, appointmentAddress, appointmentName, boAddress, bo, role, primaryAO]);
 
+
+  const handleDeleteProject = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Delete this project? Emails will be retained but unlinked from the project.'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await sb
+        .from('emails')
+        .update({ project_id: null })
+        .eq('project_id', project.id);
+
+      const cleanupTables = [
+        'tasks',
+        'project_events',
+        'ai_sessions',
+        'ai_messages',
+        'ai_working_context',
+        'soc_reports',
+        'soc_drafts',
+      ];
+
+      for (const table of cleanupTables) {
+        try {
+          await sb.from(table).delete().eq('project_id', project.id);
+        } catch (err) {
+          console.warn(`Could not clean ${table}:`, err?.message);
+        }
+      }
+
+      const { error } = await sb
+        .from('projects')
+        .delete()
+        .eq('id', project.id);
+
+      if (error) throw error;
+
+      onBack?.();
+    } catch (err) {
+      alert(err.message || 'Could not delete project.');
+    }
+  }, [project.id, onBack]);
+
+
   const TABS = [
     { id: 'details', label: 'Details' },
     { id: 'emails', label: 'Emails' },
@@ -1477,7 +1522,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             Edit
           </button>
 
-          <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', color: 'var(--red)', borderRadius: 99 }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={handleDeleteProject}
+            style={{ cursor: 'pointer', color: 'var(--red)', borderRadius: 99 }}
+          >
             Delete
           </button>
 
@@ -1786,7 +1835,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               ].map(({ label, val, colour }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
                   <span style={{ color: 'var(--text2)' }}>{label}</span>
-                  <span style={{ fontWeight: 600, color: colour }}>{val}</span>
+                  <span style={{ fontWeight: 600, color }}>{val}</span>
                 </div>
               ))}
             </div>
