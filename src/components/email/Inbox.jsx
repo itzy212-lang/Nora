@@ -76,15 +76,22 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
   const [input, setInput]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [listening, setListening] = useState(false);
+  const [firmSettings, setFirmSettings] = useState(null);
   const endRef    = useRef(null);
   const recogRef  = useRef(null);
-  const hasAutoRun = useRef(false);
+  const hasAutoRun = useRef(null); // stores email.id of last auto-run
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  // Load firm settings for signature info
   useEffect(() => {
-    if (hasAutoRun.current || !email) return;
-    hasAutoRun.current = true;
+    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,email,tel,footer_text,signature_b64').limit(1)
+      .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
+  }, []);
+
+  useEffect(() => {
+    if (hasAutoRun.current === email.id || !email) return;
+    hasAutoRun.current = email.id;
     const threadSummary = threadEmails.length > 1
       ? [...threadEmails]
           .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
@@ -92,9 +99,13 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
           .join('\n\n')
       : stripHtml(email.body || email.body_preview || '').slice(0, 1200);
 
+    const sigNote = firmSettings
+      ? `IMPORTANT: The sender has an email signature already set up showing their name, qualifications, firm and contact details. Do NOT add a sign-off, name, or closing to the draft — just the email body.`
+      : '';
+
     const prompt = threadEmails.length > 1
-      ? `Read this email thread and draft a professional reply to the latest message. Separate your reply draft clearly between --- markers.\n\nTHREAD:\n${threadSummary}`
-      : `Read this email and draft a professional reply. Put the draft between --- markers.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\n\n${threadSummary}`;
+      ? `You are the Draft with Ely panel. Read this email thread, give me a 2-line summary of what it is about, then produce a draft reply between --- markers. Do not ask me what I want to say — just read and draft.\n\n${sigNote}\n\nTHREAD:\n${threadSummary}`
+      : `You are the Draft with Ely panel. Read this email, give me a 1-line summary of what it is about, then produce a draft reply between --- markers. Do not ask me what I want to say — just read and draft.\n\n${sigNote}\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\n\n${threadSummary}`;
 
     callEly(prompt, true);
   }, [email, threadEmails]); // eslint-disable-line
@@ -111,7 +122,7 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: text,
-          surface: 'email_composer',
+          surface: 'inbox_draft',  // bypasses step 2 ask-for-intent
           emailContext: {
             from: email.sender_name || email.sender_email,
             subject: email.subject,
@@ -255,6 +266,32 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
           style={{ flex: 1, padding: '8px 10px', fontSize: 12.5, resize: 'none', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
         <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12, height: 34, alignSelf: 'flex-end' }}>Send</button>
       </div>
+    </div>
+  );
+}
+
+// ── Signature footer ─────────────────────────────────────────────────────────
+function SignatureFooter() {
+  const [sig, setSig] = useState(null);
+  useEffect(() => {
+    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,email,tel,signature_b64').limit(1)
+      .then(({ data }) => { if (data?.[0]) setSig(data[0]); });
+  }, []);
+  if (!sig) return null;
+  return (
+    <div style={{ marginTop: 8, padding: '10px 14px', borderTop: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Email signature</div>
+      {sig.signature_b64
+        ? <img src={`data:image/png;base64,${sig.signature_b64}`} alt="Signature" style={{ maxHeight: 80, maxWidth: '100%', display: 'block', marginBottom: 4 }} />
+        : (
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--text2)' }}>{sig.surveyor_name}{sig.qualifications ? ` ${sig.qualifications}` : ''}</div>
+            <div>{sig.firm_name}</div>
+            {sig.tel && <div>T: {sig.tel}</div>}
+            {sig.email && <div>E: {sig.email}</div>}
+          </div>
+        )
+      }
     </div>
   );
 }
