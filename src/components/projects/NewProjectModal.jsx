@@ -53,7 +53,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const fee = form.fee.trim() ? parseFloat(form.fee) : null;
       const svc = sameAddr ? form.premise : form.service;
       const payload = {
-        ref, role: form.role, surveyor_role: form.role, status: 'active',
+        ref, role: form.role, status: 'active',
         bo_premise_address: form.premise.trim(),
         bo_service_address: svc || null,
         bo_1_name: form.bo1.name.trim(), bo: form.bo1.name.trim(),
