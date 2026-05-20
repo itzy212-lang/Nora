@@ -27,6 +27,12 @@ export default function AwardReview() {
   const [loading, setLoading]     = useState(false);
   const [review, setReview]       = useState('');
   const [error, setError]         = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput]       = useState('');
+  const [chatLoading, setChatLoading]   = useState(false);
+  const [docText1, setDocText1]         = useState('');
+  const [docText2, setDocText2]         = useState('');
+  const chatEndRef = useRef(null);
   const ref1 = useRef(null);
   const ref2 = useRef(null);
 
@@ -68,11 +74,66 @@ ${AWARD_REVIEW_SYSTEM_PROMPT}`;
 
       const text = data.content?.find(c => c.type === 'text')?.text || '';
       setReview(text);
+      // Seed chat history with the review as Ely's first message
+      setChatMessages([{ role: 'assistant', content: text }]);
+      setDocText1(text1);
+      if (text2) setDocText2(text2);
 
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChat = async () => {
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    setChatInput('');
+    const userMsg = { role: 'user', content: text };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    try {
+      const systemPrompt = `You are Ely, a party wall surveying expert assistant to Itzik Darel MIPWS ACIArb of Square One Consulting. You are collaborating on a party wall award review.
+
+${mode === 'benchmark' ? `MASTER TEMPLATE AWARD (Itzik's standard):
+${docText1 ? '[Document text was extracted and reviewed]' : ''}
+
+REVIEWED AWARD: [as per initial review]` : `TWO DRAFTS BEING COMPARED: [as per initial review]`}
+
+You are now in a collaborative chat. The user may ask you to:
+- Draft specific clauses or additions
+- Discard or de-prioritise certain review points
+- Rewrite clauses in Itzik's style
+- Produce a final clean list of amendments
+- Answer questions about the Act or award drafting
+
+Be direct and practical. When drafting clauses, produce complete ready-to-use wording. Never use em dashes.`;
+
+      const history = [...chatMessages, userMsg].map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+
+      const response = await fetch('/api/review-award', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_mode: true,
+          system: systemPrompt,
+          chat_history: history,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Chat failed');
+      const reply = data.content?.[0]?.text || '';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
   };
 
@@ -211,6 +272,74 @@ ${AWARD_REVIEW_SYSTEM_PROMPT}`;
             </button>
           </div>
           <div style={{ lineHeight: 1.7 }}>{renderReview(review)}</div>
+        </div>
+      )}
+
+      {/* Chat — shown after initial review */}
+      {review && !loading && (
+        <div style={{ ...card({ padding: '0', overflow: 'hidden' }) }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✨</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Continue with Ely</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>Ask Ely to draft clauses, discard points, rewrite wording, or produce a final amendment list</div>
+            </div>
+          </div>
+
+          {/* Quick suggestions */}
+          {chatMessages.length <= 1 && (
+            <div style={{ padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: 8, borderBottom: '1px solid var(--border)' }}>
+              {[
+                'Draft the missing clauses for me',
+                'Produce a final list of amendments to make',
+                'Ignore the Security for Expenses point — not applicable here',
+                'Rewrite the weakest clause in my style',
+                'Which of these issues are most critical before service?',
+              ].map(s => (
+                <button key={s} onClick={() => setChatInput(s)}
+                  style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Messages — skip first (it's the review shown above) */}
+          {chatMessages.length > 1 && (
+            <div style={{ maxHeight: 500, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {chatMessages.slice(1).map((msg, i) => (
+                <div key={i} style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                  background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
+                  color: msg.role === 'user' ? '#fff' : 'var(--text)',
+                  padding: '10px 14px', borderRadius: 12, fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                }}>
+                  {msg.content}
+                </div>
+              ))}
+              {chatLoading && (
+                <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>✨ Thinking…</div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+            <textarea
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChat(); }}}
+              placeholder="Ask Ely to draft a clause, discard a point, rewrite something…"
+              rows={2}
+              style={{ flex: 1, padding: '9px 12px', fontSize: 13, resize: 'none', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', outline: 'none' }}
+            />
+            <button onClick={handleChat} disabled={chatLoading || !chatInput.trim()}
+              style={{ padding: '0 16px', borderRadius: 10, border: 'none', background: chatLoading || !chatInput.trim() ? 'var(--border)' : 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer', alignSelf: 'flex-end', height: 38 }}>
+              Send
+            </button>
+          </div>
         </div>
       )}
     </div>
