@@ -7,6 +7,7 @@ import { uid } from '../../utils/formatters';
 
 function isDraftRequest(text = '') {
   const s = text.toLowerCase();
+
   return [
     'draft',
     'write',
@@ -16,11 +17,12 @@ function isDraftRequest(text = '') {
     'covering',
     'respond',
     'reply',
-  ].some(w => s.includes(w));
+  ].some(word => s.includes(word));
 }
 
 function isProceed(text = '') {
   const s = text.trim().toLowerCase();
+
   return [
     'proceed',
     'go ahead',
@@ -31,8 +33,7 @@ function isProceed(text = '') {
     'write it',
     'prepare it',
     'do it',
-    'send it',
-  ].some(x => s === x || s.includes(x));
+  ].some(phrase => s === phrase || s.includes(phrase));
 }
 
 function tidyBrief(raw = '') {
@@ -54,12 +55,9 @@ function tidyBrief(raw = '') {
   return text;
 }
 
-function extractLikelyDraft(raw = '') {
-  return normaliseDraftText(raw);
-}
-
 export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [chatList, setChatList] = useState([]);
@@ -194,7 +192,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
       );
 
       const raw = result.draft || result.reply || '';
-      const draftText = extractLikelyDraft(raw);
+      const draftText = normaliseDraftText(raw);
 
       let elyMsg;
 
@@ -256,9 +254,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
   }, [input, loading, send, stopVoice, state.currentProject, pendingDraftRequest]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSend();
     }
   };
@@ -277,9 +275,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
     textareaRef.current?.focus();
   };
 
-  const handleTextChange = (e) => {
+  const handleTextChange = (event) => {
     voiceBaseRef.current = '';
-    setInput(e.target.value);
+    setInput(event.target.value);
   };
 
   return (
@@ -516,7 +514,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
           color: #9ca3af !important;
         }
 
-        .main-chat-input-row .voice-btn.listening {
+        .main-chat-input-row .voice-btn.listening,
+        .main-chat-input-row .voice-btn.recording {
           color: #ef4444 !important;
         }
 
@@ -529,7 +528,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
           color: #6b7280 !important;
         }
 
-        .main-chat-input-row .voice-btn.listening:hover {
+        .main-chat-input-row .voice-btn.listening:hover,
+        .main-chat-input-row .voice-btn.recording:hover {
           color: #dc2626 !important;
         }
 
@@ -556,11 +556,17 @@ function TypingIndicator() {
       <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>✨</div>
       <div style={{ display: 'flex', gap: 4, padding: '10px 14px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 16, borderBottomLeftRadius: 4 }}>
         {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)',
-            animation: 'blink 1.2s infinite',
-            animationDelay: `${i * 0.2}s`,
-          }} />
+          <div
+            key={i}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'var(--blue)',
+              animation: 'blink 1.2s infinite',
+              animationDelay: `${i * 0.2}s`,
+            }}
+          />
         ))}
       </div>
       <style>{`@keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }`}</style>
@@ -569,7 +575,7 @@ function TypingIndicator() {
 }
 
 function WelcomeScreen({ onSend, userName }) {
-  const SUGGESTIONS = [
+  const suggestions = [
     'What are my active party wall cases?',
     'Draft a section 10 consent letter',
     'What are the current statutory timescales?',
@@ -581,14 +587,24 @@ function WelcomeScreen({ onSend, userName }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
       <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 16 }}>✨</div>
-      <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Hello{userName ? `, ${userName}` : ''}!</h2>
+
+      <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+        Hello{userName ? `, ${userName}` : ''}!
+      </h2>
+
       <p style={{ color: 'var(--text2)', fontSize: 13.5, marginBottom: 28, maxWidth: 400, lineHeight: 1.6 }}>
         I'm Ely, your party wall practice assistant. I can help with legal questions, drafting documents, searching your emails, and managing your cases.
       </p>
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 540 }}>
-        {SUGGESTIONS.map((s, i) => (
-          <button key={i} className="btn btn-sm" onClick={() => onSend(s)} style={{ borderRadius: 99 }}>
-            {s}
+        {suggestions.map((suggestion, i) => (
+          <button
+            key={i}
+            className="btn btn-sm"
+            onClick={() => onSend(suggestion)}
+            style={{ borderRadius: 99 }}
+          >
+            {suggestion}
           </button>
         ))}
       </div>
