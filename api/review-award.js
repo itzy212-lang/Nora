@@ -554,7 +554,25 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
 
   try {
-    const { doc1_b64, doc2_b64, mode, system } = req.body;
+    const { doc1_b64, doc2_b64, mode, system, chat_mode, chat_history } = req.body;
+
+    // ── CHAT MODE — no document extraction needed ──────────────
+    if (chat_mode && chat_history) {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 2000,
+          messages: [{ role: 'system', content: system }, ...chat_history],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || 'OpenAI error');
+      return res.status(200).json({
+        content: [{ type: 'text', text: data.choices?.[0]?.message?.content || '' }],
+      });
+    }
     if (!doc1_b64) return res.status(400).json({ error: 'No document provided' });
 
     // Extract text from DOCX base64 using mammoth
