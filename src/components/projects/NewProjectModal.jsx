@@ -299,30 +299,30 @@ export default function NewProjectModal({ onClose, onCreated }) {
         user_id: user?.id || null,
 
         ref,
-        role: form.role,
-        appointment_role: form.role,
+        role: form.role,   // valid column — appointment_role does not exist
         status: 'active',
 
+        // Building owner — top-level columns that exist in schema
         bo_premise_address: boPremise || null,
         bo_service_address: boService || boPremise || null,
         bo_1_name: form.bo1.name.trim() || null,
-        bo: form.bo1.name.trim() || null,
+        bo: form.bo1.name.trim() || null,       // legacy display field
         bo_1_email: form.bo1.email.trim() || null,
-        bo_email: form.bo1.email.trim() || null,
-        bo_phone: form.bo1.phone.trim() || null,
+        bo_phone: form.bo1.phone.trim() || null, // only one phone column
         bo_2_name: form.bo2.name.trim() || null,
         bo_2_email: form.bo2.email.trim() || null,
-        bo_2_phone: form.bo2.phone.trim() || null,
+        // bo_email / bo_2_phone do not exist in schema — omitted
 
+        // Adjoining owner — schema has ao_client_name, ao_email, ao_phone (single owner)
+        // Owner 2 and full AO details live in the aos jsonb array below
         ao_premise_address: aoPremise || null,
         ao_service_address: aoService || aoPremise || null,
-        ao_1_name: form.ao1.name.trim() || null,
-        ao_1_email: form.ao1.email.trim() || null,
-        ao_1_phone: form.ao1.phone.trim() || null,
-        ao_2_name: form.ao2.name.trim() || null,
-        ao_2_email: form.ao2.email.trim() || null,
-        ao_2_phone: form.ao2.phone.trim() || null,
+        ao_client_name: form.ao1.name.trim() || null,
+        ao_email: form.ao1.email.trim() || null,
+        ao_phone: form.ao1.phone.trim() || null,
+        // ao_2_name / ao_2_email / ao_2_phone are not top-level columns — in aos jsonb
 
+        // Full AO record (including owner 2) stored in aos jsonb
         aos: isAO ? [buildAORecord(form, aoService || aoPremise)] : [],
 
         works: form.works.trim() || null,
