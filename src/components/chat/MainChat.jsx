@@ -5,26 +5,47 @@ import ChatMessage from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
 
-export default function MainChat({ onOpenComposer }) {
+export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [chatList, setChatList] = useState([]); // [{id, name, messages, sessionId}]
+  const [chatList, setChatList] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
-  const { send, loading, sessionId, resetSession } = useEly({ surface: 'main_chat' });
+  const voiceBaseRef = useRef('');
+  const { send, loading, resetSession } = useEly({ surface: 'main_chat' });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.overflowY = el.scrollHeight > 140 ? 'auto' : 'hidden';
+  }, []);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [input, resizeTextarea]);
+
+  const stopVoice = useCallback(() => {
+    setVoiceStopSignal(v => v + 1);
+    voiceBaseRef.current = '';
+  }, []);
+
   const startNewChat = useCallback(() => {
+    stopVoice();
+
     if (messages.length > 0) {
-      // Save current chat to list
       const id = uid();
       const firstMsg = messages[0];
+
       setChatList(prev => [{
         id,
         name: firstMsg?.content?.slice(0, 40) || 'Chat',
@@ -32,25 +53,39 @@ export default function MainChat({ onOpenComposer }) {
         date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
       }, ...prev]);
     }
+
     setMessages([]);
+    setInput('');
     resetSession();
     setActiveChatId(null);
-  }, [messages, resetSession]);
+  }, [messages, resetSession, stopVoice]);
 
   const loadChat = useCallback((chat) => {
+    stopVoice();
     setMessages(chat.messages);
     setActiveChatId(chat.id);
     setSidebarOpen(false);
-  }, []);
+  }, [stopVoice]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
+
     if (!text || loading) return;
+
+    stopVoice();
     setInput('');
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
     const userMsg = { id: uid(), role: 'user', content: text };
+
     setMessages(prev => [...prev, userMsg]);
+
     try {
       const result = await send(text);
+
       const elyMsg = {
         id: uid(),
         role: 'ely',
@@ -59,14 +94,16 @@ export default function MainChat({ onOpenComposer }) {
         draftType: result.draftType,
         suggestedActions: result.suggestedActions,
       };
+
       setMessages(prev => [...prev, elyMsg]);
     } catch (err) {
       setMessages(prev => [...prev, {
-        id: uid(), role: 'ely',
+        id: uid(),
+        role: 'ely',
         content: `Sorry, I couldn't process that. ${err.message}`,
       }]);
     }
-  }, [input, loading, send]);
+  }, [input, loading, send, stopVoice]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -76,17 +113,41 @@ export default function MainChat({ onOpenComposer }) {
   };
 
   const handleVoice = (transcript) => {
-    setInput(prev => prev ? prev + ' ' + transcript : transcript);
+    if (!voiceBaseRef.current) {
+      voiceBaseRef.current = input.trim();
+    }
+
+    const base = voiceBaseRef.current;
+    const next = base ? `${base} ${transcript}` : transcript;
+
+    setInput(next);
+
+    requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
+  };
+
+  const handleTextChange = (e) => {
+    voiceBaseRef.current = '';
+    setInput(e.target.value);
   };
 
   const handleOpenInComposer = (draft) => {
     onOpenComposer?.({ mode: 'compose', body: draft });
   };
 
+  const handleClose = () => {
+    stopVoice();
+
+    if (onClose) {
+      onClose();
+      return;
+    }
+
+    window.history.back();
+  };
+
   return (
     <div className="ai-full-screen">
-      {/* Top bar */}
       <div className="ai-full-top">
         <button
           className="btn btn-ghost btn-sm"
@@ -96,23 +157,43 @@ export default function MainChat({ onOpenComposer }) {
         >
           ☰
         </button>
+
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✨</div>
+
         <div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Ely</div>
           <div style={{ fontSize: 10, color: 'var(--text3)' }}>Practice Assistant</div>
         </div>
+
         <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startNewChat}>
           + New chat
+        </button>
+
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={handleClose}
+          title="Close chat"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            padding: 0,
+            fontSize: 18,
+            marginLeft: 6,
+            cursor: 'pointer',
+          }}
+        >
+          ×
         </button>
       </div>
 
       <div className="ai-full-body">
-        {/* Chat history sidebar */}
         <div className={`ai-full-sidebar${sidebarOpen ? ' mob-open' : ''}`}>
           <div className="ai-full-sidebar-hdr">
             <span>History</span>
             <button className="btn btn-xs btn-ghost" onClick={startNewChat}>+ New</button>
           </div>
+
           {chatList.length === 0 ? (
             <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
               No previous chats
@@ -131,43 +212,56 @@ export default function MainChat({ onOpenComposer }) {
           )}
         </div>
 
-        {/* Main chat area */}
         <div className="ai-full-main">
           <div className="ai-full-msgs">
             {messages.length === 0 ? (
-              <WelcomeScreen onSend={(text) => { setInput(text); }} userName={state.currentUser?.email?.split('@')[0] || state.settings.name} />
+              <WelcomeScreen
+                onSend={(text) => {
+                  setInput(text);
+                  requestAnimationFrame(resizeTextarea);
+                }}
+                userName={state.currentUser?.email?.split('@')[0] || state.settings.name}
+              />
             ) : (
               messages.map(msg => (
                 <ChatMessage
                   key={msg.id}
                   msg={msg}
-                  onUseDraft={(draft) => { setInput(draft); }}
+                  onUseDraft={(draft) => {
+                    setInput(draft);
+                    requestAnimationFrame(resizeTextarea);
+                  }}
                   onOpenInComposer={handleOpenInComposer}
                 />
               ))
             )}
+
             {loading && <TypingIndicator />}
+
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="ai-full-input">
-            <div className="ai-input-row">
-              <VoiceInput onTranscript={handleVoice} disabled={loading} />
+            <div className="ai-input-row" style={{ alignItems: 'flex-end' }}>
+              <VoiceInput onTranscript={handleVoice} disabled={loading} stopSignal={voiceStopSignal} />
+
               <textarea
                 ref={textareaRef}
                 className="ai-textarea"
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask Ely anything about party wall, your projects, or drafting..."
                 rows={1}
-                style={{ minHeight: 28 }}
-                onInput={e => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
+                style={{
+                  minHeight: 38,
+                  maxHeight: 140,
+                  overflowY: 'hidden',
+                  resize: 'none',
+                  lineHeight: 1.5,
                 }}
               />
+
               <button
                 className="ai-send-btn"
                 onClick={handleSend}
@@ -179,6 +273,7 @@ export default function MainChat({ onOpenComposer }) {
                 </svg>
               </button>
             </div>
+
             <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>
               AI can make mistakes. Always verify professional advice.
             </div>
