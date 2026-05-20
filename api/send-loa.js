@@ -45,11 +45,11 @@ export default async function handler(req, res) {
     const anchor2Sign = isAO ? 'AO_2_SIGN_HERE' : 'BO_2_SIGN_HERE';
 
     const fields = [];
-    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 76, width: 30, height: 5 }, anchor_string: anchor1Date, anchor_x_offset: 0, anchor_y_offset: 0 });
+    fields.push({ type: 'date',      recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 76, width: 30, height: 5 }, anchor_string: anchor1Date, anchor_x_offset: 0, anchor_y_offset: 0, date_format: 'DD MMMM YYYY' });
     fields.push({ type: 'signature', recipient_id: 'temp_1', required: true, page_number: 1, position: { x: 5,  y: 83, width: 35, height: 8 }, anchor_string: anchor1Sign, anchor_x_offset: 0, anchor_y_offset: 0 });
 
     if (recipients.length >= 2) {
-      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 76, width: 30, height: 5 }, anchor_string: anchor2Date, anchor_x_offset: 0, anchor_y_offset: 0 });
+      fields.push({ type: 'date',      recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 76, width: 30, height: 5 }, anchor_string: anchor2Date, anchor_x_offset: 0, anchor_y_offset: 0, date_format: 'DD MMMM YYYY' });
       fields.push({ type: 'signature', recipient_id: 'temp_2', required: true, page_number: 1, position: { x: 55, y: 83, width: 35, height: 8 }, anchor_string: anchor2Sign, anchor_x_offset: 0, anchor_y_offset: 0 });
     }
 
