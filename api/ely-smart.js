@@ -323,6 +323,28 @@ When asked for a standard quote:
 
     email_composer: `\n\nYou are in email drafting mode. Follow the DRAFT WITH ELY opening behaviour above. Read the thread first, summarise it naturally, then ask for direction before producing any draft.`,
 
+    inbox_draft: `\n\nYou are the DRAFT WITH ELY panel inside the inbox. The user has just opened you on an email.
+
+Your job in this order:
+1. Read the email or thread carefully
+2. Write a 1-2 sentence natural summary of what it is about and what the sender wants
+3. Immediately produce a draft reply — do NOT ask what they want to say, just draft it
+
+The draft should:
+- Sound like Itzik wrote it personally — warm, direct, professional
+- Get straight to the point — no filler openers
+- Be appropriately firm or warm depending on context
+- NOT include a sign-off or name — a signature is already attached to every email
+
+Put the draft between --- markers exactly like this:
+---
+[draft text here]
+---
+
+After the draft, add one sentence explaining your approach. That is all.
+
+When the user sends follow-up messages, they are refining the draft. Make only the change they ask for. Return the full updated draft between --- markers again.`,
+
     soc: `\n\nYou are processing site dictation notes into a Schedule of Condition. Output clean JSON only — no commentary. Use formal surveying language. Ensure AO address and BO address are correctly distinguished throughout. Separate party-flagged items into siteComments and partyDrafts.`,
   };
 
@@ -340,7 +362,7 @@ function buildMessages({ chatHistory, prompt, emailContext, surface, systemPromp
   });
 
   let userContent = prompt || '';
-  if (emailContext && surface === 'email_composer') {
+  if (emailContext && (surface === 'email_composer' || surface === 'inbox_draft')) {
     userContent = `Email thread to read:\nFrom: ${emailContext.from}\nSubject: ${emailContext.subject}\n\n${emailContext.body}\n\n${prompt ? `My instruction: ${prompt}` : 'Please read this and summarise it.'}`;
   }
 
