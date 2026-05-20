@@ -294,9 +294,6 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const aoPremise = form.aoPremise.trim();
       const aoService = (aoSameAddr ? form.aoPremise : form.aoService).trim();
 
-      const appointmentAddress = isAO ? aoPremise : boPremise;
-      const appointmentName = isAO ? form.ao1.name.trim() : form.bo1.name.trim();
-
       const payload = {
         id: newId,
         user_id: user?.id || null,
@@ -305,9 +302,6 @@ export default function NewProjectModal({ onClose, onCreated }) {
         role: form.role,
         appointment_role: form.role,
         status: 'active',
-
-
-        appointment_name: appointmentName || null,
 
         bo_premise_address: boPremise || null,
         bo_service_address: boService || boPremise || null,
@@ -322,6 +316,12 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
         ao_premise_address: aoPremise || null,
         ao_service_address: aoService || aoPremise || null,
+        ao_1_name: form.ao1.name.trim() || null,
+        ao_1_email: form.ao1.email.trim() || null,
+        ao_1_phone: form.ao1.phone.trim() || null,
+        ao_2_name: form.ao2.name.trim() || null,
+        ao_2_email: form.ao2.email.trim() || null,
+        ao_2_phone: form.ao2.phone.trim() || null,
 
         aos: isAO ? [buildAORecord(form, aoService || aoPremise)] : [],
 
