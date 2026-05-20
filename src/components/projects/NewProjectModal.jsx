@@ -52,16 +52,25 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const ref = await getNextRef();
       const fee = form.fee.trim() ? parseFloat(form.fee) : null;
       const svc = sameAddr ? form.premise : form.service;
+      const { data: { user } } = await sb.auth.getUser();
+      // Generate a unique text id (projects.id is text NOT NULL with no default)
+      const newId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const payload = {
-        ref, role: form.role, status: 'active', user_id: (await sb.auth.getUser()).data?.user?.id,
+        id: newId,
+        user_id: user?.id || null,
+        ref,
+        role: form.role,
+        status: 'active',
         bo_premise_address: form.premise.trim(),
         bo_service_address: svc || null,
-        bo_1_name: form.bo1.name.trim(), bo: form.bo1.name.trim(),
+        bo_1_name: form.bo1.name.trim(),
+        bo: form.bo1.name.trim(),
         bo_1_email: form.bo1.email.trim() || null,
         bo_phone: form.bo1.phone.trim() || null,
-        bo_2_name: form.bo2.name.trim() || null, bo_2_email: form.bo2.email.trim() || null,
-        works: form.works.trim() || null, fee: Number.isFinite(fee) ? fee : null,
-        aos: [], created_at: new Date().toISOString(),
+        bo_2_name: form.bo2.name.trim() || null,
+        bo_2_email: form.bo2.email.trim() || null,
+        works: form.works.trim() || null,
+        fee: Number.isFinite(fee) ? fee : null,
       };
       const { data, error: err } = await sb.from('projects').insert([payload]).select('*').single();
       if (err) throw err;
