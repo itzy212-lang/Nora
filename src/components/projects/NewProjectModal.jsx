@@ -57,9 +57,9 @@ export default function NewProjectModal({ onClose, onCreated }) {
         bo_premise_address: form.premise.trim(),
         bo_service_address: svc || null,
         bo_1_name: form.bo1.name.trim(), bo: form.bo1.name.trim(),
-        bo_1_email: form.bo1.email.trim() || null, bo_email: form.bo1.email.trim() || null,
-        bo_1_phone: form.bo1.phone.trim() || null,
-        bo_2_name: form.bo2.name.trim() || null, bo_2_email: form.bo2.email.trim() || null, bo_2_phone: form.bo2.phone.trim() || null,
+        bo_1_email: form.bo1.email.trim() || null,
+        bo_phone: form.bo1.phone.trim() || null,
+        bo_2_name: form.bo2.name.trim() || null, bo_2_email: form.bo2.email.trim() || null,
         works: form.works.trim() || null, fee: Number.isFinite(fee) ? fee : null,
         aos: [], created_at: new Date().toISOString(),
       };
