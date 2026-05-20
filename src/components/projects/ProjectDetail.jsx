@@ -113,18 +113,19 @@ function getAppointmentAddress(project) {
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
 
-  if (project.appointment_address) return project.appointment_address;
-  if (role === 'AO') return aoAddress(primaryAO) || project.address || project.bo_premise_address || '';
-  return project.address || project.bo_premise_address || '';
+  if (role === 'AO') {
+    return aoAddress(primaryAO) || project.appointment_address || project.address || project.bo_premise_address || '';
+  }
+
+  return project.appointment_address || project.address || project.bo_premise_address || '';
 }
 
 function getAppointmentName(project) {
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
 
-  if (project.appointment_name) return project.appointment_name;
-  if (role === 'AO') return primaryAO?.name || '';
-  return project.bo || project.bo_1_name || '';
+  if (role === 'AO') return primaryAO?.name || project.appointment_name || '';
+  return project.appointment_name || project.bo || project.bo_1_name || '';
 }
 
 const card = (extra = {}) => ({
@@ -836,7 +837,7 @@ function AOCard({
   onServeNotice,
   loaLoading,
 }) {
-  const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
+  const isAOAppointment = projectRole === 'AO' || !!ao.appointed_by_me;
   const colour = getAOColour(ao, projectRole);
   const address = aoAddress(ao);
   const cd = aoConsent(ao);
@@ -1785,7 +1786,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               ].map(({ label, val, colour }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
                   <span style={{ color: 'var(--text2)' }}>{label}</span>
-                  <span style={{ fontWeight: 600, color }}>{val}</span>
+                  <span style={{ fontWeight: 600, color: colour }}>{val}</span>
                 </div>
               ))}
             </div>
