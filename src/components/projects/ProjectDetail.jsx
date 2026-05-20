@@ -13,7 +13,6 @@ const aoConsent   = ao => ao.consent_deadline  || ao.consentDeadline  || '';
 const aoNotice    = ao => ao.notice_served_date || ao.noticeServedDate || '';
 const aoS10       = ao => ao.s10_deadline       || ao.s10Deadline      || '';
 const aoName2     = ao => ao.name2 || '';
-
 const STAGES = ['Notice served', 'Consent', 'Appt made', 'Award', 'Complete'];
 
 function fmtDate(d) {
@@ -28,7 +27,6 @@ function daysUntil(d) {
 function fmtGBP(v) {
   return `£${(parseFloat(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 0 })}`;
 }
-
 function getAOColour(ao) {
   const st = (ao.status || '').toLowerCase();
   if (st === 'consent') return '#22c55e';
@@ -39,7 +37,6 @@ function getAOColour(ao) {
   if (aoAddress(ao)) return '#a855f7';
   return '#9ca3af';
 }
-
 function getProjectColour(project) {
   const aos = project.aos || [];
   if (!aos.length) return '#9ca3af';
@@ -53,28 +50,30 @@ function getProjectColour(project) {
   if (aos.some(ao => aoAddress(ao))) return '#a855f7';
   return '#9ca3af';
 }
-
 const card = (extra = {}) => ({ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, ...extra });
 
 async function updateProjectSafely(projectId, payload) {
-  let cleanPayload = { ...payload };
-  let lastError = null;
+  let p = { ...payload }; let lastError = null;
   for (let i = 0; i < 12; i++) {
-    const { data, error } = await sb.from('projects').update(cleanPayload).eq('id', projectId).select('*').single();
+    const { data, error } = await sb.from('projects').update(p).eq('id', projectId).select('*').single();
     if (!error) return data;
     lastError = error;
-    const missing = error.message?.match(/Could not find the '([^']+)' column/)?.[1];
-    if (missing && Object.prototype.hasOwnProperty.call(cleanPayload, missing)) {
-      const next = { ...cleanPayload }; delete next[missing]; cleanPayload = next; continue;
-    }
+    const m = error.message?.match(/Could not find the '([^']+)' column/)?.[1];
+    if (m && Object.prototype.hasOwnProperty.call(p, m)) { const n = { ...p }; delete n[m]; p = n; continue; }
     throw error;
   }
-  throw lastError || new Error('Could not save project.');
+  throw lastError || new Error('Could not save.');
 }
 
-const mInput = { width: '100%', padding: '10px 12px', fontSize: 13.5, background: '#fff', border: '1px solid #dfe3ea', borderRadius: 12, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
+// ── STYLE CONSTANTS ────────────────────────────────────────────────────────────
+const mInput = {
+  width: '100%', padding: '8px 12px', fontSize: 13.5,
+  background: '#fff', border: '1px solid #dfe3ea', borderRadius: 10,
+  color: 'var(--text)', outline: 'none', boxSizing: 'border-box',
+};
 const mSection = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 };
 
+// ── SHARED COMPONENTS ──────────────────────────────────────────────────────────
 function ModalShell({ title, children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
@@ -93,38 +92,39 @@ function Field({ label, hint, children }) {
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 5 }}>{label}</div>
-      {hint && <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.4, marginBottom: 6 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.4, marginBottom: 5 }}>{hint}</div>}
       {children}
     </div>
   );
 }
 
-function AddressBlock({ premise, serviceSame, service, onPremise, onToggleSame, onService, premiseLabel = 'Premise address', premiseHint = 'The property where the works are taking place.' }) {
+// Address block with premise + optional service address
+function AddressBlock({ premise, service, serviceSame, onPremise, onService, onToggle, premiseLabel = 'Premise address', premiseHint }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Field label={premiseLabel} hint={premiseHint}>
-        <textarea rows={2} value={premise} onChange={e => onPremise(e.target.value)} style={{ ...mInput, resize: 'vertical' }} />
+        <input value={premise} onChange={e => onPremise(e.target.value)} style={mInput} placeholder="Full address including postcode" />
       </Field>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
-        <input type="checkbox" checked={serviceSame} onChange={e => onToggleSame(e.target.checked)} />
-        Service / correspondence address is the same as the premise address
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer', userSelect: 'none' }}>
+        <input type="checkbox" checked={serviceSame} onChange={e => onToggle(e.target.checked)} />
+        Service / correspondence address is the same as premise address
       </label>
       {!serviceSame && (
-        <Field label="Service / correspondence address" hint="Use this if the owner lives elsewhere, is a business with a different registered address, or correspondence should go somewhere other than the property.">
-          <textarea rows={2} value={service} onChange={e => onService(e.target.value)} style={{ ...mInput, resize: 'vertical' }} />
+        <Field label="Service / correspondence address" hint="Use this if the owner is a company with a different registered office, lives at a different address, or you need to serve notices and awards somewhere other than the property itself.">
+          <input value={service} onChange={e => onService(e.target.value)} style={mInput} placeholder="Registered or correspondence address" />
         </Field>
       )}
     </div>
   );
 }
 
-function OwnerBlock({ title, form, set, optional }) {
+function OwnerBlock({ title, optional, form, set }) {
   return (
-    <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 16, padding: 14 }}>
+    <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 14, padding: 14 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>
         {title}{optional && <span style={{ fontWeight: 400, textTransform: 'none', marginLeft: 6 }}>(optional)</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="Full name"><input value={form.name} onChange={e => set('name', e.target.value)} style={mInput} /></Field>
         <Field label="Email"><input value={form.email} onChange={e => set('email', e.target.value)} style={mInput} /></Field>
         <Field label="Phone"><input value={form.phone} onChange={e => set('phone', e.target.value)} style={mInput} /></Field>
@@ -133,37 +133,119 @@ function OwnerBlock({ title, form, set, optional }) {
   );
 }
 
-// ── PROJECT EDIT MODAL ────────────────────────────────────────────────────────
+// Surveyor autocomplete input — searches contacts, saves new ones
+function SurveyorBlock({ title, form, set }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  const searchContacts = useCallback(async (query) => {
+    if (!query || query.length < 2) { setSuggestions([]); return; }
+    try {
+      const { data } = await sb.from('contacts')
+        .select('id, name, firm, email, phone')
+        .ilike('name', `%${query}%`)
+        .eq('type', 'surveyor')
+        .limit(8);
+      setSuggestions(data || []);
+    } catch { setSuggestions([]); }
+  }, []);
+
+  const handleNameChange = (val) => {
+    set('name', val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => searchContacts(val), 250);
+    setShowDropdown(true);
+  };
+
+  const selectContact = (contact) => {
+    set('name', contact.name);
+    set('firm', contact.firm || '');
+    set('email', contact.email || '');
+    set('phone', contact.phone || '');
+    setSuggestions([]);
+    setShowDropdown(false);
+  };
+
+  useEffect(() => {
+    const handleClick = (e) => { if (!dropdownRef.current?.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div style={{ background: '#f8fafc', border: '1px solid #eef1f5', borderRadius: 14, padding: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 10 }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div ref={dropdownRef} style={{ position: 'relative' }}>
+          <Field label="Surveyor name">
+            <input
+              value={form.name}
+              onChange={e => handleNameChange(e.target.value)}
+              onFocus={() => form.name?.length >= 2 && setShowDropdown(true)}
+              style={mInput}
+              placeholder="Start typing to search contacts…"
+              autoComplete="off"
+            />
+          </Field>
+          {showDropdown && suggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: '#fff', border: '1px solid #dfe3ea', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+              {suggestions.map(c => (
+                <div key={c.id} onMouseDown={() => selectContact(c)} style={{ padding: '9px 14px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 13 }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f0f4ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
+                  {c.firm && <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>{c.firm}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <Field label="Firm"><input value={form.firm} onChange={e => set('firm', e.target.value)} style={mInput} /></Field>
+        <Field label="Email"><input value={form.email} onChange={e => set('email', e.target.value)} style={mInput} /></Field>
+        <Field label="Phone"><input value={form.phone} onChange={e => set('phone', e.target.value)} style={mInput} /></Field>
+      </div>
+    </div>
+  );
+}
+
+// Save surveyor to contacts if not already there
+async function maybeSaveSurveyor(surv) {
+  if (!surv?.name?.trim() || !surv?.email?.trim()) return;
+  try {
+    const { data } = await sb.from('contacts').select('id').ilike('email', surv.email.trim()).limit(1);
+    if (data?.length > 0) return; // already exists
+    await sb.from('contacts').insert([{
+      type: 'surveyor', name: surv.name.trim(), firm: surv.firm?.trim() || null,
+      email: surv.email.trim(), phone: surv.phone?.trim() || null,
+    }]);
+  } catch (err) { console.warn('Could not save surveyor to contacts:', err.message); }
+}
+
+// ── PROJECT EDIT MODAL ─────────────────────────────────────────────────────────
 function ProjectEditModal({ project, onSave, onClose }) {
   const ip = project.bo_premise_address || project.address || '';
   const is = project.bo_service_address || project.bo_1_service_address || project.bo_address || ip;
   const [sameAddr, setSameAddr] = useState(!is || is === ip);
   const [form, setForm] = useState({
     role: project.role || project.surveyor_role || 'BO',
-    premise: ip,
-    service: is,
+    premise: ip, service: is,
     bo1: { name: project.bo_1_name || project.bo || '', email: project.bo_1_email || project.bo_email || '', phone: project.bo_1_phone || project.bo_phone || '' },
     bo2: { name: project.bo_2_name || '', email: project.bo_2_email || '', phone: project.bo_2_phone || '' },
-    ref: project.ref || '',
-    status: project.status || 'active',
-    works: project.works || '',
-    fee: project.fee ?? '',
+    ref: project.ref || '', status: project.status || 'active',
+    works: project.works || '', fee: project.fee ?? '',
   });
   const [saving, setSaving] = useState(false);
   const setBo1 = (k, v) => setForm(f => ({ ...f, bo1: { ...f.bo1, [k]: v } }));
   const setBo2 = (k, v) => setForm(f => ({ ...f, bo2: { ...f.bo2, [k]: v } }));
-
   const handlePremise = v => setForm(f => ({ ...f, premise: v, service: sameAddr ? v : f.service }));
-  const handleToggle  = checked => { setSameAddr(checked); if (checked) setForm(f => ({ ...f, service: f.premise })); };
+  const handleToggle  = c => { setSameAddr(c); if (c) setForm(f => ({ ...f, service: f.premise })); };
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      const svc = sameAddr ? form.premise : form.service;
-      await onSave({ ...form, service: svc });
-      onClose();
-    } catch (err) { alert(err.message || 'Could not save.'); }
-    finally { setSaving(false); }
+    try { await onSave({ ...form, service: sameAddr ? form.premise : form.service }); onClose(); }
+    catch (err) { alert(err.message || 'Could not save.'); setSaving(false); }
   };
 
   return (
@@ -181,17 +263,19 @@ function ProjectEditModal({ project, onSave, onClose }) {
             ))}
           </div>
         </div>
-        {/* Address */}
+        {/* Addresses */}
         <div style={mSection}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Property addresses</div>
-          <AddressBlock premise={form.premise} serviceSame={sameAddr} service={form.service} onPremise={handlePremise} onToggleSame={handleToggle} onService={v => setForm(f => ({ ...f, service: v }))} />
+          <AddressBlock premise={form.premise} service={form.service} serviceSame={sameAddr}
+            onPremise={handlePremise} onService={v => setForm(f => ({ ...f, service: v }))} onToggle={handleToggle}
+            premiseHint="The property where the works are taking place." />
         </div>
-        {/* Building owners */}
+        {/* BO details */}
         <div style={mSection}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Building owner details</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <OwnerBlock title="Owner 1" form={form.bo1} set={setBo1} />
-            <OwnerBlock title="Owner 2" form={form.bo2} set={setBo2} optional />
+            <OwnerBlock title="Owner 2" optional form={form.bo2} set={setBo2} />
           </div>
         </div>
         {/* Project details */}
@@ -205,7 +289,11 @@ function ProjectEditModal({ project, onSave, onClose }) {
                 <option value="on_hold">On hold</option><option value="dispute">Dispute</option>
               </select>
             </Field>
-            <div style={{ gridColumn: '1/-1' }}><Field label="Works description"><textarea rows={3} value={form.works} onChange={e => setForm(f => ({ ...f, works: e.target.value }))} style={{ ...mInput, resize: 'vertical' }} /></Field></div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <Field label="Works description">
+                <textarea rows={2} value={form.works} onChange={e => setForm(f => ({ ...f, works: e.target.value }))} style={{ ...mInput, resize: 'vertical' }} />
+              </Field>
+            </div>
             <Field label="Projected fee (£)"><input value={form.fee} onChange={e => setForm(f => ({ ...f, fee: e.target.value }))} style={mInput} /></Field>
           </div>
         </div>
@@ -218,7 +306,7 @@ function ProjectEditModal({ project, onSave, onClose }) {
   );
 }
 
-// ── AO EDIT MODAL ─────────────────────────────────────────────────────────────
+// ── AO EDIT MODAL ──────────────────────────────────────────────────────────────
 function AOEditModal({ ao, mode, onSave, onClose }) {
   const isNew = mode === 'add';
   const ip = aoAddress(ao || {});
@@ -226,27 +314,28 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
   const [sameAddr, setSameAddr] = useState(!is || is === ip);
   const [form, setForm] = useState({
     premise: ip, service: is,
-    ao1: { name: ao?.name || '', email: ao?.email || '', phone: ao?.phone || '' },
-    ao2: { name: ao?.name2 || '', email: ao?.email2 || '', phone: ao?.phone2 || '' },
-    surv: { name: aoSurvName(ao || {}), firm: aoSurvFirm(ao || {}), email: aoSurvEmail(ao || {}), phone: aoSurvPhone(ao || '') },
-    third: { name: ao?.third_surveyor_name || '', firm: ao?.third_surveyor_firm || '', email: ao?.third_surveyor_email || '', phone: ao?.third_surveyor_phone || '' },
+    ao1:  { name: ao?.name || '', email: ao?.email || '', phone: ao?.phone || '' },
+    ao2:  { name: ao?.name2 || '', email: ao?.email2 || '', phone: ao?.phone2 || '' },
+    surv: { name: aoSurvName(ao || {}), firm: aoSurvFirm(ao || {}), email: aoSurvEmail(ao || {}), phone: aoSurvPhone(ao || {}) },
+    third:{ name: ao?.third_surveyor_name || '', firm: ao?.third_surveyor_firm || '', email: ao?.third_surveyor_email || '', phone: ao?.third_surveyor_phone || '' },
   });
   const [saving, setSaving] = useState(false);
   const setAo1   = (k, v) => setForm(f => ({ ...f, ao1:  { ...f.ao1,  [k]: v } }));
   const setAo2   = (k, v) => setForm(f => ({ ...f, ao2:  { ...f.ao2,  [k]: v } }));
   const setSurv  = (k, v) => setForm(f => ({ ...f, surv: { ...f.surv, [k]: v } }));
   const setThird = (k, v) => setForm(f => ({ ...f, third:{ ...f.third,[k]: v } }));
-
   const handlePremise = v => setForm(f => ({ ...f, premise: v, service: sameAddr ? v : f.service }));
-  const handleToggle  = checked => { setSameAddr(checked); if (checked) setForm(f => ({ ...f, service: f.premise })); };
+  const handleToggle  = c => { setSameAddr(c); if (c) setForm(f => ({ ...f, service: f.premise })); };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Save surveyors to contacts if new
+      await maybeSaveSurveyor(form.surv);
+      await maybeSaveSurveyor(form.third);
       await onSave({ ...form, service: sameAddr ? form.premise : form.service });
       onClose();
-    } catch (err) { alert(err.message || 'Could not save AO.'); }
-    finally { setSaving(false); }
+    } catch (err) { alert(err.message || 'Could not save AO.'); setSaving(false); }
   };
 
   return (
@@ -254,36 +343,28 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
       <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Address */}
         <div style={mSection}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Adjoining property addresses</div>
-          <AddressBlock premise={form.premise} serviceSame={sameAddr} service={form.service} onPremise={handlePremise} onToggleSame={handleToggle} onService={v => setForm(f => ({ ...f, service: v }))} premiseLabel="Premise address" premiseHint="The adjoining property relevant to this party wall matter." />
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Adjoining property</div>
+          <AddressBlock premise={form.premise} service={form.service} serviceSame={sameAddr}
+            onPremise={handlePremise} onService={v => setForm(f => ({ ...f, service: v }))} onToggle={handleToggle}
+            premiseHint="The adjoining property relevant to this party wall matter." />
         </div>
         {/* AO owners */}
         <div style={mSection}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Adjoining owner details</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <OwnerBlock title="Owner 1" form={form.ao1} set={setAo1} />
-            <OwnerBlock title="Owner 2" form={form.ao2} set={setAo2} optional />
+            <OwnerBlock title="Owner 2" optional form={form.ao2} set={setAo2} />
           </div>
         </div>
         {/* AO Surveyor */}
         <div style={mSection}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>AO surveyor details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Surveyor name"><input value={form.surv.name} onChange={e => setSurv('name', e.target.value)} style={mInput} /></Field>
-            <Field label="Firm"><input value={form.surv.firm} onChange={e => setSurv('firm', e.target.value)} style={mInput} /></Field>
-            <Field label="Email"><input value={form.surv.email} onChange={e => setSurv('email', e.target.value)} style={mInput} /></Field>
-            <Field label="Phone"><input value={form.surv.phone} onChange={e => setSurv('phone', e.target.value)} style={mInput} /></Field>
-          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>AO surveyor</div>
+          <SurveyorBlock title="AO Surveyor" form={form.surv} set={setSurv} />
         </div>
         {/* Third Surveyor */}
         <div style={mSection}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Third surveyor details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Surveyor name"><input value={form.third.name} onChange={e => setThird('name', e.target.value)} style={mInput} /></Field>
-            <Field label="Firm"><input value={form.third.firm} onChange={e => setThird('firm', e.target.value)} style={mInput} /></Field>
-            <Field label="Email"><input value={form.third.email} onChange={e => setThird('email', e.target.value)} style={mInput} /></Field>
-            <Field label="Phone"><input value={form.third.phone} onChange={e => setThird('phone', e.target.value)} style={mInput} /></Field>
-          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>Third surveyor</div>
+          <SurveyorBlock title="Third Surveyor" form={form.third} set={setThird} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
@@ -294,7 +375,7 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
   );
 }
 
-// ── AO CARD ───────────────────────────────────────────────────────────────────
+// ── AO CARD ────────────────────────────────────────────────────────────────────
 function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, loaLoading }) {
   const colour  = getAOColour(ao);
   const address = aoAddress(ao);
@@ -305,17 +386,13 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
   const survFirm  = aoSurvFirm(ao);
   const survEmail = aoSurvEmail(ao);
   const survPhone = aoSurvPhone(ao);
-
-  const statusLabel = {
-    consent: 'Consent', dissent: 'Dissent', s10: 'S.10', notice_served: 'Notice served',
-  }[(ao.status || '').toLowerCase()] || (noticed ? 'Notice served' : '');
+  const statusLabel = { consent: 'Consent', dissent: 'Dissent', s10: 'S.10', notice_served: 'Notice served' }[(ao.status || '').toLowerCase()] || (noticed ? 'Notice served' : '');
 
   return (
     <div style={{ ...card({ marginBottom: 12, overflow: 'hidden' }) }}>
       <div style={{ display: 'flex' }}>
         <div style={{ width: 5, background: colour, borderRadius: '16px 0 0 16px', flexShrink: 0 }} />
         <div style={{ flex: 1, padding: '14px 16px' }}>
-          {/* Name + status */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: colour }}>AO{ao.num} — {(ao.name || '').toUpperCase()}</div>
@@ -323,7 +400,6 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
             </div>
             {statusLabel && <span style={{ fontSize: 12, fontWeight: 600, color: colour, paddingLeft: 8 }}>{statusLabel}</span>}
           </div>
-
           {address && <div style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4 }}>{address}</div>}
           {ao.phone && <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 6 }}>📞 {ao.phone}</div>}
 
@@ -332,7 +408,7 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, margin: '6px 0',
               padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-              background: days !== null && days < 0 ? 'var(--red-bg)' : days !== null && days === 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
+              background: days !== null && days <= 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
               color: days !== null && days <= 0 ? 'var(--red)' : days !== null && days <= 7 ? 'var(--amber)' : 'var(--green)',
             }}>
               ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline — ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline — ${days}d`}
@@ -347,7 +423,6 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>I am the Agreed Surveyor for this AO</span>
           </div>
 
-          {/* AO Surveyor block */}
           {(survName || survFirm) && (
             <div style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5 }}>AO Surveyor</div>
@@ -357,22 +432,14 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
             </div>
           )}
 
-          {/* Action buttons */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {/* Before notice: Serve notice button */}
             {!noticed && (
-              <button onClick={() => onServeNotice?.(ao)} style={{
-                padding: '5px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                background: 'var(--blue)', color: '#fff', border: 'none',
-              }}>Serve notice</button>
+              <button onClick={() => onServeNotice?.(ao)} style={{ padding: '5px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'var(--blue)', color: '#fff', border: 'none' }}>
+                Serve notice
+              </button>
             )}
-            {/* After notice: Consent / Dissent */}
             {noticed && ['Consent', 'Dissent'].map(a => (
-              <button key={a} style={{
-                padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
-                background: 'transparent', color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
-              }}>{a}</button>
+              <button key={a} style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`, background: 'transparent', color: a === 'Consent' ? 'var(--green)' : 'var(--red)' }}>{a}</button>
             ))}
             {noticed && <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', fontSize: 12, borderRadius: 99 }}>Note intention</button>}
             <button style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid var(--purple)', background: 'transparent', color: 'var(--purple)' }}>Schedule of Condition</button>
@@ -392,7 +459,7 @@ function AOCard({ ao, onOpenComposer, onGenerateAOLOA, onEditAO, onServeNotice, 
   );
 }
 
-// ── PROJECT CHAT ──────────────────────────────────────────────────────────────
+// ── PROJECT CHAT ───────────────────────────────────────────────────────────────
 function ProjectChat({ project, onOpenComposer }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -410,6 +477,7 @@ function ProjectChat({ project, onOpenComposer }) {
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: `Error: ${err.message}` }]);
     }
   }, [input, loading, send]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '60vh', minHeight: 400 }}>
       <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
@@ -432,19 +500,18 @@ function ProjectChat({ project, onOpenComposer }) {
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
+// ── MAIN ───────────────────────────────────────────────────────────────────────
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
-  const [tab, setTab]     = useState('details');
-  const [emails, setEmails] = useState([]);
+  const [tab, setTab]           = useState('details');
+  const [emails, setEmails]     = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
-  const [loaLoading, setLoaLoading]   = useState(null);
-  const [project, setProject]         = useState(initialProject);
+  const [loaLoading, setLoaLoading]       = useState(null);
+  const [project, setProject]             = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
-  const [editingAO, setEditingAO]     = useState(null);
-  const [showAddAO, setShowAddAO]     = useState(false);
+  const [editingAO, setEditingAO]   = useState(null);
+  const [showAddAO, setShowAddAO]   = useState(false);
 
   useEffect(() => { setProject(initialProject); }, [initialProject]);
-
   const { generateDocument, sendForSignature } = useDocumentGenerator();
 
   const address    = project.address || project.bo_premise_address || '';
@@ -454,12 +521,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const aos        = project.aos     || [];
   const docs       = project.documents || [];
   const projColour = getProjectColour(project);
-
-  const roleLabel = (() => {
-    const r = (project.role || project.surveyor_role || 'BO').toUpperCase();
-    if (r === 'AO') return "Adjoining Owner's Surveyor";
-    return "Building Owner's Surveyor";
-  })();
+  const roleLabel  = (project.role || '').toUpperCase() === 'AO' ? "Adjoining Owner's Surveyor" : "Building Owner's Surveyor";
 
   const stageIndex = project.status === 'complete' ? 4
     : aos.some(ao => ['consent','dissent','s10'].includes((ao.status||'').toLowerCase())) ? 2
@@ -481,64 +543,55 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       .then(({ data }) => { setEmails(data || []); setEmailsLoading(false); });
   }, [tab, project.id]);
 
-  // ── BO LoA ─────────────────────────────────────────────────────────────────
   const handleGenerateBOLOA = useCallback(async () => {
-    if (!boEmail) { alert('No email address for the Building Owner. Please add one first.'); return; }
+    if (!boEmail) { alert('No email for the Building Owner. Please add one first.'); return; }
     setLoaLoading('bo');
     try {
-      const result = await sendForSignature({ templateKey: 'loa_bo', mergeData: buildBOLOAPlaceholders(project), fileName: buildLOAFileName('bo', project), projectId: project.id, appointmentType: 'bo_loa', signers: [{ name: bo, email: boEmail }, ...(project.bo_2_name && project.bo_2_email ? [{ name: project.bo_2_name, email: project.bo_2_email }] : [])] });
-      result.success ? alert(`LoA sent to ${boEmail} for signature.`) : alert(result.error || 'Could not send LoA.');
-    } catch (err) { alert(err.message || 'Could not send LoA.'); }
+      const r = await sendForSignature({ templateKey: 'loa_bo', mergeData: buildBOLOAPlaceholders(project), fileName: buildLOAFileName('bo', project), projectId: project.id, appointmentType: 'bo_loa', signers: [{ name: bo, email: boEmail }, ...(project.bo_2_name && project.bo_2_email ? [{ name: project.bo_2_name, email: project.bo_2_email }] : [])] });
+      r.success ? alert(`LoA sent to ${boEmail} for signature.`) : alert(r.error || 'Could not send LoA.');
+    } catch (err) { alert(err.message); }
     finally { setLoaLoading(null); }
   }, [sendForSignature, project, bo, boEmail]);
 
-  // ── AO LoA ─────────────────────────────────────────────────────────────────
   const handleGenerateAOLOA = useCallback(async (ao) => {
     const aoEmail = ao.email || ao.surv_email || ao.surveyorEmail;
-    if (!aoEmail) { alert('No email address for this AO. Please add one first.'); return; }
+    if (!aoEmail) { alert('No email for this AO. Please add one first.'); return; }
     const aoKey = `ao-${ao.id || ao.num || ao.name || 'unknown'}`;
     setLoaLoading(aoKey);
     try {
-      const result = await sendForSignature({ templateKey: 'loa_ao', mergeData: buildAOLOAPlaceholders(project, ao), fileName: buildLOAFileName('ao', project, ao), projectId: project.id, appointmentType: ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa', signers: [{ name: ao.name, email: aoEmail }, ...(ao.name2 && ao.email2 ? [{ name: ao.name2, email: ao.email2 }] : [])] });
-      result.success ? alert(`LoA sent to ${aoEmail} for signature.`) : alert(result.error || 'Could not send LoA.');
-    } catch (err) { alert(err.message || 'Could not send LoA.'); }
+      const r = await sendForSignature({ templateKey: 'loa_ao', mergeData: buildAOLOAPlaceholders(project, ao), fileName: buildLOAFileName('ao', project, ao), projectId: project.id, appointmentType: ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa', signers: [{ name: ao.name, email: aoEmail }, ...(ao.name2 && ao.email2 ? [{ name: ao.name2, email: ao.email2 }] : [])] });
+      r.success ? alert(`LoA sent to ${aoEmail} for signature.`) : alert(r.error || 'Could not send LoA.');
+    } catch (err) { alert(err.message); }
     finally { setLoaLoading(null); }
   }, [sendForSignature, project]);
 
-  // ── Save project edit ──────────────────────────────────────────────────────
   const handleSaveProjectEdit = useCallback(async (form) => {
-    const feeValue = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
+    const fee = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
     const svc = form.service || form.premise || null;
     const payload = {
       ref: form.ref || null, role: form.role, surveyor_role: form.role,
       bo_premise_address: form.premise || null, bo_service_address: svc, bo_1_service_address: svc,
       bo_1_name: form.bo1?.name || null, bo_1_email: form.bo1?.email || null, bo_1_phone: form.bo1?.phone || null,
       bo_2_name: form.bo2?.name || null, bo_2_email: form.bo2?.email || null, bo_2_phone: form.bo2?.phone || null,
-      works: form.works || null, fee: Number.isFinite(feeValue) ? feeValue : null, status: form.status || 'active',
+      works: form.works || null, fee: Number.isFinite(fee) ? fee : null, status: form.status || 'active',
     };
     const data = await updateProjectSafely(project.id, payload);
     setProject(prev => ({ ...prev, ...payload, ...(data || {}), address: payload.bo_premise_address || prev.address || '', bo: payload.bo_1_name || prev.bo || '', bo_email: payload.bo_1_email || prev.bo_email || '' }));
   }, [project.id]);
 
-  // ── Save AO ────────────────────────────────────────────────────────────────
   const handleSaveAO = useCallback(async (form, existingAO = null) => {
     const currentAOs = project.aos || [];
     const newAO = {
       ...(existingAO || {}),
-      id: existingAO?.id || `ao-${Date.now()}`,
-      num: existingAO?.num || currentAOs.length + 1,
+      id: existingAO?.id || `ao-${Date.now()}`, num: existingAO?.num || currentAOs.length + 1,
       premise: form.premise || '', address: form.premise || '',
       reg_addr: form.service || form.premise || '', service_address: form.service || form.premise || '',
       name: form.ao1?.name || '', email: form.ao1?.email || '', phone: form.ao1?.phone || '',
       name2: form.ao2?.name || '', email2: form.ao2?.email || '', phone2: form.ao2?.phone || '',
       status: existingAO?.status || 'details_added',
-      // preserve existing notice dates
-      notice_served_date: existingAO?.notice_served_date || existingAO?.noticeServedDate || '',
-      noticeServedDate: existingAO?.noticeServedDate || existingAO?.notice_served_date || '',
-      consent_deadline: existingAO?.consent_deadline || existingAO?.consentDeadline || '',
-      consentDeadline: existingAO?.consentDeadline || existingAO?.consent_deadline || '',
-      s10_deadline: existingAO?.s10_deadline || existingAO?.s10Deadline || '',
-      s10Deadline: existingAO?.s10Deadline || existingAO?.s10_deadline || '',
+      notice_served_date: existingAO?.notice_served_date || '', noticeServedDate: existingAO?.noticeServedDate || '',
+      consent_deadline: existingAO?.consent_deadline || '', consentDeadline: existingAO?.consentDeadline || '',
+      s10_deadline: existingAO?.s10_deadline || '', s10Deadline: existingAO?.s10Deadline || '',
       surv_name: form.surv?.name || '', surveyorName: form.surv?.name || '',
       surv_firm: form.surv?.firm || '', surveyorFirm: form.surv?.firm || '',
       surv_email: form.surv?.email || '', surveyorEmail: form.surv?.email || '',
@@ -555,10 +608,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project]);
 
   const handleRaiseInvoice = useCallback(() => {
-    if (onRaiseInvoice) onRaiseInvoice({ property_address: address, bill_to_name: bo, bill_to_address: project.bo_address || '', role: (project.role || 'BO').toUpperCase() === 'AO' ? 'AO' : 'BO', project_id: project.id });
+    onRaiseInvoice?.({ property_address: address, bill_to_name: bo, bill_to_address: project.bo_address || '', role: (project.role || 'BO').toUpperCase() === 'AO' ? 'AO' : 'BO', project_id: project.id });
   }, [onRaiseInvoice, project, address, bo]);
-
-  const handleOpenSOC = useCallback(() => { onOpenSOC?.(project); }, [onOpenSOC, project]);
 
   const TABS = [{ id: 'details', label: 'Details' }, { id: 'emails', label: 'Emails' }, { id: 'documents', label: 'Documents' }, { id: 'chat', label: '💬 Chat' }];
 
@@ -568,7 +619,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       {showAddAO && <AOEditModal mode="add" ao={{}} onSave={form => handleSaveAO(form, null)} onClose={() => setShowAddAO(false)} />}
       {editingAO && <AOEditModal mode="edit" ao={editingAO} onSave={form => handleSaveAO(form, editingAO)} onClose={() => setEditingAO(null)} />}
 
-      {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0 14px' }}>
         <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>← Back</button>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -578,12 +628,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20, gap: 2 }}>
         {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '8px 18px', fontSize: 13, border: 'none', cursor: 'pointer', background: 'none', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? 'var(--blue)' : 'var(--text2)', borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent', marginBottom: -1 }}>{t.label}</button>)}
       </div>
 
-      {/* DETAILS */}
       {tab === 'details' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 18, alignItems: 'start' }}>
           <div>
@@ -602,8 +650,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Building owner</div>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{bo}</div>
                   {boEmail && <div style={{ fontSize: 12.5, color: 'var(--blue)', marginTop: 2 }}>{boEmail}</div>}
-                  <button className="btn btn-sm btn-ghost" disabled={loaLoading === 'bo'} onClick={handleGenerateBOLOA}
-                    style={{ cursor: loaLoading === 'bo' ? 'not-allowed' : 'pointer', marginTop: 6, fontSize: 12, borderRadius: 99, opacity: loaLoading === 'bo' ? 0.65 : 1 }}>
+                  <button className="btn btn-sm btn-ghost" disabled={loaLoading === 'bo'} onClick={handleGenerateBOLOA} style={{ cursor: loaLoading === 'bo' ? 'not-allowed' : 'pointer', marginTop: 6, fontSize: 12, borderRadius: 99, opacity: loaLoading === 'bo' ? 0.65 : 1 }}>
                     {loaLoading === 'bo' ? 'Sending…' : '📄 Send BO LoA'}
                   </button>
                 </div>
@@ -617,13 +664,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 </div>}
               </div>
               <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                {STAGES.map((s, i) => (
-                  <div key={s} style={{ flex: 1, textAlign: 'center', padding: '8px 0', fontSize: 11.5, fontWeight: i === stageIndex ? 600 : 400, background: i === stageIndex ? projColour : i < stageIndex ? `${projColour}33` : 'transparent', color: i === stageIndex ? '#fff' : i < stageIndex ? projColour : 'var(--text3)', borderRight: i < STAGES.length - 1 ? '1px solid var(--border)' : 'none' }}>{s}</div>
-                ))}
+                {STAGES.map((s, i) => <div key={s} style={{ flex: 1, textAlign: 'center', padding: '8px 0', fontSize: 11.5, fontWeight: i === stageIndex ? 600 : 400, background: i === stageIndex ? projColour : i < stageIndex ? `${projColour}33` : 'transparent', color: i === stageIndex ? '#fff' : i < stageIndex ? projColour : 'var(--text3)', borderRight: i < STAGES.length - 1 ? '1px solid var(--border)' : 'none' }}>{s}</div>)}
               </div>
             </div>
 
-            {/* AOs */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Adjoining owners</div>
@@ -639,15 +683,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             </div>
           </div>
 
-          {/* Right sidebar */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>📅 Upcoming & tasks</div>
                 <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', fontSize: 11, borderRadius: 99 }}>+ Task</button>
               </div>
-              {upcoming.length === 0
-                ? <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No upcoming deadlines.</div>
+              {upcoming.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No upcoming deadlines.</div>
                 : upcoming.map((u, i) => (
                   <div key={i} style={{ fontSize: 12, padding: '6px 0', borderBottom: i < upcoming.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{fmtDate(u.date)}</div>
@@ -660,7 +702,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               }
             </div>
 
-            <div style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }} onClick={handleOpenSOC} onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--purple)'} onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+            <div style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }} onClick={() => onOpenSOC?.(project)} onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--purple)'} onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--purple-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎙️</div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>SOC Dictation</div><div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Dictate conditions · generate PDF</div></div>
@@ -689,7 +731,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         </div>
       )}
 
-      {/* EMAILS */}
       {tab === 'emails' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -713,7 +754,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         </div>
       )}
 
-      {/* DOCUMENTS */}
       {tab === 'documents' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -735,7 +775,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         </div>
       )}
 
-      {/* CHAT */}
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
     </div>
   );
