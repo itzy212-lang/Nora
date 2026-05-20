@@ -582,10 +582,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const fee = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
     const svc = form.service || form.premise || null;
     const payload = {
-      ref: form.ref || null, role: form.role, surveyor_role: form.role,
-      bo_premise_address: form.premise || null, bo_service_address: svc, bo_1_service_address: svc,
-      bo_1_name: form.bo1?.name || null, bo_1_email: form.bo1?.email || null, bo_1_phone: form.bo1?.phone || null,
-      bo_2_name: form.bo2?.name || null, bo_2_email: form.bo2?.email || null, bo_2_phone: form.bo2?.phone || null,
+      ref: form.ref || null, role: form.role,
+      bo_premise_address: form.premise || null, bo_service_address: svc,
+      bo_1_name: form.bo1?.name || null, bo: form.bo1?.name || null,
+      bo_1_email: form.bo1?.email || null,
+      bo_phone: form.bo1?.phone || null,
+      bo_2_name: form.bo2?.name || null, bo_2_email: form.bo2?.email || null,
       works: form.works || null, fee: Number.isFinite(fee) ? fee : null, status: form.status || 'active',
     };
     const data = await updateProjectSafely(project.id, payload);
