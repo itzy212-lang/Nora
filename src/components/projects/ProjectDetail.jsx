@@ -1310,7 +1310,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       bo_1_name: form.bo1?.name || null,
       bo: form.bo1?.name || null,
       bo_1_email: form.bo1?.email || null,
-      bo_email: form.bo1?.email || null,
       bo_phone: form.bo1?.phone || null,
       bo_2_name: form.bo2?.name || null,
       bo_2_email: form.bo2?.email || null,
@@ -1319,12 +1318,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       fee: Number.isFinite(fee) ? fee : null,
       status: form.status || 'active',
     };
-
-    if (form.role === 'BO') {
-      payload.address = payload.bo_premise_address || null;
-      payload.appointment_address = payload.bo_premise_address || null;
-      payload.appointment_name = payload.bo_1_name || null;
-    }
 
     const data = await updateProjectSafely(project.id, payload);
 
@@ -1385,26 +1378,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ? currentAOs.map(a => (a.id && existingAO.id ? a.id === existingAO.id : a.num === existingAO.num) ? newAO : a)
       : [...currentAOs, newAO];
 
-    const payload = { aos: updatedAOs };
-
-    if (role === 'AO') {
-      payload.address = form.premise || project.address || null;
-      payload.appointment_address = form.premise || project.appointment_address || null;
-      payload.appointment_name = form.ao1?.name || project.appointment_name || null;
-    }
-
-    const { data, error } = await sb
-      .from('projects')
-      .update(payload)
-      .eq('id', project.id)
-      .select('*')
-      .single();
-
-    if (error) throw new Error('Could not save AO: ' + error.message);
+    // Only update the aos jsonb column — address/appointment_address/appointment_name
+    // do not exist as top-level columns; getAppointmentAddress/Name read from the aos array directly
+    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
 
     setProject(prev => ({
       ...prev,
-      ...payload,
+      aos: updatedAOs,
       ...(data || {}),
     }));
   }, [project, role]);
