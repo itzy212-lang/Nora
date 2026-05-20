@@ -14,35 +14,50 @@ function stripHtml(html = '') {
 }
 
 export function normaliseDraftText(raw = '') {
-  let text = String(raw || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .trim();
-
+  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   if (!text) return '';
 
-  text = text
-    .replace(/^```[a-z]*\s*/i, '')
-    .replace(/```$/i, '')
-    .trim();
+  text = text.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim();
 
-  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z]/i, /\bHi\s+[A-Z]/i, /\bHello\s+[A-Z]/i];
-  const indexes = markers
+  const startMarkers = [
+    /\bSubject\s*:/i,
+    /\bDear\s+[A-Z0-9]/i,
+    /\bHi\s+[A-Z0-9]/i,
+    /\bHello\s+[A-Z0-9]/i,
+  ];
+
+  const starts = startMarkers
     .map(rx => {
-      const match = text.match(rx);
-      return match ? match.index : -1;
+      const m = text.match(rx);
+      return m ? m.index : -1;
     })
-    .filter(index => index >= 0);
+    .filter(i => i >= 0);
 
-  if (indexes.length) text = text.slice(Math.min(...indexes)).trim();
+  if (starts.length) text = text.slice(Math.min(...starts)).trim();
 
   text = text
+    .replace(/^Thanks for the direction\.?\s*/i, '')
     .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
     .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
     .replace(/^Draft\s*:\s*/i, '')
     .trim();
 
+  [
+    /\n-{3,}\s*\n\s*I included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*I've included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*This draft[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*Let me know[\s\S]*$/i,
+    /\n\s*I included the[\s\S]*$/i,
+    /\n\s*I've included the[\s\S]*$/i,
+    /\n\s*Let me know if this tone[\s\S]*$/i,
+    /\n\s*Let me know if this suits[\s\S]*$/i,
+  ].forEach(rx => {
+    text = text.replace(rx, '').trim();
+  });
+
   text = text
+    .replace(/\n\s*-{3,}\s*$/g, '')
+    .replace(/^\s*-{3,}\s*\n/g, '')
     .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
     .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
     .replace(/(Subject\s*:[^\n]+)\s*(?=Hello\s+)/i, '$1\n\n')
@@ -50,7 +65,7 @@ export function normaliseDraftText(raw = '') {
     .replace(/([^\n])\s*(Hi\s+[^\n,]+,)/i, '$1\n\n$2')
     .replace(/([^\n])\s*(Hello\s+[^\n,]+,)/i, '$1\n\n$2')
     .replace(/([.!?])\s+(Please\s+)/g, '$1\n\n$2')
-    .replace(/([.!?])\s+(As\s+stipulated|Under\s+section|However,|I have also|Should you|Kind regards,|Best regards,|Regards,)/g, '$1\n\n$2')
+    .replace(/([.!?])\s+(As\s+stipulated|Under\s+section|However,|I have also|Should you|Additionally,|Kind regards,|Best regards,|Regards,)/g, '$1\n\n$2')
     .replace(/\s*(Kind regards,|Best regards,|Regards,)\s*/i, '\n\n$1\n')
     .replace(/\[Your Name\]|\[Your Position\]/g, '')
     .replace(/[ \t]+\n/g, '\n')
@@ -65,15 +80,12 @@ export function splitSubjectFromDraft(raw = '') {
   const draft = normaliseDraftText(raw);
   const subjectMatch = draft.match(/^Subject\s*:\s*(.+)$/im);
 
-  if (!subjectMatch) {
-    return { subject: '', body: draft, full: draft };
-  }
+  if (!subjectMatch) return { subject: '', body: draft, full: draft };
 
-  return {
-    subject: subjectMatch[1].trim(),
-    body: draft.replace(/^Subject\s*:\s*.+\n*/im, '').trim(),
-    full: draft,
-  };
+  const subject = subjectMatch[1].trim();
+  const body = draft.replace(/^Subject\s*:\s*.+\n*/im, '').trim();
+
+  return { subject, body, full: draft };
 }
 
 async function copyToClipboard(text) {
@@ -109,7 +121,8 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   const [copied, setCopied] = useState(false);
 
   const replyText = msg.content || msg.reply || '';
-  const draftText = normaliseDraftText(msg.draft || msg.documentText || (isDraft ? replyText : ''));
+  const draftSource = msg.draft || msg.documentText || (isDraft ? replyText : '');
+  const draftText = normaliseDraftText(draftSource);
   const actionText = isDraft ? draftText : '';
 
   const handleCopy = async () => {
@@ -149,66 +162,35 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
 
       {isDraft && actionText.trim().length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
-          <button
-            type="button"
-            onClick={handleCopy}
-            style={{
-              border: '1px solid var(--border)',
-              background: copied ? 'var(--green-bg)' : 'var(--bg2)',
-              color: copied ? 'var(--green)' : 'var(--text2)',
-              borderRadius: 99,
-              padding: '4px 10px',
-              fontSize: 11.5,
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
+          <button type="button" onClick={handleCopy} style={{
+            border: '1px solid var(--border)', background: copied ? 'var(--green-bg)' : 'var(--bg2)',
+            color: copied ? 'var(--green)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
+            fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
             {copied ? 'Copied' : 'Copy draft'}
           </button>
 
-          <button
-            type="button"
-            onClick={handleCompose}
-            style={{
-              border: '1px solid var(--blue)',
-              background: 'var(--blue-bg)',
-              color: 'var(--blue)',
-              borderRadius: 99,
-              padding: '4px 10px',
-              fontSize: 11.5,
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
+          <button type="button" onClick={handleCompose} style={{
+            border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)',
+            borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
             Open in email composer
           </button>
         </div>
       )}
 
       {!isUser && !isDraft && msg.draft && (
-        <DraftCard
-          draft={draftText || msg.draft}
-          draftType={msg.draftType}
-          onUseDraft={onUseDraft}
-          onOpenInComposer={onOpenInComposer}
-        />
+        <DraftCard draft={draftText || msg.draft} draftType={msg.draftType} onUseDraft={onUseDraft} onOpenInComposer={onOpenInComposer} />
       )}
 
       {msg.suggestedActions?.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
           {msg.suggestedActions.map((action, i) => (
-            <span
-              key={i}
-              style={{
-                fontSize: 11,
-                padding: '3px 9px',
-                borderRadius: 99,
-                cursor: 'pointer',
-                border: '1px solid var(--border)',
-                background: 'var(--bg4)',
-                color: 'var(--text2)',
-              }}
-            >
+            <span key={i} style={{
+              fontSize: 11, padding: '3px 9px', borderRadius: 99, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg4)', color: 'var(--text2)',
+              transition: 'all 0.15s',
+            }}>
               {action}
             </span>
           ))}
