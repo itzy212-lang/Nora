@@ -2,6 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import VoiceInput from '../shared/VoiceInput';
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  useEffect(() => {
+    const h = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return width;
+}
+
+const isMobileWidth = (w) => w < 768;
+
 const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -619,6 +631,9 @@ export default function Inbox({ onOpenComposer }) {
   const [checkedIds, setCheckedIds]      = useState(new Set());
   const [replyOverlay, setReplyOverlay]  = useState(null);
   const [draftWithEly, setDraftWithEly]  = useState(false);
+  const [mobileShowEmail, setMobileShowEmail] = useState(false);
+  const windowWidth = useWindowWidth();
+  const isMobile = isMobileWidth(windowWidth);
   const folderRef = useRef(null);
 
   useEffect(() => {
@@ -657,6 +672,7 @@ export default function Inbox({ onOpenComposer }) {
   const handleSelect = async (email) => {
     setSelectedEmail(email);
     loadThread(email);
+    if (isMobile) setMobileShowEmail(true);
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
       setEmails(prev => prev.map(e => e.id === email.id ? { ...e, is_read: true } : e));
@@ -731,8 +747,16 @@ export default function Inbox({ onOpenComposer }) {
         />
       )}
 
-      {/* Left panel */}
-      <div style={{ width: 360, minWidth: 300, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg)' }}>
+      {/* Left panel — hidden on mobile when email is open */}
+      <div style={{
+        width: isMobile ? '100%' : 360,
+        minWidth: isMobile ? 'unset' : 300,
+        display: isMobile && mobileShowEmail ? 'none' : 'flex',
+        flexDirection: 'column',
+        borderRight: isMobile ? 'none' : '1px solid var(--border)',
+        flexShrink: 0,
+        background: 'var(--bg)',
+      }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0, background: 'var(--bg2)' }}>
           <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>✎ Compose</button>
           <div style={{ position: 'relative', flex: 1 }} ref={folderRef}>
@@ -793,10 +817,39 @@ export default function Inbox({ onOpenComposer }) {
         </div>
       </div>
 
-      {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg2)' }}>
-        <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} />
-      </div>
+      {/* Right panel — full screen on mobile when email selected */}
+      {(!isMobile || mobileShowEmail) && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          background: 'var(--bg2)',
+          position: isMobile ? 'fixed' : 'relative',
+          inset: isMobile ? 0 : 'unset',
+          zIndex: isMobile ? 50 : 'unset',
+        }}>
+          {/* Mobile back button */}
+          {isMobile && mobileShowEmail && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderBottom: '1px solid var(--border)',
+              background: 'var(--bg2)', flexShrink: 0,
+            }}>
+              <button
+                onClick={() => { setMobileShowEmail(false); setSelectedEmail(null); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}
+              >
+                ← Back
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {selectedEmail?.subject}
+              </span>
+            </div>
+          )}
+          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} />
+        </div>
+      )}
     </div>
   );
 }
