@@ -121,7 +121,6 @@ export default function NewProjectModal({ onClose, onCreated }) {
               {[
                 { value: 'BO', title: "Building Owner's Surveyor", sub: 'Acting for the BO' },
                 { value: 'AO', title: "Adjoining Owner's Surveyor", sub: 'Acting for the AO' },
-                { value: 'AS', title: 'Agreed Surveyor', sub: 'Acting for both' },
               ].map(opt => (
                 <button key={opt.value} onClick={() => set('role', opt.value)} style={{
                   textAlign: 'left', padding: '12px 14px', borderRadius: 14, cursor: 'pointer',
