@@ -1,20 +1,62 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+function collapseRepeatedWords(text = '') {
+  const words = String(text).replace(/\s+/g, ' ').trim().split(' ');
+  const out = [];
+
+  for (const word of words) {
+    const previous = out[out.length - 1] || '';
+    if (previous.toLowerCase() === word.toLowerCase()) continue;
+    out.push(word);
+  }
+
+  return out.join(' ');
+}
+
+function collapseRepeatedPhrases(text = '') {
+  let cleaned = collapseRepeatedWords(text);
+
+  // Stops mobile speech recognition repeatedly appending the same short phrase.
+  for (let size = 2; size <= 8; size++) {
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    const out = [];
+
+    for (let i = 0; i < words.length; i++) {
+      const current = words.slice(i, i + size).join(' ').toLowerCase();
+      const next = words.slice(i + size, i + size * 2).join(' ').toLowerCase();
+
+      if (current && current === next) {
+        out.push(...words.slice(i, i + size));
+        i += size;
+      } else {
+        out.push(words[i]);
+      }
+    }
+
+    cleaned = out.join(' ');
+  }
+
+  return cleaned;
+}
+
 export default function VoiceInput({
   onTranscript,
   disabled = false,
   stopSignal = 0,
 }) {
   const [listening, setListening] = useState(false);
+
   const recognitionRef = useRef(null);
   const listeningRef = useRef(false);
   const manualStopRef = useRef(false);
   const finalTranscriptRef = useRef('');
+  const lastEmittedRef = useRef('');
 
   const stopListening = useCallback(() => {
     manualStopRef.current = true;
     listeningRef.current = false;
     finalTranscriptRef.current = '';
+    lastEmittedRef.current = '';
 
     try {
       recognitionRef.current?.stop();
@@ -49,6 +91,7 @@ export default function VoiceInput({
     manualStopRef.current = false;
     listeningRef.current = true;
     finalTranscriptRef.current = '';
+    lastEmittedRef.current = '';
 
     const recognition = new SpeechRecognition();
 
@@ -72,13 +115,17 @@ export default function VoiceInput({
 
       finalTranscriptRef.current = finalTranscript;
 
-      const combined = `${finalTranscript}${interimTranscript}`.trim();
+      const combined = collapseRepeatedPhrases(`${finalTranscript}${interimTranscript}`.trim());
 
-      onTranscript?.(combined, {
-        listening: true,
-        interim: interimTranscript,
-        final: finalTranscript.trim(),
-      });
+      if (combined && combined !== lastEmittedRef.current) {
+        lastEmittedRef.current = combined;
+
+        onTranscript?.(combined, {
+          listening: true,
+          interim: interimTranscript,
+          final: collapseRepeatedPhrases(finalTranscript.trim()),
+        });
+      }
     };
 
     recognition.onend = () => {
@@ -155,14 +202,14 @@ export default function VoiceInput({
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.4"
+        strokeWidth="1.65"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" />
-        <path d="M19 11v1a7 7 0 0 1-14 0v-1" />
+        <path d="M12 3.5a3 3 0 0 0-3 3v5.5a3 3 0 0 0 6 0V6.5a3 3 0 0 0-3-3z" />
+        <path d="M19 11.5v.5a7 7 0 0 1-14 0v-.5" />
         <path d="M12 19v3" />
-        <path d="M8 22h8" />
+        <path d="M8.5 22h7" />
       </svg>
     </button>
   );
