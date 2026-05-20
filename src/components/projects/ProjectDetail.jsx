@@ -4,6 +4,17 @@ import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import sb from '../../supabaseClient';
 
+// ── Responsive hook ──────────────────────────────────────────────────────────
+function useWindowWidth() {
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return width;
+}
+
 const aoAddress   = ao => ao.premise || ao.reg_addr || ao.address || '';
 const aoSurvName  = ao => ao.surv_name  || ao.surveyorName  || '';
 const aoSurvFirm  = ao => ao.surv_firm  || ao.surveyorFirm  || '';
@@ -32,9 +43,11 @@ function getAOColour(ao) {
   if (st === 'consent') return '#22c55e';
   if (st === 'dissent' || st === 's10') return '#ef4444';
   const cd = aoConsent(ao); const sd = aoS10(ao); const now = Date.now();
+  // Red if any deadline has passed
   if ((cd && new Date(cd).getTime() < now) || (sd && new Date(sd).getTime() < now)) return '#ef4444';
-  if (cd || aoNotice(ao) || st === 'notice_served') return '#22c55e';
-  if (aoAddress(ao)) return '#a855f7';
+  // Green if notice has been served
+  if (aoNotice(ao) || st === 'notice_served' || cd) return '#22c55e';
+  // Grey — no notice served yet (regardless of whether address is filled)
   return '#9ca3af';
 }
 function getProjectColour(project) {
@@ -47,7 +60,6 @@ function getProjectColour(project) {
   });
   if (hasOverdue) return '#ef4444';
   if (aos.some(ao => aoNotice(ao) || aoConsent(ao) || (ao.status||'').toLowerCase() === 'notice_served')) return '#22c55e';
-  if (aos.some(ao => aoAddress(ao))) return '#a855f7';
   return '#9ca3af';
 }
 const card = (extra = {}) => ({ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, ...extra });
@@ -227,7 +239,7 @@ async function maybeSaveSurveyor(surv) {
 function ProjectEditModal({ project, onSave, onClose }) {
   const ip = project.bo_premise_address || project.address || '';
   const is = project.bo_service_address || project.bo_1_service_address || project.bo_address || ip;
-  const [sameAddr, setSameAddr] = useState(!is || is === ip);
+  const [sameAddr, setSameAddr] = useState(false);
   const [form, setForm] = useState({
     role: project.role || project.surveyor_role || 'BO',
     premise: ip, service: is,
@@ -311,7 +323,7 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
   const isNew = mode === 'add';
   const ip = aoAddress(ao || {});
   const is = (ao && (ao.service_address || ao.serviceAddress || ao.reg_addr)) || ip;
-  const [sameAddr, setSameAddr] = useState(!is || is === ip);
+  const [sameAddr, setSameAddr] = useState(false);
   const [form, setForm] = useState({
     premise: ip, service: is,
     ao1:  { name: ao?.name || '', email: ao?.email || '', phone: ao?.phone || '' },
@@ -510,6 +522,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showProjectEdit, setShowProjectEdit] = useState(false);
   const [editingAO, setEditingAO]   = useState(null);
   const [showAddAO, setShowAddAO]   = useState(false);
+  const windowWidth = useWindowWidth();
 
   useEffect(() => { setProject(initialProject); }, [initialProject]);
   const { generateDocument, sendForSignature } = useDocumentGenerator();
@@ -633,7 +646,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       </div>
 
       {tab === 'details' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 18, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: windowWidth < 768 ? '1fr' : 'minmax(0, 1fr) 300px', gap: 18, alignItems: 'start' }}>
           <div>
             <div style={{ ...card({ padding: '18px 20px', marginBottom: 16 }) }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14, lineHeight: 1.4 }}>{project.ref} — {bo} — {address}</div>
