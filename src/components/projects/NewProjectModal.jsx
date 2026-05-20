@@ -35,7 +35,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
     bo2: { name: '', email: '', phone: '' },
     works: '', fee: '',
   });
-  const [sameAddr, setSameAddr] = useState(true);
+  const [sameAddr, setSameAddr] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,7 +54,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const svc = sameAddr ? form.premise : form.service;
       const payload = {
         ref, role: form.role, surveyor_role: form.role, status: 'active',
-        address: form.premise.trim(), bo_premise_address: form.premise.trim(),
+        bo_premise_address: form.premise.trim(),
         bo_service_address: svc || null,
         bo_1_name: form.bo1.name.trim(), bo: form.bo1.name.trim(),
         bo_1_email: form.bo1.email.trim() || null, bo_email: form.bo1.email.trim() || null,
