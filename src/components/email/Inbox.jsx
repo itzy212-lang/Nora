@@ -54,12 +54,30 @@ function EmailBody({ email }) {
   return <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{body}</div>;
 }
 
+// ── Extract draft from Ely response ─────────────────────────────────────────
+function extractDraft(text) {
+  // Look for content between --- markers
+  const betweenDashes = text.match(/---+\s*\n([\s\S]+?)\n\s*---+/);
+  if (betweenDashes) return betweenDashes[1].trim();
+  // Look for after "Here's a draft:" or "Suggested draft:" etc
+  const afterDraft = text.match(/(?:draft|reply)[:\s]+\n+([\s\S]{30,})/i);
+  if (afterDraft) return afterDraft[1].trim();
+  // Look for Dear/Hi opening
+  const fromOpening = text.match(/(Dear\s+\w[\s\S]{20,})/);
+  if (fromOpening) return fromOpening[1].trim();
+  const fromHi = text.match(/(Hi\s+\w[\s\S]{20,})/);
+  if (fromHi) return fromHi[1].trim();
+  return null;
+}
+
 // ── Ely draft panel ───────────────────────────────────────────────────────────
 function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
   const [loading, setLoading]   = useState(false);
-  const endRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const endRef    = useRef(null);
+  const recogRef  = useRef(null);
   const hasAutoRun = useRef(false);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -68,25 +86,24 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
     if (hasAutoRun.current || !email) return;
     hasAutoRun.current = true;
     const threadSummary = threadEmails.length > 1
-      ? threadEmails
+      ? [...threadEmails]
           .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
           .map(e => `--- ${fmtDate(e.received_at)} | From: ${e.sender_name || e.sender_email} ---\n${stripHtml(e.body || e.body_preview || '').slice(0, 600)}`)
           .join('\n\n')
       : stripHtml(email.body || email.body_preview || '').slice(0, 1200);
 
     const prompt = threadEmails.length > 1
-      ? `I need to reply to this email thread (${threadEmails.length} emails). Please read the full thread and draft a professional reply to the most recent message.\n\nFULL THREAD:\n${threadSummary}`
-      : `Please read this email and draft a professional reply.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\nDate: ${fmtDate(email.received_at)}\n\n${threadSummary}`;
+      ? `Read this email thread and draft a professional reply to the latest message. Separate your reply draft clearly between --- markers.\n\nTHREAD:\n${threadSummary}`
+      : `Read this email and draft a professional reply. Put the draft between --- markers.\n\nFrom: ${email.sender_name || email.sender_email}\nSubject: ${email.subject}\n\n${threadSummary}`;
 
     callEly(prompt, true);
   }, [email, threadEmails]); // eslint-disable-line
 
-  // Fix 3: Use /api/ely-smart instead of /api/ely-ai
   const callEly = async (text, isAuto = false) => {
     if (loading) return;
     setLoading(true);
     if (!isAuto) setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
-    else setMessages([{ id: 0, role: 'system', content: `📧 Reading ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'}…` }]);
+    else setMessages([{ id: 0, role: 'system', content: `✨ Reading ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'} and drafting…` }]);
 
     try {
       const res = await fetch('/api/ely-smart', {
@@ -104,19 +121,22 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
       });
       const data = await res.json();
       const reply = data.reply || data.replyText || 'Could not generate a draft.';
+      const draft = extractDraft(reply);
+      // Strip the draft from the explanation
+      const explanation = draft ? reply.replace(/---+[\s\S]*?---+/, '').replace(draft, '').trim() : reply;
+
+      const msgId = Date.now() + 1;
+      const newMsg = { id: msgId, role: 'ely', explanation, draft };
 
       if (isAuto) {
-        setMessages([{ id: 1, role: 'ely', content: reply }]);
+        setMessages([newMsg]);
       } else {
-        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: reply }]);
+        setMessages(prev => [...prev, newMsg]);
       }
-
-      const draftMatch = reply.match(/Subject:[\s\S]{5,}/) ||
-                         reply.match(/Dear[\s\S]{20,}/) ||
-                         reply.match(/Hi[\s\S]{20,}/);
-      if (draftMatch) onUseDraft(draftMatch[0], false);
+      // Auto-populate body if draft found
+      if (draft) onUseDraft(draft, false);
     } catch {
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: 'Could not connect to Ely. Please try again.' }]);
+      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', explanation: 'Could not connect to Ely. Please try again.', draft: null }]);
     }
     setLoading(false);
   };
@@ -128,36 +148,112 @@ function ElyDraftPanel({ email, threadEmails, onUseDraft, onClose }) {
     callEly(text);
   };
 
+  // Voice dictation
+  const toggleVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('Voice input not supported in this browser.'); return; }
+    if (listening) {
+      recogRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const recog = new SR();
+    recogRef.current = recog;
+    recog.continuous = false;
+    recog.interimResults = false;
+    recog.lang = 'en-GB';
+    recog.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setInput(prev => prev ? prev + ' ' + transcript : transcript);
+    };
+    recog.onend = () => setListening(false);
+    recog.start();
+    setListening(true);
+  };
+
   return (
-    <div style={{ width: '42%', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--bg3)' }}>
+    <div style={{ width: '44%', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--bg3)' }}>
+      {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>✨ Draft with Ely</div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
-            {threadEmails.length > 1 ? `Reading thread (${threadEmails.length} emails)` : 'Reading email'}
+            {threadEmails.length > 1 ? `Thread: ${threadEmails.length} emails` : 'Single email'}
           </div>
         </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer' }}>✕</button>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {messages.map(msg => (
-          <div key={msg.id} style={{
-            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%',
-            background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg2)',
-            color: msg.role === 'user' ? '#fff' : 'var(--text)',
-            border: msg.role === 'system' ? '1px solid var(--border)' : 'none',
-            padding: '10px 13px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.65, whiteSpace: 'pre-wrap',
-          }}>{msg.content}</div>
+          <div key={msg.id}>
+            {/* User bubble */}
+            {msg.role === 'user' && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+              </div>
+            )}
+            {/* System bubble */}
+            {msg.role === 'system' && (
+              <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '9px 13px', borderRadius: 10, fontSize: 12, color: 'var(--text3)' }}>{msg.content}</div>
+            )}
+            {/* Ely response — split explanation and draft */}
+            {msg.role === 'ely' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Explanation */}
+                {msg.explanation && msg.explanation.length > 10 && (
+                  <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.65 }}>
+                    {msg.explanation}
+                  </div>
+                )}
+                {/* Draft box — highlighted, with actions */}
+                {msg.draft && (
+                  <div style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--blue)', background: 'rgba(79,127,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Draft reply</span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => navigator.clipboard.writeText(msg.draft)}
+                          style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, border: '1px solid var(--blue)', background: 'transparent', color: 'var(--blue)', cursor: 'pointer' }}>
+                          Copy
+                        </button>
+                        <button onClick={() => onUseDraft(msg.draft, false)}
+                          style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, border: 'none', background: 'var(--blue)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                          Use draft →
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ padding: '10px 13px', fontSize: 12.5, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{msg.draft}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ))}
-        {loading && <div style={{ alignSelf: 'flex-start', background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 12.5, color: 'var(--text3)' }}>✨ Reading & drafting…</div>}
+        {loading && (
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 12.5, color: 'var(--text3)' }}>
+            ✨ Reading & drafting…
+          </div>
+        )}
         <div ref={endRef} />
       </div>
-      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
-        <input value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); }}}
-          placeholder="Adjust tone, add something…"
-          style={{ flex: 1, padding: '8px 10px', fontSize: 12.5, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
-        <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12 }}>Send</button>
+
+      {/* Input */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 7, flexShrink: 0, alignItems: 'flex-end' }}>
+        <button onClick={toggleVoice} title="Voice input" style={{
+          width: 34, height: 34, borderRadius: '50%', border: `1.5px solid ${listening ? 'var(--red)' : 'var(--border)'}`,
+          background: listening ? 'var(--red-bg)' : 'var(--bg2)', cursor: 'pointer', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
+          color: listening ? 'var(--red)' : 'var(--text3)',
+        }}>
+          {listening ? '⏹' : '🎤'}
+        </button>
+        <textarea value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
+          placeholder={listening ? 'Listening…' : 'Ask Ely to adjust, change tone…'}
+          rows={2}
+          style={{ flex: 1, padding: '8px 10px', fontSize: 12.5, resize: 'none', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }} />
+        <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12, height: 34, alignSelf: 'flex-end' }}>Send</button>
       </div>
     </div>
   );
@@ -400,7 +496,7 @@ export default function Inbox({ onOpenComposer }) {
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
       if (folder === 'Sent')    q = q.eq('is_sent', true);
-      if (folder === 'Inbox')   q = q.not('is_draft', 'eq', true).not('is_sent', 'eq', true);
+      if (folder === 'Inbox')   q = q.or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false');
       const { data, error } = await q;
       if (error) throw error;
       setEmails(data || []);
