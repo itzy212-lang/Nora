@@ -4,45 +4,44 @@ import DraftCard from './DraftCard';
 
 function stripHtml(html = '') {
   const div = document.createElement('div');
-  div.innerHTML = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<\/div>/gi, '\n');
+  div.innerHTML = String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n');
+
   return div.innerText || div.textContent || '';
 }
 
 export function normaliseDraftText(raw = '') {
-  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  let text = String(raw || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
 
   if (!text) return '';
 
-  // Remove markdown fences if the model produced them.
-  text = text.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim();
+  text = text
+    .replace(/^```[a-z]*\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
 
-  // Keep only the actual draft where possible.
-  const draftMarkers = [
-    /\bSubject\s*:/i,
-    /\bDear\s+[A-Z]/i,
-    /\bHi\s+[A-Z]/i,
-    /\bHello\s+[A-Z]/i,
-  ];
-
-  const positions = draftMarkers
+  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z]/i, /\bHi\s+[A-Z]/i, /\bHello\s+[A-Z]/i];
+  const indexes = markers
     .map(rx => {
-      const m = text.match(rx);
-      return m ? m.index : -1;
+      const match = text.match(rx);
+      return match ? match.index : -1;
     })
-    .filter(i => i >= 0);
+    .filter(index => index >= 0);
 
-  if (positions.length) {
-    const first = Math.min(...positions);
-    text = text.slice(first).trim();
-  }
+  if (indexes.length) text = text.slice(Math.min(...indexes)).trim();
 
-  // Remove AI explanation sections if they somehow remain before the draft.
   text = text
     .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
     .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
+    .replace(/^Draft\s*:\s*/i, '')
     .trim();
 
-  // Add missing line breaks around common email structure.
   text = text
     .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
     .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
@@ -54,10 +53,27 @@ export function normaliseDraftText(raw = '') {
     .replace(/([.!?])\s+(As\s+stipulated|Under\s+section|However,|I have also|Should you|Kind regards,|Best regards,|Regards,)/g, '$1\n\n$2')
     .replace(/\s*(Kind regards,|Best regards,|Regards,)\s*/i, '\n\n$1\n')
     .replace(/\[Your Name\]|\[Your Position\]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   return text;
+}
+
+export function splitSubjectFromDraft(raw = '') {
+  const draft = normaliseDraftText(raw);
+  const subjectMatch = draft.match(/^Subject\s*:\s*(.+)$/im);
+
+  if (!subjectMatch) {
+    return { subject: '', body: draft, full: draft };
+  }
+
+  return {
+    subject: subjectMatch[1].trim(),
+    body: draft.replace(/^Subject\s*:\s*.+\n*/im, '').trim(),
+    full: draft,
+  };
 }
 
 async function copyToClipboard(text) {
@@ -89,18 +105,15 @@ async function copyToClipboard(text) {
 
 export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   const isUser = msg.role === 'user';
-  const isDraftOnly = msg.messageType === 'draft';
+  const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
 
   const replyText = msg.content || msg.reply || '';
-  const rawDraft = msg.draft || msg.documentText || (isDraftOnly ? replyText : '');
-  const draftText = normaliseDraftText(rawDraft);
-  const actionText = draftText || stripHtml(renderMarkdown(replyText));
-  const showActions = !isUser && actionText.trim().length > 0 && (isDraftOnly || msg.draft);
+  const draftText = normaliseDraftText(msg.draft || msg.documentText || (isDraft ? replyText : ''));
+  const actionText = isDraft ? draftText : '';
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(actionText);
-
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
@@ -108,19 +121,13 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   };
 
   const handleCompose = () => {
-    const body = actionText.trim();
-
+    const { subject, body } = splitSubjectFromDraft(actionText);
     if (!body) return;
-
-    const subjectMatch = body.match(/^Subject\s*:\s*(.+)$/im);
-    const bodyWithoutSubject = subjectMatch
-      ? body.replace(/^Subject\s*:\s*.+\n*/im, '').trim()
-      : body;
 
     onOpenInComposer?.({
       mode: 'compose',
-      body: bodyWithoutSubject,
-      subject: msg.subject || subjectMatch?.[1]?.trim() || '',
+      body,
+      subject: msg.subject || subject || '',
       to: msg.to || msg.recipient?.email || '',
       projectId: msg.projectId || msg.project_id || '',
     });
@@ -128,39 +135,20 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-      <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraftOnly ? 'draft-only' : ''}`}>
+      <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
         {isUser ? (
           msg.content
-        ) : isDraftOnly ? (
-          <pre
-            style={{
-              margin: 0,
-              whiteSpace: 'pre-wrap',
-              fontFamily: 'inherit',
-              fontSize: 'inherit',
-              lineHeight: 1.65,
-            }}
-          >
+        ) : isDraft ? (
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 1.65 }}>
             {draftText}
           </pre>
         ) : (
-          <div
-            className="ely-md"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-          />
+          <div className="ely-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(replyText) }} />
         )}
       </div>
 
-      {showActions && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 6,
-            flexWrap: 'wrap',
-            marginTop: 7,
-            marginLeft: isUser ? 0 : 4,
-          }}
-        >
+      {isDraft && actionText.trim().length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
           <button
             type="button"
             onClick={handleCopy}
@@ -175,7 +163,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
               fontWeight: 500,
             }}
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? 'Copied' : 'Copy draft'}
           </button>
 
           <button
@@ -192,12 +180,12 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
               fontWeight: 500,
             }}
           >
-            Compose email
+            Open in email composer
           </button>
         </div>
       )}
 
-      {!isUser && !isDraftOnly && msg.draft && (
+      {!isUser && !isDraft && msg.draft && (
         <DraftCard
           draft={draftText || msg.draft}
           draftType={msg.draftType}
@@ -208,18 +196,20 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
 
       {msg.suggestedActions?.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          {msg.suggestedActions.map((a, i) => (
-            <span key={i} style={{
-              fontSize: 11,
-              padding: '3px 9px',
-              borderRadius: 99,
-              cursor: 'pointer',
-              border: '1px solid var(--border)',
-              background: 'var(--bg4)',
-              color: 'var(--text2)',
-              transition: 'all 0.15s',
-            }}>
-              {a}
+          {msg.suggestedActions.map((action, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize: 11,
+                padding: '3px 9px',
+                borderRadius: 99,
+                cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: 'var(--bg4)',
+                color: 'var(--text2)',
+              }}
+            >
+              {action}
             </span>
           ))}
         </div>
