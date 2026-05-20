@@ -43,6 +43,7 @@ function normaliseAO(ao = {}, index = 0) {
 
 function normaliseProject(project = {}) {
   const aos = Array.isArray(project.aos) ? project.aos : [];
+
   return {
     id: project.id || null,
     ref: first(project.ref, project.reference, project.project_ref),
@@ -86,17 +87,21 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     const projects = state.projects || [];
     const currentProject = state.currentProject || state.selectedProject || null;
     const targetId = explicitProjectId || projectId || currentProject?.id || null;
+
     if (targetId) {
       const fromList = projects.find(p => p.id === targetId);
       if (fromList) return fromList;
       if (currentProject?.id === targetId) return currentProject;
     }
+
     if (currentProject?.id) return currentProject;
+
     return null;
   }, [state.projects, state.currentProject, state.selectedProject, projectId]);
 
   const buildProjectsContext = useCallback(() => {
     const projects = state.projects || [];
+
     return projects
       .filter(p => p.status !== 'complete' && p.status !== 'archived')
       .slice(0, 20)
@@ -114,7 +119,13 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           boEmail2: np.building_owner.email2,
           works: np.works,
           aoCount: np.aoCount,
-          aos: np.aos.map(ao => ({ name: ao.name, name2: ao.name2, premise: ao.premise, status: ao.status, surveyor: ao.surveyor })),
+          aos: np.aos.map(ao => ({
+            name: ao.name,
+            name2: ao.name2,
+            premise: ao.premise,
+            status: ao.status,
+            surveyor: ao.surveyor,
+          })),
         };
       });
   }, [state.projects]);
@@ -127,21 +138,31 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
 
   const buildRecentEmails = useCallback(() => {
     const emails = state.emails || [];
-    return emails.slice(0, 8).map(e => ({
-      id: e.id || e.external_id || '',
-      project_id: e.project_id || '',
-      from: first(e.from_email, e.sender_email, e.from),
-      from_name: first(e.from, e.sender_name),
-      subject: e.subject || '',
-      date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB') : '',
-      preview: first(e.body_preview, e.preview),
-    }));
+
+    return emails
+      .slice(0, 8)
+      .map(e => ({
+        id: e.id || e.external_id || '',
+        project_id: e.project_id || '',
+        from: first(e.from_email, e.sender_email, e.from),
+        from_name: first(e.from, e.sender_name),
+        subject: e.subject || '',
+        date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB') : '',
+        preview: first(e.body_preview, e.preview),
+      }));
   }, [state.emails]);
 
   const send = useCallback(async (prompt, extraOpts = {}) => {
     setLoading(true);
     setError(null);
-    const effectiveProjectId = extraOpts.projectId || projectId || state.currentProject?.id || state.selectedProject?.id || null;
+
+    const effectiveProjectId =
+      extraOpts.projectId ||
+      projectId ||
+      state.currentProject?.id ||
+      state.selectedProject?.id ||
+      null;
+
     const userMsg = { role: 'user', content: prompt };
     const currentHistory = [...chatHistory, userMsg];
     const currentProject = buildCurrentProject(effectiveProjectId);
@@ -159,22 +180,33 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         emailContext: extraOpts.emailContext || null,
         emailId: extraOpts.emailId || null,
         threadId: extraOpts.threadId || null,
+
         context: {
           currentProject,
           projectsContext,
           recentEmails,
           currentView: state.currentView || null,
           activeProjectId: effectiveProjectId,
+          mainChatWorkflow: extraOpts.mainChatWorkflow || null,
           ...(extraOpts.context || {}),
         },
+
         chatHistory: currentHistory.slice(-16),
         projectsContext,
         currentProject,
         recentEmails,
+
         ...extraOpts,
       });
+
       if (result.sessionId) setSessionId(result.sessionId);
-      setChatHistory(prev => [...prev, userMsg, { role: 'ely', content: result.reply || result.replyText || '' }].slice(-30));
+
+      setChatHistory(prev => [
+        ...prev,
+        userMsg,
+        { role: 'ely', content: result.reply || result.replyText || '' },
+      ].slice(-30));
+
       return {
         ...result,
         reply: result.reply || result.replyText || '',
@@ -183,6 +215,8 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         recipient: result.recipient || null,
         selectedAO: result.selectedAO || null,
         recipientSuggestions: result.recipientSuggestions || [],
+        projectId: effectiveProjectId,
+        currentProject,
       };
     } catch (err) {
       setError(err.message);
@@ -190,7 +224,19 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     } finally {
       setLoading(false);
     }
-  }, [surface, sessionId, projectId, state.currentUser, state.currentProject, state.selectedProject, state.currentView, chatHistory, buildProjectsContext, buildCurrentProject, buildRecentEmails]);
+  }, [
+    surface,
+    sessionId,
+    projectId,
+    state.currentUser,
+    state.currentProject,
+    state.selectedProject,
+    state.currentView,
+    chatHistory,
+    buildProjectsContext,
+    buildCurrentProject,
+    buildRecentEmails,
+  ]);
 
   const resetSession = useCallback(() => {
     setSessionId(null);
