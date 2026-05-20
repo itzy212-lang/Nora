@@ -306,7 +306,6 @@ export default function NewProjectModal({ onClose, onCreated }) {
         appointment_role: form.role,
         status: 'active',
 
-        address: appointmentAddress || null,
         appointment_address: appointmentAddress || null,
         appointment_name: appointmentName || null,
 
@@ -320,6 +319,9 @@ export default function NewProjectModal({ onClose, onCreated }) {
         bo_2_name: form.bo2.name.trim() || null,
         bo_2_email: form.bo2.email.trim() || null,
         bo_2_phone: form.bo2.phone.trim() || null,
+
+        ao_premise_address: aoPremise || null,
+        ao_service_address: aoService || aoPremise || null,
 
         aos: isAO ? [buildAORecord(form, aoService || aoPremise)] : [],
 
