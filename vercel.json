@@ -16,5 +16,10 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/generate-doc.js": { "maxDuration": 60 },
+    "api/send-loa.js":     { "maxDuration": 60 },
+    "api/ely-smart.js":    { "maxDuration": 60 }
+  }
 }
