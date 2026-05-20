@@ -214,7 +214,15 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    const fullReply = data.choices?.[0]?.message?.content || '';
+    // Strip em dashes regardless of whether GPT followed the instruction
+    const rawReply = data.choices?.[0]?.message?.content || '';
+    const fullReply = rawReply
+      .replace(/—/g, ' - ')    // em dash → spaced hyphen
+      .replace(/–/g, '-')       // en dash → hyphen
+      .replace(/--/g, '-')           // double hyphen → single
+      .replace(/pre-existing/gi, 'preexisting')  // common hyphenation fix
+      .replace(/co-ordinate/gi, 'coordinate')
+      .replace(/e-mail/gi, 'email');
 
     // Parse replyText and documentText if the response contains them
     let replyText = fullReply;
