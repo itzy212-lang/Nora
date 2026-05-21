@@ -25,6 +25,8 @@ const aoSurvPhone = ao => ao?.surv_phone || ao?.surveyorPhone || '';
 const aoConsent = ao => ao?.consent_deadline || ao?.consentDeadline || '';
 const aoNotice = ao => ao?.notice_served_date || ao?.noticeServedDate || '';
 const aoS10 = ao => ao?.s10_deadline || ao?.s10Deadline || '';
+const aoS10Served = ao => ao?.s10_served_date || ao?.s10ServedDate || '';
+const ao104BServed = ao => ao?.s104b_served_date || ao?.s104bServedDate || '';
 const aoName2 = ao => ao?.name2 || '';
 
 const STAGES = ['Notice served', 'Consent', 'Appt made', 'Award', 'Complete'];
@@ -46,6 +48,16 @@ function fmtDate(d) {
 function daysUntil(d) {
   if (!d) return null;
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
+}
+
+function addDaysIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function todayISODate() {
@@ -883,6 +895,48 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
   );
 }
 
+
+function getAOWorkflowAction(ao, projectRole = 'BO') {
+  const st = (ao.status || '').toLowerCase();
+  const noticed = !!aoNotice(ao);
+  const consentDeadlineDays = daysUntil(aoConsent(ao));
+  const s10DeadlineDays = daysUntil(aoS10(ao));
+  const s10Served = !!aoS10Served(ao);
+  const s104bServed = !!ao104BServed(ao);
+
+  if (projectRole === 'AO' && ao?.appointed_by_me) {
+    return { label: 'Your AO client', action: null, colour: '#a855f7', active: false };
+  }
+
+  if (st === 'consent') return { label: 'Consent received', action: null, colour: 'var(--green)', active: false };
+  if (st === 'dissent' && ao.agreed_surveyor) return { label: 'Agreed surveyor', action: null, colour: 'var(--green)', active: false };
+  if (st === 'dissent') return { label: 'Dissent received', action: null, colour: 'var(--amber)', active: false };
+
+  if (s104bServed || st === 's104b') {
+    return { label: '10(4)(b) served', action: null, colour: 'var(--green)', active: false };
+  }
+
+  if (s10Served || st === 's10') {
+    if (s10DeadlineDays !== null && s10DeadlineDays <= 0) {
+      return { label: 'Serve 10(4)(b) papers', action: 'serve104b', colour: 'var(--red)', active: true };
+    }
+    return {
+      label: s10DeadlineDays === null ? 'Section 10 served' : s10DeadlineDays === 0 ? 'S.10 deadline today' : `S.10 deadline — ${s10DeadlineDays}d`,
+      action: null,
+      colour: 'var(--green)',
+      active: false,
+    };
+  }
+
+  if (noticed && consentDeadlineDays !== null && consentDeadlineDays <= 0) {
+    return { label: 'Serve Section 10', action: 'serveS10', colour: 'var(--red)', active: true };
+  }
+
+  if (noticed) return { label: 'Notice served', action: null, colour: 'var(--green)', active: false };
+
+  return { label: 'Serve notice', action: 'serveNotice', colour: 'var(--blue)', active: true };
+}
+
 function AOCard({
   ao,
   projectRole,
@@ -1165,6 +1219,104 @@ function AOCard({
   );
 }
 
+
+function S104BSurveyorModal({ ao, onSave, onClose }) {
+  const [form, setForm] = useState({
+    name: aoSurvName(ao || ''),
+    firm: aoSurvFirm(ao || ''),
+    email: aoSurvEmail(ao || ''),
+    phone: aoSurvPhone(ao || ''),
+  });
+  const [third, setThird] = useState({
+    name: ao?.third_surveyor_name || '',
+    firm: ao?.third_surveyor_firm || '',
+    email: ao?.third_surveyor_email || '',
+    phone: ao?.third_surveyor_phone || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const setSurveyor = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const setThirdSurveyor = (k, v) => setThird(prev => ({ ...prev, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.name?.trim()) {
+      alert('Please enter the surveyor name.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await maybeSaveSurveyor(form);
+      await maybeSaveSurveyor(third);
+      await onSave({ surveyor: form, third });
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Could not save 10(4)(b) surveyor details.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Serve 10(4)(b) papers" onClose={onClose}>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{
+          background: 'var(--amber-bg)',
+          border: '1px solid var(--amber)',
+          color: 'var(--amber)',
+          borderRadius: 14,
+          padding: '10px 14px',
+          fontSize: 13,
+          lineHeight: 1.55,
+        }}>
+          Enter the surveyor details to be used for the Section 10(4)(b) appointment papers.
+          Start typing a surveyor name to search existing contacts, or enter the details manually.
+        </div>
+
+        <div style={mSection}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            marginBottom: 12,
+          }}>
+            Surveyor details
+          </div>
+
+          <SurveyorBlock title="Surveyor appointed under Section 10(4)(b)" form={form} set={setSurveyor} />
+        </div>
+
+        <div style={mSection}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            marginBottom: 12,
+          }}>
+            Third surveyor details
+          </div>
+
+          <SurveyorBlock title="Third surveyor" form={third} set={setThirdSurveyor} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+            Cancel
+          </button>
+
+          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+            {saving ? 'Saving…' : 'Save and prepare 10(4)(b) papers'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+
 function ProjectChat({ project, onOpenComposer }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -1278,6 +1430,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showProjectEdit, setShowProjectEdit] = useState(false);
   const [editingAO, setEditingAO] = useState(null);
   const [showAddAO, setShowAddAO] = useState(false);
+  const [s104bAO, setS104bAO] = useState(null);
 
   const windowWidth = useWindowWidth();
 
@@ -1651,6 +1804,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           ao={{}}
           onSave={form => handleSaveAO(form, null)}
           onClose={() => setShowAddAO(false)}
+        />
+      )}
+
+
+      {s104bAO && (
+        <S104BSurveyorModal
+          ao={s104bAO}
+          onSave={handleSave104BSurveyorDetails}
+          onClose={() => setS104bAO(null)}
         />
       )}
 
