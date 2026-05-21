@@ -92,6 +92,10 @@ export default function ProjectDetailNoticeWorkflow(props) {
     const button = event.target?.closest?.('button');
     if (!button) return;
 
+    if (button.closest('[data-notice-serving-modal="true"]')) {
+      return;
+    }
+
     const label = (button.textContent || '').trim().toLowerCase();
     if (label !== 'serve notice') return;
 
@@ -107,13 +111,15 @@ export default function ProjectDetailNoticeWorkflow(props) {
   return (
     <div style={{ position: 'relative' }} onClickCapture={handleClickCapture}>
       {noticeAO !== undefined && (
-        <NoticeServingModal
-          project={projectForChild}
-          initialAO={noticeAO}
-          generateDocument={generateDocument}
-          onServed={handleNoticeServed}
-          onClose={closeNoticeModal}
-        />
+        <div data-notice-serving-modal="true">
+          <NoticeServingModal
+            project={projectForChild}
+            initialAO={noticeAO}
+            generateDocument={generateDocument}
+            onServed={handleNoticeServed}
+            onClose={closeNoticeModal}
+          />
+        </div>
       )}
 
       <ProjectDetail {...props} project={projectForChild} />
