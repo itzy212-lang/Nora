@@ -1975,7 +1975,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const nonS10Sections = sections.filter(s => ['s1', 's3', 's6'].includes(s));
     if (nonS10Sections.length > 0) {
       const deadline = addDaysIso(14);
-      await updateAOById(ao, {
+      await updateAORecord(ao, {
         status: 'notice_served',
         notice_served_date: noticeDate,
         noticeServedDate: noticeDate,
@@ -1994,7 +1994,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     if (sections.includes('s10')) {
       const deadline = addDaysIso(10);
-      await updateAOById(ao, {
+      await updateAORecord(ao, {
         status: 's10',
         s10_served_date: noticeDate,
         s10ServedDate: noticeDate,
@@ -2012,7 +2012,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
 
     alert(generatedDocs.length > 1 ? 'Notice pack generated and served.' : 'Notice generated and served.');
-  }, [project, generateDocument, saveNoticeRecord, updateAOById, createProjectTask]);
+  }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
   const handleServeNotice = useCallback(async (ao) => {
     await updateAORecord(ao, {
