@@ -13,7 +13,7 @@ import LoginScreen from './components/layout/LoginScreen';
 
 // Features
 import ProjectList from './components/projects/ProjectList';
-import ProjectDetail from './components/projects/ProjectDetail';
+import ProjectDetail from './components/projects/ProjectDetailNoticeWorkflow';
 import Inbox from './components/email/Inbox';
 import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
@@ -43,10 +43,9 @@ export default function App() {
   const [projectView, setProjectView]       = useState(null);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [composerOpts, setComposerOpts]     = useState(null);
-  const [invoiceProject, setInvoiceProject] = useState(null); // project data to pre-fill invoice
-  const [socProjectId, setSocProjectId]     = useState(null); // project to pre-select in SOC
+  const [invoiceProject, setInvoiceProject] = useState(null);
+  const [socProjectId, setSocProjectId]     = useState(null);
 
-  // Auth
   useEffect(() => {
     if (!sb) { setAuthChecked(true); return; }
     sb.auth.getSession().then(({ data: { session } }) => {
@@ -61,7 +60,10 @@ export default function App() {
   }, [dispatch]);
 
   useEffect(() => {
-    if (currentUser) { loadProjects(); loadEmails(); }
+    if (currentUser) {
+      loadProjects();
+      loadEmails();
+    }
   }, [currentUser?.id]);
 
   const handleNavigate = useCallback((view) => {
@@ -82,17 +84,20 @@ export default function App() {
     }
   }, [setCurrentProject]);
 
-  const openComposer  = useCallback((opts) => setComposerOpts(opts || { mode: 'compose' }), []);
-  const closeComposer = useCallback(() => setComposerOpts(null), []);
+  const openComposer = useCallback((opts) => {
+    setComposerOpts(opts || { mode: 'compose' });
+  }, []);
 
-  // Raise invoice — from sidebar or from project
+  const closeComposer = useCallback(() => {
+    setComposerOpts(null);
+  }, []);
+
   const handleRaiseInvoice = useCallback((projectData = null) => {
     setInvoiceProject(projectData);
     setCurrentView('accounting');
     setProjectView(null);
   }, []);
 
-  // Open SOC — from project (pre-selects project) or from sidebar
   const handleOpenSOC = useCallback((project = null) => {
     setSocProjectId(project?.id || null);
     setCurrentView('soc');
@@ -120,7 +125,10 @@ export default function App() {
       return (
         <ProjectDetail
           project={projectView}
-          onBack={() => { setProjectView(null); clearCurrentProject(); }}
+          onBack={() => {
+            setProjectView(null);
+            clearCurrentProject();
+          }}
           onOpenComposer={openComposer}
           onRaiseInvoice={handleRaiseInvoice}
           onOpenSOC={handleOpenSOC}
@@ -157,7 +165,7 @@ export default function App() {
           <SOC
             onOpenComposer={openComposer}
             defaultProjectId={socProjectId}
-            key={socProjectId} // remount when project changes
+            key={socProjectId}
           />
         );
       case 'leads':
@@ -175,7 +183,13 @@ export default function App() {
     return (
       <>
         <MainChat onOpenComposer={openComposer} />
-        {composerOpts && <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />}
+        {composerOpts && (
+          <EmailComposer
+            opts={composerOpts}
+            onClose={closeComposer}
+            onSent={closeComposer}
+          />
+        )}
       </>
     );
   }
@@ -183,10 +197,17 @@ export default function App() {
   return (
     <div className="app">
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
+
       <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{
-        width: 216, minWidth: 216, background: 'var(--bg2)',
-        borderRight: '1px solid var(--border)', display: 'flex',
-        flexDirection: 'column', zIndex: 50, overflowY: 'auto', transition: 'transform 0.3s',
+        width: 216,
+        minWidth: 216,
+        background: 'var(--bg2)',
+        borderRight: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 50,
+        overflowY: 'auto',
+        transition: 'transform 0.3s',
       }}>
         <Sidebar
           currentView={currentView}
@@ -195,11 +216,26 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
         />
       </div>
+
       <div className="main">
-        <TopBar currentView={currentView} onMenuToggle={() => setSidebarOpen(v => !v)} onNavigate={handleNavigate} />
-        <div className="content">{renderContent()}</div>
+        <TopBar
+          currentView={currentView}
+          onMenuToggle={() => setSidebarOpen(v => !v)}
+          onNavigate={handleNavigate}
+        />
+
+        <div className="content">
+          {renderContent()}
+        </div>
       </div>
-      {composerOpts && <EmailComposer opts={composerOpts} onClose={closeComposer} onSent={closeComposer} />}
+
+      {composerOpts && (
+        <EmailComposer
+          opts={composerOpts}
+          onClose={closeComposer}
+          onSent={closeComposer}
+        />
+      )}
     </div>
   );
 }
