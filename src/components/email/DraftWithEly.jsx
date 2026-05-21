@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
-import ChatMessage from '../chat/ChatMessage';
+import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
 
@@ -9,7 +9,7 @@ import { uid } from '../../utils/formatters';
  * DraftWithEly — slide-in panel for drafting emails with Ely.
  * On open: automatically reads the email thread.
  * Subsequent turns: collaborative_reply_assistant mode.
- * "Use this draft" button sends draft text back to composer.
+ * "Use this draft" button sends clean draft text back to composer.
  */
 export default function DraftWithEly({ email, threadId, projectId, onUseDraft, onClose }) {
   const { state } = useApp();
@@ -45,11 +45,26 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     voiceBaseRef.current = '';
   }, []);
 
+  const applyDraftToComposer = useCallback((draftInput) => {
+    const raw = typeof draftInput === 'string'
+      ? draftInput
+      : draftInput?.body || draftInput?.draft || draftInput?.documentText || draftInput?.content || '';
+
+    const { body } = splitSubjectFromDraft(raw);
+    const cleanBody = normaliseDraftText(body || raw);
+
+    if (!cleanBody) return;
+
+    onUseDraft?.(cleanBody);
+    stopVoice();
+    onClose?.();
+  }, [onUseDraft, onClose, stopVoice]);
+
   useEffect(() => {
     if (!email || initialized) return;
     setInitialized(true);
     autoSummarise();
-  }, [email]);
+  }, [email, initialized]);
 
   const autoSummarise = useCallback(async () => {
     setLoading(true);
@@ -57,6 +72,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     try {
       const result = await send('', {
         mode: 'email_thread_summary',
+        workflowStage: 'summary',
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
         projectId,
@@ -107,6 +123,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     try {
       const result = await send(text, {
         mode: 'collaborative_reply_assistant',
+        workflowStage: 'discussion_or_draft',
         sessionId,
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
@@ -183,7 +200,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
           {loading && messages.length === 0 && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '12px 0' }}>
               <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>✨</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text2)' }}>Reading email thread…</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)' }}>Reading email thread...</div>
               <div style={{ display: 'flex', gap: 3 }}>
                 {[0,1,2].map(i => (
                   <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--blue)', animation: 'blink 1.2s infinite', animationDelay: `${i*0.2}s` }} />
@@ -196,8 +213,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
             <ChatMessage
               key={msg.id}
               msg={msg}
-              onUseDraft={onUseDraft}
-              onOpenInComposer={onUseDraft}
+              onUseDraft={applyDraftToComposer}
+              onOpenInComposer={applyDraftToComposer}
             />
           ))}
 
