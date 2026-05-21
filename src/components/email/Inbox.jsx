@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import VoiceInput from '../shared/VoiceInput';
+import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -104,7 +105,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
   useEffect(() => {
-    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,signature_b64').limit(1)
+    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,email,tel,address_line1,address_line2,city,postcode,website,signature_b64,logo_base64,accreditation_b64').limit(1)
       .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
   }, []);
 
@@ -121,7 +122,19 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
       : stripHtml(email.body || email.body_preview || '');
 
     const sigNote = firmSettings ? 'The sender has a signature — do NOT add a sign-off or name.' : '';
-    const prompt = `Read this ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'}, give me a 2-sentence summary, then draft a reply between --- markers. ${sigNote}`;
+    const prompt = `Read this ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'} carefully.
+
+First provide a clear mobile-friendly synopsis only, using short headings and bullet points:
+WHO IS INVOLVED
+LATEST POSITION
+KEY ISSUES / ACTIONS
+IMPORTANT EARLIER CONTEXT
+TONE / DYNAMICS
+SUGGESTED APPROACH
+
+Do not include a draft unless the user asks for one. If a draft is requested later, provide one single draft only under a clear DRAFT REPLY heading.
+
+Use "the Act" for normal correspondence, or "Party Wall Act" if more formal. Do not write "Party Wall etc. Act 1996" in conversational drafts. ${sigNote}`;
 
     callEly(prompt, fullThread, true);
   }, [email, threadEmails, firmSettings]);
@@ -178,7 +191,12 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
       const reply = data.reply || data.replyText || 'Could not generate a draft.';
       const draft = data.documentText || extractDraft(reply);
       const explanation = draft
-        ? (data.replyText !== reply ? data.replyText : reply.replace(/---[\s\S]*?---/, '').trim())
+        ? (data.replyText && data.replyText !== reply
+          ? data.replyText
+          : reply
+              .replace(/---[\s\S]*?---/, '')
+              .replace(/(?:^|\n)\s*(?:DRAFT REPLY|SUGGESTED DRAFT|SUGGESTED REPLY|DRAFT)\s*:?\s*[\s\S]*$/i, '')
+              .trim())
         : reply;
 
       const msgId = Date.now() + 1;
@@ -440,9 +458,17 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,email,tel,address_line1,address_line2,city,postcode,signature_b64,logo_base64').limit(1)
+    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,email,tel,address_line1,address_line2,city,postcode,website,signature_b64,logo_base64,accreditation_b64').limit(1)
       .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
   }, []);
+
+  useEffect(() => {
+    if (prefillTo) setTo(prefillTo);
+    if (prefillSubject) setSubject(prefillSubject);
+    if (typeof prefillBody === 'string' && prefillBody.trim()) setBody(prefillBody);
+  }, [prefillBody, prefillTo, prefillSubject]);
+
+  const signatureHtml = firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
 
   const handleSend = async () => {
     if (!to.trim() || !body.trim()) return;
@@ -512,6 +538,15 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 placeholder="Type your reply here, or use ✨ Draft with Ely…"
                 style={{ ...inp, flex: 1, minHeight: 320, resize: 'vertical', lineHeight: 1.7 }} />
             </div>
+            {firmSettings && includeSignature && signatureHtml && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ width: 52, flexShrink: 0 }} />
+                <div
+                  style={{ flex: 1, padding: '10px 14px', background: '#fff', borderRadius: 10, border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.8, overflowX: 'auto' }}
+                  dangerouslySetInnerHTML={{ __html: signatureHtml }}
+                />
+              </div>
+            )}
             {threadEmails.length > 1 && (
               <details style={{ marginTop: 4 }}>
                 <summary style={{ fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none' }}>Show thread ({threadEmails.length} emails)</summary>
@@ -528,29 +563,6 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
           </div>
           {/* Signature + checkboxes + attach */}
           <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-
-            {/* Signature preview */}
-            {firmSettings && includeSignature && (
-              <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 10, fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.8 }}>
-                {firmSettings.logo_base64 && (
-                  <img src={`data:image/png;base64,${firmSettings.logo_base64}`} alt="Logo" style={{ maxHeight: 50, display: 'block', marginBottom: 6 }} />
-                )}
-                {firmSettings.signature_b64
-                  ? <img src={`data:image/png;base64,${firmSettings.signature_b64}`} alt="Signature" style={{ maxHeight: 90, maxWidth: '100%', display: 'block' }} />
-                  : (
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{firmSettings.surveyor_name}</div>
-                      {firmSettings.qualifications && <div style={{ fontSize: 12 }}>{firmSettings.qualifications}</div>}
-                      {firmSettings.tel && <div>Tel | {firmSettings.tel}</div>}
-                      {firmSettings.email && <div>Email | {firmSettings.email}</div>}
-                      {[firmSettings.address_line1, firmSettings.city, firmSettings.postcode].filter(Boolean).join(' | ') && (
-                        <div>{[firmSettings.address_line1, firmSettings.city, firmSettings.postcode].filter(Boolean).join(' | ')}</div>
-                      )}
-                    </div>
-                  )
-                }
-              </div>
-            )}
 
             {/* Checkboxes */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
@@ -598,7 +610,14 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
             </div>
           </div>
         </div>
-        {showEly && <ElyDraftPanel email={email} threadEmails={threadEmails} onUseDraft={handleElyDraft} onClose={() => setShowEly(false)} />}
+        {showEly && (
+          <DraftWithElyOverlay
+            email={email}
+            threadEmails={threadEmails}
+            onUseDraft={(draft) => handleElyDraft(draft, true)}
+            onClose={() => setShowEly(false)}
+          />
+        )}
       </div>
     </div>
   );
@@ -1011,7 +1030,17 @@ export default function Inbox({ onOpenComposer }) {
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', background: 'var(--bg)' }}>
       {replyOverlay && selectedEmail && (
-        <ReplyOverlay email={selectedEmail} mode={replyOverlay.mode} threadEmails={threadEmails} initialOpenEly={replyOverlay.openEly} onSend={handleSendReply} onClose={() => setReplyOverlay(null)} />
+        <ReplyOverlay
+          email={selectedEmail}
+          mode={replyOverlay.mode}
+          threadEmails={threadEmails}
+          prefillBody={replyOverlay.prefillBody}
+          prefillTo={replyOverlay.prefillTo}
+          prefillSubject={replyOverlay.prefillSubject}
+          initialOpenEly={replyOverlay.openEly}
+          onSend={handleSendReply}
+          onClose={() => setReplyOverlay(null)}
+        />
       )}
 
       {draftWithEly && selectedEmail && (
