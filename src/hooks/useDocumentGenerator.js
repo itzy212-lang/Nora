@@ -1,9 +1,46 @@
 // src/hooks/useDocumentGenerator.js
 import sb from '../supabaseClient';
 
-export default function useDocumentGenerator() {
+async function loadTemplate(templateKey) {
+  if (!templateKey) {
+    throw new Error('No template key supplied');
+  }
 
-  // ── Generate DOCX (and optionally PDF) ──────────────────────
+  const { data, error } = await sb
+    .from('document_templates')
+    .select('template_key,label,filename,file_b64,is_active')
+    .eq('template_key', templateKey)
+    .eq('is_active', true)
+    .limit(1);
+
+  if (error) {
+    throw new Error(`Unable to load template "${templateKey}": ${error.message}`);
+  }
+
+  const template = data?.[0];
+
+  if (!template) {
+    throw new Error(`No active template found for "${templateKey}"`);
+  }
+
+  if (!template.file_b64) {
+    throw new Error(`Template "${templateKey}" exists but has no file content`);
+  }
+
+  return template;
+}
+
+async function readJson(response) {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { error: text || `Server returned ${response.status}` };
+  }
+}
+
+export default function useDocumentGenerator() {
   const generateDocument = async ({
     templateKey,
     mergeData,
@@ -11,19 +48,11 @@ export default function useDocumentGenerator() {
     projectId = null,
   }) => {
     try {
-      // Fetch template from Supabase
-      const { data: template, error: templateError } = await sb
-        .from('document_templates')
-        .select('file_b64')
-        .eq('template_key', templateKey)
-        .single();
+      console.log('[generateDocument] start', { templateKey, fileName, projectId });
 
-      if (templateError || !template?.file_b64) {
-        throw new Error('Unable to load document template');
-      }
+      const template = await loadTemplate(templateKey);
 
-      // Inject project_id into merge data so server can save record
-      const enrichedMergeData = { ...mergeData };
+      const enrichedMergeData = { ...(mergeData || {}) };
       if (projectId) enrichedMergeData.project_id = projectId;
 
       const response = await fetch('/api/generate-doc', {
@@ -33,17 +62,27 @@ export default function useDocumentGenerator() {
           template_b64: template.file_b64,
           merge_data: enrichedMergeData,
           output_format: 'docx',
-        })
+        }),
       });
 
-      const result = await response.json();
+      const result = await readJson(response);
+
       if (!response.ok || !result?.success) {
-        throw new Error(result?.error || 'Document generation failed');
+        console.error('[generateDocument] /api/generate-doc failed', {
+          templateKey,
+          status: response.status,
+          result,
+        });
+
+        throw new Error(result?.error || `Document generation failed (${response.status})`);
       }
 
-      // Trigger DOCX download
       if (result.docx_b64) {
-        downloadB64(result.docx_b64, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        downloadB64(
+          result.docx_b64,
+          fileName,
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
       }
 
       return {
@@ -53,35 +92,24 @@ export default function useDocumentGenerator() {
         storage_path: result.storage_path || null,
         doc_id: result.doc_id || null,
       };
-
     } catch (error) {
-      console.error('generateDocument error:', error);
+      console.error('[generateDocument] error:', error);
       return { success: false, error: error.message };
     }
   };
 
-  // ── Send for e-signature via Firma ───────────────────────────
   const sendForSignature = async ({
     templateKey,
     mergeData,
     fileName = 'Letter of Appointment.pdf',
     projectId,
-    appointmentType, // 'bo_loa' | 'ao_loa' | 'ao_agreed_surveyor_loa'
-    signers,         // [{ name, email }] or [{ name, email }, { name, email }]
+    appointmentType,
+    signers,
   }) => {
     try {
-      // Step 1 — generate DOCX + PDF
-      const { data: template, error: templateError } = await sb
-        .from('document_templates')
-        .select('file_b64')
-        .eq('template_key', templateKey)
-        .single();
+      const template = await loadTemplate(templateKey);
 
-      if (templateError || !template?.file_b64) {
-        throw new Error('Unable to load document template');
-      }
-
-      const enrichedMergeData = { ...mergeData };
+      const enrichedMergeData = { ...(mergeData || {}) };
       if (projectId) enrichedMergeData.project_id = projectId;
 
       const genResponse = await fetch('/api/generate-doc', {
@@ -91,19 +119,19 @@ export default function useDocumentGenerator() {
           template_b64: template.file_b64,
           merge_data: enrichedMergeData,
           output_format: 'docx',
-        })
+        }),
       });
 
-      const genResult = await genResponse.json();
+      const genResult = await readJson(genResponse);
+
       if (!genResponse.ok || !genResult?.success) {
-        throw new Error(genResult?.error || 'Document generation failed');
+        throw new Error(genResult?.error || `Document generation failed (${genResponse.status})`);
       }
 
       if (!genResult.pdf_b64) {
-        throw new Error('PDF conversion failed — cannot send for signature without a PDF. Check API2PDF_API_KEY is set in Vercel.');
+        throw new Error('PDF conversion failed. Check API2PDF_API_KEY is set in Vercel.');
       }
 
-      // Step 2 — send to Firma
       const sigResponse = await fetch('/api/send-loa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,10 +142,11 @@ export default function useDocumentGenerator() {
           document_name: fileName.replace(/\.docx$/i, '.pdf'),
           pdf_b64: genResult.pdf_b64,
           signers,
-        })
+        }),
       });
 
-      const sigResult = await sigResponse.json();
+      const sigResult = await readJson(sigResponse);
+
       if (!sigResponse.ok || !sigResult?.success) {
         throw new Error(sigResult?.error || 'Failed to send for signature');
       }
@@ -127,9 +156,8 @@ export default function useDocumentGenerator() {
         signing_request_id: sigResult.signing_request_id,
         doc_id: genResult.doc_id || null,
       };
-
     } catch (error) {
-      console.error('sendForSignature error:', error);
+      console.error('[sendForSignature] error:', error);
       return { success: false, error: error.message };
     }
   };
@@ -137,16 +165,18 @@ export default function useDocumentGenerator() {
   return { generateDocument, sendForSignature };
 }
 
-// ── Helper ────────────────────────────────────────────────────
 function downloadB64(b64, fileName, mimeType) {
   const byteCharacters = atob(b64);
   const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
+
+  for (let i = 0; i < byteCharacters.length; i += 1) {
     byteNumbers[i] = byteCharacters.charCodeAt(i);
   }
+
   const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
+
   link.href = url;
   link.download = fileName;
   document.body.appendChild(link);
