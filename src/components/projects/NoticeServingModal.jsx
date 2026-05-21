@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 
 const NOTICE_TYPES = [
   { key: 'section_1', label: 'Section 1', templateKeys: ['s1', 'section_1', 'section_1_notice', 'notice_section_1'] },
@@ -8,7 +9,6 @@ const NOTICE_TYPES = [
 ];
 
 const aoAddress = ao => ao?.premise || ao?.reg_addr || ao?.address || '';
-const aoServiceAddress = ao => ao?.service_address || ao?.serviceAddress || ao?.reg_addr || aoAddress(ao);
 const aoKey = ao => String(ao?.id || ao?.num || `${ao?.name || ''}-${aoAddress(ao)}`);
 
 function todayISO() {
@@ -79,28 +79,21 @@ export default function NoticeServingModal({ project, initialAO = null, generate
   const tryGenerateNotice = async ({ ao, type }) => {
     const fileName = `${cleanFileName(project?.ref || 'Project')} - ${type.label} Notice - AO${ao.num || ''} ${cleanFileName(aoAddress(ao) || ao.name)}.docx`;
 
-    const mergeData = {
+    const mergeData = buildNoticePlaceholders(project, ao, {
+      noticeDate,
+      noticeType: type.label,
+      noticeSection: type.label,
+      notifiableWorks: works,
+    });
+
+    const enrichedMergeData = {
+      ...mergeData,
       project_id: project.id,
       ao_id: ao.id || String(ao.num || ''),
       file_name: fileName,
       category: 'notice',
       section_type: type.key,
-      notice_date: noticeDate,
-      notice_type: type.label,
-      notice_section: type.label,
-      notifiable_works: works,
-      works,
-      bo_name: project.bo || project.bo_1_name || '',
-      bo_1_name: project.bo_1_name || project.bo || '',
-      bo_2_name: project.bo_2_name || '',
-      bo_premise_address: project.bo_premise_address || project.address || '',
-      bo_service_address: project.bo_service_address || project.bo_address || project.bo_premise_address || project.address || '',
-      ao_name: ao.name || '',
-      ao_1_name: ao.name || '',
-      ao_2_name: ao.name2 || '',
-      ao_address: aoAddress(ao),
-      ao_premise_address: aoAddress(ao),
-      ao_service_address: aoServiceAddress(ao),
+      template_key: type.templateKeys[0],
       notice_cover_letter: includeCoverLetter ? 'Yes' : 'No',
     };
 
@@ -111,7 +104,7 @@ export default function NoticeServingModal({ project, initialAO = null, generate
 
       const result = await generateDocument({
         templateKey,
-        mergeData: { ...mergeData, template_key: templateKey },
+        mergeData: { ...enrichedMergeData, TEMPLATE_KEY: templateKey, template_key: templateKey },
         fileName,
         projectId: project.id,
       });
