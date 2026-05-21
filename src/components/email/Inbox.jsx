@@ -87,6 +87,8 @@ function extractDraft(text) {
 // Left: original email in full | Right: Ely collaboration with voice
 
 function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) {
+  const windowWidth = useWindowWidth();
+  const isMobile = isMobileWidth(windowWidth);
   const [messages, setMessages]       = useState([]);
   const [input, setInput]             = useState('');
   const [workingDraft, setWorkingDraft] = useState('');
@@ -272,13 +274,16 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
         </div>
       </div>
 
-      {/* Body — split screen */}
+      {/* Body — split screen on desktop, full screen chat on mobile */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LEFT — original email */}
+        {/* LEFT — original email — hidden on mobile */}
         <div style={{
-          width: '50%', display: 'flex', flexDirection: 'column',
-          borderRight: '1px solid var(--border)', overflow: 'hidden',
+          width: isMobile ? '0%' : '50%',
+          display: isMobile ? 'none' : 'flex',
+          flexDirection: 'column',
+          borderRight: '1px solid var(--border)',
+          overflow: 'hidden',
         }}>
           <div style={{
             padding: '12px 18px', borderBottom: '1px solid var(--border)',
@@ -300,8 +305,8 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
           </div>
         </div>
 
-        {/* RIGHT — Ely collaboration */}
-        <div style={{ width: '50%', display: 'flex', flexDirection: 'column', background: 'var(--bg3)', overflow: 'hidden' }}>
+        {/* RIGHT — Ely collaboration — full width on mobile */}
+        <div style={{ width: isMobile ? '100%' : '50%', display: 'flex', flexDirection: 'column', background: 'var(--bg3)', overflow: 'hidden' }}>
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -420,11 +425,21 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const [body, setBody]       = useState(prefillBody || '');
   const [showEly, setShowEly] = useState(false);
   const [sending, setSending] = useState(false);
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [createTask, setCreateTask]             = useState(false);
+  const [firmSettings, setFirmSettings]         = useState(null);
+
+  useEffect(() => {
+    sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,email,tel,address_line1,address_line2,city,postcode,signature_b64,logo_base64').limit(1)
+      .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
+  }, []);
 
   const handleSend = async () => {
     if (!to.trim() || !body.trim()) return;
     setSending(true);
-    try { await onSend({ to, cc, subject, body, replyToId: email?.id }); } catch {}
+    try {
+      await onSend({ to, cc, subject, body, replyToId: email?.id, includeSignature, createTask });
+    } catch {}
     setSending(false);
     onClose();
   };
