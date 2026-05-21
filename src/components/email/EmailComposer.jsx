@@ -3,37 +3,21 @@ import { useApp } from '../../state/appStore';
 import { useEmails } from '../../hooks/useEmails';
 import DraftWithEly from './DraftWithEly';
 import { uid, escapeHtml } from '../../utils/formatters';
+import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import sb from '../../supabaseClient';
-
-function buildSignatureHTML(settings) {
-  const name = settings.sigName || settings.name || '';
-  const quals = settings.sigQuals || settings.title || '';
-  const phone = settings.sigPhone || settings.phone || settings.mobile || '';
-  const email = settings.sigEmail || settings.email || '';
-  const address = settings.sigAddress || settings.address || '';
-  const logo = settings.sigFirmLogoData || settings.logoData || '';
-  let html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;border-top:1px solid #e5e7eb;margin-top:24px;padding-top:14px">';
-  if (name) html += `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${escapeHtml(name)}</div>`;
-  if (quals) html += `<div style="font-size:12px;color:#555;margin-bottom:10px">${escapeHtml(quals)}</div>`;
-  if (logo) html += `<div style="margin-bottom:10px"><img src="${logo}" style="max-height:50px;max-width:180px;object-fit:contain"></div>`;
-  const lines = [phone && `Tel | ${escapeHtml(phone)}`, email && `Email | ${escapeHtml(email)}`, address && escapeHtml(address)].filter(Boolean);
-  if (lines.length) html += `<div style="font-size:12.5px;color:#333;line-height:1.9">${lines.map(l => `<div>${l}</div>`).join('')}</div>`;
-  html += '</div>';
-  return html;
-}
 
 export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const { state } = useApp();
   const { sendEmail, markReplied } = useEmails();
-  const { settings, currentUser, projects, emails } = state;
+  const { currentUser, projects, emails } = state;
 
-  // opts: { mode, to, subject, body, projectId, replyToEmailId, threadId, originalEmail, followUp }
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [projectId, setProjectId] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [includeSig, setIncludeSig] = useState(true);
+  const [firmSettings, setFirmSettings] = useState(null);
   const [createFollowUp, setCreateFollowUp] = useState(false);
   const [draftNote, setDraftNote] = useState('Draft not saved');
   const [status, setStatus] = useState('');
@@ -44,7 +28,26 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const replyInfoRef = useRef({});
   const fileInputRef = useRef(null);
 
-  // On opts change, populate fields
+  useEffect(() => {
+    const loadFirmSettings = async () => {
+      if (!sb) return;
+      try {
+        const { data, error } = await sb
+          .from('firm_settings')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        setFirmSettings(data || null);
+      } catch (err) {
+        console.error('[EmailComposer] Failed loading firm settings:', err);
+        setFirmSettings(null);
+      }
+    };
+
+    loadFirmSettings();
+  }, [currentUser]);
+
   useEffect(() => {
     if (!opts) return;
     setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
@@ -63,6 +66,8 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     };
   }, [opts]);
 
+  const signatureHtml = includeSig && firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
+
   const handleToInput = (val) => {
     setTo(val);
     setDirty(true);
@@ -70,7 +75,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     const q = val.toLowerCase();
     const seen = {};
     const candidates = [];
-    // Search contacts + email senders
+
     emails.slice(0, 200).forEach(e => {
       const addr = e.from_email || '';
       const name = e.from || '';
@@ -80,6 +85,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
         candidates.push({ name, email: addr });
       }
     });
+
     setToSuggestions(candidates.slice(0, 6));
   };
 
@@ -89,7 +95,9 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         setAttachments(prev => [...prev, {
-          name: file.name, type: file.type, size: file.size,
+          name: file.name,
+          type: file.type,
+          size: file.size,
           data: ev.target.result,
         }]);
       };
@@ -101,14 +109,15 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const handleSend = useCallback(async () => {
     if (!to.trim()) { alert('Add a recipient first.'); return; }
     if (!body.trim()) { alert('Write a message first.'); return; }
+
     const userEmail = currentUser?.email || '';
     if (!userEmail) { alert('No logged-in user found. Please log in first.'); return; }
 
     setSending(true);
-    setStatus('Sending via Outlook…');
+    setStatus('Sending via Outlook...');
+
     try {
-      const sigHtml = includeSig ? buildSignatureHTML(settings) : '';
-      const htmlBody = escapeHtml(body).replace(/\n/g, '<br>') + sigHtml;
+      const htmlBody = escapeHtml(body).replace(/\n/g, '<br>') + signatureHtml;
       await sendEmail({
         to: to.trim(),
         subject: subject.trim() || '(No subject)',
@@ -116,9 +125,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
         userId: userEmail,
         attachments: attachments.map(a => ({ name: a.name, type: a.type, data: a.data })),
       });
-      // Mark original as replied
+
       const { replyToEmailId } = replyInfoRef.current;
       if (replyToEmailId) markReplied(replyToEmailId);
+
       setStatus('Sent ✓');
       setDirty(false);
       setTimeout(() => { onSent?.(); onClose?.(); }, 500);
@@ -128,7 +138,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     } finally {
       setSending(false);
     }
-  }, [to, subject, body, includeSig, settings, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
+  }, [to, subject, body, signatureHtml, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
 
   const handleClose = () => {
     if (dirty) {
@@ -153,7 +163,6 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
       <div className="email-composer-body">
         <div className="email-composer-fields">
           <div className="two-col">
-            {/* To field */}
             <div className="form-row" style={{ position: 'relative' }}>
               <label className="form-label">To</label>
               <input
@@ -196,11 +205,18 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
             />
           </div>
 
-          {includeSig && (
-            <div style={{ margin: '0 0 8px 0', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg4)', fontSize: 12 }}
-              dangerouslySetInnerHTML={{ __html: buildSignatureHTML(settings) }}
+          {includeSig && firmSettings && (
+            <div style={{ margin: '0 0 8px 0', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: '#fff', fontSize: 12, overflow: 'auto' }}
+              dangerouslySetInnerHTML={{ __html: signatureHtml }}
             />
           )}
+
+          {includeSig && !firmSettings && (
+            <div style={{ margin: '0 0 8px 0', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg4)', fontSize: 12, color: 'var(--text3)' }}>
+              No saved email signature found. Add one in Settings &gt; Firm.
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
               <input type="checkbox" checked={includeSig} onChange={e => setIncludeSig(e.target.checked)} />
@@ -221,7 +237,6 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           </div>
         </div>
 
-        {/* Original email preview */}
         {replyInfoRef.current.original && (
           <>
             <hr className="email-composer-divider" />
@@ -232,7 +247,6 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           </>
         )}
 
-        {/* Attachments */}
         <div style={{ paddingTop: 12 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {attachments.map((att, i) => (
@@ -248,7 +262,6 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           </div>
         </div>
 
-        {/* Actions */}
         <div className="email-composer-actions">
           <div className="email-composer-meta">
             <span className="email-composer-dot" />
@@ -258,13 +271,12 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
             <button className="btn" onClick={() => setShowDraftWithEly(true)}>✨ Draft with Ely</button>
             <button className="btn btn-amber" onClick={() => setDraftNote('Draft saved')}>Save draft</button>
             <button className="btn btn-primary" onClick={handleSend} disabled={sending}>
-              {sending ? 'Sending…' : 'Send'}
+              {sending ? 'Sending...' : 'Send'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Draft with Ely panel */}
       {showDraftWithEly && (
         <DraftWithEly
           email={replyInfoRef.current.original}
@@ -282,7 +294,6 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   );
 }
 
-// CSS for the overlay
 const style = document.createElement('style');
 style.textContent = `
 .email-composer-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: none; flex-direction: column; }
