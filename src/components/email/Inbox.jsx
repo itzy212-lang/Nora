@@ -474,7 +474,12 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     if (!to.trim() || !body.trim()) return;
     setSending(true);
     try {
-      await onSend({ to, cc, subject, body, replyToId: email?.id, includeSignature, createTask, attachments });
+      const bodyHtml = String(body || '').replace(/\n/g, '<br>');
+      const outgoingBody = includeSignature && signatureHtml
+        ? `${bodyHtml}<br><br>${signatureHtml}`
+        : body;
+
+      await onSend({ to, cc, subject, body: outgoingBody, replyToId: email?.id, includeSignature, createTask, attachments });
       setSending(false);
       onClose();
     } catch (err) {
