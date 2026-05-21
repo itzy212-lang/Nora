@@ -21,7 +21,6 @@ async function convertDocxToPdf(storagePath, fileName, docxBuffer) {
 
   const pdfFileName = (fileName || 'document').replace(/\.docx$/i, '.pdf');
 
-  // Try 1: Use Supabase signed URL (preferred)
   if (storagePath) {
     try {
       const supabase = getSupabase();
@@ -51,7 +50,6 @@ async function convertDocxToPdf(storagePath, fileName, docxBuffer) {
     }
   }
 
-  // Try 2: Upload DOCX directly to a temporary public Supabase URL
   if (docxBuffer) {
     try {
       const supabase = getSupabase();
@@ -79,7 +77,6 @@ async function convertDocxToPdf(storagePath, fileName, docxBuffer) {
             console.log('[generate-doc] PDF via temp upload succeeded');
             const pdfRes = await fetch(data.FileUrl);
             const pdfBuf = await pdfRes.arrayBuffer();
-            // Clean up temp file
             supabase.storage.from('documents').remove([tempPath]).catch(() => {});
             return Buffer.from(pdfBuf).toString('base64');
           }
@@ -139,6 +136,18 @@ async function saveDocRecord({ project_id, ao_id, file_name, file_type, category
   return data?.id || null;
 }
 
+function normaliseMergeData(mergeData = {}) {
+  const tdata = {};
+
+  Object.keys(mergeData || {}).forEach(k => {
+    const cleanKey = k.replace(/^\{\{/, '').replace(/\}\}$/, '');
+    const value = mergeData[k];
+    tdata[cleanKey] = value === undefined || value === null ? '' : value;
+  });
+
+  return tdata;
+}
+
 // ── TEMPLATE FILL ─────────────────────────────────────────────
 function fillTemplate(templateB64, mergeData) {
   const buf = Buffer.from(templateB64, 'base64');
@@ -148,13 +157,10 @@ function fillTemplate(templateB64, mergeData) {
     linebreaks: true,
     delimiters: { start: '{{', end: '}}' },
     errorLogging: false,
+    nullGetter: () => '',
   });
 
-  const tdata = {};
-  Object.keys(mergeData || {}).forEach(k => {
-    const cleanKey = k.replace(/^\{\{/, '').replace(/\}\}$/, '');
-    tdata[cleanKey] = mergeData[k] ?? '';
-  });
+  const tdata = normaliseMergeData(mergeData);
 
   doc.render(tdata);
   return {
@@ -184,29 +190,27 @@ export default async function handler(req, res) {
     }
 
     const buffer = Buffer.from(output, 'base64');
-    const rawName = tdata.file_name || 'document.docx';
+    const rawName = tdata.file_name || tdata.FILE_NAME || 'document.docx';
     const fileName = rawName.toLowerCase().endsWith('.docx') ? rawName : `${rawName}.docx`;
-    const projectId = tdata.project_id || merge_data?.project_id || 'unknown';
+    const projectId = tdata.project_id || tdata.PROJECT_ID || merge_data?.project_id || 'unknown';
 
-    // Upload to Supabase Storage
     let storagePath = null;
     let docId = null;
     try {
       storagePath = await uploadToStorage(buffer, fileName, projectId);
       docId = await saveDocRecord({
         project_id: projectId,
-        ao_id: tdata.ao_id || merge_data?.ao_id || null,
+        ao_id: tdata.ao_id || tdata.AO_ID || merge_data?.ao_id || null,
         file_name: fileName,
-        category: tdata.category || 'document',
+        category: tdata.category || tdata.CATEGORY || 'document',
         storage_path: storagePath,
-        user_id: tdata.user_id || null,
-        section_type: tdata.section_type || null,
+        user_id: tdata.user_id || tdata.USER_ID || null,
+        section_type: tdata.section_type || tdata.SECTION_TYPE || null,
       });
     } catch (storeErr) {
       console.warn('[generate-doc] Storage/DB failed (non-fatal):', storeErr.message);
     }
 
-    // Convert to PDF for Firma signing — pass buffer as fallback
     const pdfB64 = await convertDocxToPdf(storagePath, fileName, buffer);
 
     return res.status(200).json({
