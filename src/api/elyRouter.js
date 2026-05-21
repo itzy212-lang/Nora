@@ -11,11 +11,15 @@ export async function callEly({
   emailId = null,
   emailContext = null,
   userId = null,
+  mode = null,
+  workflowStage = null,
   // Rich context — passed in by useEly automatically from app state
   chatHistory = [],
   projectsContext = [],
   currentProject = null,
   recentEmails = [],
+  context = {},
+  ...extra
 }) {
   const payload = {
     prompt,
@@ -26,10 +30,14 @@ export async function callEly({
     emailId,
     emailContext,
     userId,
+    mode,
+    workflowStage,
     chatHistory,
     projectsContext,
     currentProject,
     recentEmails,
+    context,
+    ...extra,
   };
 
   const res = await fetch(ROUTER_URL, {
@@ -46,10 +54,13 @@ export async function callEly({
   const data = await res.json();
   return {
     reply: data.reply || data.replyText || '',
-    draft: data.draft || null,
+    draft: data.draft || data.documentText || null,
     sessionId: data.sessionId || null,
     action: data.action || 'general_answer',
     draftType: data.draftType || 'general',
     suggestedActions: data.suggestedActions || [],
+    mode: data.mode || mode || null,
+    workflowStage: data.workflowStage || workflowStage || null,
+    instructionSet: data.instructionSet || null,
   };
 }
