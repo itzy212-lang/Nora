@@ -526,11 +526,76 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </details>
             )}
           </div>
-          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
-            <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
-            <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>
-              {sending ? 'Sending…' : '↩ Send reply'}
-            </button>
+          {/* Signature + checkboxes + attach */}
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+
+            {/* Signature preview */}
+            {firmSettings && includeSignature && (
+              <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 10, fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.8 }}>
+                {firmSettings.logo_base64 && (
+                  <img src={`data:image/png;base64,${firmSettings.logo_base64}`} alt="Logo" style={{ maxHeight: 50, display: 'block', marginBottom: 6 }} />
+                )}
+                {firmSettings.signature_b64
+                  ? <img src={`data:image/png;base64,${firmSettings.signature_b64}`} alt="Signature" style={{ maxHeight: 90, maxWidth: '100%', display: 'block' }} />
+                  : (
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{firmSettings.surveyor_name}</div>
+                      {firmSettings.qualifications && <div style={{ fontSize: 12 }}>{firmSettings.qualifications}</div>}
+                      {firmSettings.tel && <div>Tel | {firmSettings.tel}</div>}
+                      {firmSettings.email && <div>Email | {firmSettings.email}</div>}
+                      {[firmSettings.address_line1, firmSettings.city, firmSettings.postcode].filter(Boolean).join(' | ') && (
+                        <div>{[firmSettings.address_line1, firmSettings.city, firmSettings.postcode].filter(Boolean).join(' | ')}</div>
+                      )}
+                    </div>
+                  )
+                }
+              </div>
+            )}
+
+            {/* Checkboxes */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={includeSignature} onChange={e => setIncludeSignature(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--blue)' }} />
+                Include signature
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={createTask} onChange={e => setCreateTask(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--blue)' }} />
+                Create follow-up task
+                <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>Default due date: 10 days</span>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: email?.project_id ? 'var(--blue-bg)' : 'var(--bg3)', color: email?.project_id ? 'var(--blue)' : 'var(--text3)', border: email?.project_id ? 'none' : '1px solid var(--border)' }}>
+                  {email?.project_id ? 'Project linked' : 'No project'}
+                </span>
+              </label>
+            </div>
+
+            {/* Attachments list */}
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {attachments.map((att, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'var(--bg3)', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12 }}>
+                    <span>📎 {att.name}</span>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>({Math.round(att.size/1024)}kb)</span>
+                    <button onClick={() => removeAttachment(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 15, padding: '0 2px', lineHeight: 1 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
+                <button onClick={() => fileInputRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 12.5, cursor: 'pointer', color: 'var(--text2)' }}>
+                  📎 Attach file
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
+                <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>
+                  {sending ? 'Sending…' : '↩ Send reply'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         {showEly && <ElyDraftPanel email={email} threadEmails={threadEmails} onUseDraft={handleElyDraft} onClose={() => setShowEly(false)} />}
