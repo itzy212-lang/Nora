@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import sb from '../../supabaseClient';
+import PizZip from 'pizzip';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -59,6 +60,118 @@ function addDaysIso(days) {
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
+
+function safeFilePart(value) {
+  return String(value || 'Document')
+    .replace(/[^\w\s.-]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 80);
+}
+
+function addDocxToZip(zip, fileName, b64) {
+  if (!zip || !b64) return;
+  zip.file(fileName, b64, { base64: true });
+}
+
+function downloadB64File(b64, fileName, mimeType) {
+  const byteCharacters = atob(b64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i += 1) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+function joinOwnerNames(name1, name2) {
+  const a = String(name1 || '').trim();
+  const b = String(name2 || '').trim();
+  if (a && b) return `${a} & ${b}`;
+  return a || b || '';
+}
+
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false }) {
+  const noticeDate = todayIso();
+  const aoNames = joinOwnerNames(ao?.name, ao?.name2);
+  const boNames = joinOwnerNames(project?.bo_1_name || project?.bo, project?.bo_2_name);
+  const aoPremise = aoAddress(ao);
+  const aoService = aoServiceAddress(ao);
+  const boPremise = project?.bo_premise_address || project?.address || '';
+  const boService = project?.bo_service_address || project?.bo_1_service_address || project?.bo_address || boPremise;
+  const works = project?.works || '';
+  const ref = project?.ref || '';
+
+  const sectionLabels = {
+    s1: 'Section 1',
+    s3: 'Section 3',
+    s6: 'Section 6',
+    s10: 'Section 10',
+    cover: 'Covering Letter',
+  };
+
+  const fileBase = `${safeFilePart(ref)}_${safeFilePart(aoNames || `AO${ao?.num || ''}`)}_${safeFilePart(sectionLabels[sectionKey] || sectionKey)}`.replace(/_+/g, '_');
+
+  return {
+    project_id: project?.id || '',
+    ao_id: ao?.id || String(ao?.num || ''),
+    file_name: `${fileBase}.docx`,
+    category: 'notice',
+    section_type: sectionKey,
+    source_template: sectionKey,
+
+    REF: ref,
+    PROJECT_REF: ref,
+
+    NOTICE_DATE: noticeDate,
+    NOTICE_DATE_LONG: new Date(noticeDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+
+    BO_NAME: boNames,
+    BO_NAMES: boNames,
+    BO_NAME_1: project?.bo_1_name || project?.bo || '',
+    BO_NAME_2: project?.bo_2_name || '',
+    BO_PREMISE: boPremise,
+    BO_PROPERTY: boPremise,
+    BO_SERVICE_ADDRESS: boService,
+
+    AO_NAME: aoNames,
+    AO_NAMES: aoNames,
+    AO_NAME_1: ao?.name || '',
+    AO_NAME_2: ao?.name2 || '',
+    AO_PREMISE: aoPremise,
+    AO_PROPERTY: aoPremise,
+    AO_SERVICE_ADDRESS: aoService,
+
+    OWNER_S: ao?.name2 ? 'Owners' : 'Owner',
+    OWNER_S_POSSESSIVE: ao?.name2 ? "Owners'" : "Owner's",
+    AO_OWNER_S: ao?.name2 ? 'Adjoining Owners' : 'Adjoining Owner',
+    AO_OWNER_S_POSSESSIVE: ao?.name2 ? "Adjoining Owners'" : "Adjoining Owner's",
+
+    WORKS: works,
+    PROPOSED_WORKS: works,
+    NOTIFIABLE_WORKS: works,
+
+    NOTICE_SECTION: sectionLabels[sectionKey] || sectionKey,
+    NOTICE_SUBSECTION: '',
+    NOTICE_SECTION_FULL: sectionLabels[sectionKey] || sectionKey,
+
+    SECTION_1: sectionKey === 's1' ? 'Yes' : '',
+    SECTION_3: sectionKey === 's3' ? 'Yes' : '',
+    SECTION_6: sectionKey === 's6' ? 'Yes' : '',
+    SECTION_10: sectionKey === 's10' ? 'Yes' : '',
+
+    SURVEYOR_NAME: 'Itzik Darel',
+    SURVEYOR_FIRM: 'Square One Consulting',
+    SURVEYOR_EMAIL: 'help@sq1consulting.co.uk',
+  };
+}
+
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -1220,6 +1333,127 @@ function AOCard({
 }
 
 
+
+function NoticeServeModal({ project, ao, defaultSections = [], onServe, onClose }) {
+  const [sections, setSections] = useState({
+    s1: defaultSections.includes('s1'),
+    s3: defaultSections.includes('s3'),
+    s6: defaultSections.includes('s6'),
+    s10: defaultSections.includes('s10'),
+  });
+  const [includeCover, setIncludeCover] = useState(!defaultSections.includes('s10'));
+  const [saving, setSaving] = useState(false);
+
+  const selectedSections = Object.keys(sections).filter(k => sections[k]);
+
+  const toggle = key => setSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const handleServe = async () => {
+    if (selectedSections.length === 0 && !includeCover) {
+      alert('Please select at least one notice or covering letter.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onServe({ sections: selectedSections, includeCover });
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Could not serve notices.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={sections.s10 ? 'Serve Section 10 notice' : 'Serve notice pack'} onClose={onClose}>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{
+          background: 'var(--blue-bg)',
+          border: '1px solid var(--blue)',
+          color: 'var(--blue)',
+          borderRadius: 14,
+          padding: '10px 14px',
+          fontSize: 13,
+          lineHeight: 1.55,
+        }}>
+          Serving notices for <strong>{ao?.name || `AO${ao?.num || ''}`}</strong>
+          {aoAddress(ao) ? ` at ${aoAddress(ao)}` : ''}.
+          If more than one document is generated, Ely will download a ZIP pack.
+        </div>
+
+        <div style={mSection}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            marginBottom: 12,
+          }}>
+            Select notices
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              ['s1', 'Section 1 Notice'],
+              ['s3', 'Section 3 Notice'],
+              ['s6', 'Section 6 Notice'],
+              ['s10', 'Section 10 Notice'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => toggle(key)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: 14,
+                  border: sections[key] ? '2px solid var(--blue)' : '1px solid #e5e7eb',
+                  background: sections[key] ? 'var(--blue-bg)' : '#fff',
+                  color: sections[key] ? 'var(--blue)' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: sections[key] ? 700 : 500,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={mSection}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: 'var(--text2)' }}>
+            <input type="checkbox" checked={includeCover} onChange={e => setIncludeCover(e.target.checked)} />
+            Include notice covering letter
+          </label>
+        </div>
+
+        <div style={{
+          background: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 14,
+          padding: '10px 14px',
+          fontSize: 12.5,
+          color: 'var(--text3)',
+          lineHeight: 1.55,
+        }}>
+          Deadline rule: S1/S3/S6 create one 14-day deadline task for this AO. Section 10 creates one 10-day deadline task. Duplicate tasks are skipped automatically.
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+            Cancel
+          </button>
+
+          <button onClick={handleServe} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+            {saving ? 'Serving…' : 'Serve notice pack'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+
 function S104BSurveyorModal({ ao, onSave, onClose }) {
   const [form, setForm] = useState({
     name: aoSurvName(ao || ''),
@@ -1431,6 +1665,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [editingAO, setEditingAO] = useState(null);
   const [showAddAO, setShowAddAO] = useState(false);
   const [s104bAO, setS104bAO] = useState(null);
+  const [noticeModal, setNoticeModal] = useState(null);
 
   const windowWidth = useWindowWidth();
 
@@ -1438,7 +1673,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     setProject(initialProject);
   }, [initialProject]);
 
-  const { sendForSignature } = useDocumentGenerator();
+  const { generateDocument, sendForSignature } = useDocumentGenerator();
 
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
@@ -1661,6 +1896,124 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }));
   }, [project.id, project.aos]);
 
+
+  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate }) => {
+    const record = {
+      project_id: project.id,
+      ao_id: ao?.id || String(ao?.num || ''),
+      section_1: selectedSections.includes('s1'),
+      section_3: selectedSections.includes('s3'),
+      section_6: selectedSections.includes('s6'),
+      section_10: selectedSections.includes('s10'),
+      notice_cover_letter: !!includeCover,
+      notice_date: noticeDate,
+      status: 'served',
+      template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
+    };
+
+    try {
+      await sb.from('notices').insert([record]);
+    } catch (err) {
+      console.warn('Could not save notices table record:', err?.message || err);
+    }
+
+    try {
+      const existing = Array.isArray(project.notices) ? project.notices : [];
+      await updateProjectSafely(project.id, {
+        notices: [
+          ...existing,
+          {
+            ...record,
+            id: `notice-${Date.now()}`,
+            created_at: new Date().toISOString(),
+            sections: selectedSections,
+          },
+        ],
+      });
+    } catch (err) {
+      console.warn('Could not update project notices json:', err?.message || err);
+    }
+  }, [project]);
+
+  const handleOpenNoticeModal = useCallback((ao, defaultSections = []) => {
+    setNoticeModal({ ao, defaultSections });
+  }, []);
+
+  const handleServeNoticePack = useCallback(async ({ ao, sections, includeCover }) => {
+    const noticeDate = todayIso();
+    const generatedDocs = [];
+    const zip = new PizZip();
+
+    const keysToGenerate = [...sections];
+    if (includeCover) keysToGenerate.unshift('cover');
+
+    for (const key of keysToGenerate) {
+      const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
+      const result = await generateDocument({
+        templateKey: key,
+        mergeData,
+        fileName: mergeData.file_name,
+        projectId: project.id,
+      });
+
+      if (!result?.success) {
+        throw new Error(result?.error || `Could not generate ${key} notice.`);
+      }
+
+      generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+      addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+    }
+
+    if (generatedDocs.length > 1) {
+      const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
+      downloadB64File(zipB64, zipName, 'application/zip');
+    }
+
+    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate });
+
+    const nonS10Sections = sections.filter(s => ['s1', 's3', 's6'].includes(s));
+    if (nonS10Sections.length > 0) {
+      const deadline = addDaysIso(14);
+      await updateAOById(ao, {
+        status: 'notice_served',
+        notice_served_date: noticeDate,
+        noticeServedDate: noticeDate,
+        consent_deadline: deadline,
+        consentDeadline: deadline,
+      });
+
+      await createProjectTask({
+        title: `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+        description: '14-day notice consent period has expired. Review whether Section 10 notice is required.',
+        due_date: deadline,
+        task_type: 'consent_deadline',
+        ao,
+      });
+    }
+
+    if (sections.includes('s10')) {
+      const deadline = addDaysIso(10);
+      await updateAOById(ao, {
+        status: 's10',
+        s10_served_date: noticeDate,
+        s10ServedDate: noticeDate,
+        s10_deadline: deadline,
+        s10Deadline: deadline,
+      });
+
+      await createProjectTask({
+        title: `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+        description: '10-day Section 10 notice period has expired. Review whether to serve 10(4)(b) papers.',
+        due_date: deadline,
+        task_type: 'section_10_deadline',
+        ao,
+      });
+    }
+
+    alert(generatedDocs.length > 1 ? 'Notice pack generated and served.' : 'Notice generated and served.');
+  }, [project, generateDocument, saveNoticeRecord, updateAOById, createProjectTask]);
+
   const handleServeNotice = useCallback(async (ao) => {
     await updateAORecord(ao, {
       status: 'notice_served',
@@ -1807,6 +2160,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         />
       )}
 
+
+
+      {noticeModal && (
+        <NoticeServeModal
+          project={project}
+          ao={noticeModal.ao}
+          defaultSections={noticeModal.defaultSections || []}
+          onServe={({ sections, includeCover }) => handleServeNoticePack({ ao: noticeModal.ao, sections, includeCover })}
+          onClose={() => setNoticeModal(null)}
+        />
+      )}
 
       {s104bAO && (
         <S104BSurveyorModal
