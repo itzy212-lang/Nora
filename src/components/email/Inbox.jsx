@@ -940,27 +940,42 @@ export default function Inbox({ onOpenComposer }) {
     setSyncing(false);
   };
 
-  const handleSendReply = async ({ to, cc, subject, body, replyToId }) => {
+  const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId }) => {
     if (!sb) return;
+
+    const funcPayload = {
+      to_email: to,
+      cc_email: cc || null,
+      subject: subject,
+      body: emailBody,
+      reply_to_message_id: replyToId || null,
+    };
+
     const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
-      body: { to_email: to, cc_email: cc || null, subject, body, reply_to_message_id: replyToId || null }
+      body: funcPayload,
     });
+
     if (error || data?.error) {
       const msg = error?.message || data?.error || 'Unknown error';
-      // Token expired — tell the user clearly
-      if (msg.includes('401') || msg.includes('token') || msg.includes('expired') || msg.includes('auth')) {
+      if (msg.includes('401') || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('expired')) {
         throw new Error('Your Microsoft account connection has expired. Go to Settings → Email → Reconnect, then try again.');
       }
       throw new Error('Could not send email: ' + msg);
     }
-    // Save as sent email in DB
+
+    // Save as sent in DB
     await sb.from('emails').insert([{
-      subject, body, is_sent: true, is_read: true,
+      subject,
+      body: emailBody,
+      is_sent: true,
+      is_read: true,
       sender_email: 'help@sq1consulting.co.uk',
-      to_email: to, thread_id: replyToId || null,
+      to_email: to,
+      thread_id: replyToId || null,
       received_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     }]).catch(() => {});
+
     if (replyToId) {
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       setEmails(prev => prev.map(e => e.id === replyToId ? { ...e, is_replied: true } : e));
