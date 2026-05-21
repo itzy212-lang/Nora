@@ -86,17 +86,40 @@ export function useEmails() {
   }, [dispatch, state.emails]);
 
   const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId }) => {
-    const res = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject, body, user_id: userId, attachments }),
+    if (!sb) throw new Error('Supabase client is not available.');
+
+    const normalisedAttachments = (attachments || []).map((attachment) => {
+      const rawData = attachment.base64 || attachment.data || attachment.content || '';
+      const contentBytes = String(rawData).includes(',')
+        ? String(rawData).split(',').pop()
+        : String(rawData);
+
+      return {
+        name: attachment.name || attachment.filename || 'attachment',
+        type: attachment.type || attachment.content_type || attachment.mime_type || 'application/octet-stream',
+        size: attachment.size || attachment.size_bytes || null,
+        base64: contentBytes,
+      };
+    }).filter(att => att.base64 && att.name);
+
+    const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
+      body: {
+        to_email: to,
+        subject: subject || '(No subject)',
+        body,
+        user_id: userId || state.currentUser?.email || state.currentUser?.id || null,
+        attachments: normalisedAttachments,
+      },
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Email send failed');
+
+    if (error || data?.error) {
+      const message = error?.message || data?.error || 'Email send failed';
+      throw new Error(message);
     }
-    return data;
-  }, []);
+
+    await loadEmails().catch(() => {});
+    return data || { ok: true };
+  }, [loadEmails, state.currentUser]);
 
   return {
     emails: state.emails,
@@ -116,8 +139,8 @@ function normalizeEmail(row) {
     ...row,
     id: row.id,
     external_id: row.external_id || row.id,
-    from: row.sender_name || row.from_email || 'Unknown',
-    from_email: row.from_email || '',
+    from: row.sender_name || row.from_email || row.sender_email || 'Unknown',
+    from_email: row.from_email || row.sender_email || '',
     subject: row.subject || '(No subject)',
     preview: row.body_preview || row.preview || '',
     body: row.body || '',
