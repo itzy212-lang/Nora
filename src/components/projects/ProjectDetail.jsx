@@ -48,6 +48,76 @@ function daysUntil(d) {
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
 }
 
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function aoKeyMatches(a, target) {
+  if (!a || !target) return false;
+  if (a.id && target.id) return a.id === target.id;
+  if (a.num && target.num) return a.num === target.num;
+  return a.name === target.name && aoAddress(a) === aoAddress(target);
+}
+
+function isAOResolved(ao) {
+  const st = (ao?.status || '').toLowerCase();
+  return ['consent', 'dissent', 's10', 'section_10_served', 'award', 'complete'].includes(st);
+}
+
+function hasS10BeenServed(ao) {
+  const st = (ao?.status || '').toLowerCase();
+  return st === 's10' || st === 'section_10_served' || !!ao?.s10_served_date || !!ao?.s10ServedDate;
+}
+
+function consentPeriodExpired(ao) {
+  const cd = aoConsent(ao);
+  if (!cd || isAOResolved(ao)) return false;
+  return new Date(cd).getTime() < Date.now();
+}
+
+function getAOStatusMeta(ao, projectRole = 'BO') {
+  const st = (ao?.status || '').toLowerCase();
+  const noticed = !!aoNotice(ao);
+  const s10Served = hasS10BeenServed(ao);
+  const overdue = consentPeriodExpired(ao);
+
+  if (projectRole === 'AO' && ao?.appointed_by_me) {
+    return { label: 'Your AO client', colour: '#a855f7', action: null };
+  }
+
+  if (st === 'consent') {
+    return { label: 'Consent received', colour: '#22c55e', action: null };
+  }
+
+  if (st === 'dissent') {
+    return {
+      label: ao?.agreed_surveyor ? 'Dissent - agreed surveyor' : 'Dissent received',
+      colour: ao?.agreed_surveyor || aoSurvName(ao) ? '#22c55e' : '#ef4444',
+      action: null,
+    };
+  }
+
+  if (s10Served) {
+    return { label: 'Section 10 served', colour: '#22c55e', action: null };
+  }
+
+  if (overdue) {
+    return { label: 'Serve Section 10', colour: '#ef4444', action: 'serve_s10' };
+  }
+
+  if (noticed) {
+    return { label: 'Notice served', colour: '#22c55e', action: null };
+  }
+
+  return { label: 'Serve notice', colour: '#3b82f6', action: 'serve_notice' };
+}
+
 function fmtGBP(v) {
   return `£${(parseFloat(v) || 0).toLocaleString('en-GB', {
     minimumFractionDigits: 0,
@@ -55,21 +125,7 @@ function fmtGBP(v) {
 }
 
 function getAOColour(ao, projectRole = 'BO') {
-  if (projectRole === 'AO' && ao?.appointed_by_me) return '#a855f7';
-
-  const st = (ao.status || '').toLowerCase();
-
-  if (st === 'consent') return '#22c55e';
-  if (st === 'dissent' || st === 's10') return '#ef4444';
-
-  const cd = aoConsent(ao);
-  const sd = aoS10(ao);
-  const now = Date.now();
-
-  if ((cd && new Date(cd).getTime() < now) || (sd && new Date(sd).getTime() < now)) return '#ef4444';
-  if (aoNotice(ao) || st === 'notice_served' || cd) return '#22c55e';
-
-  return '#9ca3af';
+  return getAOStatusMeta(ao, projectRole).colour || '#9ca3af';
 }
 
 function getProjectColour(project) {
@@ -87,8 +143,8 @@ function getProjectColour(project) {
     const st = (ao.status || '').toLowerCase();
 
     return (
-      (cd && new Date(cd).getTime() < now && !['consent', 'dissent'].includes(st)) ||
-      (sd && new Date(sd).getTime() < now)
+      (cd && new Date(cd).getTime() < now && !isAOResolved(ao)) ||
+      (sd && new Date(sd).getTime() < now && !['consent', 'dissent', 's10', 'section_10_served', 'award', 'complete'].includes(st))
     );
   });
 
@@ -830,10 +886,16 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
 function AOCard({
   ao,
   projectRole,
+  project,
   onOpenComposer,
   onGenerateAOLOA,
   onEditAO,
   onServeNotice,
+  onServeS10,
+  onSetAOStatus,
+  onToggleAgreedSurveyor,
+  onNoteIntention,
+  onOpenSOCForAO,
   loaLoading,
 }) {
   const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
@@ -847,9 +909,9 @@ function AOCard({
   const survEmail = aoSurvEmail(ao);
   const survPhone = aoSurvPhone(ao);
 
-  const statusLabel = isAOAppointment
-    ? 'Your AO client'
-    : ({ consent: 'Consent', dissent: 'Dissent', s10: 'S.10', notice_served: 'Notice served' }[(ao.status || '').toLowerCase()] || (noticed ? 'Notice served' : ''));
+  const statusMeta = getAOStatusMeta(ao, projectRole);
+  const statusLabel = statusMeta.label;
+  const statusColour = statusMeta.colour || colour;
 
   return (
     <div style={{ ...card({ marginBottom: 12, overflow: 'hidden' }) }}>
@@ -870,9 +932,28 @@ function AOCard({
             </div>
 
             {statusLabel && (
-              <span style={{ fontSize: 12, fontWeight: 600, color: colour, paddingLeft: 8 }}>
-                {statusLabel}
-              </span>
+              statusMeta.action ? (
+                <button
+                  onClick={() => statusMeta.action === 'serve_s10' ? onServeS10?.(ao) : onServeNotice?.(ao)}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: 99,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: `1px solid ${statusColour}`,
+                    background: statusMeta.action === 'serve_s10' ? 'var(--red-bg)' : 'var(--blue-bg)',
+                    color: statusColour,
+                    marginLeft: 8,
+                  }}
+                >
+                  {statusLabel}
+                </button>
+              ) : (
+                <span style={{ fontSize: 12, fontWeight: 700, color: statusColour, paddingLeft: 8 }}>
+                  {statusLabel}
+                </span>
+              )
             )}
           </div>
 
@@ -907,15 +988,21 @@ function AOCard({
 
           {!isAOAppointment && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-              <div style={{
-                width: 32,
-                height: 18,
-                borderRadius: 9,
-                cursor: 'pointer',
-                position: 'relative',
-                flexShrink: 0,
-                background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)',
-              }}>
+              <div
+                onClick={() => onToggleAgreedSurveyor?.(ao)}
+                role="switch"
+                aria-checked={!!ao.agreed_surveyor}
+                title="Toggle agreed surveyor appointment"
+                style={{
+                  width: 32,
+                  height: 18,
+                  borderRadius: 9,
+                  cursor: 'pointer',
+                  position: 'relative',
+                  flexShrink: 0,
+                  background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)',
+                }}
+              >
                 <div style={{
                   width: 14,
                   height: 14,
@@ -988,23 +1075,36 @@ function AOCard({
             )}
 
             {!isAOAppointment && noticed && ['Consent', 'Dissent'].map(a => (
-              <button key={a} style={{
-                padding: '4px 12px',
-                borderRadius: 99,
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: 'pointer',
-                border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
-                background: 'transparent',
-                color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
-              }}>
+              <button
+                key={a}
+                onClick={() => onSetAOStatus?.(ao, a.toLowerCase())}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 99,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
+                  background: (ao.status || '').toLowerCase() === a.toLowerCase() ? (a === 'Consent' ? 'var(--green-bg)' : 'var(--red-bg)') : 'transparent',
+                  color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
+                }}
+              >
                 {a}
               </button>
             ))}
 
             {!isAOAppointment && noticed && (
-              <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', fontSize: 12, borderRadius: 99 }}>
-                Note intention
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => onNoteIntention?.(ao)}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  borderRadius: 99,
+                  color: ao.intention_noted ? 'var(--green)' : undefined,
+                }}
+              >
+                {ao.intention_noted ? 'Intention noted' : 'Note intention'}
               </button>
             )}
 
@@ -1042,16 +1142,19 @@ function AOCard({
             </button>
 
             {!isAOAppointment && (
-              <button style={{
-                padding: '4px 12px',
-                borderRadius: 99,
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: 'pointer',
-                border: '1px solid var(--purple)',
-                background: 'transparent',
-                color: 'var(--purple)',
-              }}>
+              <button
+                onClick={() => onOpenSOCForAO?.(ao)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 99,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  border: '1px solid var(--purple)',
+                  background: ao.soc_required || ao.status === 'consent_soc' ? 'var(--purple-bg)' : 'transparent',
+                  color: 'var(--purple)',
+                }}
+              >
                 Schedule of Condition
               </button>
             )}
@@ -1389,6 +1492,86 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }));
   }, [project, role]);
 
+  const updateAORecord = useCallback(async (ao, patch) => {
+    const currentAOs = project.aos || [];
+    const updatedAOs = currentAOs.map(item => aoKeyMatches(item, ao)
+      ? { ...item, ...patch, updated_at: new Date().toISOString() }
+      : item
+    );
+
+    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
+
+    setProject(prev => ({
+      ...prev,
+      aos: updatedAOs,
+      ...(data || {}),
+    }));
+  }, [project.id, project.aos]);
+
+  const handleServeNotice = useCallback(async (ao) => {
+    await updateAORecord(ao, {
+      status: 'notice_served',
+      notice_served_date: todayISODate(),
+      noticeServedDate: todayISODate(),
+      consent_deadline: addDaysISO(14),
+      consentDeadline: addDaysISO(14),
+    });
+  }, [updateAORecord]);
+
+  const handleServeS10 = useCallback(async (ao) => {
+    await updateAORecord(ao, {
+      status: 's10',
+      s10_served_date: todayISODate(),
+      s10ServedDate: todayISODate(),
+      s10_deadline: addDaysISO(10),
+      s10Deadline: addDaysISO(10),
+    });
+  }, [updateAORecord]);
+
+  const handleSetAOStatus = useCallback(async (ao, status) => {
+    const patch = { status };
+
+    if (status === 'consent') {
+      patch.consent_received_date = todayISODate();
+      patch.consentReceivedDate = todayISODate();
+    }
+
+    if (status === 'dissent') {
+      patch.dissent_received_date = todayISODate();
+      patch.dissentReceivedDate = todayISODate();
+    }
+
+    await updateAORecord(ao, patch);
+  }, [updateAORecord]);
+
+  const handleToggleAgreedSurveyor = useCallback(async (ao) => {
+    const next = !ao.agreed_surveyor;
+    await updateAORecord(ao, {
+      agreed_surveyor: next,
+      agreedSurveyor: next,
+      status: next ? 'dissent' : (ao.status || 'notice_served'),
+      agreed_surveyor_updated_at: todayISODate(),
+    });
+  }, [updateAORecord]);
+
+  const handleNoteIntention = useCallback(async (ao) => {
+    await updateAORecord(ao, {
+      intention_noted: true,
+      intention_noted_date: todayISODate(),
+      status: ao.status || 'notice_served',
+    });
+  }, [updateAORecord]);
+
+  const handleOpenSOCForAO = useCallback((ao) => {
+    onOpenSOC?.({
+      ...project,
+      selectedAO: ao,
+      selected_ao: ao,
+      selected_ao_id: ao.id || ao.num,
+      soc_target_ao: ao,
+    });
+  }, [onOpenSOC, project]);
+
   const handleRaiseInvoice = useCallback(() => {
     onRaiseInvoice?.({
       property_address: appointmentAddress || boAddress,
@@ -1699,9 +1882,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       ao={ao}
                       projectRole={role}
                       onOpenComposer={onOpenComposer}
+                      project={project}
                       onGenerateAOLOA={handleGenerateAOLOA}
                       onEditAO={setEditingAO}
-                      onServeNotice={() => {}}
+                      onServeNotice={handleServeNotice}
+                      onServeS10={handleServeS10}
+                      onSetAOStatus={handleSetAOStatus}
+                      onToggleAgreedSurveyor={handleToggleAgreedSurveyor}
+                      onNoteIntention={handleNoteIntention}
+                      onOpenSOCForAO={handleOpenSOCForAO}
                       loaLoading={loaLoading === aoKey}
                     />
                   );
