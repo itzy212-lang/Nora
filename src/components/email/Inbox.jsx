@@ -959,7 +959,7 @@ export default function Inbox({ onOpenComposer }) {
     setSyncing(false);
   };
 
-  const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId }) => {
+  const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId, attachments = [] }) => {
     if (!sb) return;
 
     const funcPayload = {
@@ -968,6 +968,7 @@ export default function Inbox({ onOpenComposer }) {
       subject: subject,
       body: emailBody,
       reply_to_message_id: replyToId || null,
+      attachments,
     };
 
     const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
