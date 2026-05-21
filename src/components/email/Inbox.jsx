@@ -92,6 +92,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
   const [messages, setMessages]       = useState([]);
   const [input, setInput]             = useState('');
   const [workingDraft, setWorkingDraft] = useState('');
+  const workingDraftRef = useRef(''); // ref always has latest — survives re-renders
   const [loading, setLoading]         = useState(false);
   const [interimText, setInterimText] = useState('');
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
@@ -190,7 +191,10 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
       }
 
       // Always update working draft with latest draft
-      if (draft) setWorkingDraft(draft);
+      if (draft) {
+        setWorkingDraft(draft);
+        workingDraftRef.current = draft;
+      }
     } catch (err) {
       setMessages(prev => [...prev, {
         id: Date.now() + 1, role: 'ely',
@@ -249,27 +253,30 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {(() => {
-            // Get the latest draft from messages or workingDraft
-            const latestDraft = workingDraft || 
-              [...messages].reverse().find(m => m.role === 'ely' && m.draft)?.draft || '';
-            return latestDraft ? (
-              <button
-                onClick={() => onSendWithDraft({
+          {(workingDraftRef.current || workingDraft || messages.some(m => m.role === 'ely' && m.draft)) && (
+            <button
+              onClick={() => {
+                // Use ref first (most reliable), then state, then latest message draft
+                const body = workingDraftRef.current
+                  || workingDraft
+                  || [...messages].reverse().find(m => m.role === 'ely' && m.draft)?.draft
+                  || '';
+                if (!body) { alert('No draft to send yet — ask Ely to produce a draft first.'); return; }
+                onSendWithDraft({
                   to: email?.sender_email || '',
                   subject: `Re: ${email?.subject || ''}`,
-                  body: latestDraft,
-                })}
-                style={{
-                  padding: '7px 18px', borderRadius: 99, border: 'none',
-                  background: 'var(--blue)', color: '#fff', fontSize: 13,
-                  fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                ↩ Send this email
-              </button>
-            ) : null;
-          })()}
+                  body,
+                });
+              }}
+              style={{
+                padding: '7px 18px', borderRadius: 99, border: 'none',
+                background: 'var(--blue)', color: '#fff', fontSize: 13,
+                fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              ↩ Send this email
+            </button>
+          )}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
       </div>
@@ -343,6 +350,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
                             Copy
                           </button>
                           <button onClick={() => {
+                            workingDraftRef.current = msg.draft;
                             setWorkingDraft(msg.draft);
                             onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: msg.draft });
                           }}
@@ -428,6 +436,8 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const [includeSignature, setIncludeSignature] = useState(true);
   const [createTask, setCreateTask]             = useState(false);
   const [firmSettings, setFirmSettings]         = useState(null);
+  const [attachments, setAttachments]           = useState([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,email,tel,address_line1,address_line2,city,postcode,signature_b64,logo_base64').limit(1)
@@ -438,16 +448,35 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     if (!to.trim() || !body.trim()) return;
     setSending(true);
     try {
-      await onSend({ to, cc, subject, body, replyToId: email?.id, includeSignature, createTask });
-    } catch {}
-    setSending(false);
-    onClose();
+      await onSend({ to, cc, subject, body, replyToId: email?.id, includeSignature, createTask, attachments });
+      setSending(false);
+      onClose();
+    } catch (err) {
+      setSending(false);
+      alert(err.message || 'Could not send email. Please try again.');
+      // Do NOT close — let the user retry
+    }
   };
 
   const handleElyDraft = (draft, close = false) => {
     setBody(draft);
     if (close) setShowEly(false);
   };
+
+  const handleAttachFile = (e) => {
+    const files = Array.from(e.target.files || []);
+    const readers = files.map(file => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, base64: reader.result.split(',')[1] });
+      reader.readAsDataURL(file);
+    }));
+    Promise.all(readers).then(fileData => {
+      setAttachments(prev => [...prev, ...fileData]);
+    });
+    e.target.value = ''; // reset so same file can be re-added
+  };
+
+  const removeAttachment = (idx) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
   const inp = { width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
 
@@ -575,10 +604,145 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
   );
 }
 
+// ── Project link banner ──────────────────────────────────────────────────────
+function ProjectLinkBanner({ email, onLinked }) {
+  const [projects, setProjects]   = useState([]);
+  const [selected, setSelected]   = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!email || dismissed) return;
+    // Only show for unlinked emails
+    if (email.link_status === 'auto_linked' || email.link_status === 'manually_linked') return;
+    // Load active projects for the dropdown
+    sb.from('projects').select('id,ref,bo_premise_address,bo,status')
+      .neq('status', 'closed').order('created_at', { ascending: false }).limit(50)
+      .then(({ data }) => setProjects(data || []));
+  }, [email, dismissed]);
+
+  if (!email || dismissed) return null;
+  if (email.link_status === 'auto_linked' || email.link_status === 'manually_linked') return null;
+  if (projects.length === 0) return null;
+
+  const handleLink = async () => {
+    if (!selected) return;
+    setSaving(true);
+    await sb.from('emails').update({ project_id: selected, link_status: 'manually_linked' }).eq('id', email.id);
+    // Also link other emails in the same thread
+    if (email.thread_id) {
+      await sb.from('emails').update({ project_id: selected, link_status: 'auto_linked' })
+        .eq('thread_id', email.thread_id).neq('id', email.id).eq('link_status', 'unlinked');
+    }
+    onLinked?.(selected);
+    setDismissed(true);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      padding: '8px 14px', background: 'var(--blue-bg)', borderBottom: '1px solid var(--blue)',
+      display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--blue)', flexShrink: 0 }}>
+        🔗 Link to project?
+      </span>
+      <select value={selected} onChange={e => setSelected(e.target.value)}
+        style={{ flex: 1, minWidth: 160, padding: '4px 8px', fontSize: 12.5, borderRadius: 8, border: '1px solid var(--blue)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}>
+        <option value="">Select project…</option>
+        {projects.map(p => (
+          <option key={p.id} value={p.id}>
+            {p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}
+          </option>
+        ))}
+      </select>
+      <button onClick={handleLink} disabled={!selected || saving}
+        style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: 'none', opacity: selected ? 1 : 0.5 }}>
+        {saving ? 'Linking…' : 'Link'}
+      </button>
+      <button onClick={() => setDismissed(true)}
+        style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, cursor: 'pointer', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)' }}>
+        Skip
+      </button>
+    </div>
+  );
+}
+
+// ── Save attachment popup ─────────────────────────────────────────────────────
+function SaveAttachmentPopup({ email, onDismiss }) {
+  const [projects, setProjects] = useState([]);
+  const [selected, setSelected] = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [done, setDone]         = useState(false);
+
+  useEffect(() => {
+    sb.from('projects').select('id,ref,bo_premise_address,bo')
+      .neq('status', 'closed').order('created_at', { ascending: false }).limit(50)
+      .then(({ data }) => setProjects(data || []));
+  }, []);
+
+  if (done) return null;
+
+  const handleSave = async () => {
+    if (!selected) return;
+    setSaving(true);
+    // Link the email to the project and mark attachments noted
+    await sb.from('emails').update({ project_id: selected, link_status: 'manually_linked' }).eq('id', email.id);
+    setSaving(false);
+    setDone(true);
+    onDismiss?.();
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', right: 16, top: 60, zIndex: 200,
+      background: 'var(--bg2)', border: '1px solid var(--border)',
+      borderRadius: 14, padding: '16px 18px', width: 300,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 16 }}>📎</span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>Save attachment?</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.6 }}>
+        This email has attachments. Link it to a project to keep them organised.
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text3)', marginBottom: 6 }}>Save to project:</div>
+      <select value={selected} onChange={e => setSelected(e.target.value)}
+        style={{ width: '100%', padding: '6px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', marginBottom: 12, cursor: 'pointer' }}>
+        <option value="">— Select project —</option>
+        {projects.map(p => (
+          <option key={p.id} value={p.id}>{p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}</option>
+        ))}
+      </select>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={handleSave} disabled={!selected || saving}
+          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed', opacity: selected ? 1 : 0.5 }}>
+          {saving ? 'Saving…' : 'Link to project'}
+        </button>
+        <button onClick={() => { setDone(true); onDismiss?.(); }}
+          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Email preview panel ───────────────────────────────────────────────────────
 function EmailPreview({ email, onOpenReply, onDraftWithEly }) {
-  const [replyDropOpen, setReplyDropOpen] = useState(false);
+  const [replyDropOpen, setReplyDropOpen]   = useState(false);
+  const [showSavePopup, setShowSavePopup]   = useState(false);
   const dropRef = useRef(null);
+
+  // Show save popup automatically when email has attachments and is unlinked
+  useEffect(() => {
+    if (email?.has_attachments && email?.link_status === 'unlinked') {
+      setShowSavePopup(true);
+    } else {
+      setShowSavePopup(false);
+    }
+  }, [email?.id]);
 
   useEffect(() => {
     const h = e => { if (dropRef.current && !dropRef.current.contains(e.target)) setReplyDropOpen(false); };
@@ -591,7 +755,8 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly }) {
   const isHtml = isHtmlEmail(email.body || '');
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
+      {showSavePopup && <SaveAttachmentPopup email={email} onDismiss={() => setShowSavePopup(false)} />}
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -699,23 +864,42 @@ export default function Inbox({ onOpenComposer }) {
     setSyncing(true);
     try {
       await sb.functions.invoke('sync_outlook', { method: 'POST' });
-      // Wait briefly then reload
       await new Promise(r => setTimeout(r, 2000));
+      // Run auto-matching after sync
+      await sb.rpc('match_emails_to_projects').catch(() => {});
       await loadEmails();
     } catch (err) {
       console.warn('Sync error:', err);
-      await loadEmails(); // reload from DB even if sync failed
+      await loadEmails();
     }
     setSyncing(false);
   };
 
   const handleSendReply = async ({ to, cc, subject, body, replyToId }) => {
     if (!sb) return;
-    try {
-      await sb.functions.invoke('send_email_via_microsoft', { body: { to_email: to, cc_email: cc || null, subject, body, reply_to_message_id: replyToId || null } }).catch(() => {});
-      if (replyToId) await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
+    const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
+      body: { to_email: to, cc_email: cc || null, subject, body, reply_to_message_id: replyToId || null }
+    });
+    if (error || data?.error) {
+      const msg = error?.message || data?.error || 'Unknown error';
+      // Token expired — tell the user clearly
+      if (msg.includes('401') || msg.includes('token') || msg.includes('expired') || msg.includes('auth')) {
+        throw new Error('Your Microsoft account connection has expired. Go to Settings → Email → Reconnect, then try again.');
+      }
+      throw new Error('Could not send email: ' + msg);
+    }
+    // Save as sent email in DB
+    await sb.from('emails').insert([{
+      subject, body, is_sent: true, is_read: true,
+      sender_email: 'help@sq1consulting.co.uk',
+      to_email: to, thread_id: replyToId || null,
+      received_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    }]).catch(() => {});
+    if (replyToId) {
+      await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       setEmails(prev => prev.map(e => e.id === replyToId ? { ...e, is_replied: true } : e));
-    } catch (err) { console.error('Send reply error:', err); }
+    }
   };
 
   const handleDelete = async (id) => {
