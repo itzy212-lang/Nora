@@ -1,10 +1,10 @@
 import { useState } from 'react';
 
 const NOTICE_TYPES = [
-  { key: 'section_1', label: 'Section 1', templateKeys: ['notice_section_1', 'section_1_notice', 's1_notice', 'notice_s1'] },
-  { key: 'section_3', label: 'Section 3', templateKeys: ['notice_section_3', 'section_3_notice', 's3_notice', 'notice_s3'] },
-  { key: 'section_6', label: 'Section 6', templateKeys: ['notice_section_6', 'section_6_notice', 's6_notice', 'notice_s6'] },
-  { key: 'section_10', label: 'Section 10', templateKeys: ['notice_section_10', 'section_10_notice', 's10_notice', 'notice_s10'] },
+  { key: 'section_1', label: 'Section 1', templateKeys: ['s1', 'section_1', 'section_1_notice', 'notice_section_1'] },
+  { key: 'section_3', label: 'Section 3', templateKeys: ['s3', 'section_3', 'section_3_notice', 'notice_section_3'] },
+  { key: 'section_6', label: 'Section 6', templateKeys: ['s6', 'section_6', 'section_6_notice', 'notice_section_6'] },
+  { key: 'section_10', label: 'Section 10', templateKeys: ['s10', 'section_10', 'section_10_notice', 'notice_section_10'] },
 ];
 
 const aoAddress = ao => ao?.premise || ao?.reg_addr || ao?.address || '';
@@ -21,37 +21,9 @@ function cleanFileName(value) {
 
 function ModalShell({ children, onClose }) {
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 900,
-      background: 'rgba(15,23,42,0.55)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 18,
-    }}>
-      <div style={{
-        width: 760,
-        maxWidth: '96vw',
-        maxHeight: '88vh',
-        overflowY: 'auto',
-        background: '#eef1f5',
-        border: '1px solid #d8dde6',
-        borderRadius: 22,
-        boxShadow: '0 24px 70px rgba(15,23,42,0.35)',
-      }}>
-        <div style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
-          background: '#eef1f5',
-          padding: '18px 22px 12px',
-          borderBottom: '1px solid #d8dde6',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+      <div style={{ width: 760, maxWidth: '96vw', maxHeight: '88vh', overflowY: 'auto', background: '#eef1f5', border: '1px solid #d8dde6', borderRadius: 22, boxShadow: '0 24px 70px rgba(15,23,42,0.35)' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#eef1f5', padding: '18px 22px 12px', borderBottom: '1px solid #d8dde6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Serve notice</div>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text3)', cursor: 'pointer', fontSize: 24, lineHeight: 1 }}>×</button>
         </div>
@@ -90,6 +62,8 @@ export default function NoticeServingModal({ project, initialAO = null, generate
   const [createReminder, setCreateReminder] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const selectedAOs = aos.filter(ao => selectedAOKeys.includes(aoKey(ao)));
   const selectedTypes = NOTICE_TYPES.filter(type => noticeTypes[type.key]);
@@ -103,7 +77,8 @@ export default function NoticeServingModal({ project, initialAO = null, generate
   };
 
   const tryGenerateNotice = async ({ ao, type }) => {
-    const fileName = `${cleanFileName(project?.ref || 'Project')} - ${type.label} Notice - AO${ao.num || ''} ${cleanFileName(ao.name || aoAddress(ao))}.docx`;
+    const fileName = `${cleanFileName(project?.ref || 'Project')} - ${type.label} Notice - AO${ao.num || ''} ${cleanFileName(aoAddress(ao) || ao.name)}.docx`;
+
     const mergeData = {
       project_id: project.id,
       ao_id: ao.id || String(ao.num || ''),
@@ -130,7 +105,10 @@ export default function NoticeServingModal({ project, initialAO = null, generate
     };
 
     let lastError = '';
+
     for (const templateKey of type.templateKeys) {
+      setStatusMessage(`Trying template ${templateKey}…`);
+
       const result = await generateDocument({
         templateKey,
         mergeData: { ...mergeData, template_key: templateKey },
@@ -138,14 +116,20 @@ export default function NoticeServingModal({ project, initialAO = null, generate
         projectId: project.id,
       });
 
-      if (result?.success) return { ...result, templateKey, fileName };
+      if (result?.success) {
+        setStatusMessage(`${type.label} generated successfully.`);
+        return { ...result, templateKey, fileName };
+      }
+
       lastError = result?.error || lastError;
     }
 
-    throw new Error(`Could not generate ${type.label} notice for ${ao.name || aoAddress(ao)}. ${lastError || 'No matching notice template found.'}`);
+    throw new Error(`Could not generate ${type.label} notice for ${aoAddress(ao) || ao.name}. ${lastError || 'No matching notice template found.'}`);
   };
 
   const recordServedNotice = async ({ ao, type, generated }) => {
+    setStatusMessage('Recording notice and creating tasks…');
+
     const response = await fetch('/api/serve-notice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -165,6 +149,7 @@ export default function NoticeServingModal({ project, initialAO = null, generate
     });
 
     const data = await response.json();
+
     if (!response.ok || !data?.success) {
       throw new Error(data?.error || 'Notice was generated but could not be recorded.');
     }
@@ -178,22 +163,32 @@ export default function NoticeServingModal({ project, initialAO = null, generate
     if (!noticeDate) return alert('Please enter the notice date.');
 
     setSaving(true);
+    setErrorMessage('');
+    setStatusMessage('Preparing notice generation…');
+
     try {
       const completed = [];
 
       for (const ao of selectedAOs) {
         for (const type of selectedTypes) {
+          setStatusMessage(`Generating ${type.label} for ${aoAddress(ao) || ao.name}…`);
+
           const generated = await tryGenerateNotice({ ao, type });
           const recorded = await recordServedNotice({ ao, type, generated });
+
           completed.push({ ao, type, generated, recorded });
         }
       }
 
+      setStatusMessage('Notice workflow completed successfully.');
+
       await onServed?.({ completed, selectedAOs, selectedTypes, noticeDate });
       onClose();
+
       alert(`Generated and recorded ${completed.length} notice document${completed.length === 1 ? '' : 's'}.`);
     } catch (err) {
-      alert(err.message || 'Could not serve notice.');
+      console.error('[NoticeServingModal] workflow error:', err);
+      setErrorMessage(err.message || 'Could not serve notice.');
       setSaving(false);
     }
   };
@@ -203,14 +198,7 @@ export default function NoticeServingModal({ project, initialAO = null, generate
       <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {NOTICE_TYPES.map(type => (
-            <button key={type.key} onClick={() => toggleType(type.key)} style={{
-              padding: 14,
-              borderRadius: 14,
-              border: noticeTypes[type.key] ? '2px solid var(--blue)' : '1px solid #e5e7eb',
-              background: noticeTypes[type.key] ? 'var(--blue-bg)' : '#fff',
-              cursor: 'pointer',
-              textAlign: 'center',
-            }}>
+            <button key={type.key} onClick={() => toggleType(type.key)} style={{ padding: 14, borderRadius: 14, border: noticeTypes[type.key] ? '2px solid var(--blue)' : '1px solid #e5e7eb', background: noticeTypes[type.key] ? 'var(--blue-bg)' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>{type.label}</div>
             </button>
           ))}
@@ -222,7 +210,7 @@ export default function NoticeServingModal({ project, initialAO = null, generate
             {aos.map(ao => (
               <label key={aoKey(ao)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10, cursor: 'pointer' }}>
                 <input type="checkbox" checked={selectedAOKeys.includes(aoKey(ao))} onChange={() => toggleAO(aoKey(ao))} />
-                <span style={{ fontSize: 13, color: 'var(--text)' }}>AO{ao.num} - {ao.name || aoAddress(ao) || 'Unnamed AO'}</span>
+                <span style={{ fontSize: 13, color: 'var(--text)' }}>AO{ao.num} - {aoAddress(ao) || ao.name || 'Unnamed AO'}</span>
               </label>
             ))}
           </div>
@@ -234,6 +222,7 @@ export default function NoticeServingModal({ project, initialAO = null, generate
               Notice date
               <input type="date" value={noticeDate} onChange={e => setNoticeDate(e.target.value)} style={{ ...inputStyle, marginTop: 5 }} />
             </label>
+
             <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase' }}>
               Notifiable works
               <textarea rows={4} value={works} onChange={e => setWorks(e.target.value)} style={{ ...inputStyle, marginTop: 5, resize: 'vertical' }} />
@@ -246,25 +235,38 @@ export default function NoticeServingModal({ project, initialAO = null, generate
             <input type="checkbox" checked={includeCoverLetter} onChange={e => setIncludeCoverLetter(e.target.checked)} />
             Include covering letter
           </label>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: 'var(--text2)' }}>
             <input type="checkbox" checked={createReminder} onChange={e => setCreateReminder(e.target.checked)} />
             Create consent / deadline task
           </label>
         </div>
 
+        {statusMessage && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 12, padding: '10px 12px', fontSize: 12.5 }}>{statusMessage}</div>
+        )}
+
+        {errorMessage && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 12, padding: '10px 12px', fontSize: 12.5 }}>{errorMessage}</div>
+        )}
+
         {previewOpen && (
           <div style={{ ...sectionStyle, background: '#f8fafc', fontSize: 12.5, lineHeight: 1.7, color: 'var(--text2)' }}>
             Notices: {selectedTypes.map(t => t.label).join(', ') || 'None selected'}<br />
-            AOs: {selectedAOs.map(ao => `AO${ao.num} ${ao.name || aoAddress(ao)}`).join(', ') || 'None selected'}<br />
+            AOs: {selectedAOs.map(ao => `AO${ao.num} ${aoAddress(ao) || ao.name}`).join(', ') || 'None selected'}<br />
             Notice date: {noticeDate}
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: '1px solid #d8dde6', paddingTop: 16 }}>
           <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Back</button>
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setPreviewOpen(v => !v)} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Preview</button>
-            <button onClick={handleServe} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>{saving ? 'Generating…' : 'Serve notice'}</button>
+
+            <button onClick={handleServe} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+              {saving ? 'Generating…' : 'Serve notice'}
+            </button>
           </div>
         </div>
       </div>
