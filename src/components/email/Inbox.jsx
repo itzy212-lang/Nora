@@ -982,18 +982,23 @@ export default function Inbox({ onOpenComposer }) {
       throw new Error('Could not send email: ' + msg);
     }
 
-    // Save as sent in DB
-    await sb.from('emails').insert([{
-      subject,
-      body: emailBody,
-      is_sent: true,
-      is_read: true,
-      sender_email: 'help@sq1consulting.co.uk',
-      to_email: to,
-      thread_id: replyToId || null,
-      received_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    }]).catch(() => {});
+    // Save as sent in DB without using .catch() on the Supabase query builder
+    try {
+      const { error: insertError } = await sb.from('emails').insert([{
+        subject,
+        body: emailBody,
+        is_sent: true,
+        is_read: true,
+        sender_email: 'help@sq1consulting.co.uk',
+        to_email: to,
+        thread_id: replyToId || null,
+        received_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      }]);
+      if (insertError) console.warn('Sent email DB insert warning:', insertError.message);
+    } catch (insertErr) {
+      console.warn('Sent email DB insert warning:', insertErr?.message || insertErr);
+    }
 
     if (replyToId) {
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
