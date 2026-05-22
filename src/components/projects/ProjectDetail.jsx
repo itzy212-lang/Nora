@@ -1184,7 +1184,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     setProject(initialProject);
   }, [initialProject]);
 
-  const { sendForSignature } = useDocumentGenerator();
+  const { generateDocument, sendForSignature } = useDocumentGenerator();
 
   const role = getRole(project);
   const primaryAO = getPrimaryAO(project);
