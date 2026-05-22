@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
+import NoticeServingModal from './NoticeServingModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import sb from '../../supabaseClient';
 import PizZip from 'pizzip';
@@ -1974,7 +1975,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, []);
 
   const handleServeNotice = useCallback((ao) => {
-    handleOpenNoticeModal(ao, ['s1', 's3', 's6']);
+    handleOpenNoticeModal(ao, []);
   }, [handleOpenNoticeModal]);
 
   const handleServeS10 = useCallback((ao) => {
@@ -2202,11 +2203,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
 
       {noticeModal && (
-        <NoticeServeModal
+        <NoticeServingModal
           project={project}
           ao={noticeModal.ao}
           defaultSections={noticeModal.defaultSections || []}
-          onServe={({ sections, includeCover }) => handleServeNoticePack({ ao: noticeModal.ao, sections, includeCover })}
+          generateDocument={generateDocument}
+          onServe={({ ao: servedAO, sections, includeCover }) => handleServeNoticePack({ ao: servedAO || noticeModal.ao, sections, includeCover })}
           onClose={() => setNoticeModal(null)}
         />
       )}
