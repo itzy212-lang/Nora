@@ -1180,9 +1180,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
   const windowWidth = useWindowWidth();
 
+  // Only reset local state when navigating to a DIFFERENT project
+  // Parent re-renders with stale cached data must NOT overwrite local notice/AO updates
   useEffect(() => {
     setProject(initialProject);
-  }, [initialProject]);
+  }, [initialProject?.id]);
 
   const { generateDocument, sendForSignature } = useDocumentGenerator();
 
@@ -1484,7 +1486,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         autoDownload: false,   // suppress individual auto-downloads — we handle ZIP ourselves
         download: false,
       });
-      if (!result?.success) { console.warn(`Notice template '${key}' not found:`, result?.error); continue; }
+      if (!result?.success) {
+        console.warn(`[Notice] Template '${key}' failed:`, result?.error);
+        if (key === 'cover') alert(`Note: Covering letter could not be generated. Check the cover template is properly set up.`);
+        continue;
+      }
       generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
       addDocxToZip(zip, mergeData.file_name, result.docx_b64);
     }
@@ -1515,7 +1521,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       await createProjectTask({
         title: `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
         description: '14-day notice consent period expired. Review whether Section 10 is required.',
-        due_date: deadline, task_type: 'consent_deadline', ao,
+        due_date: deadline, task_type: 'notice_consent_deadline', ao,
       });
     }
     if (sections.includes('s10')) {
@@ -1527,7 +1533,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       await createProjectTask({
         title: `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
         description: '10-day Section 10 notice period expired.',
-        due_date: deadline, task_type: 'section_10_deadline', ao,
+        due_date: deadline, task_type: 'notice_section10_deadline', ao,
       });
     }
     alert(generatedDocs.length > 1 ? 'Notice pack generated and served.' : 'Notice generated and served.');
