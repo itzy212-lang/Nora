@@ -1973,6 +1973,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     setNoticeModal({ ao, defaultSections });
   }, []);
 
+  const handleServeNotice = useCallback((ao) => {
+    handleOpenNoticeModal(ao, ['s1', 's3', 's6']);
+  }, [handleOpenNoticeModal]);
+
+  const handleServeS10 = useCallback((ao) => {
+    handleOpenNoticeModal(ao, ['s10']);
+  }, [handleOpenNoticeModal]);
+
   // ── Serve notices: persist workflow first, generate documents second ──
   const handleServeNoticePack = useCallback(async ({ ao, sections, includeCover }) => {
     const noticeDate = todayIso();
