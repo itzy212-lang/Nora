@@ -3,26 +3,10 @@ import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import PizZip from 'pizzip';
 
 const NOTICE_TYPES = [
-  {
-    key: 's1',
-    label: 'Section 1 Notice',
-    deadlineDays: 14,
-  },
-  {
-    key: 's3',
-    label: 'Section 3 Notice',
-    deadlineDays: 14,
-  },
-  {
-    key: 's6',
-    label: 'Section 6 Notice',
-    deadlineDays: 14,
-  },
-  {
-    key: 's10',
-    label: 'Section 10 Notice',
-    deadlineDays: 10,
-  },
+  { key: 's1', label: 'Section 1 Notice', deadlineDays: 14 },
+  { key: 's3', label: 'Section 3 Notice', deadlineDays: 14 },
+  { key: 's6', label: 'Section 6 Notice', deadlineDays: 14 },
+  { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
 
 function addDocxToZip(zip, fileName, b64) {
@@ -50,15 +34,23 @@ function downloadB64File(b64, fileName, mimeType) {
   window.URL.revokeObjectURL(url);
 }
 
+function safeName(value) {
+  return String(value || 'Document')
+    .replace(/[^\w\s.-]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 80);
+}
+
 export default function NoticeServingModal({
   project,
   ao,
+  defaultSections = [],
   generateDocument,
   onServe,
   onClose,
 }) {
-  const [selected, setSelected] = useState([]);
-  const [includeCover, setIncludeCover] = useState(true);
+  const [selected, setSelected] = useState(defaultSections || []);
+  const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
   const [loading, setLoading] = useState(false);
 
   const toggle = key => {
@@ -70,8 +62,23 @@ export default function NoticeServingModal({
   };
 
   const handleServe = async () => {
+    if (!ao) {
+      alert('Please select an adjoining owner first.');
+      return;
+    }
+
     if (!selected.length) {
       alert('Please select at least one notice type.');
+      return;
+    }
+
+    if (typeof generateDocument !== 'function') {
+      alert('Document generator is not available.');
+      return;
+    }
+
+    if (typeof onServe !== 'function') {
+      alert('Notice save handler is not available.');
       return;
     }
 
@@ -93,8 +100,7 @@ export default function NoticeServingModal({
             noticeType: key,
           });
 
-          const fileName = `${project?.ref || 'Project'}_${ao?.name || 'AO'}_${key}.docx`
-            .replace(/\s+/g, '_');
+          const fileName = `${safeName(project?.ref || 'Project')}_${safeName(ao?.name || `AO${ao?.num || ''}`)}_${safeName(key)}.docx`;
 
           const result = await generateDocument({
             templateKey: key,
@@ -119,22 +125,24 @@ export default function NoticeServingModal({
         const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
         downloadB64File(
           zipB64,
-          `${project?.ref || 'Project'}_${ao?.name || 'AO'}_Notice_Pack.zip`.replace(/\s+/g, '_'),
+          `${safeName(project?.ref || 'Project')}_${safeName(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`,
           'application/zip'
         );
       }
 
       await onServe({
+        ao,
         sections: selected,
         includeCover,
         warnings,
+        generatedCount: generatedDocs.length,
       });
+
+      onClose?.();
 
       if (warnings.length) {
         alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
       }
-
-      onClose?.();
     } catch (err) {
       console.error(err);
       alert(err.message || 'Failed to serve notices.');
@@ -144,65 +152,168 @@ export default function NoticeServingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6 flex flex-col gap-5">
-        <div>
-          <div className="text-lg font-semibold">Serve Notices</div>
-          <div className="text-sm text-neutral-500 mt-1">
-            {ao?.name || 'Adjoining Owner'} • {project?.ref || 'Project'}
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 9999,
+      background: 'rgba(15,23,42,0.55)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 18,
+    }}>
+      <div style={{
+        width: 680,
+        maxWidth: '96vw',
+        maxHeight: '88vh',
+        overflowY: 'auto',
+        background: '#eef1f5',
+        border: '1px solid #d8dde6',
+        borderRadius: 22,
+        boxShadow: '0 24px 70px rgba(15,23,42,0.35)',
+      }}>
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          background: '#eef1f5',
+          padding: '18px 22px 12px',
+          borderBottom: '1px solid #d8dde6',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>
+              Serve Notices
+            </div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+              {ao?.name || 'Adjoining Owner'} • {project?.ref || 'Project'}
+            </div>
           </div>
+
+          <button onClick={onClose} style={{
+            border: 'none',
+            background: 'transparent',
+            color: '#6b7280',
+            cursor: 'pointer',
+            fontSize: 24,
+            lineHeight: 1,
+          }}>
+            ×
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {NOTICE_TYPES.map(item => {
-            const active = selected.includes(item.key);
+        <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 18,
+            padding: 16,
+          }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              marginBottom: 12,
+            }}>
+              Select notices
+            </div>
 
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => toggle(item.key)}
-                className={`rounded-xl border px-4 py-3 text-left transition ${
-                  active
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-neutral-200 hover:border-neutral-400'
-                }`}
-              >
-                <div className="font-medium">{item.label}</div>
-                <div className="text-xs opacity-70 mt-1">
-                  {item.deadlineDays}-day workflow
-                </div>
-              </button>
-            );
-          })}
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {NOTICE_TYPES.map(item => {
+                const active = selected.includes(item.key);
 
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
-          <input
-            type="checkbox"
-            checked={includeCover}
-            onChange={e => setIncludeCover(e.target.checked)}
-          />
-          Include covering letter
-        </label>
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => toggle(item.key)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '12px 14px',
+                      borderRadius: 14,
+                      border: active ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                      background: active ? '#eff6ff' : '#fff',
+                      color: active ? '#1d4ed8' : '#111827',
+                      cursor: 'pointer',
+                      fontWeight: active ? 700 : 500,
+                    }}
+                  >
+                    <div>{item.label}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 3 }}>
+                      {item.deadlineDays}-day workflow
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-neutral-300"
-          >
-            Cancel
-          </button>
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 18,
+            padding: 16,
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
+              <input
+                type="checkbox"
+                checked={includeCover}
+                onChange={e => setIncludeCover(e.target.checked)}
+              />
+              Include covering letter
+            </label>
+          </div>
 
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleServe}
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white disabled:opacity-50"
-          >
-            {loading ? 'Serving…' : 'Serve Notice Pack'}
-          </button>
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            padding: '10px 14px',
+            fontSize: 12.5,
+            color: '#6b7280',
+            lineHeight: 1.55,
+          }}>
+            S1/S3/S6 create one 14-day deadline task for this AO. Section 10 creates one 10-day deadline task. Duplicate tasks are skipped automatically.
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 99,
+                border: '1px solid #d1d5db',
+                background: '#fff',
+                color: '#374151',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleServe}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 99,
+                border: 'none',
+                background: '#2563eb',
+                color: '#fff',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.65 : 1,
+                fontWeight: 700,
+              }}
+            >
+              {loading ? 'Serving…' : 'Serve Notice Pack'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
