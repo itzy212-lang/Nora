@@ -1336,7 +1336,124 @@ function AOCard({
 
 
 
+function NoticeServeModal({ project, ao, defaultSections = [], onServe, onClose }) {
+  const [sections, setSections] = useState({
+    s1: defaultSections.includes('s1'),
+    s3: defaultSections.includes('s3'),
+    s6: defaultSections.includes('s6'),
+    s10: defaultSections.includes('s10'),
+  });
+  const [includeCover, setIncludeCover] = useState(!defaultSections.includes('s10'));
+  const [saving, setSaving] = useState(false);
 
+  const selectedSections = Object.keys(sections).filter(k => sections[k]);
+
+  const toggle = key => setSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const handleServe = async () => {
+    if (selectedSections.length === 0 && !includeCover) {
+      alert('Please select at least one notice or covering letter.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onServe({ sections: selectedSections, includeCover });
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Could not serve notices.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={sections.s10 ? 'Serve Section 10 notice' : 'Serve notice pack'} onClose={onClose}>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{
+          background: 'var(--blue-bg)',
+          border: '1px solid var(--blue)',
+          color: 'var(--blue)',
+          borderRadius: 14,
+          padding: '10px 14px',
+          fontSize: 13,
+          lineHeight: 1.55,
+        }}>
+          Serving notices for <strong>{ao?.name || `AO${ao?.num || ''}`}</strong>
+          {aoAddress(ao) ? ` at ${aoAddress(ao)}` : ''}.
+          If more than one document is generated, Ely will download a ZIP pack.
+        </div>
+
+        <div style={mSection}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            marginBottom: 12,
+          }}>
+            Select notices
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              ['s1', 'Section 1 Notice'],
+              ['s3', 'Section 3 Notice'],
+              ['s6', 'Section 6 Notice'],
+              ['s10', 'Section 10 Notice'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => toggle(key)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: 14,
+                  border: sections[key] ? '2px solid var(--blue)' : '1px solid #e5e7eb',
+                  background: sections[key] ? 'var(--blue-bg)' : '#fff',
+                  color: sections[key] ? 'var(--blue)' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: sections[key] ? 700 : 500,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={mSection}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: 'var(--text2)' }}>
+            <input type="checkbox" checked={includeCover} onChange={e => setIncludeCover(e.target.checked)} />
+            Include notice covering letter
+          </label>
+        </div>
+
+        <div style={{
+          background: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 14,
+          padding: '10px 14px',
+          fontSize: 12.5,
+          color: 'var(--text3)',
+          lineHeight: 1.55,
+        }}>
+          Deadline rule: S1/S3/S6 create one 14-day deadline task for this AO. Section 10 creates one 10-day deadline task. Duplicate tasks are skipped automatically.
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+            Cancel
+          </button>
+
+          <button onClick={handleServe} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+            {saving ? 'Serving…' : 'Serve notice pack'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
 
 
 function S104BSurveyorModal({ ao, onSave, onClose }) {
@@ -1551,6 +1668,44 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showAddAO, setShowAddAO] = useState(false);
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
+
+  // Defensive cleanup: remove legacy floating Notices card only.
+  useEffect(() => {
+    const killGhostNoticeCard = () => {
+      try {
+        const allDivs = Array.from(document.querySelectorAll('div'));
+
+        allDivs.forEach(el => {
+          const txt = (el.innerText || '').trim();
+
+          const isLegacyNoticeCard =
+            txt.includes('Generate and record notices for one or more adjoining owners') &&
+            txt.includes('Serve notice');
+
+          const isCorrectNewCard =
+            txt.includes('Select AOs') ||
+            txt.includes('generate notice pack');
+
+          if (isLegacyNoticeCard && !isCorrectNewCard) {
+            const card =
+              el.closest('[style*="position"]') ||
+              el.closest('div');
+
+            if (card) {
+              card.style.display = 'none';
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('Ghost notice cleanup failed', err);
+      }
+    };
+
+    const timer = setTimeout(killGhostNoticeCard, 300);
+
+    return () => clearTimeout(timer);
+  }, [tab, project?.id, noticeModal]);
+
 
   const windowWidth = useWindowWidth();
 
