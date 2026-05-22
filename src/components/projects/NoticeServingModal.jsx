@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import PizZip from 'pizzip';
 
 const NOTICE_TYPES = [
@@ -40,6 +41,10 @@ function safeName(value) {
     .slice(0, 80);
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function aoKey(item) {
   return String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
 }
@@ -47,190 +52,6 @@ function aoKey(item) {
 function aoAddress(item) {
   return item?.premise || item?.reg_addr || item?.address || item?.service_address || item?.serviceAddress || '';
 }
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function joinOwnerNames(name1, name2) {
-  const a = String(name1 || '').trim();
-  const b = String(name2 || '').trim();
-  if (a && b) return `${a} & ${b}`;
-  return a || b || '';
-}
-
-function aoServiceAddress(item) {
-  return item?.service_address || item?.serviceAddress || item?.reg_addr || aoAddress(item);
-}
-
-function ordinalDay(day) {
-  const n = Number(day);
-  if (n > 10 && n < 14) return `${n}th`;
-
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
-}
-
-function formatNoticeDate(value = new Date()) {
-  const d = value instanceof Date ? value : new Date(value);
-  const day = ordinalDay(d.getDate());
-  const month = d.toLocaleDateString('en-GB', { month: 'long' });
-  const year = d.getFullYear();
-
-  return `${day} ${month} ${year}`;
-}
-
-function buildNoticeMergeData({ project, ao, sectionKey }) {
-  const noticeDateIso = todayIso();
-  const noticeDateLong = formatNoticeDate(new Date());
-
-  const bo1Name = project?.bo_1_name || project?.bo || '';
-  const bo2Name = project?.bo_2_name || '';
-  const ao1Name = ao?.name || '';
-  const ao2Name = ao?.name2 || '';
-
-  const hasBO2 = !!String(bo2Name || '').trim();
-  const hasAO2 = !!String(ao2Name || '').trim();
-
-  const boNames = joinOwnerNames(bo1Name, bo2Name);
-  const aoNames = joinOwnerNames(ao1Name, ao2Name);
-
-  const boAnd = hasBO2 ? 'and' : '';
-  const aoAnd = hasAO2 ? 'and' : '';
-
-  const boIWe = hasBO2 ? 'we' : 'I';
-  const aoIWe = hasAO2 ? 'we' : 'I';
-
-  const boAmAre = hasBO2 ? 'are' : 'am';
-  const aoAmAre = hasAO2 ? 'are' : 'am';
-
-  const boMyOur = hasBO2 ? 'our' : 'my';
-  const aoMyOur = hasAO2 ? 'our' : 'my';
-
-  const boMeUs = hasBO2 ? 'us' : 'me';
-  const aoMeUs = hasAO2 ? 'us' : 'me';
-
-  const boOwnerS = hasBO2 ? 'Owners' : 'Owner';
-  const aoOwnerS = hasAO2 ? 'Owners' : 'Owner';
-
-  const boOwnerSPossessive = hasBO2 ? "Owners'" : "Owner's";
-  const aoOwnerSPossessive = hasAO2 ? "Owners'" : "Owner's";
-
-  const aoPremise = aoAddress(ao);
-  const aoService = aoServiceAddress(ao);
-  const boPremise = project?.bo_premise_address || project?.address || '';
-  const boService = project?.bo_service_address || project?.bo_1_service_address || project?.bo_address || boPremise;
-  const works = project?.works || '';
-  const ref = project?.ref || '';
-
-  const sectionLabels = {
-    s1: 'Section 1',
-    s3: 'Section 3',
-    s6: 'Section 6',
-    s10: 'Section 10',
-    cover: 'Covering Letter',
-  };
-
-  const fileBase = `${safeName(ref)}_${safeName(aoNames || `AO${ao?.num || ''}`)}_${safeName(sectionLabels[sectionKey] || sectionKey)}`.replace(/_+/g, '_');
-
-  return {
-    project_id: project?.id || '',
-    ao_id: ao?.id || String(ao?.num || ''),
-    file_name: `${fileBase}.docx`,
-    category: 'notice',
-    section_type: sectionKey,
-    source_template: sectionKey,
-
-    REF: ref,
-    PROJECT_REF: ref,
-
-    NOTICE_DATE: noticeDateLong,
-    NOTICE_DATE_LONG: noticeDateLong,
-    NOTICE_DATE_ISO: noticeDateIso,
-
-    BO_NAME: boNames,
-    BO_NAMES: boNames,
-    BO_NAME_1: bo1Name,
-    BO_NAME_2: bo2Name,
-    BO_1_NAME: bo1Name,
-    BO_2_NAME: bo2Name,
-    BO_PREMISE: boPremise,
-    BO_PROPERTY: boPremise,
-    BO_SERVICE_ADDRESS: boService,
-
-    AO_NAME: aoNames,
-    AO_NAMES: aoNames,
-    AO_NAME_1: ao1Name,
-    AO_NAME_2: ao2Name,
-    AO_1_NAME: ao1Name,
-    AO_2_NAME: ao2Name,
-    AO_PREMISE: aoPremise,
-    AO_PROPERTY: aoPremise,
-    AO_SERVICE_ADDRESS: aoService,
-
-    OWNER_S: aoOwnerS,
-    OWNER_S_POSSESSIVE: aoOwnerSPossessive,
-
-    BO_OWNER_S: boOwnerS,
-    BO_OWNER_S_POSSESSIVE: boOwnerSPossessive,
-    AO_OWNER_S: hasAO2 ? 'Adjoining Owners' : 'Adjoining Owner',
-    AO_OWNER_S_POSSESSIVE: hasAO2 ? "Adjoining Owners'" : "Adjoining Owner's",
-
-    BO_AND: boAnd,
-    AO_AND: aoAnd,
-    BO_I_WE: boIWe,
-    AO_I_WE: aoIWe,
-    BO_AM_ARE: boAmAre,
-    AO_AM_ARE: aoAmAre,
-    BO_MY_OUR: boMyOur,
-    AO_MY_OUR: aoMyOur,
-    BO_ME_US: boMeUs,
-    AO_ME_US: aoMeUs,
-
-    'BO_&_and': boAnd,
-    'AO_&_and': aoAnd,
-    'BO_&_I_&_we': boIWe,
-    'AO_&_I_&_we': aoIWe,
-    'BO_&_am_&_are': boAmAre,
-    'AO_&_am_&_are': aoAmAre,
-    'BO_&_my_&_our': boMyOur,
-    'AO_&_my_&_our': aoMyOur,
-    'BO_&_me_&_us': boMeUs,
-    'AO_&_me_&_us': aoMeUs,
-    'BO_&_Owner_&_Owners': boOwnerS,
-    'AO_&_Owner_&_Owners': aoOwnerS,
-    'BO_&_OwnerPossessive': boOwnerSPossessive,
-    'AO_&_OwnerPossessive': aoOwnerSPossessive,
-    'BO_&_Owner_&_Owners_possessive': boOwnerSPossessive,
-    'AO_&_Owner_&_Owners_possessive': aoOwnerSPossessive,
-
-    WORKS: works,
-    PROPOSED_WORKS: works,
-    NOTIFIABLE_WORKS: works,
-
-    NOTICE_SECTION: sectionLabels[sectionKey] || sectionKey,
-    NOTICE_SUBSECTION: '',
-    NOTICE_SECTION_FULL: sectionLabels[sectionKey] || sectionKey,
-
-    SECTION_1: sectionKey === 's1' ? 'Yes' : '',
-    SECTION_3: sectionKey === 's3' ? 'Yes' : '',
-    SECTION_6: sectionKey === 's6' ? 'Yes' : '',
-    SECTION_10: sectionKey === 's10' ? 'Yes' : '',
-
-    SURVEYOR_NAME: 'Itzik Darel',
-    SURVEYOR_FIRM: 'Square One Consulting',
-    SURVEYOR_EMAIL: 'help@sq1consulting.co.uk',
-  };
-}
-
 
 function normaliseAOList({ ao, aos, project }) {
   const sources = [
@@ -338,9 +159,13 @@ export default function NoticeServingModal({
 
         for (const key of allKeys) {
           try {
-            const placeholders = buildNoticeMergeData({ project, ao: selectedAO, sectionKey: key });
+            const placeholders = buildNoticePlaceholders(project, selectedAO, {
+              noticeDate: todayIso(),
+              noticeType: key,
+              noticeSection: key,
+            });
 
-            const fileName = placeholders.file_name;
+            const fileName = `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_${safeName(key)}.docx`;
 
             const result = await generateDocument({
               templateKey: key,
