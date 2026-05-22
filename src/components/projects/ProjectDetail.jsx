@@ -1486,40 +1486,45 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const handleServeNoticePack = useCallback(async ({ ao, sections, includeCover }) => {
     const noticeDate = todayIso();
     const generatedDocs = [];
+    const noticeErrors = [];
     const zip = new PizZip();
-    const keysToGenerate = [...sections];
-    if (includeCover) keysToGenerate.unshift('cover');
 
-    for (const key of keysToGenerate) {
-      const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
-      const result = await generateDocument({
-        templateKey: key, mergeData, fileName: mergeData.file_name, projectId: project.id,
-        autoDownload: false,   // suppress individual auto-downloads — we handle ZIP ourselves
-        download: false,
-      });
-      if (!result?.success) {
-        console.warn(`[Notice] Template '${key}' failed:`, result?.error);
-        if (key === 'cover') alert(`Note: Covering letter could not be generated. Check the cover template is properly set up.`);
-        continue;
+    // STEP 1: Generate documents (failures here do NOT block saving the notice)
+    for (const key of sections) {
+      try {
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
+        const result = await generateDocument({
+          templateKey: key, mergeData, fileName: mergeData.file_name, projectId: project.id,
+        });
+        if (result?.success && result?.docx_b64) {
+          generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+        } else if (!result?.success) {
+          noticeErrors.push(`${key}: ${result?.error || 'unknown error'}`);
+        }
+      } catch (err) {
+        noticeErrors.push(`${key}: ${err.message}`);
       }
-      generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
-      addDocxToZip(zip, mergeData.file_name, result.docx_b64);
     }
 
-    if (generatedDocs.length === 0) {
-      alert('No notice templates found. Please check your document templates.');
-      return;
+    // Try cover letter separately — failure is non-blocking
+    if (includeCover) {
+      try {
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: 'cover', includeCover });
+        const result = await generateDocument({
+          templateKey: 'cover', mergeData, fileName: mergeData.file_name, projectId: project.id,
+        });
+        if (result?.success && result?.docx_b64) {
+          generatedDocs.push({ key: 'cover', fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+        }
+      } catch {
+        // Cover letter failure is non-blocking — notices still served
+      }
     }
-    // Always produce ZIP when multiple docs; single doc downloaded as DOCX
-    // Note: generateDocument may auto-download — if duplicate downloads occur,
-    // check useDocumentGenerator and set { autoDownload: false } if supported
-    if (generatedDocs.length > 1) {
-      const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-      const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
-      downloadB64File(zipB64, zipName, 'application/zip');
-    }
-    // Single doc already downloaded by generateDocument — no extra download needed
 
+    // STEP 2: ALWAYS save the notice record regardless of doc generation result
+    // The notice is legally served even if the document failed to generate
     await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate });
 
     const nonS10 = sections.filter(s => ['s1', 's3', 's6'].includes(s));
@@ -1547,7 +1552,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         due_date: deadline, task_type: 'notice_section10_deadline', ao,
       });
     }
-    alert(generatedDocs.length > 1 ? 'Notice pack generated and served.' : 'Notice generated and served.');
+
+    // STEP 3: Download ZIP if we have multiple docs, individual downloads handled by generateDocument
+    if (generatedDocs.length > 1) {
+      const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+      const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
+      downloadB64File(zipB64, zipName, 'application/zip');
+    }
+
+    const msg = generatedDocs.length > 0
+      ? `Notice served and saved. ${generatedDocs.length} document(s) generated.`
+      : `Notice saved. Documents could not be generated — check templates are uploaded in Settings.`;
+    alert(msg);
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
   // ── Handle 10(4)(b) surveyor save ──
