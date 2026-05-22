@@ -138,10 +138,7 @@ export default function NoticeServingModal({
       return;
     }
 
-    if (typeof onServe !== 'function') {
-      alert('Notice save handler is not available.');
-      return;
-    }
+    const canSaveWorkflow = typeof onServe === 'function';
 
     setLoading(true);
 
@@ -192,23 +189,33 @@ export default function NoticeServingModal({
             `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_Notice_Pack.zip`,
             'application/zip'
           );
+        } else if (generatedDocs.length === 1) {
+          downloadB64File(
+            generatedDocs[0].b64,
+            generatedDocs[0].fileName,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          );
         }
 
         totalGenerated += generatedDocs.length;
 
-        await onServe({
-          ao: selectedAO,
-          sections: selected,
-          includeCover,
-          createDeadlineTask,
-          warnings,
-          generatedCount: generatedDocs.length,
-        });
+        if (canSaveWorkflow) {
+          await onServe({
+            ao: selectedAO,
+            sections: selected,
+            includeCover,
+            createDeadlineTask,
+            warnings,
+            generatedCount: generatedDocs.length,
+          });
+        }
       }
 
       onClose?.();
 
-      if (warnings.length) {
+      if (!canSaveWorkflow) {
+        alert(`Documents generated, but the notice workflow was not saved because the save handler is not connected.`);
+      } else if (warnings.length) {
         alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
       } else {
         alert(`Notice workflow saved. ${totalGenerated} document(s) generated.`);
