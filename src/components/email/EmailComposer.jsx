@@ -57,7 +57,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setCreateFollowUp(!!opts.followUp);
     setDirty(false);
     setDraftNote('Draft not saved');
-    setAttachments([]);
+    setAttachments(opts.attachments || []);
     replyInfoRef.current = {
       replyToEmailId: opts.replyToEmailId || '',
       threadId: opts.threadId || uid(),
@@ -251,7 +251,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {attachments.map((att, i) => (
               <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11.5, color: 'var(--text2)' }}>
-                📎 {att.name} <span style={{ color: 'var(--text3)' }}>{Math.round(att.size / 1024)}kb</span>
+                📎 {att.name} <span style={{ color: 'var(--text3)' }}>{Math.round((att.size || 0) / 1024)}kb</span>
                 <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '0 0 0 4px', fontSize: 13 }}>×</button>
               </div>
             ))}
