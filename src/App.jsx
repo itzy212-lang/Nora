@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
 import { useEmails } from './hooks/useEmails';
+import { useInvoices } from './hooks/useInvoices';
 import sb from './supabaseClient';
 
 // Layout
@@ -20,6 +21,7 @@ import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
 import Calendar from './components/calendar/Calendar';
 import Accounting from './components/accounting/Accounting';
+import InvoiceModal from './components/accounting/InvoiceModal';
 import SOC from './components/soc/SOC';
 
 function StubView({ icon, title, subtitle }) {
@@ -37,6 +39,7 @@ export default function App() {
   const { currentUser, settings } = state;
   const { loadProjects, setCurrentProject, clearCurrentProject } = useProjects();
   const { loadEmails } = useEmails();
+  const { invoices, createInvoice } = useInvoices();
 
   const [authChecked, setAuthChecked]       = useState(false);
   const [currentView, setCurrentView]       = useState('dashboard');
@@ -44,7 +47,13 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [composerOpts, setComposerOpts]     = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [socProjectId, setSocProjectId]     = useState(null);
+
+  const nextInvoiceNumber = settings?.next_invoice_number
+    || (invoices?.length > 0
+      ? Math.max(...invoices.map(i => parseInt(i.invoice_number, 10) || 0)) + 1
+      : 1601);
 
   useEffect(() => {
     if (!sb) { setAuthChecked(true); return; }
@@ -93,10 +102,25 @@ export default function App() {
   }, []);
 
   const handleRaiseInvoice = useCallback((projectData = null) => {
-    setInvoiceProject(projectData);
+    if (projectData) {
+      setInvoiceProject(projectData);
+      setShowInvoiceModal(true);
+      return;
+    }
+
+    setInvoiceProject(null);
     setCurrentView('accounting');
     setProjectView(null);
   }, []);
+
+  const closeInvoiceModal = useCallback(() => {
+    setShowInvoiceModal(false);
+    setInvoiceProject(null);
+  }, []);
+
+  const handleSaveProjectInvoice = useCallback(async (data) => {
+    await createInvoice(data);
+  }, [createInvoice]);
 
   const handleOpenSOC = useCallback((project = null) => {
     setSocProjectId(project?.id || null);
@@ -156,8 +180,6 @@ export default function App() {
           <Accounting
             projects={state.projects || []}
             settings={settings || {}}
-            defaultInvoiceData={invoiceProject}
-            onInvoiceOpened={() => setInvoiceProject(null)}
           />
         );
       case 'soc':
@@ -179,22 +201,28 @@ export default function App() {
     }
   };
 
-  if (currentView === 'chat') {
-    return (
-      <>
-        <MainChat onOpenComposer={openComposer} />
-        {composerOpts && (
-          <EmailComposer
-            opts={composerOpts}
-            onClose={closeComposer}
-            onSent={closeComposer}
-          />
-        )}
-      </>
-    );
-  }
-
-  return (
+  const appBody = currentView === 'chat' ? (
+    <>
+      <MainChat onOpenComposer={openComposer} />
+      {composerOpts && (
+        <EmailComposer
+          opts={composerOpts}
+          onClose={closeComposer}
+          onSent={closeComposer}
+        />
+      )}
+      {showInvoiceModal && (
+        <InvoiceModal
+          initialData={invoiceProject || {}}
+          nextNumber={nextInvoiceNumber}
+          settings={settings || {}}
+          projects={state.projects || []}
+          onSave={handleSaveProjectInvoice}
+          onClose={closeInvoiceModal}
+        />
+      )}
+    </>
+  ) : (
     <div className="app">
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
@@ -236,6 +264,19 @@ export default function App() {
           onSent={closeComposer}
         />
       )}
+
+      {showInvoiceModal && (
+        <InvoiceModal
+          initialData={invoiceProject || {}}
+          nextNumber={nextInvoiceNumber}
+          settings={settings || {}}
+          projects={state.projects || []}
+          onSave={handleSaveProjectInvoice}
+          onClose={closeInvoiceModal}
+        />
+      )}
     </div>
   );
+
+  return appBody;
 }
