@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
-import NoticeServingModal from './NoticeServingModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import sb from '../../supabaseClient';
-import PizZip from 'pizzip';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -27,8 +25,6 @@ const aoSurvPhone = ao => ao?.surv_phone || ao?.surveyorPhone || '';
 const aoConsent = ao => ao?.consent_deadline || ao?.consentDeadline || '';
 const aoNotice = ao => ao?.notice_served_date || ao?.noticeServedDate || '';
 const aoS10 = ao => ao?.s10_deadline || ao?.s10Deadline || '';
-const aoS10Served = ao => ao?.s10_served_date || ao?.s10ServedDate || '';
-const ao104BServed = ao => ao?.s104b_served_date || ao?.s104bServedDate || '';
 const aoName2 = ao => ao?.name2 || '';
 
 const STAGES = ['Notice served', 'Consent', 'Appt made', 'Award', 'Complete'];
@@ -52,198 +48,6 @@ function daysUntil(d) {
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
 }
 
-function addDaysIso(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function safeFilePart(value) {
-  return String(value || 'Document')
-    .replace(/[^\w\s.-]/g, '')
-    .replace(/\s+/g, '_')
-    .slice(0, 80);
-}
-
-function addDocxToZip(zip, fileName, b64) {
-  if (!zip || !b64) return;
-  zip.file(fileName, b64, { base64: true });
-}
-
-function downloadB64File(b64, fileName, mimeType) {
-  const byteCharacters = atob(b64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i += 1) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
-}
-
-function joinOwnerNames(name1, name2) {
-  const a = String(name1 || '').trim();
-  const b = String(name2 || '').trim();
-  if (a && b) return `${a} & ${b}`;
-  return a || b || '';
-}
-
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false }) {
-  const noticeDate = todayIso();
-  const aoNames = joinOwnerNames(ao?.name, ao?.name2);
-  const boNames = joinOwnerNames(project?.bo_1_name || project?.bo, project?.bo_2_name);
-  const aoPremise = aoAddress(ao);
-  const aoService = aoServiceAddress(ao);
-  const boPremise = project?.bo_premise_address || project?.address || '';
-  const boService = project?.bo_service_address || project?.bo_1_service_address || project?.bo_address || boPremise;
-  const works = project?.works || '';
-  const ref = project?.ref || '';
-
-  const sectionLabels = {
-    s1: 'Section 1',
-    s3: 'Section 3',
-    s6: 'Section 6',
-    s10: 'Section 10',
-    cover: 'Covering Letter',
-  };
-
-  const fileBase = `${safeFilePart(ref)}_${safeFilePart(aoNames || `AO${ao?.num || ''}`)}_${safeFilePart(sectionLabels[sectionKey] || sectionKey)}`.replace(/_+/g, '_');
-
-  return {
-    project_id: project?.id || '',
-    ao_id: ao?.id || String(ao?.num || ''),
-    file_name: `${fileBase}.docx`,
-    category: 'notice',
-    section_type: sectionKey,
-    source_template: sectionKey,
-
-    REF: ref,
-    PROJECT_REF: ref,
-
-    NOTICE_DATE: noticeDate,
-    NOTICE_DATE_LONG: new Date(noticeDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-
-    BO_NAME: boNames,
-    BO_NAMES: boNames,
-    BO_NAME_1: project?.bo_1_name || project?.bo || '',
-    BO_NAME_2: project?.bo_2_name || '',
-    BO_PREMISE: boPremise,
-    BO_PROPERTY: boPremise,
-    BO_SERVICE_ADDRESS: boService,
-
-    AO_NAME: aoNames,
-    AO_NAMES: aoNames,
-    AO_NAME_1: ao?.name || '',
-    AO_NAME_2: ao?.name2 || '',
-    AO_PREMISE: aoPremise,
-    AO_PROPERTY: aoPremise,
-    AO_SERVICE_ADDRESS: aoService,
-
-    OWNER_S: ao?.name2 ? 'Owners' : 'Owner',
-    OWNER_S_POSSESSIVE: ao?.name2 ? "Owners'" : "Owner's",
-    AO_OWNER_S: ao?.name2 ? 'Adjoining Owners' : 'Adjoining Owner',
-    AO_OWNER_S_POSSESSIVE: ao?.name2 ? "Adjoining Owners'" : "Adjoining Owner's",
-
-    WORKS: works,
-    PROPOSED_WORKS: works,
-    NOTIFIABLE_WORKS: works,
-
-    NOTICE_SECTION: sectionLabels[sectionKey] || sectionKey,
-    NOTICE_SUBSECTION: '',
-    NOTICE_SECTION_FULL: sectionLabels[sectionKey] || sectionKey,
-
-    SECTION_1: sectionKey === 's1' ? 'Yes' : '',
-    SECTION_3: sectionKey === 's3' ? 'Yes' : '',
-    SECTION_6: sectionKey === 's6' ? 'Yes' : '',
-    SECTION_10: sectionKey === 's10' ? 'Yes' : '',
-
-    SURVEYOR_NAME: 'Itzik Darel',
-    SURVEYOR_FIRM: 'Square One Consulting',
-    SURVEYOR_EMAIL: 'help@sq1consulting.co.uk',
-  };
-}
-
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDaysISO(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function aoKeyMatches(a, target) {
-  if (!a || !target) return false;
-  if (a.id && target.id) return a.id === target.id;
-  if (a.num && target.num) return a.num === target.num;
-  return a.name === target.name && aoAddress(a) === aoAddress(target);
-}
-
-function isAOResolved(ao) {
-  const st = (ao?.status || '').toLowerCase();
-  return ['consent', 'dissent', 's10', 'section_10_served', 'award', 'complete'].includes(st);
-}
-
-function hasS10BeenServed(ao) {
-  const st = (ao?.status || '').toLowerCase();
-  return st === 's10' || st === 'section_10_served' || !!ao?.s10_served_date || !!ao?.s10ServedDate;
-}
-
-function consentPeriodExpired(ao) {
-  const cd = aoConsent(ao);
-  if (!cd || isAOResolved(ao)) return false;
-  return new Date(cd).getTime() < Date.now();
-}
-
-function getAOStatusMeta(ao, projectRole = 'BO') {
-  const st = (ao?.status || '').toLowerCase();
-  const noticed = !!aoNotice(ao);
-  const s10Served = hasS10BeenServed(ao);
-  const overdue = consentPeriodExpired(ao);
-
-  if (projectRole === 'AO' && ao?.appointed_by_me) {
-    return { label: 'Your AO client', colour: '#a855f7', action: null };
-  }
-
-  if (st === 'consent') {
-    return { label: 'Consent received', colour: '#22c55e', action: null };
-  }
-
-  if (st === 'dissent') {
-    return {
-      label: ao?.agreed_surveyor ? 'Dissent - agreed surveyor' : 'Dissent received',
-      colour: ao?.agreed_surveyor || aoSurvName(ao) ? '#22c55e' : '#ef4444',
-      action: null,
-    };
-  }
-
-  if (s10Served) {
-    return { label: 'Section 10 served', colour: '#22c55e', action: null };
-  }
-
-  if (overdue) {
-    return { label: 'Serve Section 10', colour: '#ef4444', action: 'serve_s10' };
-  }
-
-  if (noticed) {
-    return { label: 'Notice served', colour: '#22c55e', action: null };
-  }
-
-  return { label: 'Serve notice', colour: '#3b82f6', action: 'serve_notice' };
-}
-
 function fmtGBP(v) {
   return `£${(parseFloat(v) || 0).toLocaleString('en-GB', {
     minimumFractionDigits: 0,
@@ -251,13 +55,26 @@ function fmtGBP(v) {
 }
 
 function getAOColour(ao, projectRole = 'BO') {
-  return getAOStatusMeta(ao, projectRole).colour || '#9ca3af';
+  if (projectRole === 'AO' && ao?.appointed_by_me) return '#a855f7';
+
+  const st = (ao.status || '').toLowerCase();
+
+  if (st === 'consent') return '#22c55e';
+  if (st === 'dissent' || st === 's10') return '#ef4444';
+
+  const cd = aoConsent(ao);
+  const sd = aoS10(ao);
+  const now = Date.now();
+
+  if ((cd && new Date(cd).getTime() < now) || (sd && new Date(sd).getTime() < now)) return '#ef4444';
+  if (aoNotice(ao) || st === 'notice_served' || cd) return '#22c55e';
+
+  return '#9ca3af';
 }
 
 function getProjectColour(project) {
   const role = (project.role || project.appointment_role || 'BO').toUpperCase();
   const aos = project.aos || [];
-  const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
 
   if (role === 'AO') return '#a855f7';
   if (!aos.length) return '#9ca3af';
@@ -270,8 +87,8 @@ function getProjectColour(project) {
     const st = (ao.status || '').toLowerCase();
 
     return (
-      (cd && new Date(cd).getTime() < now && !isAOResolved(ao)) ||
-      (sd && new Date(sd).getTime() < now && !['consent', 'dissent', 's10', 'section_10_served', 'award', 'complete'].includes(st))
+      (cd && new Date(cd).getTime() < now && !['consent', 'dissent'].includes(st)) ||
+      (sd && new Date(sd).getTime() < now)
     );
   });
 
@@ -1010,61 +827,13 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
   );
 }
 
-
-function getAOWorkflowAction(ao, projectRole = 'BO') {
-  const st = (ao.status || '').toLowerCase();
-  const noticed = !!aoNotice(ao);
-  const consentDeadlineDays = daysUntil(aoConsent(ao));
-  const s10DeadlineDays = daysUntil(aoS10(ao));
-  const s10Served = !!aoS10Served(ao);
-  const s104bServed = !!ao104BServed(ao);
-
-  if (projectRole === 'AO' && ao?.appointed_by_me) {
-    return { label: 'Your AO client', action: null, colour: '#a855f7', active: false };
-  }
-
-  if (st === 'consent') return { label: 'Consent received', action: null, colour: 'var(--green)', active: false };
-  if (st === 'dissent' && ao.agreed_surveyor) return { label: 'Agreed surveyor', action: null, colour: 'var(--green)', active: false };
-  if (st === 'dissent') return { label: 'Dissent received', action: null, colour: 'var(--amber)', active: false };
-
-  if (s104bServed || st === 's104b') {
-    return { label: '10(4)(b) served', action: null, colour: 'var(--green)', active: false };
-  }
-
-  if (s10Served || st === 's10') {
-    if (s10DeadlineDays !== null && s10DeadlineDays <= 0) {
-      return { label: 'Serve 10(4)(b) papers', action: 'serve104b', colour: 'var(--red)', active: true };
-    }
-    return {
-      label: s10DeadlineDays === null ? 'Section 10 served' : s10DeadlineDays === 0 ? 'S.10 deadline today' : `S.10 deadline — ${s10DeadlineDays}d`,
-      action: null,
-      colour: 'var(--green)',
-      active: false,
-    };
-  }
-
-  if (noticed && consentDeadlineDays !== null && consentDeadlineDays <= 0) {
-    return { label: 'Serve Section 10', action: 'serveS10', colour: 'var(--red)', active: true };
-  }
-
-  if (noticed) return { label: 'Notice served', action: null, colour: 'var(--green)', active: false };
-
-  return { label: 'Serve notice', action: 'serveNotice', colour: 'var(--blue)', active: true };
-}
-
 function AOCard({
   ao,
   projectRole,
-  project,
   onOpenComposer,
   onGenerateAOLOA,
   onEditAO,
   onServeNotice,
-  onServeS10,
-  onSetAOStatus,
-  onToggleAgreedSurveyor,
-  onNoteIntention,
-  onOpenSOCForAO,
   loaLoading,
 }) {
   const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
@@ -1078,9 +847,9 @@ function AOCard({
   const survEmail = aoSurvEmail(ao);
   const survPhone = aoSurvPhone(ao);
 
-  const statusMeta = getAOStatusMeta(ao, projectRole);
-  const statusLabel = statusMeta.label;
-  const statusColour = statusMeta.colour || colour;
+  const statusLabel = isAOAppointment
+    ? 'Your AO client'
+    : ({ consent: 'Consent', dissent: 'Dissent', s10: 'S.10', notice_served: 'Notice served' }[(ao.status || '').toLowerCase()] || (noticed ? 'Notice served' : ''));
 
   return (
     <div style={{ ...card({ marginBottom: 12, overflow: 'hidden' }) }}>
@@ -1101,28 +870,9 @@ function AOCard({
             </div>
 
             {statusLabel && (
-              statusMeta.action ? (
-                <button
-                  onClick={() => statusMeta.action === 'serve_s10' ? onServeS10?.(ao) : onServeNotice?.(ao)}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: 99,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    border: `1px solid ${statusColour}`,
-                    background: statusMeta.action === 'serve_s10' ? 'var(--red-bg)' : 'var(--blue-bg)',
-                    color: statusColour,
-                    marginLeft: 8,
-                  }}
-                >
-                  {statusLabel}
-                </button>
-              ) : (
-                <span style={{ fontSize: 12, fontWeight: 700, color: statusColour, paddingLeft: 8 }}>
-                  {statusLabel}
-                </span>
-              )
+              <span style={{ fontSize: 12, fontWeight: 600, color: colour, paddingLeft: 8 }}>
+                {statusLabel}
+              </span>
             )}
           </div>
 
@@ -1157,21 +907,15 @@ function AOCard({
 
           {!isAOAppointment && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-              <div
-                onClick={() => onToggleAgreedSurveyor?.(ao)}
-                role="switch"
-                aria-checked={!!ao.agreed_surveyor}
-                title="Toggle agreed surveyor appointment"
-                style={{
-                  width: 32,
-                  height: 18,
-                  borderRadius: 9,
-                  cursor: 'pointer',
-                  position: 'relative',
-                  flexShrink: 0,
-                  background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)',
-                }}
-              >
+              <div style={{
+                width: 32,
+                height: 18,
+                borderRadius: 9,
+                cursor: 'pointer',
+                position: 'relative',
+                flexShrink: 0,
+                background: ao.agreed_surveyor ? 'var(--blue)' : 'var(--border2)',
+              }}>
                 <div style={{
                   width: 14,
                   height: 14,
@@ -1244,36 +988,23 @@ function AOCard({
             )}
 
             {!isAOAppointment && noticed && ['Consent', 'Dissent'].map(a => (
-              <button
-                key={a}
-                onClick={() => onSetAOStatus?.(ao, a.toLowerCase())}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 99,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
-                  background: (ao.status || '').toLowerCase() === a.toLowerCase() ? (a === 'Consent' ? 'var(--green-bg)' : 'var(--red-bg)') : 'transparent',
-                  color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
-                }}
-              >
+              <button key={a} style={{
+                padding: '4px 12px',
+                borderRadius: 99,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
+                background: 'transparent',
+                color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
+              }}>
                 {a}
               </button>
             ))}
 
             {!isAOAppointment && noticed && (
-              <button
-                className="btn btn-sm btn-ghost"
-                onClick={() => onNoteIntention?.(ao)}
-                style={{
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  borderRadius: 99,
-                  color: ao.intention_noted ? 'var(--green)' : undefined,
-                }}
-              >
-                {ao.intention_noted ? 'Intention noted' : 'Note intention'}
+              <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', fontSize: 12, borderRadius: 99 }}>
+                Note intention
               </button>
             )}
 
@@ -1311,19 +1042,16 @@ function AOCard({
             </button>
 
             {!isAOAppointment && (
-              <button
-                onClick={() => onOpenSOCForAO?.(ao)}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 99,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  border: '1px solid var(--purple)',
-                  background: ao.soc_required || ao.status === 'consent_soc' ? 'var(--purple-bg)' : 'transparent',
-                  color: 'var(--purple)',
-                }}
-              >
+              <button style={{
+                padding: '4px 12px',
+                borderRadius: 99,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: '1px solid var(--purple)',
+                background: 'transparent',
+                color: 'var(--purple)',
+              }}>
                 Schedule of Condition
               </button>
             )}
@@ -1333,225 +1061,6 @@ function AOCard({
     </div>
   );
 }
-
-
-
-function NoticeServeModal({ project, ao, defaultSections = [], onServe, onClose }) {
-  const [sections, setSections] = useState({
-    s1: defaultSections.includes('s1'),
-    s3: defaultSections.includes('s3'),
-    s6: defaultSections.includes('s6'),
-    s10: defaultSections.includes('s10'),
-  });
-  const [includeCover, setIncludeCover] = useState(!defaultSections.includes('s10'));
-  const [saving, setSaving] = useState(false);
-
-  const selectedSections = Object.keys(sections).filter(k => sections[k]);
-
-  const toggle = key => setSections(prev => ({ ...prev, [key]: !prev[key] }));
-
-  const handleServe = async () => {
-    if (selectedSections.length === 0 && !includeCover) {
-      alert('Please select at least one notice or covering letter.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await onServe({ sections: selectedSections, includeCover });
-      onClose();
-    } catch (err) {
-      alert(err.message || 'Could not serve notices.');
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell title={sections.s10 ? 'Serve Section 10 notice' : 'Serve notice pack'} onClose={onClose}>
-      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{
-          background: 'var(--blue-bg)',
-          border: '1px solid var(--blue)',
-          color: 'var(--blue)',
-          borderRadius: 14,
-          padding: '10px 14px',
-          fontSize: 13,
-          lineHeight: 1.55,
-        }}>
-          Serving notices for <strong>{ao?.name || `AO${ao?.num || ''}`}</strong>
-          {aoAddress(ao) ? ` at ${aoAddress(ao)}` : ''}.
-          If more than one document is generated, Ely will download a ZIP pack.
-        </div>
-
-        <div style={mSection}>
-          <div style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: 'var(--text3)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.6px',
-            marginBottom: 12,
-          }}>
-            Select notices
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {[
-              ['s1', 'Section 1 Notice'],
-              ['s3', 'Section 3 Notice'],
-              ['s6', 'Section 6 Notice'],
-              ['s10', 'Section 10 Notice'],
-            ].map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => toggle(key)}
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  borderRadius: 14,
-                  border: sections[key] ? '2px solid var(--blue)' : '1px solid #e5e7eb',
-                  background: sections[key] ? 'var(--blue-bg)' : '#fff',
-                  color: sections[key] ? 'var(--blue)' : 'var(--text)',
-                  cursor: 'pointer',
-                  fontWeight: sections[key] ? 700 : 500,
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={mSection}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: 'var(--text2)' }}>
-            <input type="checkbox" checked={includeCover} onChange={e => setIncludeCover(e.target.checked)} />
-            Include notice covering letter
-          </label>
-        </div>
-
-        <div style={{
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 14,
-          padding: '10px 14px',
-          fontSize: 12.5,
-          color: 'var(--text3)',
-          lineHeight: 1.55,
-        }}>
-          Deadline rule: S1/S3/S6 create one 14-day deadline task for this AO. Section 10 creates one 10-day deadline task. Duplicate tasks are skipped automatically.
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-            Cancel
-          </button>
-
-          <button onClick={handleServe} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
-            {saving ? 'Serving…' : 'Serve notice pack'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-
-function S104BSurveyorModal({ ao, onSave, onClose }) {
-  const [form, setForm] = useState({
-    name: aoSurvName(ao || ''),
-    firm: aoSurvFirm(ao || ''),
-    email: aoSurvEmail(ao || ''),
-    phone: aoSurvPhone(ao || ''),
-  });
-  const [third, setThird] = useState({
-    name: ao?.third_surveyor_name || '',
-    firm: ao?.third_surveyor_firm || '',
-    email: ao?.third_surveyor_email || '',
-    phone: ao?.third_surveyor_phone || '',
-  });
-  const [saving, setSaving] = useState(false);
-
-  const setSurveyor = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-  const setThirdSurveyor = (k, v) => setThird(prev => ({ ...prev, [k]: v }));
-
-  const handleSave = async () => {
-    if (!form.name?.trim()) {
-      alert('Please enter the surveyor name.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await maybeSaveSurveyor(form);
-      await maybeSaveSurveyor(third);
-      await onSave({ surveyor: form, third });
-      onClose();
-    } catch (err) {
-      alert(err.message || 'Could not save 10(4)(b) surveyor details.');
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell title="Serve 10(4)(b) papers" onClose={onClose}>
-      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{
-          background: 'var(--amber-bg)',
-          border: '1px solid var(--amber)',
-          color: 'var(--amber)',
-          borderRadius: 14,
-          padding: '10px 14px',
-          fontSize: 13,
-          lineHeight: 1.55,
-        }}>
-          Enter the surveyor details to be used for the Section 10(4)(b) appointment papers.
-          Start typing a surveyor name to search existing contacts, or enter the details manually.
-        </div>
-
-        <div style={mSection}>
-          <div style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: 'var(--text3)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.6px',
-            marginBottom: 12,
-          }}>
-            Surveyor details
-          </div>
-
-          <SurveyorBlock title="Surveyor appointed under Section 10(4)(b)" form={form} set={setSurveyor} />
-        </div>
-
-        <div style={mSection}>
-          <div style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: 'var(--text3)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.6px',
-            marginBottom: 12,
-          }}>
-            Third surveyor details
-          </div>
-
-          <SurveyorBlock title="Third surveyor" form={third} set={setThirdSurveyor} />
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-            Cancel
-          </button>
-
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
-            {saving ? 'Saving…' : 'Save and prepare 10(4)(b) papers'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
 
 function ProjectChat({ project, onOpenComposer }) {
   const [messages, setMessages] = useState([]);
@@ -1662,18 +1171,31 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [loaLoading, setLoaLoading] = useState(null);
+  const [noticeModal, setNoticeModal] = useState(null);
+  const [s104bAO, setS104bAO] = useState(null);
   const [project, setProject] = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
   const [editingAO, setEditingAO] = useState(null);
   const [showAddAO, setShowAddAO] = useState(false);
-  const [s104bAO, setS104bAO] = useState(null);
-  const [noticeModal, setNoticeModal] = useState(null);
 
   const windowWidth = useWindowWidth();
 
+  // Re-fetch from DB whenever we open a project to avoid stale parent cache
   useEffect(() => {
-    setProject(initialProject);
-  }, [initialProject]);
+    if (!initialProject?.id) {
+      setProject(initialProject);
+      return;
+    }
+    sb.from('projects').select('*').eq('id', initialProject.id).single()
+      .then(({ data, error }) => {
+        if (data && !error) {
+          setProject(data);
+        } else {
+          setProject(initialProject); // fallback to prop if fetch fails
+        }
+      })
+      .catch(() => setProject(initialProject));
+  }, [initialProject?.id]);
 
   const { generateDocument, sendForSignature } = useDocumentGenerator();
 
@@ -1686,7 +1208,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const boEmail = project.bo_email || project.bo_1_email || '';
   const works = project.works || '';
   const aos = project.aos || [];
-  const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
   const docs = project.documents || [];
   const projColour = getProjectColour(project);
   const roleLabel = role === 'AO' ? "Adjoining Owner's Surveyor" : "Building Owner's Surveyor";
@@ -1804,6 +1325,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       bo_1_name: form.bo1?.name || null,
       bo: form.bo1?.name || null,
       bo_1_email: form.bo1?.email || null,
+      bo_email: form.bo1?.email || null,
       bo_phone: form.bo1?.phone || null,
       bo_2_name: form.bo2?.name || null,
       bo_2_email: form.bo2?.email || null,
@@ -1812,6 +1334,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       fee: Number.isFinite(fee) ? fee : null,
       status: form.status || 'active',
     };
+
+    if (form.role === 'BO') {
+      payload.address = payload.bo_premise_address || null;
+      payload.appointment_address = payload.bo_premise_address || null;
+      payload.appointment_name = payload.bo_1_name || null;
+    }
 
     const data = await updateProjectSafely(project.id, payload);
 
@@ -1872,48 +1400,33 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ? currentAOs.map(a => (a.id && existingAO.id ? a.id === existingAO.id : a.num === existingAO.num) ? newAO : a)
       : [...currentAOs, newAO];
 
-    // Only update the aos jsonb column — address/appointment_address/appointment_name
-    // do not exist as top-level columns; getAppointmentAddress/Name read from the aos array directly
-    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
-
-    setProject(prev => ({
-      ...prev,
-      aos: updatedAOs,
-      ...(data || {}),
-    }));
+    // Direct update — no select('*') to avoid schema cache errors
+    const { error } = await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+    if (error) throw new Error('Could not save AO: ' + error.message);
+    setProject(prev => ({ ...prev, aos: updatedAOs }));
   }, [project, role]);
 
+
+  // ── AO record update (direct — no select('*') to avoid schema cache errors) ──
   const updateAORecord = useCallback(async (ao, patch) => {
     const currentAOs = project.aos || [];
     const updatedAOs = currentAOs.map(item => aoKeyMatches(item, ao)
       ? { ...item, ...patch, updated_at: new Date().toISOString() }
       : item
     );
-
-    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
-
-    setProject(prev => ({
-      ...prev,
-      aos: updatedAOs,
-      ...(data || {}),
-    }));
+    const { error } = await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+    if (error) throw error;
+    setProject(prev => ({ ...prev, aos: updatedAOs }));
   }, [project.id, project.aos]);
 
+  // ── Create deadline task ──
   const createProjectTask = useCallback(async ({ title, description, due_date, task_type, ao }) => {
     try {
       const aoToken = ao?.id || `AO${ao?.num || ''}`;
-
-      const { data: existing } = await sb
-        .from('tasks')
-        .select('id')
-        .eq('project_id', project.id)
-        .eq('task_type', task_type)
-        .eq('due_date', due_date)
-        .ilike('description', `%AO_REF:${aoToken}%`)
-        .limit(1);
-
+      const { data: existing } = await sb.from('tasks').select('id')
+        .eq('project_id', project.id).eq('task_type', task_type)
+        .eq('due_date', due_date).ilike('description', `%AO_REF:${aoToken}%`).limit(1);
       if (existing?.length) return existing[0];
-
       const { data, error } = await sb.from('tasks').insert([{
         project_id: project.id,
         title,
@@ -1924,7 +1437,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         priority: 'high',
         project_address_snapshot: aoAddress(ao) || project.bo_premise_address || '',
       }]).select('id').single();
-
       if (error) throw error;
       return data;
     } catch (err) {
@@ -1933,7 +1445,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project.id, project.bo_premise_address]);
 
-
+  // ── Save notice record to DB ──
   const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate }) => {
     const record = {
       project_id: project.id,
@@ -1947,187 +1459,148 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       status: 'served',
       template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
     };
-
-    try {
-      await sb.from('notices').insert([record]);
-    } catch (err) {
-      console.warn('Could not save notices table record:', err?.message || err);
-    }
-
+    try { await sb.from('notices').insert([record]); }
+    catch (err) { console.warn('notices table insert warn:', err?.message); }
     try {
       const existing = Array.isArray(project.notices) ? project.notices : [];
-      await updateProjectSafely(project.id, {
-        notices: [
-          ...existing,
-          {
-            ...record,
-            id: `notice-${Date.now()}`,
-            created_at: new Date().toISOString(),
-            sections: selectedSections,
-          },
-        ],
-      });
-    } catch (err) {
-      console.warn('Could not update project notices json:', err?.message || err);
-    }
+      const updated = [...existing, { ...record, id: `notice-${Date.now()}`, created_at: new Date().toISOString(), sections: selectedSections }];
+      const { error } = await sb.from('projects').update({ notices: updated }).eq('id', project.id);
+      if (!error) setProject(prev => ({ ...prev, notices: updated }));
+    } catch (err) { console.warn('notices json update warn:', err?.message); }
   }, [project]);
 
+  // ── Notice modal open/serve ──
   const handleOpenNoticeModal = useCallback((ao, defaultSections = []) => {
     setNoticeModal({ ao, defaultSections });
   }, []);
 
   const handleServeNotice = useCallback((ao) => {
-    handleOpenNoticeModal(ao, []);
+    handleOpenNoticeModal(ao, ['s1', 's3', 's6']);
   }, [handleOpenNoticeModal]);
 
   const handleServeS10 = useCallback((ao) => {
     handleOpenNoticeModal(ao, ['s10']);
   }, [handleOpenNoticeModal]);
 
-  // ── Serve notices: persist workflow first, generate documents second ──
-  const handleServeNoticePack = useCallback(async ({
-    ao,
-    sections,
-    includeCover,
-    createDeadlineTask = true,
-  }) => {
+  // ── Generate + download notices ──
+  const handleServeNoticePack = useCallback(async ({ ao, sections, includeCover }) => {
     const noticeDate = todayIso();
     const generatedDocs = [];
-    const warnings = [];
+    const noticeErrors = [];
+    const zip = new PizZip();
 
-    if (!ao) throw new Error('No adjoining owner selected.');
-    if (!sections?.length && !includeCover) throw new Error('No notice selected.');
+    // STEP 1: Generate documents (failures here do NOT block saving the notice)
+    for (const key of sections) {
+      try {
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
+        const result = await generateDocument({
+          templateKey: key, mergeData, fileName: mergeData.file_name, projectId: project.id,
+        });
+        if (result?.success && result?.docx_b64) {
+          generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+        } else if (!result?.success) {
+          noticeErrors.push(`${key}: ${result?.error || 'unknown error'}`);
+        }
+      } catch (err) {
+        noticeErrors.push(`${key}: ${err.message}`);
+      }
+    }
 
-    // STEP 1: persist legal/workflow state first
+    // Try cover letter separately — failure is non-blocking
+    if (includeCover) {
+      try {
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: 'cover', includeCover });
+        const result = await generateDocument({
+          templateKey: 'cover', mergeData, fileName: mergeData.file_name, projectId: project.id,
+        });
+        if (result?.success && result?.docx_b64) {
+          generatedDocs.push({ key: 'cover', fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+        }
+      } catch {
+        // Cover letter failure is non-blocking — notices still served
+      }
+    }
+
+    // STEP 2: ALWAYS save the notice record regardless of doc generation result
+    // The notice is legally served even if the document failed to generate
     await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate });
 
     const nonS10 = sections.filter(s => ['s1', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
       const deadline = addDaysIso(14);
-
       await updateAORecord(ao, {
-        status: 'notice_served',
-        notice_served_date: noticeDate,
-        noticeServedDate: noticeDate,
-        consent_deadline: deadline,
-        consentDeadline: deadline,
+        status: 'notice_served', notice_served_date: noticeDate, noticeServedDate: noticeDate,
+        consent_deadline: deadline, consentDeadline: deadline,
       });
-
-      if (createDeadlineTask) {
-        await createProjectTask({
-          title: `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
-          description: '14-day notice consent period expired. Review whether Section 10 is required.',
-          due_date: deadline,
-          task_type: 'notice_consent_deadline',
-          ao,
-        });
-      }
+      await createProjectTask({
+        title: `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+        description: '14-day notice consent period expired. Review whether Section 10 is required.',
+        due_date: deadline, task_type: 'notice_consent_deadline', ao,
+      });
     }
-
     if (sections.includes('s10')) {
       const deadline = addDaysIso(10);
-
       await updateAORecord(ao, {
-        status: 's10',
-        s10_served_date: noticeDate,
-        s10ServedDate: noticeDate,
-        s10_deadline: deadline,
-        s10Deadline: deadline,
+        status: 's10', s10_served_date: noticeDate, s10ServedDate: noticeDate,
+        s10_deadline: deadline, s10Deadline: deadline,
       });
-
-      if (createDeadlineTask) {
-        await createProjectTask({
-          title: `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
-          description: '10-day Section 10 notice period expired.',
-          due_date: deadline,
-          task_type: 'notice_section10_deadline',
-          ao,
-        });
-      }
+      await createProjectTask({
+        title: `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+        description: '10-day Section 10 notice period expired.',
+        due_date: deadline, task_type: 'notice_section10_deadline', ao,
+      });
     }
 
-    // STEP 2: generate documents after workflow state is safely saved
-    const zip = new PizZip();
-
-    const keysToGenerate = [...sections];
-    if (includeCover) keysToGenerate.unshift('cover');
-
-    for (const key of keysToGenerate) {
-      try {
-        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
-        const result = await generateDocument({
-          templateKey: key,
-          mergeData,
-          fileName: mergeData.file_name,
-          projectId: project.id,
-          skipDownload: keysToGenerate.length > 1,
-        });
-
-        if (result?.success && result?.docx_b64) {
-          generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
-          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
-        } else {
-          warnings.push(`${key}: ${result?.error || 'document not generated'}`);
-        }
-      } catch (err) {
-        warnings.push(`${key}: ${err.message}`);
-      }
-    }
-
-    // STEP 3: download ZIP pack where more than one document generated
+    // STEP 3: Download ZIP if we have multiple docs, individual downloads handled by generateDocument
     if (generatedDocs.length > 1) {
       const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
       const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
       downloadB64File(zipB64, zipName, 'application/zip');
     }
 
-    const warningText = warnings.length ? `\n\nWarnings:\n${warnings.join('\n')}` : '';
-    alert(`Notice workflow saved. ${generatedDocs.length} document(s) generated.${warningText}`);
+    const msg = generatedDocs.length > 0
+      ? `Notice served and saved. ${generatedDocs.length} document(s) generated.`
+      : `Notice saved. Documents could not be generated — check templates are uploaded in Settings.`;
+    alert(msg);
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
+
+  // ── Handle 10(4)(b) surveyor save ──
 
   const handleSetAOStatus = useCallback(async (ao, status) => {
     const patch = { status };
-
-    if (status === 'consent') {
-      patch.consent_received_date = todayISODate();
-      patch.consentReceivedDate = todayISODate();
-    }
-
-    if (status === 'dissent') {
-      patch.dissent_received_date = todayISODate();
-      patch.dissentReceivedDate = todayISODate();
-    }
-
+    if (status === 'consent') { patch.consent_received_date = todayIso(); patch.consentReceivedDate = todayIso(); }
+    if (status === 'dissent') { patch.dissent_received_date = todayIso(); patch.dissentReceivedDate = todayIso(); }
     await updateAORecord(ao, patch);
   }, [updateAORecord]);
 
   const handleToggleAgreedSurveyor = useCallback(async (ao) => {
     const next = !ao.agreed_surveyor;
-    await updateAORecord(ao, {
-      agreed_surveyor: next,
-      agreedSurveyor: next,
-      status: next ? 'dissent' : (ao.status || 'notice_served'),
-      agreed_surveyor_updated_at: todayISODate(),
-    });
+    await updateAORecord(ao, { agreed_surveyor: next, agreedSurveyor: next, status: next ? 'dissent' : (ao.status || 'notice_served') });
   }, [updateAORecord]);
 
   const handleNoteIntention = useCallback(async (ao) => {
-    await updateAORecord(ao, {
-      intention_noted: true,
-      intention_noted_date: todayISODate(),
-      status: ao.status || 'notice_served',
-    });
+    await updateAORecord(ao, { intention_noted: true, intention_noted_date: todayIso(), status: ao.status || 'notice_served' });
   }, [updateAORecord]);
 
   const handleOpenSOCForAO = useCallback((ao) => {
-    onOpenSOC?.({
-      ...project,
-      selectedAO: ao,
-      selected_ao: ao,
-      selected_ao_id: ao.id || ao.num,
-      soc_target_ao: ao,
-    });
+    onOpenSOC?.({ ...project, selectedAO: ao, selected_ao: ao });
   }, [onOpenSOC, project]);
+
+  const handleSave104BSurveyorDetails = useCallback(async ({ surveyor, third }) => {
+    if (!s104bAO) return;
+    await updateAORecord(s104bAO, {
+      surv_name: surveyor.name, surv_firm: surveyor.firm,
+      surv_email: surveyor.email, surv_phone: surveyor.phone,
+      surveyorName: surveyor.name, surveyorFirm: surveyor.firm,
+      surveyorEmail: surveyor.email, surveyorPhone: surveyor.phone,
+      third_surveyor_name: third.name, third_surveyor_firm: third.firm,
+      third_surveyor_email: third.email, third_surveyor_phone: third.phone,
+      status: 's104b', s104b_served_date: new Date().toISOString().slice(0, 10),
+    });
+    setS104bAO(null);
+  }, [s104bAO, updateAORecord]);
 
   const handleRaiseInvoice = useCallback(() => {
     onRaiseInvoice?.({
@@ -2211,41 +1684,30 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         />
       )}
 
-
-
-      {tab === 'details' && noticeModal && (
-        <NoticeServingModal
-          project={project}
-          ao={noticeModal.ao}
-          aos={modalAOs}
-          defaultSections={noticeModal.defaultSections || []}
-          generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, createDeadlineTask }) =>
-            handleServeNoticePack({
-              ao: servedAO || noticeModal.ao,
-              sections,
-              includeCover,
-              createDeadlineTask,
-            })
-          }
-          onClose={() => setNoticeModal(null)}
-        />
-      )}
-
-      {s104bAO && (
-        <S104BSurveyorModal
-          ao={s104bAO}
-          onSave={handleSave104BSurveyorDetails}
-          onClose={() => setS104bAO(null)}
-        />
-      )}
-
       {editingAO && (
         <AOEditModal
           mode="edit"
           ao={editingAO}
           onSave={form => handleSaveAO(form, editingAO)}
           onClose={() => setEditingAO(null)}
+        />
+      )}
+
+      {tab === 'details' && noticeModal && (
+        <NoticeServeModal
+          project={project}
+          ao={noticeModal.ao}
+          defaultSections={noticeModal.defaultSections || []}
+          onServe={({ sections, includeCover }) => handleServeNoticePack({ ao: noticeModal.ao, sections, includeCover })}
+          onClose={() => setNoticeModal(null)}
+        />
+      )}
+
+      {tab === 'details' && s104bAO && (
+        <S104BSurveyorModal
+          ao={s104bAO}
+          onSave={handleSave104BSurveyorDetails}
+          onClose={() => setS104bAO(null)}
         />
       )}
 
@@ -2298,7 +1760,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         {TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setNoticeModal(null); }}
+            onClick={() => setTab(t.id)}
             style={{
               padding: '8px 18px',
               fontSize: 13,
@@ -2467,8 +1929,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       key={ao.id || i}
                       ao={ao}
                       projectRole={role}
-                      onOpenComposer={onOpenComposer}
                       project={project}
+                      onOpenComposer={onOpenComposer}
                       onGenerateAOLOA={handleGenerateAOLOA}
                       onEditAO={setEditingAO}
                       onServeNotice={handleServeNotice}
@@ -2486,6 +1948,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
             <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
@@ -2562,41 +2025,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             </div>
 
-            
-            <div
-              style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }}
-              onClick={() => setNoticeModal({ ao: null, defaultSections: [] })}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
-                  background: 'var(--blue-bg)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 20,
-                  flexShrink: 0,
-                }}>
-                  📄
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                    Serve Notices
-                  </div>
-
-                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
-                    Select AOs · generate notice pack
-                  </div>
-                </div>
-
-                <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
-              </div>
-            </div>
-
-<div style={{ ...card({ padding: '14px 16px' }) }}>
+            <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                   Financials
@@ -2695,43 +2124,60 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             </button>
           </div>
 
-          <div style={{ ...card() }}>
-            {docs.length === 0 ? (
-              <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
-                No documents uploaded yet.
-              </div>
-            ) : (
-              docs.map((d, i) => (
-                <div key={d.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  borderBottom: i < docs.length - 1 ? '1px solid var(--border)' : 'none',
-                }}>
+          {/* BO documents */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10, padding: '6px 0', borderBottom: '2px solid var(--border)' }}>
+              📁 Building Owner — {project.bo_1_name || project.bo || 'BO'}
+            </div>
+            <div style={{ ...card() }}>
+              {docs.filter(d => !d.ao_id && !d.ao_num).length === 0 ? (
+                <div style={{ padding: 16, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+                  No documents for the Building Owner.
+                </div>
+              ) : docs.filter(d => !d.ao_id && !d.ao_num).map((d, i, arr) => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-                      📄 {d.file_name}
-                    </div>
-
-                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                      {fmtDate(d.created_at)}
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>📄 {d.file_name}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>{d.category || 'document'} · {fmtDate(d.created_at)}</div>
                   </div>
-
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-                      Preview
-                    </button>
-
-                    <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>
-                      DOCX
-                    </button>
+                    <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Preview</button>
+                    <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>DOCX</button>
                   </div>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
           </div>
+
+          {/* Per-AO documents */}
+          {aos.map((ao, aoIdx) => {
+            const aoDocs = docs.filter(d => d.ao_id === ao.id || String(d.ao_num) === String(ao.num));
+            return (
+              <div key={ao.id || aoIdx} style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: getAOColour(ao, role), marginBottom: 10, padding: '6px 0', borderBottom: '2px solid var(--border)' }}>
+                  📁 AO{ao.num} — {ao.name || aoAddress(ao) || 'Adjoining Owner'}
+                </div>
+                <div style={{ ...card() }}>
+                  {aoDocs.length === 0 ? (
+                    <div style={{ padding: 16, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+                      No documents for this AO.
+                    </div>
+                  ) : aoDocs.map((d, i, arr) => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>📄 {d.file_name}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>{d.category || 'document'} · {fmtDate(d.created_at)}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>Preview</button>
+                        <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>DOCX</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
