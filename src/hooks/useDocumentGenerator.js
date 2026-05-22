@@ -46,6 +46,7 @@ export default function useDocumentGenerator() {
     mergeData,
     fileName = 'document.docx',
     projectId = null,
+    skipDownload = false,
   }) => {
     try {
       console.log('[generateDocument] start', { templateKey, fileName, projectId });
@@ -77,7 +78,7 @@ export default function useDocumentGenerator() {
         throw new Error(result?.error || `Document generation failed (${response.status})`);
       }
 
-      if (result.docx_b64) {
+      if (result.docx_b64 && !skipDownload) {
         downloadB64(
           result.docx_b64,
           fileName,
