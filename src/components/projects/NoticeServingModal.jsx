@@ -41,6 +41,14 @@ function safeName(value) {
     .slice(0, 80);
 }
 
+function aoKey(item) {
+  return String(item?.id || item?.num || item?.name || '');
+}
+
+function aoAddress(item) {
+  return item?.premise || item?.reg_addr || item?.address || item?.service_address || '';
+}
+
 export default function NoticeServingModal({
   project,
   ao,
@@ -50,18 +58,31 @@ export default function NoticeServingModal({
   onServe,
   onClose,
 }) {
-  const initialAO = ao || aos?.[0] || null;
-  const [selectedAOId, setSelectedAOId] = useState(initialAO?.id || initialAO?.num || '');
+  const lockedToSingleAO = !!ao;
+  const availableAOs = lockedToSingleAO ? [ao] : (aos || []);
+
+  const [selectedAOKeys, setSelectedAOKeys] = useState(
+    lockedToSingleAO && ao ? [aoKey(ao)] : []
+  );
   const [selected, setSelected] = useState(defaultSections || []);
   const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
   const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const selectedAO =
-    (aos || []).find(item => String(item.id || item.num) === String(selectedAOId)) ||
-    initialAO;
+  const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
 
-  const toggle = key => {
+  const toggleAO = item => {
+    if (lockedToSingleAO) return;
+
+    const key = aoKey(item);
+    setSelectedAOKeys(prev =>
+      prev.includes(key)
+        ? prev.filter(v => v !== key)
+        : [...prev, key]
+    );
+  };
+
+  const toggleNotice = key => {
     setSelected(prev =>
       prev.includes(key)
         ? prev.filter(v => v !== key)
@@ -70,8 +91,8 @@ export default function NoticeServingModal({
   };
 
   const handleServe = async () => {
-    if (!selectedAO) {
-      alert('Please select an adjoining owner first.');
+    if (!selectedAOs.length) {
+      alert('Please select at least one adjoining owner/property.');
       return;
     }
 
@@ -93,64 +114,72 @@ export default function NoticeServingModal({
     setLoading(true);
 
     try {
-      const zip = new PizZip();
-      const generatedDocs = [];
       const warnings = [];
+      let totalGenerated = 0;
 
-      const allKeys = [...selected];
-      if (includeCover) allKeys.unshift('cover');
+      for (const selectedAO of selectedAOs) {
+        const zip = new PizZip();
+        const generatedDocs = [];
 
-      for (const key of allKeys) {
-        try {
-          const placeholders = buildNoticePlaceholders({
-            project,
-            ao: selectedAO,
-            noticeType: key,
-          });
+        const allKeys = [...selected];
+        if (includeCover) allKeys.unshift('cover');
 
-          const fileName = `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_${safeName(key)}.docx`;
+        for (const key of allKeys) {
+          try {
+            const placeholders = buildNoticePlaceholders({
+              project,
+              ao: selectedAO,
+              noticeType: key,
+            });
 
-          const result = await generateDocument({
-            templateKey: key,
-            mergeData: placeholders,
-            fileName,
-            projectId: project?.id,
-            skipDownload: allKeys.length > 1,
-          });
+            const fileName = `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_${safeName(key)}.docx`;
 
-          if (result?.success && result?.docx_b64) {
-            generatedDocs.push({ fileName, b64: result.docx_b64 });
-            addDocxToZip(zip, fileName, result.docx_b64);
-          } else {
-            warnings.push(`${key}: ${result?.error || 'Document generation failed'}`);
+            const result = await generateDocument({
+              templateKey: key,
+              mergeData: placeholders,
+              fileName,
+              projectId: project?.id,
+              skipDownload: allKeys.length > 1,
+            });
+
+            if (result?.success && result?.docx_b64) {
+              generatedDocs.push({ fileName, b64: result.docx_b64 });
+              addDocxToZip(zip, fileName, result.docx_b64);
+            } else {
+              warnings.push(`AO${selectedAO?.num || ''} ${key}: ${result?.error || 'Document generation failed'}`);
+            }
+          } catch (err) {
+            warnings.push(`AO${selectedAO?.num || ''} ${key}: ${err.message}`);
           }
-        } catch (err) {
-          warnings.push(`${key}: ${err.message}`);
         }
-      }
 
-      if (generatedDocs.length > 1) {
-        const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-        downloadB64File(
-          zipB64,
-          `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_Notice_Pack.zip`,
-          'application/zip'
-        );
-      }
+        if (generatedDocs.length > 1) {
+          const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+          downloadB64File(
+            zipB64,
+            `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_Notice_Pack.zip`,
+            'application/zip'
+          );
+        }
 
-      await onServe({
-        ao: selectedAO,
-        sections: selected,
-        includeCover,
-        createDeadlineTask,
-        warnings,
-        generatedCount: generatedDocs.length,
-      });
+        totalGenerated += generatedDocs.length;
+
+        await onServe({
+          ao: selectedAO,
+          sections: selected,
+          includeCover,
+          createDeadlineTask,
+          warnings,
+          generatedCount: generatedDocs.length,
+        });
+      }
 
       onClose?.();
 
       if (warnings.length) {
         alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
+      } else {
+        alert(`Notice workflow saved. ${totalGenerated} document(s) generated.`);
       }
     } catch (err) {
       console.error(err);
@@ -172,7 +201,7 @@ export default function NoticeServingModal({
       padding: 18,
     }}>
       <div style={{
-        width: 680,
+        width: 760,
         maxWidth: '96vw',
         maxHeight: '88vh',
         overflowY: 'auto',
@@ -197,7 +226,9 @@ export default function NoticeServingModal({
               Serve Notices
             </div>
             <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
-              {selectedAO?.name || 'Adjoining Owner'} • {project?.ref || 'Project'}
+              {lockedToSingleAO
+                ? `${ao?.name || 'Adjoining Owner'} • ${project?.ref || 'Project'}`
+                : `Select adjoining owners • ${project?.ref || 'Project'}`}
             </div>
           </div>
 
@@ -231,24 +262,47 @@ export default function NoticeServingModal({
               Adjoining owner / property
             </div>
 
-            <select
-              value={selectedAOId}
-              onChange={e => setSelectedAOId(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid #d1d5db',
-                background: '#fff',
-                fontSize: 14,
-              }}
-            >
-              {(aos || []).map(item => (
-                <option key={item.id || item.num} value={item.id || item.num}>
-                  AO{item.num || ''} — {item.name || 'Unnamed AO'}
-                </option>
-              ))}
-            </select>
+            {availableAOs.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#dc2626' }}>
+                No adjoining owners are recorded on this project.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {availableAOs.map(item => {
+                  const key = aoKey(item);
+                  const active = selectedAOKeys.includes(key);
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleAO(item)}
+                      disabled={lockedToSingleAO}
+                      style={{
+                        textAlign: 'left',
+                        padding: '12px 14px',
+                        borderRadius: 14,
+                        border: active ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                        background: active ? '#eff6ff' : '#fff',
+                        color: active ? '#1d4ed8' : '#111827',
+                        cursor: lockedToSingleAO ? 'default' : 'pointer',
+                        fontWeight: active ? 700 : 500,
+                        opacity: lockedToSingleAO && !active ? 0.6 : 1,
+                      }}
+                    >
+                      <div>
+                        AO{item?.num || ''} — {item?.name || 'Unnamed AO'}
+                      </div>
+                      {aoAddress(item) && (
+                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4, lineHeight: 1.35 }}>
+                          {aoAddress(item)}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div style={{
@@ -276,7 +330,7 @@ export default function NoticeServingModal({
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => toggle(item.key)}
+                    onClick={() => toggleNotice(item.key)}
                     style={{
                       textAlign: 'left',
                       padding: '12px 14px',
@@ -339,7 +393,7 @@ export default function NoticeServingModal({
             color: '#6b7280',
             lineHeight: 1.55,
           }}>
-            S1/S3/S6 create one 14-day deadline task for this AO. Section 10 creates one 10-day deadline task. Untick the task box if this is a duplicate or supplementary notice.
+            S1/S3/S6 create one 14-day deadline task for each selected AO. Section 10 creates one 10-day deadline task. Untick the task box if this is a duplicate or supplementary notice.
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
