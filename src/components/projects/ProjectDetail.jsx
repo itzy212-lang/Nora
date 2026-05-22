@@ -257,6 +257,7 @@ function getAOColour(ao, projectRole = 'BO') {
 function getProjectColour(project) {
   const role = (project.role || project.appointment_role || 'BO').toUpperCase();
   const aos = project.aos || [];
+  const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
 
   if (role === 'AO') return '#a855f7';
   if (!aos.length) return '#9ca3af';
@@ -1685,6 +1686,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const boEmail = project.bo_email || project.bo_1_email || '';
   const works = project.works || '';
   const aos = project.aos || [];
+  const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
   const docs = project.documents || [];
   const projColour = getProjectColour(project);
   const roleLabel = role === 'AO' ? "Adjoining Owner's Surveyor" : "Building Owner's Surveyor";
@@ -2215,7 +2217,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         <NoticeServingModal
           project={project}
           ao={noticeModal.ao}
-          aos={project.aos || []}
+          aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
           onServe={({ ao: servedAO, sections, includeCover, createDeadlineTask }) =>
