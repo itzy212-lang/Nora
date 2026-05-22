@@ -1896,6 +1896,40 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }));
   }, [project.id, project.aos]);
 
+  const createProjectTask = useCallback(async ({ title, description, due_date, task_type, ao }) => {
+    try {
+      const aoToken = ao?.id || `AO${ao?.num || ''}`;
+
+      const { data: existing } = await sb
+        .from('tasks')
+        .select('id')
+        .eq('project_id', project.id)
+        .eq('task_type', task_type)
+        .eq('due_date', due_date)
+        .ilike('description', `%AO_REF:${aoToken}%`)
+        .limit(1);
+
+      if (existing?.length) return existing[0];
+
+      const { data, error } = await sb.from('tasks').insert([{
+        project_id: project.id,
+        title,
+        description: `${description || ''}\nAO_REF:${aoToken}`,
+        due_date,
+        task_type,
+        status: 'open',
+        priority: 'high',
+        project_address_snapshot: aoAddress(ao) || project.bo_premise_address || '',
+      }]).select('id').single();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('Could not create task:', err?.message || err);
+      return null;
+    }
+  }, [project.id, project.bo_premise_address]);
+
 
   const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate }) => {
     const record = {
@@ -2014,25 +2048,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     alert(generatedDocs.length > 1 ? 'Notice pack generated and served.' : 'Notice generated and served.');
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
-  const handleServeNotice = useCallback(async (ao) => {
-    await updateAORecord(ao, {
-      status: 'notice_served',
-      notice_served_date: todayISODate(),
-      noticeServedDate: todayISODate(),
-      consent_deadline: addDaysISO(14),
-      consentDeadline: addDaysISO(14),
-    });
-  }, [updateAORecord]);
+  const handleServeNotice = useCallback((ao) => {
+    handleOpenNoticeModal(ao, ['s1', 's3', 's6']);
+  }, [handleOpenNoticeModal]);
 
-  const handleServeS10 = useCallback(async (ao) => {
-    await updateAORecord(ao, {
-      status: 's10',
-      s10_served_date: todayISODate(),
-      s10ServedDate: todayISODate(),
-      s10_deadline: addDaysISO(10),
-      s10Deadline: addDaysISO(10),
-    });
-  }, [updateAORecord]);
+  const handleServeS10 = useCallback((ao) => {
+    handleOpenNoticeModal(ao, ['s10']);
+  }, [handleOpenNoticeModal]);
 
   const handleSetAOStatus = useCallback(async (ao, status) => {
     const patch = { status };
