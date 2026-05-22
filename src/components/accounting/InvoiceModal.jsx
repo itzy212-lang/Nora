@@ -22,7 +22,7 @@ async function polishDescription(text) {
   return data?.description?.trim() || text;
 }
 
-export default function InvoiceModal({ invoice, initialData = {}, nextNumber, settings, projects, onSave, onClose }) {
+export default function InvoiceModal({ invoice, initialData = {}, nextNumber, settings, projects, onSave, onEmail, onClose }) {
   const isEdit = !!invoice;
   const role = invoice?.role || initialData?.role || 'BO';
   const isAO = String(role).toUpperCase() === 'AO';
@@ -92,7 +92,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
   const addItem = () => setField('items', [...form.items, { description: '', qty: 1, unitPrice: '', total: 0 }]);
   const removeItem = (idx) => setField('items', form.items.filter((_, i) => i !== idx));
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save') => {
     setSaving(true);
     try {
       const {
@@ -106,6 +106,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
 
       const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+      const originalProjectId = form.project_id || initialData?.project_id || '';
       const safeInvoicePayload = {
         ...invoicePayload,
         project_id: uuidPattern.test(String(invoicePayload.project_id || ''))
@@ -113,12 +114,50 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
           : null,
       };
 
-      await onSave({
+      const savedInvoice = await onSave({
         ...safeInvoicePayload,
         subtotal,
         vat_amount: vatAmount,
         total,
       });
+
+      const pdfResponse = await fetch('/api/generate-invoice-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice: {
+            ...savedInvoice,
+            ...safeInvoicePayload,
+            subtotal,
+            vat_amount: vatAmount,
+            total,
+          },
+          invoice_id: savedInvoice?.id,
+          project_id: originalProjectId,
+        }),
+      });
+
+      const pdfData = await pdfResponse.json().catch(() => ({}));
+
+      if (!pdfResponse.ok || !pdfData?.success) {
+        throw new Error(pdfData?.error || 'Invoice saved, but PDF generation failed.');
+      }
+
+      if (mode === 'email') {
+        onEmail?.({
+          mode: 'compose',
+          to: initialData?.bo_email || initialData?.bill_to_email || '',
+          subject: `Invoice ${savedInvoice?.invoice_number || form.invoice_number}`,
+          body: `Hi,\n\nPlease find attached invoice ${savedInvoice?.invoice_number || form.invoice_number}.\n\nKind regards,`,
+          projectId: originalProjectId,
+          attachments: [{
+            name: pdfData.file_name,
+            type: 'application/pdf',
+            size: 0,
+            data: pdfData.base64,
+          }],
+        });
+      }
 
       onClose();
     } catch (e) {
@@ -312,9 +351,19 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
 
         <div style={styles.footer}>
           <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Invoice'}
+          <button onClick={() => handleSave('save')} disabled={saving} style={styles.cancelBtn}>
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Save'}
           </button>
+          {!isEdit && (
+            <button onClick={() => handleSave('email')} disabled={saving} style={styles.saveBtn}>
+              {saving ? 'Preparing...' : 'Save & Email'}
+            </button>
+          )}
+          {isEdit && (
+            <button onClick={() => handleSave('save')} disabled={saving} style={styles.saveBtn}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          )}
         </div>
       </div>
     </div>
