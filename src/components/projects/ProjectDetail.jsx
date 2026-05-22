@@ -1180,10 +1180,21 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
   const windowWidth = useWindowWidth();
 
-  // Only reset local state when navigating to a DIFFERENT project
-  // Parent re-renders with stale cached data must NOT overwrite local notice/AO updates
+  // Re-fetch from DB whenever we open a project to avoid stale parent cache
   useEffect(() => {
-    setProject(initialProject);
+    if (!initialProject?.id) {
+      setProject(initialProject);
+      return;
+    }
+    sb.from('projects').select('*').eq('id', initialProject.id).single()
+      .then(({ data, error }) => {
+        if (data && !error) {
+          setProject(data);
+        } else {
+          setProject(initialProject); // fallback to prop if fetch fails
+        }
+      })
+      .catch(() => setProject(initialProject));
   }, [initialProject?.id]);
 
   const { generateDocument, sendForSignature } = useDocumentGenerator();
