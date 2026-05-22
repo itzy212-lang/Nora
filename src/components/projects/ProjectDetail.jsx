@@ -69,6 +69,14 @@ function safeFilePart(value) {
     .slice(0, 80);
 }
 
+function safeNoticeFilePart(value) {
+  return String(value || 'Document')
+    .replace(/[^\w\s.-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 90);
+}
+
 function addDocxToZip(zip, fileName, b64) {
   if (!zip || !b64) return;
   zip.file(fileName, b64, { base64: true });
@@ -117,7 +125,16 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false })
     cover: 'Covering Letter',
   };
 
-  const fileBase = `${safeFilePart(ref)}_${safeFilePart(aoNames || `AO${ao?.num || ''}`)}_${safeFilePart(sectionLabels[sectionKey] || sectionKey)}`.replace(/_+/g, '_');
+  const fileLabels = {
+    s1: 'Section 1 Notice',
+    s3: 'Section 3 Notice',
+    s6: 'Section 6 Notice',
+    s10: 'Section 10 Notice',
+    cover: 'Covering Letter',
+  };
+
+  const fileAddress = boPremise || aoPremise || 'Address not recorded';
+  const fileBase = `${safeNoticeFilePart(fileLabels[sectionKey] || sectionKey)} - ${safeNoticeFilePart(fileAddress)}`;
 
   return {
     project_id: project?.id || '',
@@ -2238,7 +2255,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   ];
 
   return (
-    <div style={{ padding: '0 24px 32px' }}>
+    <div style={{ padding: '0 18px 28px' }}>
       {showProjectEdit && (
         <ProjectEditModal
           project={project}
@@ -2294,87 +2311,125 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0 14px' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: windowWidth < 768 ? '1fr' : 'auto minmax(260px, 1fr) auto',
+        alignItems: 'center',
+        gap: 12,
+        padding: '8px 0 12px',
+        marginBottom: 10,
+        borderBottom: '1px solid var(--border)',
+      }}>
         <button onClick={onBack} style={{
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '6px 16px',
+          justifyContent: 'center',
+          gap: 5,
+          padding: '4px 11px',
           borderRadius: 99,
           border: '1px solid var(--border)',
           background: 'var(--bg2)',
           color: 'var(--text2)',
-          fontSize: 13,
+          fontSize: 12,
           cursor: 'pointer',
           fontWeight: 500,
+          height: 30,
+          width: windowWidth < 768 ? 'fit-content' : 'auto',
         }}>
           ← Back
         </button>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowProjectEdit(true)} style={{ cursor: 'pointer', borderRadius: 99 }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: windowWidth < 768 ? 'flex-start' : 'center',
+          alignItems: 'center',
+          gap: 3,
+          minWidth: 0,
+          overflowX: 'auto',
+        }}>
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setNoticeModal(null); }}
+              style={{
+                padding: '6px 14px',
+                fontSize: 12.5,
+                border: 'none',
+                cursor: 'pointer',
+                background: tab === t.id ? 'var(--blue-bg)' : 'transparent',
+                fontWeight: tab === t.id ? 700 : 500,
+                color: tab === t.id ? 'var(--blue)' : 'var(--text2)',
+                borderRadius: 99,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{
+          display: 'flex',
+          gap: 6,
+          justifyContent: windowWidth < 768 ? 'flex-start' : 'flex-end',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowProjectEdit(true)} style={{
+            cursor: 'pointer',
+            borderRadius: 99,
+            padding: '4px 10px',
+            fontSize: 12,
+            minHeight: 30,
+          }}>
             Edit
           </button>
 
           <button
             className="btn btn-sm btn-ghost"
             onClick={handleDeleteProject}
-            style={{ cursor: 'pointer', color: 'var(--red)', borderRadius: 99 }}
+            style={{
+              cursor: 'pointer',
+              color: 'var(--red)',
+              borderRadius: 99,
+              padding: '4px 10px',
+              fontSize: 12,
+              minHeight: 30,
+            }}
           >
             Delete
           </button>
 
           <button style={{
-            padding: '6px 14px',
+            padding: '4px 11px',
             borderRadius: 99,
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: 600,
             cursor: 'pointer',
             background: 'var(--amber-bg)',
             color: 'var(--amber)',
             border: '1px solid var(--amber)',
+            minHeight: 30,
           }}>
             🔒 Close project
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20, gap: 2 }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => { setTab(t.id); setNoticeModal(null); }}
-            style={{
-              padding: '8px 18px',
-              fontSize: 13,
-              border: 'none',
-              cursor: 'pointer',
-              background: 'none',
-              fontWeight: tab === t.id ? 600 : 400,
-              color: tab === t.id ? 'var(--blue)' : 'var(--text2)',
-              borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent',
-              marginBottom: -1,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {tab === 'details' && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: windowWidth < 768 ? '1fr' : 'minmax(0, 1fr) 300px',
-          gap: 18,
+          gridTemplateColumns: windowWidth < 768 ? '1fr' : 'minmax(0, 1fr) 268px',
+          gap: 14,
           alignItems: 'start',
         }}>
           <div>
-            <div style={{ ...card({ padding: '18px 20px', marginBottom: 16 }) }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14, lineHeight: 1.4 }}>
-                {project.ref} — {titleAddress}
+            <div style={{ ...card({ padding: '16px 18px', marginBottom: 14 }) }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35 }}>
+                {project.ref}{project.ref && titleAddress ? ' | ' : ''}{titleAddress}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px', marginBottom: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
                     Role
