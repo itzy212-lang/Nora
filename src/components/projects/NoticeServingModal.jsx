@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import PizZip from 'pizzip';
 
@@ -42,11 +42,39 @@ function safeName(value) {
 }
 
 function aoKey(item) {
-  return String(item?.id || item?.num || item?.name || '');
+  return String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
 }
 
 function aoAddress(item) {
-  return item?.premise || item?.reg_addr || item?.address || item?.service_address || '';
+  return item?.premise || item?.reg_addr || item?.address || item?.service_address || item?.serviceAddress || '';
+}
+
+function normaliseAOList({ ao, aos, project }) {
+  const sources = [
+    Array.isArray(aos) ? aos : [],
+    Array.isArray(project?.aos) ? project.aos : [],
+    Array.isArray(project?.adjoining_owners) ? project.adjoining_owners : [],
+    Array.isArray(project?.adjoiningOwners) ? project.adjoiningOwners : [],
+    Array.isArray(project?.adjoiningowners) ? project.adjoiningowners : [],
+    Array.isArray(project?.ao_list) ? project.ao_list : [],
+    Array.isArray(project?.owners) ? project.owners : [],
+    ao ? [ao] : [],
+  ];
+
+  const seen = new Set();
+  const out = [];
+
+  for (const source of sources) {
+    for (const item of source) {
+      if (!item) continue;
+      const key = aoKey(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+
+  return out;
 }
 
 export default function NoticeServingModal({
@@ -59,7 +87,11 @@ export default function NoticeServingModal({
   onClose,
 }) {
   const lockedToSingleAO = !!ao;
-  const availableAOs = lockedToSingleAO ? [ao] : (aos || []);
+
+  const availableAOs = useMemo(
+    () => lockedToSingleAO ? [ao] : normaliseAOList({ ao, aos, project }),
+    [ao, aos, project, lockedToSingleAO]
+  );
 
   const [selectedAOKeys, setSelectedAOKeys] = useState(
     lockedToSingleAO && ao ? [aoKey(ao)] : []
