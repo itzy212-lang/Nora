@@ -1481,6 +1481,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
       const result = await generateDocument({
         templateKey: key, mergeData, fileName: mergeData.file_name, projectId: project.id,
+        autoDownload: false,   // suppress individual auto-downloads — we handle ZIP ourselves
+        download: false,
       });
       if (!result?.success) { console.warn(`Notice template '${key}' not found:`, result?.error); continue; }
       generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
@@ -1491,14 +1493,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       alert('No notice templates found. Please check your document templates.');
       return;
     }
+    // Always produce ZIP when multiple docs; single doc downloaded as DOCX
+    // Note: generateDocument may auto-download — if duplicate downloads occur,
+    // check useDocumentGenerator and set { autoDownload: false } if supported
     if (generatedDocs.length > 1) {
       const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
       const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
       downloadB64File(zipB64, zipName, 'application/zip');
-    } else {
-      downloadB64File(generatedDocs[0].docx_b64, generatedDocs[0].fileName,
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     }
+    // Single doc already downloaded by generateDocument — no extra download needed
 
     await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate });
 
@@ -1531,6 +1534,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
   // ── Handle 10(4)(b) surveyor save ──
+
+  const handleSetAOStatus = useCallback(async (ao, status) => {
+    const patch = { status };
+    if (status === 'consent') { patch.consent_received_date = todayIso(); patch.consentReceivedDate = todayIso(); }
+    if (status === 'dissent') { patch.dissent_received_date = todayIso(); patch.dissentReceivedDate = todayIso(); }
+    await updateAORecord(ao, patch);
+  }, [updateAORecord]);
+
+  const handleToggleAgreedSurveyor = useCallback(async (ao) => {
+    const next = !ao.agreed_surveyor;
+    await updateAORecord(ao, { agreed_surveyor: next, agreedSurveyor: next, status: next ? 'dissent' : (ao.status || 'notice_served') });
+  }, [updateAORecord]);
+
+  const handleNoteIntention = useCallback(async (ao) => {
+    await updateAORecord(ao, { intention_noted: true, intention_noted_date: todayIso(), status: ao.status || 'notice_served' });
+  }, [updateAORecord]);
+
+  const handleOpenSOCForAO = useCallback((ao) => {
+    onOpenSOC?.({ ...project, selectedAO: ao, selected_ao: ao });
+  }, [onOpenSOC, project]);
+
   const handleSave104BSurveyorDetails = useCallback(async ({ surveyor, third }) => {
     if (!s104bAO) return;
     await updateAORecord(s104bAO, {
@@ -1872,10 +1896,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       key={ao.id || i}
                       ao={ao}
                       projectRole={role}
+                      project={project}
                       onOpenComposer={onOpenComposer}
                       onGenerateAOLOA={handleGenerateAOLOA}
                       onEditAO={setEditingAO}
-                      onServeNotice={() => {}}
+                      onServeNotice={handleServeNotice}
+                      onServeS10={handleServeS10}
+                      onSetAOStatus={handleSetAOStatus}
+                      onToggleAgreedSurveyor={handleToggleAgreedSurveyor}
+                      onNoteIntention={handleNoteIntention}
+                      onOpenSOCForAO={handleOpenSOCForAO}
                       loaLoading={loaLoading === aoKey}
                     />
                   );
@@ -1885,6 +1915,33 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Notices card */}
+            <div style={{ ...card({ padding: '14px 16px' }) }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 16 }}>📋</span>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Notices</div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>
+                Generate and record notices for one or more adjoining owners.
+              </div>
+              <button
+                onClick={() => {
+                  if (aos.length === 1) {
+                    handleServeNotice(aos[0]);
+                  } else if (aos.length > 1) {
+                    handleServeNotice(aos[0]);
+                  } else {
+                    alert('Add an adjoining owner first.');
+                  }
+                }}
+                className="btn btn-primary btn-sm"
+                style={{ width: '100%', cursor: 'pointer', borderRadius: 8 }}
+              >
+                Serve notice
+              </button>
+            </div>
+
             <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
