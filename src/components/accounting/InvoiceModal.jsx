@@ -3,24 +3,23 @@ import React, { useState, useEffect } from 'react';
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
 async function polishDescription(text) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const raw = String(text || '').trim();
+
+  if (!raw) return text;
+
+  const response = await fetch('/api/invoice-polish', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{
-        role: 'user',
-        content: `You are helping a party wall surveyor write professional invoice line item descriptions.
-
-Improve the following invoice line item description: fix spelling, grammar, and make it sound professional and suitable for a formal invoice from a party wall surveyor. Keep it concise. Return ONLY the improved description text with no explanation, quotes, or preamble.
-
-Description to improve: "${text}"`
-      }]
-    })
+    body: JSON.stringify({ text: raw }),
   });
-  const data = await response.json();
-  return data.content?.[0]?.text?.trim() || text;
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Could not polish invoice description');
+  }
+
+  return data?.description?.trim() || text;
 }
 
 export default function InvoiceModal({ invoice, initialData = {}, nextNumber, settings, projects, onSave, onClose }) {
@@ -96,7 +95,22 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave({ ...form, subtotal, vat_amount: vatAmount, total });
+      const {
+        acting_for_name,
+        acting_for_address,
+        ao_client_name,
+        ao_client_address,
+        project_ref,
+        ...invoicePayload
+      } = form;
+
+      await onSave({
+        ...invoicePayload,
+        subtotal,
+        vat_amount: vatAmount,
+        total,
+      });
+
       onClose();
     } catch (e) {
       alert('Error saving invoice: ' + e.message);
