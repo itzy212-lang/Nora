@@ -218,6 +218,12 @@ export default function App() {
           settings={settings || {}}
           projects={state.projects || []}
           onSave={handleSaveProjectInvoice}
+          onEmail={(opts) => {
+            setComposerOpts({
+              mode: 'compose',
+              ...opts,
+            });
+          }}
           onClose={closeInvoiceModal}
         />
       )}
@@ -272,6 +278,12 @@ export default function App() {
           settings={settings || {}}
           projects={state.projects || []}
           onSave={handleSaveProjectInvoice}
+          onEmail={(opts) => {
+            setComposerOpts({
+              mode: 'compose',
+              ...opts,
+            });
+          }}
           onClose={closeInvoiceModal}
         />
       )}
