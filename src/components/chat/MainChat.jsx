@@ -242,6 +242,14 @@ function projectLabel(project = {}) {
   ].filter(Boolean).join(' | ') || project.id || 'Unnamed project';
 }
 
+function emailLabel(email = {}) {
+  const from = getEmailFromLabel(email);
+  const subject = getEmailSubject(email);
+  const date = getEmailDateLabel(email);
+
+  return [from, subject, date].filter(Boolean).join(' | ');
+}
+
 function isEmailLookupPrompt(text = '') {
   const s = String(text || '').toLowerCase();
   return (
@@ -855,6 +863,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
         emailContext: selectedEmailContext,
         emailId: selectedEmailContext?.emailId || null,
         threadId: selectedEmailContext?.threadId || null,
+        documentContext: selectedEmailContext?.threadText
+          ? `EMAIL/THREAD CONTEXT TO USE:\n${selectedEmailContext.threadText}`
+          : null,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
