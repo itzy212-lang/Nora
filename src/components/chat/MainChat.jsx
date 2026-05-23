@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
+
+const ACTIVE_SESSION_KEY = 'ely_main_chat_active_session_id';
+const ACTIVE_PROJECT_KEY = 'ely_main_chat_selected_project_id';
 
 function isDraftRequest(text = '', hasPreviousDraft = false) {
   const s = text.toLowerCase();
@@ -100,18 +103,53 @@ function splitAssistantResponse(raw = '') {
   };
 }
 
+function sessionTitle(session = {}) {
+  return session.title || session.auto_title || session.summary || 'Untitled chat';
+}
+
+function sessionDate(session = {}) {
+  const value = session.last_message_at || session.updated_at || session.created_at;
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function sessionTimeValue(session = {}) {
+  const value = session.last_message_at || session.updated_at || session.created_at;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortSessionsNewestFirst(sessions = []) {
+  return [...(sessions || [])].sort((a, b) => sessionTimeValue(b) - sessionTimeValue(a));
+}
+
 export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(() => {
+    try {
+      return localStorage.getItem(ACTIVE_PROJECT_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [lastDraft, setLastDraft] = useState('');
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-
-  const availableProjects = state.projects || [];
+  const [restoreAttempted, setRestoreAttempted] = useState(false);
+  const [linkingProject, setLinkingProject] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -121,6 +159,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     send,
     loading,
     sessionsLoading,
+    sessionId,
     resetSession,
     startNewSession,
     loadSession,
@@ -129,18 +168,38 @@ export default function MainChat({ onOpenComposer, onClose }) {
     refreshGlobalSessions,
     projectSessions,
     globalSessions,
-    sessionId,
-  } = useEly({ surface: 'main_chat', projectId: selectedProjectId || null });
+  } = useEly({
+    surface: 'main_chat',
+    projectId: selectedProjectId || null,
+  });
+
+  const sortedSessions = useMemo(() => {
+    const source = selectedProjectId ? projectSessions : globalSessions;
+    return sortSessionsNewestFirst(source);
+  }, [selectedProjectId, projectSessions, globalSessions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    if (!selectedProjectId && state.currentProject?.id) {
-      setSelectedProjectId(String(state.currentProject.id));
-    }
-  }, [selectedProjectId, state.currentProject?.id]);
+    try {
+      if (selectedProjectId) {
+        localStorage.setItem(ACTIVE_PROJECT_KEY, selectedProjectId);
+      } else {
+        localStorage.removeItem(ACTIVE_PROJECT_KEY);
+      }
+    } catch {}
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    try {
+      if (sessionId) {
+        localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+        setActiveChatId(sessionId);
+      }
+    } catch {}
+  }, [sessionId]);
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -149,6 +208,37 @@ export default function MainChat({ onOpenComposer, onClose }) {
       refreshGlobalSessions();
     }
   }, [selectedProjectId, refreshProjectSessions, refreshGlobalSessions]);
+
+  useEffect(() => {
+    if (restoreAttempted || sessionsLoading || !sortedSessions.length) return;
+
+    let savedSessionId = '';
+    try {
+      savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY) || '';
+    } catch {}
+
+    const targetSession =
+      sortedSessions.find(s => String(s.id) === String(savedSessionId)) ||
+      sortedSessions[0];
+
+    if (!targetSession?.id) {
+      setRestoreAttempted(true);
+      return;
+    }
+
+    setRestoreAttempted(true);
+
+    loadSession(targetSession.id)
+      .then(bundle => {
+        if (bundle?.messages) {
+          setMessages(bundle.messages);
+          setActiveChatId(targetSession.id);
+        }
+      })
+      .catch(err => {
+        console.warn('[MainChat] Failed to restore session:', err.message);
+      });
+  }, [restoreAttempted, sessionsLoading, sortedSessions, loadSession]);
 
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current;
@@ -184,24 +274,30 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setMessages([]);
     setInput('');
     setLastDraft('');
-    startNewSession?.();
-    resetSession?.();
     setActiveChatId(null);
+    resetSession();
+    startNewSession?.();
+
+    try {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+    } catch {}
   }, [resetSession, startNewSession, stopVoice]);
 
   const loadChat = useCallback(async (chat) => {
     if (!chat?.id) return;
+
     stopVoice();
 
     try {
       const bundle = await loadSession(chat.id);
       setMessages(bundle?.messages || []);
       setActiveChatId(chat.id);
+      setLastDraft('');
       setSidebarOpen(false);
 
-      if (bundle?.session?.project_id) {
-        setSelectedProjectId(String(bundle.session.project_id));
-      }
+      try {
+        localStorage.setItem(ACTIVE_SESSION_KEY, chat.id);
+      } catch {}
     } catch (err) {
       setMessages(prev => [...prev, {
         id: uid(),
@@ -213,24 +309,49 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const handleProjectChange = useCallback(async (event) => {
     const nextProjectId = event.target.value || '';
-    setSelectedProjectId(nextProjectId);
 
-    if (nextProjectId && sessionId) {
-      try {
-        await linkSessionToProject({
-          targetSessionId: sessionId,
-          targetProjectId: nextProjectId,
-          title: messages[0]?.content?.slice(0, 54) || 'Project chat',
-        });
-      } catch (err) {
-        setMessages(prev => [...prev, {
-          id: uid(),
-          role: 'ely',
-          content: `I couldn't link this chat to the project. ${err.message}`,
-        }]);
-      }
+    setSelectedProjectId(nextProjectId);
+    setRestoreAttempted(false);
+
+    if (!nextProjectId) {
+      await refreshGlobalSessions();
+      return;
     }
-  }, [linkSessionToProject, messages, sessionId]);
+
+    await refreshProjectSessions(nextProjectId);
+
+    if (!sessionId || !messages.length) return;
+
+    setLinkingProject(true);
+
+    try {
+      const currentProject = (state.projects || []).find(p => String(p.id) === String(nextProjectId));
+      await linkSessionToProject({
+        targetSessionId: sessionId,
+        targetProjectId: nextProjectId,
+        title: currentProject?.ref
+          ? `${currentProject.ref} - ${messages[0]?.content?.slice(0, 42) || 'Project chat'}`
+          : null,
+      });
+
+      await refreshProjectSessions(nextProjectId);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'ely',
+        content: `I could not link this chat to the selected project. ${err.message}`,
+      }]);
+    } finally {
+      setLinkingProject(false);
+    }
+  }, [
+    sessionId,
+    messages,
+    state.projects,
+    linkSessionToProject,
+    refreshProjectSessions,
+    refreshGlobalSessions,
+  ]);
 
   const handleOpenInComposer = useCallback((draftOrOptions) => {
     if (typeof draftOrOptions === 'string') {
@@ -240,6 +361,72 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
     onOpenComposer?.({ mode: 'compose', ...(draftOrOptions || {}) });
   }, [onOpenComposer]);
+
+  const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
+    if (!wantsDraft) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'ely',
+        content: result.reply || 'Done.',
+        suggestedActions: result.suggestedActions,
+      }]);
+      return;
+    }
+
+    const raw = result.draft || result.documentText || result.reply || result.replyText || '';
+    const { brief, draft, after } = splitAssistantResponse(raw);
+    const newMessages = [];
+
+    if (brief) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: brief,
+        messageType: 'brief',
+        suggestedActions: [],
+        recipient: result.recipient,
+        selectedAO: result.selectedAO,
+        projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+      });
+    }
+
+    if (draft) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: draft,
+        draft,
+        draftType: result.draftType || 'email',
+        messageType: 'draft',
+        suggestedActions: [],
+        recipient: result.recipient,
+        selectedAO: result.selectedAO,
+        projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+      });
+      setLastDraft(draft);
+    }
+
+    if (after) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: after,
+        messageType: 'brief',
+        suggestedActions: [],
+      });
+    }
+
+    if (!newMessages.length) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: result.reply || 'Done.',
+        suggestedActions: result.suggestedActions,
+      });
+    }
+
+    setMessages(prev => [...prev, ...newMessages]);
+  }, [state.currentProject?.id]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -261,76 +448,26 @@ export default function MainChat({ onOpenComposer, onClose }) {
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
-          linkedProjectId: selectedProjectId || null,
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
             : null,
         },
       });
 
-      if (!wantsDraft) {
-        setMessages(prev => [...prev, {
-          id: uid(),
-          role: 'ely',
-          content: result.reply || 'Done.',
-          suggestedActions: result.suggestedActions,
-        }]);
-        return;
+      if (result.sessionId) {
+        setActiveChatId(result.sessionId);
+        try {
+          localStorage.setItem(ACTIVE_SESSION_KEY, result.sessionId);
+        } catch {}
       }
 
-      const raw = result.draft || result.documentText || result.reply || result.replyText || '';
-      const { brief, draft, after } = splitAssistantResponse(raw);
-      const newMessages = [];
+      appendAssistantMessagesFromResult(result, wantsDraft);
 
-      if (brief) {
-        newMessages.push({
-          id: uid(),
-          role: 'ely',
-          content: brief,
-          messageType: 'brief',
-          suggestedActions: [],
-          recipient: result.recipient,
-          selectedAO: result.selectedAO,
-          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
-        });
+      if (selectedProjectId) {
+        refreshProjectSessions(selectedProjectId);
+      } else {
+        refreshGlobalSessions();
       }
-
-      if (draft) {
-        newMessages.push({
-          id: uid(),
-          role: 'ely',
-          content: draft,
-          draft,
-          draftType: result.draftType || 'email',
-          messageType: 'draft',
-          suggestedActions: [],
-          recipient: result.recipient,
-          selectedAO: result.selectedAO,
-          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
-        });
-        setLastDraft(draft);
-      }
-
-      if (after) {
-        newMessages.push({
-          id: uid(),
-          role: 'ely',
-          content: after,
-          messageType: 'brief',
-          suggestedActions: [],
-        });
-      }
-
-      if (!newMessages.length) {
-        newMessages.push({
-          id: uid(),
-          role: 'ely',
-          content: result.reply || 'Done.',
-          suggestedActions: result.suggestedActions,
-        });
-      }
-
-      setMessages(prev => [...prev, ...newMessages]);
     } catch (err) {
       setMessages(prev => [...prev, {
         id: uid(),
@@ -338,7 +475,17 @@ export default function MainChat({ onOpenComposer, onClose }) {
         content: `Sorry, I couldn't process that. ${err.message}`,
       }]);
     }
-  }, [input, loading, send, stopVoice, state.currentProject, lastDraft, selectedProjectId]);
+  }, [
+    input,
+    loading,
+    send,
+    stopVoice,
+    lastDraft,
+    selectedProjectId,
+    appendAssistantMessagesFromResult,
+    refreshProjectSessions,
+    refreshGlobalSessions,
+  ]);
 
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -377,34 +524,45 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
         <div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Ely</div>
-          <div style={{ fontSize: 10, color: 'var(--text3)' }}>Practice Assistant</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+            Practice Assistant {linkingProject ? ' - linking project...' : ''}
+          </div>
         </div>
 
         <select
           value={selectedProjectId}
           onChange={handleProjectChange}
-          title="Link chat to project"
+          disabled={loading || linkingProject}
+          title="Link this chat to a project"
           style={{
             marginLeft: 'auto',
-            maxWidth: 260,
+            minWidth: 220,
+            maxWidth: 340,
             height: 32,
-            borderRadius: 8,
+            borderRadius: 10,
             border: '1px solid var(--border)',
             background: 'var(--bg2)',
             color: 'var(--text)',
             fontSize: 12,
-            padding: '0 8px',
+            padding: '0 10px',
           }}
         >
-          <option value="">No linked project</option>
-          {availableProjects.map(project => (
-            <option key={project.id} value={project.id}>
-              {(project.ref || project.reference || project.project_ref || 'Project')} | {(project.address || project.bo_premise_address || project.premise || '').slice(0, 60)}
-            </option>
-          ))}
+          <option value="">Main chat - no project linked</option>
+          {(state.projects || []).map(project => {
+            const label = [
+              project.ref || project.reference || project.project_ref,
+              project.address || project.bo_premise_address || project.premise,
+            ].filter(Boolean).join(' | ');
+
+            return (
+              <option key={project.id} value={project.id}>
+                {label || project.id}
+              </option>
+            );
+          })}
         </select>
 
-        <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={startNewChat}>
+        <button className="btn btn-sm" onClick={startNewChat}>
           + New chat
         </button>
 
@@ -416,44 +574,30 @@ export default function MainChat({ onOpenComposer, onClose }) {
       <div className="ai-full-body">
         <div className={`ai-full-sidebar${sidebarOpen ? ' mob-open' : ''}`}>
           <div className="ai-full-sidebar-hdr">
-            <span>History</span>
+            <span>{selectedProjectId ? 'Project chats' : 'History'}</span>
             <button className="btn btn-xs btn-ghost" onClick={startNewChat}>+ New</button>
           </div>
 
-          {(() => {
-            const sessions = selectedProjectId ? projectSessions : globalSessions;
-
-            if (sessionsLoading) {
-              return (
-                <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
-                  Loading chats...
-                </div>
-              );
-            }
-
-            if (!sessions?.length) {
-              return (
-                <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
-                  No previous chats
-                </div>
-              );
-            }
-
-            return sessions.map(chat => {
-              const title = chat.title || chat.auto_title || chat.summary || 'Untitled chat';
-              const dateSource = chat.last_message_at || chat.updated_at || chat.created_at;
-              const date = dateSource
-                ? new Date(dateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                : '';
-
-              return (
-                <div key={chat.id} className={`ai-sess-item${activeChatId === chat.id ? ' active' : ''}`} onClick={() => loadChat(chat)}>
-                  <div className="ai-sess-name">{title}</div>
-                  <div className="ai-sess-date">{date}</div>
-                </div>
-              );
-            });
-          })()}
+          {sessionsLoading ? (
+            <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+              Loading chats...
+            </div>
+          ) : sortedSessions.length === 0 ? (
+            <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+              No previous chats
+            </div>
+          ) : (
+            sortedSessions.map(chat => (
+              <div
+                key={chat.id}
+                className={`ai-sess-item${activeChatId === chat.id || sessionId === chat.id ? ' active' : ''}`}
+                onClick={() => loadChat(chat)}
+              >
+                <div className="ai-sess-name">{sessionTitle(chat)}</div>
+                <div className="ai-sess-date">{sessionDate(chat)}</div>
+              </div>
+            ))
+          )}
         </div>
 
         <div className="ai-full-main">
@@ -494,7 +638,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                 value={input}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Ely anything about party wall, your projects, or drafting..."
+                placeholder={selectedProjectId ? 'Ask Ely about this linked project...' : 'Ask Ely anything about party wall, your projects, or drafting...'}
                 rows={1}
                 style={{ minHeight: 38, maxHeight: 140, overflowY: 'hidden', resize: 'none', lineHeight: 1.5 }}
               />
@@ -508,7 +652,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
             </div>
 
             <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>
-              AI can make mistakes. Always verify professional advice.
+              {selectedProjectId ? 'This chat is linked to the selected project.' : 'AI can make mistakes. Always verify professional advice.'}
             </div>
           </div>
         </div>
@@ -599,6 +743,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
         .ely-md li {
           margin: 4px 0;
         }
+
+        @media (max-width: 820px) {
+          .ai-full-top select {
+            min-width: 120px !important;
+            max-width: 160px !important;
+          }
+        }
       `}</style>
     </div>
   );
@@ -629,7 +780,7 @@ function WelcomeScreen({ onSend, userName }) {
     'What are the current statutory timescales?',
     'Help me draft an award',
     'Find the latest email from my client',
-    'What is the Party Wall Act 1996?',
+    'What is the Act?',
   ];
 
   return (
