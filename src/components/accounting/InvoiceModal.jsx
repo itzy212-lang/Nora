@@ -2,6 +2,40 @@ import React, { useState, useEffect } from 'react';
 
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
+const INVOICE_SETTINGS_KEY = 'ely_invoice_settings';
+
+function getNextInvoiceNumberFromSettings(fallback) {
+  try {
+    const settings = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}');
+    const last = Number(settings.last_invoice_number);
+
+    if (Number.isFinite(last)) return last + 1;
+
+    const legacyNext = Number(settings.next_invoice_number);
+    if (Number.isFinite(legacyNext)) return legacyNext;
+  } catch {}
+
+  return fallback || 1601;
+}
+
+function markInvoiceNumberUsed(invoiceNumber) {
+  const used = Number(invoiceNumber);
+  if (!Number.isFinite(used)) return;
+
+  try {
+    const settings = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}');
+    const currentLast = Number(settings.last_invoice_number);
+    const nextLast = Number.isFinite(currentLast) ? Math.max(currentLast, used) : used;
+
+    localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify({
+      ...settings,
+      last_invoice_number: nextLast,
+      next_invoice_number: nextLast + 1,
+    }));
+  } catch {}
+}
+
+
 async function polishDescription(text) {
   const raw = String(text || '').trim();
 
@@ -28,7 +62,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
   const isAO = String(role).toUpperCase() === 'AO';
 
   const [form, setForm] = useState({
-    invoice_number: invoice?.invoice_number || nextNumber || 1601,
+    invoice_number: invoice?.invoice_number || getNextInvoiceNumberFromSettings(nextNumber),
     invoice_date: invoice?.invoice_date || new Date().toISOString().split('T')[0],
     due_date: invoice?.due_date || '',
     bill_to_name: invoice?.bill_to_name || initialData?.bill_to_name || '',
@@ -120,6 +154,8 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
         vat_amount: vatAmount,
         total,
       });
+
+      markInvoiceNumberUsed(savedInvoice?.invoice_number || form.invoice_number);
 
       const pdfResponse = await fetch('/api/generate-invoice-pdf', {
         method: 'POST',
