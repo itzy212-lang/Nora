@@ -105,21 +105,50 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [chatList, setChatList] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [lastDraft, setLastDraft] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+
+  const availableProjects = state.projects || [];
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
 
-  const { send, loading, resetSession } = useEly({ surface: 'main_chat' });
+  const {
+    send,
+    loading,
+    sessionsLoading,
+    resetSession,
+    startNewSession,
+    loadSession,
+    linkSessionToProject,
+    refreshProjectSessions,
+    refreshGlobalSessions,
+    projectSessions,
+    globalSessions,
+    sessionId,
+  } = useEly({ surface: 'main_chat', projectId: selectedProjectId || null });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!selectedProjectId && state.currentProject?.id) {
+      setSelectedProjectId(String(state.currentProject.id));
+    }
+  }, [selectedProjectId, state.currentProject?.id]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      refreshProjectSessions(selectedProjectId);
+    } else {
+      refreshGlobalSessions();
+    }
+  }, [selectedProjectId, refreshProjectSessions, refreshGlobalSessions]);
 
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current;
@@ -152,31 +181,56 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const startNewChat = useCallback(() => {
     stopVoice();
-
-    if (messages.length > 0) {
-      const id = uid();
-
-      setChatList(prev => [{
-        id,
-        name: messages[0]?.content?.slice(0, 40) || 'Chat',
-        messages,
-        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-      }, ...prev]);
-    }
-
     setMessages([]);
     setInput('');
     setLastDraft('');
-    resetSession();
+    startNewSession?.();
+    resetSession?.();
     setActiveChatId(null);
-  }, [messages, resetSession, stopVoice]);
+  }, [resetSession, startNewSession, stopVoice]);
 
-  const loadChat = useCallback((chat) => {
+  const loadChat = useCallback(async (chat) => {
+    if (!chat?.id) return;
     stopVoice();
-    setMessages(chat.messages);
-    setActiveChatId(chat.id);
-    setSidebarOpen(false);
-  }, [stopVoice]);
+
+    try {
+      const bundle = await loadSession(chat.id);
+      setMessages(bundle?.messages || []);
+      setActiveChatId(chat.id);
+      setSidebarOpen(false);
+
+      if (bundle?.session?.project_id) {
+        setSelectedProjectId(String(bundle.session.project_id));
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'ely',
+        content: `Sorry, I couldn't load that chat. ${err.message}`,
+      }]);
+    }
+  }, [loadSession, stopVoice]);
+
+  const handleProjectChange = useCallback(async (event) => {
+    const nextProjectId = event.target.value || '';
+    setSelectedProjectId(nextProjectId);
+
+    if (nextProjectId && sessionId) {
+      try {
+        await linkSessionToProject({
+          targetSessionId: sessionId,
+          targetProjectId: nextProjectId,
+          title: messages[0]?.content?.slice(0, 54) || 'Project chat',
+        });
+      } catch (err) {
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: 'ely',
+          content: `I couldn't link this chat to the project. ${err.message}`,
+        }]);
+      }
+    }
+  }, [linkSessionToProject, messages, sessionId]);
 
   const handleOpenInComposer = useCallback((draftOrOptions) => {
     if (typeof draftOrOptions === 'string') {
@@ -203,9 +257,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
       const wantsDraft = isDraftRequest(text, !!lastDraft);
 
       const result = await send(text, {
+        projectId: selectedProjectId || null,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
+          linkedProjectId: selectedProjectId || null,
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
             : null,
@@ -282,7 +338,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         content: `Sorry, I couldn't process that. ${err.message}`,
       }]);
     }
-  }, [input, loading, send, stopVoice, state.currentProject, lastDraft]);
+  }, [input, loading, send, stopVoice, state.currentProject, lastDraft, selectedProjectId]);
 
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -324,7 +380,31 @@ export default function MainChat({ onOpenComposer, onClose }) {
           <div style={{ fontSize: 10, color: 'var(--text3)' }}>Practice Assistant</div>
         </div>
 
-        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startNewChat}>
+        <select
+          value={selectedProjectId}
+          onChange={handleProjectChange}
+          title="Link chat to project"
+          style={{
+            marginLeft: 'auto',
+            maxWidth: 260,
+            height: 32,
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--bg2)',
+            color: 'var(--text)',
+            fontSize: 12,
+            padding: '0 8px',
+          }}
+        >
+          <option value="">No linked project</option>
+          {availableProjects.map(project => (
+            <option key={project.id} value={project.id}>
+              {(project.ref || project.reference || project.project_ref || 'Project')} | {(project.address || project.bo_premise_address || project.premise || '').slice(0, 60)}
+            </option>
+          ))}
+        </select>
+
+        <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={startNewChat}>
           + New chat
         </button>
 
@@ -340,18 +420,40 @@ export default function MainChat({ onOpenComposer, onClose }) {
             <button className="btn btn-xs btn-ghost" onClick={startNewChat}>+ New</button>
           </div>
 
-          {chatList.length === 0 ? (
-            <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
-              No previous chats
-            </div>
-          ) : (
-            chatList.map(chat => (
-              <div key={chat.id} className={`ai-sess-item${activeChatId === chat.id ? ' active' : ''}`} onClick={() => loadChat(chat)}>
-                <div className="ai-sess-name">{chat.name}</div>
-                <div className="ai-sess-date">{chat.date}</div>
-              </div>
-            ))
-          )}
+          {(() => {
+            const sessions = selectedProjectId ? projectSessions : globalSessions;
+
+            if (sessionsLoading) {
+              return (
+                <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+                  Loading chats...
+                </div>
+              );
+            }
+
+            if (!sessions?.length) {
+              return (
+                <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+                  No previous chats
+                </div>
+              );
+            }
+
+            return sessions.map(chat => {
+              const title = chat.title || chat.auto_title || chat.summary || 'Untitled chat';
+              const dateSource = chat.last_message_at || chat.updated_at || chat.created_at;
+              const date = dateSource
+                ? new Date(dateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                : '';
+
+              return (
+                <div key={chat.id} className={`ai-sess-item${activeChatId === chat.id ? ' active' : ''}`} onClick={() => loadChat(chat)}>
+                  <div className="ai-sess-name">{title}</div>
+                  <div className="ai-sess-date">{date}</div>
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <div className="ai-full-main">
