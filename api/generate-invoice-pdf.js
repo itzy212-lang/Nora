@@ -23,7 +23,7 @@ function money(value) {
   })}`;
 }
 
-function escapeHtml(value) {
+function esc(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -39,6 +39,10 @@ function safeFileName(value) {
     .slice(0, 120);
 }
 
+function spaced(text) {
+  return esc(String(text || '').toUpperCase().split('').join(' '));
+}
+
 function formatDate(value) {
   if (!value) return '';
   try {
@@ -52,652 +56,569 @@ function formatDate(value) {
   }
 }
 
-function label(text) {
-  return escapeHtml(String(text || '').toUpperCase().split('').join(' '));
-}
+function statusLabel(value) {
+  const raw = String(value || '').toLowerCase();
 
-function statusLabel(status) {
-  const raw = String(status || '').toLowerCase();
   if (raw === 'paid') return 'Paid';
   if (raw === 'void') return 'Void';
   if (raw === 'overdue') return 'Overdue';
+  if (raw === 'draft') return 'Draft';
+
   return 'Awaiting Payment';
 }
 
-function buildInvoiceHtml(invoice) {
+function getInvoiceNumber(invoice) {
+  const raw = invoice.invoice_number || invoice.id || '';
+  if (!raw) return '';
+
+  return String(raw).startsWith('INV-')
+    ? String(raw)
+    : `INV-${raw}`;
+}
+
+function mergeSettings(invoice, firm = {}, invoiceSettings = {}) {
+  return {
+    firmName:
+      invoice.firm_name ||
+      firm.firm_name ||
+      firm.trading_name ||
+      'Square One Consulting',
+
+    firmAddress:
+      invoice.firm_address ||
+      [
+        firm.address_line1,
+        firm.address_line2,
+        firm.city,
+        firm.postcode,
+      ].filter(Boolean).join(', ') ||
+      'Suite 28, 708a High Road, London, N12 9QL',
+
+    firmPhone:
+      invoice.firm_phone ||
+      firm.tel ||
+      firm.phone ||
+      '07889996841',
+
+    firmEmail:
+      invoice.firm_email ||
+      firm.email ||
+      'help@sq1consulting.co.uk',
+
+    bankName:
+      invoice.bank_name ||
+      invoice.account_name ||
+      invoiceSettings.account_name ||
+      invoiceSettings.bank_name ||
+      firm.bank_name ||
+      'Itzik Ltd',
+
+    sortCode:
+      invoice.sort_code ||
+      invoiceSettings.sort_code ||
+      firm.sort_code ||
+      '04-03-33',
+
+    accountNo:
+      invoice.account_number ||
+      invoice.account_no ||
+      invoiceSettings.account_number ||
+      firm.account_number ||
+      '67644868',
+
+    notes:
+      invoice.invoice_notes ||
+      invoiceSettings.invoice_notes ||
+      firm.footer_text ||
+      'Thank you for your business.',
+  };
+}
+
+function buildInvoiceHtml(invoice, firm, invoiceSettings) {
   const items = Array.isArray(invoice.items) ? invoice.items : [];
-  const invoiceNumber = invoice.invoice_number || invoice.id || '';
-  const invoiceLabel = String(invoiceNumber).startsWith('INV-')
-    ? invoiceNumber
-    : `INV-${invoiceNumber}`;
+  const invNo = getInvoiceNumber(invoice);
+  const projectRef = invoice.project_ref || invoice.ref || invoice.project_reference || '';
+  const settings = mergeSettings(invoice, firm, invoiceSettings);
 
-  const projectRef =
-    invoice.project_ref ||
-    invoice.ref ||
-    invoice.project_reference ||
-    '';
-
-  const firmName =
-    invoice.firm_name ||
-    'Square One Consulting';
-
-  const firmAddress =
-    invoice.firm_address ||
-    'Suite 28, 708a High Road, London, N12 9QL';
-
-  const firmPhone =
-    invoice.firm_phone ||
-    '07889996841';
-
-  const firmEmail =
-    invoice.firm_email ||
-    'help@sq1consulting.co.uk';
-
-  const bankName =
-    invoice.bank_name ||
-    invoice.account_name ||
-    'Itzik Ltd';
-
-  const sortCode =
-    invoice.sort_code ||
-    '04-03-33';
-
-  const accountNo =
-    invoice.account_number ||
-    invoice.account_no ||
-    '67644868';
-
-  const notes =
-    invoice.notes ||
-    invoice.invoice_notes ||
-    'Thank you for your business.';
+  const subtotal = Number(invoice.subtotal || 0);
+  const vatAmt = Number(invoice.vat_amount || 0);
+  const totalDue = Number(invoice.total || subtotal + vatAmt);
 
   const rows = items.map(item => {
     const qty = Number(item.qty || 0);
-
-    const unit = Number(
-      item.unitPrice ??
-      item.unit_price ??
-      0
-    );
-
-    const total = Number(
-      item.total ??
-      qty * unit
-    );
+    const unit = Number(item.unitPrice ?? item.unit_price ?? 0);
+    const total = Number(item.total ?? qty * unit);
 
     return `
       <tr>
-        <td class="description">
-          ${escapeHtml(item.description || '')}
-        </td>
-
-        <td class="num qty">
-          ${qty || ''}
-        </td>
-
-        <td class="num unit">
-          ${money(unit)}
-        </td>
-
-        <td class="num total">
-          ${money(total)}
-        </td>
+        <td class="td-desc">${esc(item.description || '')}</td>
+        <td class="td-r qty">${qty || ''}</td>
+        <td class="td-r unit">${money(unit)}</td>
+        <td class="td-r total">${money(total)}</td>
       </tr>
     `;
   }).join('');
 
-  return `
-<!doctype html>
+  return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
-
-<title>
-${escapeHtml(invoiceLabel)}
-</title>
-
+<title>${esc(invNo || 'Invoice')}</title>
 <style>
-* {
-  box-sizing: border-box;
-}
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  color: #111827;
-  margin: 0;
-  padding: 46px 54px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  background: #ffffff;
-}
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #111827;
+    background: #fff;
+    font-size: 12.5px;
+    line-height: 1.45;
+    padding: 46px 54px;
+  }
 
-.page {
-  width: 100%;
-}
+  .top {
+    display: grid;
+    grid-template-columns: 1fr 230px;
+    gap: 32px;
+    align-items: start;
+    margin-bottom: 42px;
+  }
 
-.top {
-  display: grid;
-  grid-template-columns: 1fr 230px;
-  gap: 32px;
-  align-items: start;
-  margin-bottom: 42px;
-}
+  .firm-name {
+    font-size: 19px;
+    font-weight: 700;
+    margin-bottom: 9px;
+    color: #111827;
+  }
 
-.firm-name {
-  font-size: 19px;
-  font-weight: 700;
-  margin-bottom: 9px;
-  color: #111827;
-}
+  .firm-line {
+    font-size: 12.5px;
+    color: #374151;
+    line-height: 1.55;
+  }
 
-.firm-lines {
-  color: #374151;
-  line-height: 1.55;
-  font-size: 12.5px;
-}
+  .invoice-title {
+    text-align: right;
+  }
 
-.invoice-title {
-  text-align: right;
-  padding-top: 1px;
-}
+  .invoice-word {
+    font-size: 29px;
+    letter-spacing: 1.5px;
+    line-height: 1;
+    font-weight: 500;
+    color: #111827;
+    margin-bottom: 13px;
+  }
 
-.invoice-title-main {
-  font-size: 29px;
-  letter-spacing: 1.5px;
-  line-height: 1;
-  font-weight: 500;
-  color: #111827;
-  margin-bottom: 13px;
-}
+  .invoice-no {
+    font-size: 13px;
+    color: #111827;
+    font-weight: 500;
+  }
 
-.invoice-no {
-  font-size: 13px;
-  color: #111827;
-  font-weight: 500;
-}
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    column-gap: 24px;
+    margin-bottom: 36px;
+  }
 
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  column-gap: 24px;
-  margin-bottom: 36px;
-}
+  .label {
+    font-size: 10px;
+    color: #111827;
+    font-weight: 700;
+    letter-spacing: 3.1px;
+    line-height: 1.2;
+    margin-bottom: 9px;
+    white-space: nowrap;
+  }
 
-.spaced-label {
-  font-size: 10px;
-  color: #111827;
-  font-weight: 700;
-  letter-spacing: 3.1px;
-  line-height: 1.2;
-  margin-bottom: 9px;
-  white-space: nowrap;
-}
+  .value {
+    font-size: 12.5px;
+    color: #111827;
+    line-height: 1.45;
+  }
 
-.value {
-  font-size: 12.5px;
-  color: #111827;
-  line-height: 1.45;
-}
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 58px;
+    margin-bottom: 32px;
+  }
 
-.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 58px;
-  margin-bottom: 32px;
-}
+  .block-value {
+    min-height: 42px;
+    color: #111827;
+    line-height: 1.55;
+    font-size: 12.5px;
+  }
 
-.block-value {
-  min-height: 42px;
-  color: #111827;
-  line-height: 1.55;
-  font-size: 12.5px;
-}
+  .service-line {
+    margin-top: 24px;
+    margin-bottom: 23px;
+    color: #111827;
+    font-size: 12.5px;
+  }
 
-.service-line {
-  margin-top: 24px;
-  margin-bottom: 23px;
-  color: #111827;
-  font-size: 12.5px;
-}
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+  }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 0;
-  margin-bottom: 18px;
-}
+  th {
+    text-align: left;
+    font-size: 10px;
+    color: #111827;
+    font-weight: 700;
+    letter-spacing: 3.1px;
+    padding: 0 0 11px 0;
+    border: none;
+    white-space: nowrap;
+  }
 
-th {
-  text-align: left;
-  font-size: 10px;
-  color: #111827;
-  font-weight: 700;
-  letter-spacing: 3.1px;
-  padding: 0 0 11px 0;
-  border: none;
-  white-space: nowrap;
-}
+  th.th-r {
+    text-align: right;
+  }
 
-th.num {
-  text-align: right;
-}
+  td {
+    vertical-align: top;
+    padding: 0 0 14px 0;
+    font-size: 12.5px;
+    color: #111827;
+    line-height: 1.5;
+    border: none;
+  }
 
-td {
-  vertical-align: top;
-  padding: 0 0 14px 0;
-  font-size: 12.5px;
-  color: #111827;
-  line-height: 1.5;
-  border: none;
-}
+  .td-desc {
+    width: 66%;
+    padding-right: 22px;
+  }
 
-td.description {
-  width: 66%;
-  padding-right: 22px;
-}
+  .td-r {
+    text-align: right;
+    white-space: nowrap;
+  }
 
-td.num {
-  text-align: right;
-  white-space: nowrap;
-}
+  .qty {
+    width: 8%;
+  }
 
-td.qty {
-  width: 8%;
-}
+  .unit {
+    width: 13%;
+  }
 
-td.unit {
-  width: 13%;
-}
+  .total {
+    width: 13%;
+  }
 
-td.total {
-  width: 13%;
-}
+  .totals {
+    width: 230px;
+    margin-left: auto;
+    margin-top: 2px;
+    margin-bottom: 44px;
+  }
 
-.totals {
-  width: 230px;
-  margin-left: auto;
-  margin-top: 2px;
-  margin-bottom: 44px;
-}
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 22px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
 
-.total-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 22px;
-  font-size: 12.5px;
-  line-height: 1.6;
-  margin-bottom: 6px;
-}
+  .total-row.final {
+    font-weight: 700;
+    margin-top: 4px;
+  }
 
-.total-row.final {
-  font-weight: 700;
-  margin-top: 4px;
-}
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 118px 118px 138px 1fr;
+    column-gap: 26px;
+    align-items: start;
+    margin-top: 8px;
+  }
 
-.footer-grid {
-  display: grid;
-  grid-template-columns:
-    118px
-    118px
-    138px
-    1fr;
-  column-gap: 26px;
-  align-items: start;
-  margin-top: 8px;
-}
+  .footer-value {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #111827;
+    margin-top: 7px;
+  }
 
-.footer-value {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: #111827;
-  margin-top: 7px;
-}
+  .thanks {
+    align-self: end;
+    font-size: 12.5px;
+    color: #111827;
+    line-height: 1.45;
+    padding-top: 25px;
+  }
 
-.thanks {
-  align-self: end;
-  font-size: 12.5px;
-  color: #111827;
-  line-height: 1.45;
-  padding-top: 25px;
-}
+  .notes {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #374151;
+    white-space: pre-wrap;
+  }
 </style>
 </head>
 
 <body>
-
-<div class="page">
-
   <div class="top">
-
     <div>
-      <div class="firm-name">
-        ${escapeHtml(firmName)}
-      </div>
-
-      <div class="firm-lines">
-        ${escapeHtml(firmAddress)}<br />
-        ${escapeHtml(firmPhone)}<br />
-        ${escapeHtml(firmEmail)}
-      </div>
+      <div class="firm-name">${esc(settings.firmName)}</div>
+      ${settings.firmAddress ? `<div class="firm-line">${esc(settings.firmAddress)}</div>` : ''}
+      ${settings.firmPhone ? `<div class="firm-line">${esc(settings.firmPhone)}</div>` : ''}
+      ${settings.firmEmail ? `<div class="firm-line">${esc(settings.firmEmail)}</div>` : ''}
     </div>
 
     <div class="invoice-title">
-      <div class="invoice-title-main">
-        INVOICE
-      </div>
-
-      <div class="invoice-no">
-        ${escapeHtml(invoiceLabel)}
-      </div>
+      <div class="invoice-word">INVOICE</div>
+      <div class="invoice-no">${esc(invNo)}</div>
     </div>
-
   </div>
 
-  <div class="meta-grid">
-
+  <div class="meta">
     <div>
-      <div class="spaced-label">
-        ${label('Issue Date')}
-      </div>
-
-      <div class="value">
-        ${escapeHtml(formatDate(invoice.invoice_date))}
-      </div>
+      <div class="label">${spaced('Issue Date')}</div>
+      <div class="value">${esc(formatDate(invoice.invoice_date))}</div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('Due Date')}
-      </div>
-
-      <div class="value">
-        ${escapeHtml(formatDate(invoice.due_date))}
-      </div>
+      <div class="label">${spaced('Due Date')}</div>
+      <div class="value">${esc(formatDate(invoice.due_date))}</div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('Project Ref')}
-      </div>
-
-      <div class="value">
-        ${escapeHtml(projectRef)}
-      </div>
+      <div class="label">${spaced('Project Ref')}</div>
+      <div class="value">${esc(projectRef)}</div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('Status')}
-      </div>
-
-      <div class="value">
-        ${escapeHtml(statusLabel(invoice.status))}
-      </div>
+      <div class="label">${spaced('Status')}</div>
+      <div class="value">${esc(statusLabel(invoice.status))}</div>
     </div>
-
   </div>
 
   <div class="two-col">
-
     <div>
-      <div class="spaced-label">
-        ${label('Bill To')}
-      </div>
-
+      <div class="label">${spaced('Bill To')}</div>
       <div class="block-value">
-        ${escapeHtml(invoice.bill_to_name || '')}<br />
-        ${escapeHtml(invoice.bill_to_address || '').replace(/\n/g, '<br />')}
+        <strong>${esc(invoice.bill_to_name || '')}</strong><br />
+        ${esc(invoice.bill_to_address || '').replace(/\n/g, '<br />')}
       </div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('In Respect Of')}
-      </div>
-
+      <div class="label">${spaced('In Respect Of')}</div>
       <div class="block-value">
-        ${escapeHtml(invoice.property_address || '').replace(/\n/g, '<br />')}
+        ${esc(invoice.property_address || '').replace(/\n/g, '<br />')}
       </div>
     </div>
-
   </div>
 
-  <div class="service-line">
-    Party wall surveyor services
-  </div>
+  <div class="service-line">Party wall surveyor services</div>
 
   <table>
-
     <thead>
       <tr>
-        <th>${label('Description')}</th>
-        <th class="num">${label('Qty')}</th>
-        <th class="num">${label('Unit')}</th>
-        <th class="num">${label('Total')}</th>
+        <th>${spaced('Description')}</th>
+        <th class="th-r">${spaced('Qty')}</th>
+        <th class="th-r">${spaced('Unit')}</th>
+        <th class="th-r">${spaced('Total')}</th>
       </tr>
     </thead>
 
     <tbody>
-      ${rows}
+      ${rows || '<tr><td class="td-desc" colspan="4">No line items</td></tr>'}
     </tbody>
-
   </table>
 
   <div class="totals">
-
     <div class="total-row">
       <span>Subtotal</span>
-      <span>${money(invoice.subtotal)}</span>
+      <span>${money(subtotal)}</span>
     </div>
 
-    ${Number(invoice.vat_amount || 0) > 0 ? `
+    ${vatAmt > 0 ? `
     <div class="total-row">
       <span>VAT</span>
-      <span>${money(invoice.vat_amount)}</span>
+      <span>${money(vatAmt)}</span>
     </div>
     ` : ''}
 
     <div class="total-row final">
       <span>Total Due</span>
-      <span>${money(invoice.total)}</span>
+      <span>${money(totalDue)}</span>
     </div>
-
   </div>
 
   <div class="footer-grid">
-
     <div>
-      <div class="spaced-label">
-        ${label('Bank')}
-      </div>
-
-      <div class="footer-value">
-        ${escapeHtml(bankName)}
-      </div>
+      <div class="label">${spaced('Bank')}</div>
+      <div class="footer-value">${esc(settings.bankName)}</div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('Sort Code')}
-      </div>
-
-      <div class="footer-value">
-        ${escapeHtml(sortCode)}
-      </div>
+      <div class="label">${spaced('Sort Code')}</div>
+      <div class="footer-value">${esc(settings.sortCode)}</div>
     </div>
 
     <div>
-      <div class="spaced-label">
-        ${label('Account No.')}
-      </div>
-
-      <div class="footer-value">
-        ${escapeHtml(accountNo)}
-      </div>
+      <div class="label">${spaced('Account No.')}</div>
+      <div class="footer-value">${esc(settings.accountNo)}</div>
     </div>
 
-    <div class="thanks">
-      ${escapeHtml(notes)}
-    </div>
-
+    <div class="thanks">${esc(settings.notes)}</div>
   </div>
 
-</div>
-
+  ${invoice.notes && invoice.notes !== settings.notes ? `
+  <div class="notes">
+    <strong>Notes:</strong><br />
+    ${esc(invoice.notes)}
+  </div>
+  ` : ''}
 </body>
-</html>
-`;
+</html>`;
+}
+
+async function loadFirmSettings(sb) {
+  try {
+    const { data } = await sb
+      .from('firm_settings')
+      .select('firm_name,trading_name,address_line1,address_line2,city,postcode,tel,phone,email,footer_text,bank_name,sort_code,account_number')
+      .limit(1);
+
+    return data?.[0] || {};
+  } catch {
+    return {};
+  }
+}
+
+async function loadInvoiceSettings(sb) {
+  try {
+    const { data } = await sb
+      .from('ely_data')
+      .select('data')
+      .eq('data_type', 'invoice_settings')
+      .limit(1);
+
+    return data?.[0]?.data || {};
+  } catch {
+    return {};
+  }
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: 'Method not allowed',
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(500).json({
-      error: 'Supabase environment variables not configured',
-    });
+    return res.status(500).json({ error: 'Supabase not configured' });
   }
 
   if (!API2PDF_KEY) {
-    return res.status(500).json({
-      error: 'API2PDF_API_KEY not configured',
-    });
+    return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
   }
 
-  const {
-    invoice,
-    project_id,
-    invoice_id,
-  } = req.body || {};
+  const { invoice, project_id, invoice_id } = req.body || {};
 
   if (!invoice) {
-    return res.status(400).json({
-      error: 'No invoice provided',
-    });
+    return res.status(400).json({ error: 'No invoice provided' });
   }
 
-  const projectId =
-    project_id ||
-    invoice.project_id ||
-    null;
-
-  const invoiceId =
-    invoice_id ||
-    invoice.id ||
-    null;
-
-  const invoiceNumber =
-    invoice.invoice_number ||
-    invoice.id ||
-    Date.now();
-
-  const fileName = safeFileName(
-    `Invoice-${invoiceNumber}.pdf`
-  );
-
-  const storagePath =
-    `${projectId || 'unlinked'}/invoices/${Date.now()}_${fileName}`;
+  const sb = getSupabase();
+  const projectId = project_id || invoice.project_id || null;
+  const invoiceId = invoice_id || invoice.id || null;
+  const invoiceNumber = invoice.invoice_number || invoice.id || Date.now();
+  const fileName = safeFileName(`Invoice-${invoiceNumber}.pdf`);
+  const storagePath = `${projectId || 'unlinked'}/invoices/${Date.now()}_${fileName}`;
 
   try {
-    const html = buildInvoiceHtml(invoice);
+    const [firm, invoiceSettings] = await Promise.all([
+      loadFirmSettings(sb),
+      loadInvoiceSettings(sb),
+    ]);
 
-    const pdfRes = await fetch(
-      'https://v2.api2pdf.com/chrome/pdf/html',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: API2PDF_KEY,
-          'Content-Type': 'application/json',
+    const html = buildInvoiceHtml(invoice, firm, invoiceSettings);
+
+    const pdfRes = await fetch('https://v2.api2pdf.com/chrome/pdf/html', {
+      method: 'POST',
+      headers: {
+        Authorization: API2PDF_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        html,
+        fileName,
+        options: {
+          printBackground: true,
+          marginTop: '0.35in',
+          marginRight: '0.45in',
+          marginBottom: '0.35in',
+          marginLeft: '0.45in',
+          format: 'A4',
         },
-        body: JSON.stringify({
-          html,
-          fileName,
-          options: {
-            printBackground: true,
-            marginTop: '0.25in',
-            marginRight: '0.25in',
-            marginBottom: '0.25in',
-            marginLeft: '0.25in',
-          },
-        }),
-      }
-    );
+      }),
+    });
 
     const pdfData = await pdfRes.json();
 
     if (!pdfRes.ok || !pdfData?.FileUrl) {
       return res.status(500).json({
-        error:
-          pdfData?.Message ||
-          pdfData?.error ||
-          'PDF generation failed',
+        error: pdfData?.Message || pdfData?.error || 'PDF generation failed',
       });
     }
 
-    const fileRes = await fetch(
-      pdfData.FileUrl
-    );
+    const fileRes = await fetch(pdfData.FileUrl);
+    const arrayBuffer = await fileRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
 
-    const arrayBuffer =
-      await fileRes.arrayBuffer();
+    const { error: uploadError } = await sb.storage
+      .from('documents')
+      .upload(storagePath, buffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
 
-    const buffer =
-      Buffer.from(arrayBuffer);
-
-    const base64 =
-      buffer.toString('base64');
-
-    const sb = getSupabase();
-
-    const { error: uploadError } =
-      await sb.storage
-        .from('documents')
-        .upload(storagePath, buffer, {
-          contentType: 'application/pdf',
-          upsert: true,
-        });
-
-    if (uploadError) {
-      throw uploadError;
-    }
+    if (uploadError) throw uploadError;
 
     let docId = null;
 
     if (projectId) {
-      const {
-        data: doc,
-        error: docError,
-      } = await sb
+      const { data: doc, error: docError } = await sb
         .from('documents')
-        .insert([
-          {
-            project_id: projectId,
-            file_name: fileName,
-            file_type: 'pdf',
-            category: 'invoice',
-            section_type: 'invoice',
-            storage_path: storagePath,
-            status: 'generated',
-            version: 1,
-            created_at: new Date().toISOString(),
-            metadata: {
-              invoice_id: invoiceId,
-              invoice_number: invoiceNumber,
-              total: invoice.total || 0,
-            },
+        .insert([{
+          project_id: projectId,
+          file_name: fileName,
+          file_type: 'pdf',
+          category: 'invoice',
+          section_type: 'invoice',
+          storage_path: storagePath,
+          status: 'generated',
+          version: 1,
+          created_at: new Date().toISOString(),
+          metadata: {
+            invoice_id: invoiceId,
+            invoice_number: invoiceNumber,
+            total: invoice.total || 0,
           },
-        ])
+        }])
         .select('id')
         .single();
 
-      if (!docError) {
-        docId = doc?.id || null;
-      }
+      if (!docError) docId = doc?.id || null;
     }
 
     return res.status(200).json({
@@ -705,15 +626,11 @@ export default async function handler(req, res) {
       file_name: fileName,
       storage_path: storagePath,
       document_id: docId,
-      base64:
-        `data:application/pdf;base64,${base64}`,
+      base64: `data:application/pdf;base64,${base64}`,
     });
-
   } catch (err) {
     return res.status(500).json({
-      error:
-        err?.message ||
-        'Could not generate invoice PDF',
+      error: err?.message || 'Could not generate invoice PDF',
     });
   }
 }
