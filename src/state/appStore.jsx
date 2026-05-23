@@ -2,12 +2,23 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 
 const AppContext = createContext(null);
 
+function getSavedSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('ely5_settings') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+const savedSettings = typeof window !== 'undefined' ? getSavedSettings() : {};
+const savedTheme = savedSettings?.theme === 'dark' ? 'dark' : 'light';
+
 const initialState = {
   currentUser: null,
-  currentProject: null, // explicitly set by navigating to a project
+  currentProject: null,
   projects: [],
   emails: [],
-  theme: 'dark',
+  theme: savedTheme,
   chatSessions: {},
   settings: {
     role: 'partywall',
@@ -29,7 +40,7 @@ const initialState = {
     sigType: 'built',
     googleReview: '',
     reviewTiming: '3',
-    theme: 'dark',
+    theme: savedTheme,
     projPrefix: 'ELY',
     invoicePrefix: 'INV',
     invoiceStartNum: 1,
@@ -47,8 +58,14 @@ const initialState = {
     sigAddress: '',
     sigDisclaimer: '',
     sigFirmLogoData: '',
+    ...savedSettings,
   },
 };
+
+if (typeof document !== 'undefined') {
+  if (savedTheme === 'light') document.body.classList.add('light');
+  else document.body.classList.remove('light');
+}
 
 function reducer(state, action) {
   switch (action.type) {
@@ -90,13 +107,40 @@ function reducer(state, action) {
       return { ...state, emails: updatedEmails };
     }
     case 'SET_THEME': {
-      const theme = action.payload;
-      if (theme === 'light') document.body.classList.add('light');
-      else document.body.classList.remove('light');
-      return { ...state, theme };
+      const theme = action.payload === 'dark' ? 'dark' : 'light';
+
+      if (typeof document !== 'undefined') {
+        if (theme === 'light') document.body.classList.add('light');
+        else document.body.classList.remove('light');
+      }
+
+      return {
+        ...state,
+        theme,
+        settings: {
+          ...state.settings,
+          theme,
+        },
+      };
     }
-    case 'SET_SETTINGS':
-      return { ...state, settings: { ...state.settings, ...action.payload } };
+    case 'SET_SETTINGS': {
+      const nextSettings = { ...state.settings, ...action.payload };
+      const nextTheme = nextSettings.theme === 'dark' ? 'dark' : 'light';
+
+      if (typeof document !== 'undefined') {
+        if (nextTheme === 'light') document.body.classList.add('light');
+        else document.body.classList.remove('light');
+      }
+
+      return {
+        ...state,
+        settings: {
+          ...nextSettings,
+          theme: nextTheme,
+        },
+        theme: nextTheme,
+      };
+    }
     case 'SET_CHAT_SESSION':
       return {
         ...state,
@@ -113,21 +157,17 @@ function reducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Persist settings to localStorage
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('ely5_settings') || '{}');
-      if (saved && Object.keys(saved).length > 0) {
-        dispatch({ type: 'SET_SETTINGS', payload: saved });
-        if (saved.theme) dispatch({ type: 'SET_THEME', payload: saved.theme });
-      }
-    } catch (e) {}
-  }, []);
+      if (state.theme === 'light') document.body.classList.add('light');
+      else document.body.classList.remove('light');
+    } catch {}
+  }, [state.theme]);
 
   useEffect(() => {
     try {
       localStorage.setItem('ely5_settings', JSON.stringify(state.settings));
-    } catch (e) {}
+    } catch {}
   }, [state.settings]);
 
   return (
