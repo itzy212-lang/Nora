@@ -42,8 +42,25 @@ export default function App() {
   const { invoices, createInvoice } = useInvoices();
 
   const [authChecked, setAuthChecked]       = useState(false);
-  const [currentView, setCurrentView]       = useState('dashboard');
+  const getInitialView = () => {
+    try {
+      return localStorage.getItem('ely_current_view') || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  };
+
+  const getInitialProjectId = () => {
+    try {
+      return localStorage.getItem('ely_current_project_id') || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const [currentView, setCurrentView]       = useState(getInitialView);
   const [projectView, setProjectView]       = useState(null);
+  const [pendingProjectId, setPendingProjectId] = useState(getInitialProjectId);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [composerOpts, setComposerOpts]     = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
@@ -75,21 +92,58 @@ export default function App() {
     }
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('ely_current_view', currentView || 'dashboard');
+    } catch {}
+  }, [currentView]);
+
+  useEffect(() => {
+    if (!pendingProjectId || !state.projects?.length) return;
+
+    const restoredProject = state.projects.find(p => String(p.id) === String(pendingProjectId));
+
+    if (restoredProject) {
+      setProjectView(restoredProject);
+      setCurrentProject(restoredProject);
+      setCurrentView('projects');
+      setPendingProjectId('');
+    }
+  }, [pendingProjectId, state.projects, setCurrentProject]);
+
   const handleNavigate = useCallback((view) => {
     setCurrentView(view);
     setProjectView(null);
+    setPendingProjectId('');
     clearCurrentProject();
     setSidebarOpen(false);
+
+    try {
+      localStorage.setItem('ely_current_view', view);
+      localStorage.removeItem('ely_current_project_id');
+    } catch {}
   }, [clearCurrentProject]);
 
   const handleOpenProject = useCallback((project) => {
     if (project === 'new') {
       setCurrentView('projects');
       setProjectView('new');
+      setPendingProjectId('');
+
+      try {
+        localStorage.setItem('ely_current_view', 'projects');
+        localStorage.removeItem('ely_current_project_id');
+      } catch {}
     } else {
       setCurrentProject(project);
       setProjectView(project);
       setCurrentView('projects');
+      setPendingProjectId('');
+
+      try {
+        localStorage.setItem('ely_current_view', 'projects');
+        localStorage.setItem('ely_current_project_id', project.id);
+      } catch {}
     }
   }, [setCurrentProject]);
 
@@ -111,6 +165,12 @@ export default function App() {
     setInvoiceProject(null);
     setCurrentView('accounting');
     setProjectView(null);
+    setPendingProjectId('');
+
+    try {
+      localStorage.setItem('ely_current_view', 'accounting');
+      localStorage.removeItem('ely_current_project_id');
+    } catch {}
   }, []);
 
   const closeInvoiceModal = useCallback(() => {
@@ -126,7 +186,13 @@ export default function App() {
     setSocProjectId(project?.id || null);
     setCurrentView('soc');
     setProjectView(null);
+    setPendingProjectId('');
     clearCurrentProject();
+
+    try {
+      localStorage.setItem('ely_current_view', 'soc');
+      localStorage.removeItem('ely_current_project_id');
+    } catch {}
   }, [clearCurrentProject]);
 
   if (!authChecked) {
@@ -151,12 +217,26 @@ export default function App() {
           project={projectView}
           onBack={() => {
             setProjectView(null);
+            setPendingProjectId('');
             clearCurrentProject();
+
+            try {
+              localStorage.setItem('ely_current_view', 'projects');
+              localStorage.removeItem('ely_current_project_id');
+            } catch {}
           }}
           onOpenComposer={openComposer}
           onRaiseInvoice={handleRaiseInvoice}
           onOpenSOC={handleOpenSOC}
         />
+      );
+    }
+
+    if (currentView === 'projects' && pendingProjectId && !projectView) {
+      return (
+        <div style={{ padding: 40, color: 'var(--text3)', fontSize: 13 }}>
+          Loading project…
+        </div>
       );
     }
 
