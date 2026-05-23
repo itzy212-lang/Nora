@@ -7,6 +7,75 @@ import { uid } from '../../utils/formatters';
 
 const ACTIVE_SESSION_KEY = 'ely_main_chat_active_session_id';
 const ACTIVE_PROJECT_KEY = 'ely_main_chat_selected_project_id';
+const ACTIVE_EMAIL_KEY = 'ely_main_chat_selected_email_id';
+
+function first(...values) {
+  return values.find(v => v !== undefined && v !== null && String(v).trim() !== '') || '';
+}
+
+function getEmailId(email = {}) {
+  return first(email.id, email.email_id, email.message_id, email.external_id, email.outlook_id, email.internet_message_id);
+}
+
+function getThreadId(email = {}) {
+  return first(email.thread_id, email.conversation_id, email.conversationId, email.graph_conversation_id, email.internet_thread_id);
+}
+
+function getEmailDateValue(email = {}) {
+  const value = first(email.received_at, email.sent_at, email.date, email.created_at, email.updated_at);
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getEmailDateLabel(email = {}) {
+  const value = first(email.received_at, email.sent_at, email.date, email.created_at, email.updated_at);
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function getEmailFromLabel(email = {}) {
+  return first(email.from_name, email.sender_name, email.from, email.from_email, email.sender_email, email.email_from);
+}
+
+function getEmailSubject(email = {}) {
+  return first(email.subject, email.title, '(no subject)');
+}
+
+function getEmailPreview(email = {}) {
+  return first(email.body_preview, email.preview, email.snippet, email.body_text, email.text_body, email.body);
+}
+
+function buildEmailContext(email = null) {
+  if (!email) return null;
+
+  return {
+    id: getEmailId(email),
+    emailId: getEmailId(email),
+    threadId: getThreadId(email),
+    conversationId: getThreadId(email),
+    projectId: first(email.project_id, email.projectId),
+    subject: getEmailSubject(email),
+    from: first(email.from_email, email.sender_email, email.email_from, email.from),
+    fromName: first(email.from_name, email.sender_name, email.from),
+    to: email.to || email.to_email || email.recipients || [],
+    cc: email.cc || email.cc_email || email.cc_recipients || [],
+    date: first(email.received_at, email.sent_at, email.date, email.created_at),
+    preview: getEmailPreview(email),
+    body: first(email.body_text, email.text_body, email.body, email.html_body, email.body_html, email.content),
+    hasAttachment: !!(email.has_attachment || email.hasAttachments || email.attachments?.length),
+    attachments: email.attachments || email.email_attachments || [],
+    raw: email,
+  };
+}
 
 function isDraftRequest(text = '', hasPreviousDraft = false) {
   const s = text.toLowerCase();
@@ -132,6 +201,21 @@ function sortSessionsNewestFirst(sessions = []) {
   return [...(sessions || [])].sort((a, b) => sessionTimeValue(b) - sessionTimeValue(a));
 }
 
+function projectLabel(project = {}) {
+  return [
+    first(project.ref, project.reference, project.project_ref),
+    first(project.address, project.bo_premise_address, project.premise),
+  ].filter(Boolean).join(' | ') || project.id || 'Unnamed project';
+}
+
+function emailLabel(email = {}) {
+  const from = getEmailFromLabel(email);
+  const subject = getEmailSubject(email);
+  const date = getEmailDateLabel(email);
+
+  return [from, subject, date].filter(Boolean).join(' | ');
+}
+
 export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
 
@@ -141,6 +225,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
       return localStorage.getItem(ACTIVE_PROJECT_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [selectedEmailId, setSelectedEmailId] = useState(() => {
+    try {
+      return localStorage.getItem(ACTIVE_EMAIL_KEY) || '';
     } catch {
       return '';
     }
@@ -173,6 +264,41 @@ export default function MainChat({ onOpenComposer, onClose }) {
     projectId: selectedProjectId || null,
   });
 
+  const allEmails = useMemo(() => {
+    const direct = Array.isArray(state.emails) ? state.emails : [];
+    const inbox = Array.isArray(state.inboxEmails) ? state.inboxEmails : [];
+    const sent = Array.isArray(state.sentEmails) ? state.sentEmails : [];
+    const projectEmails = Array.isArray(state.projectEmails) ? state.projectEmails : [];
+
+    const byId = new Map();
+
+    [...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
+      const id = getEmailId(email);
+      if (!id) return;
+      byId.set(String(id), email);
+    });
+
+    return Array.from(byId.values()).sort((a, b) => getEmailDateValue(b) - getEmailDateValue(a));
+  }, [state.emails, state.inboxEmails, state.sentEmails, state.projectEmails]);
+
+  const filteredEmails = useMemo(() => {
+    if (!selectedProjectId) return allEmails.slice(0, 100);
+
+    const projectMatches = allEmails.filter(email => {
+      const emailProjectId = first(email.project_id, email.projectId);
+      return String(emailProjectId) === String(selectedProjectId);
+    });
+
+    return (projectMatches.length ? projectMatches : allEmails).slice(0, 100);
+  }, [allEmails, selectedProjectId]);
+
+  const selectedEmail = useMemo(() => {
+    if (!selectedEmailId) return null;
+    return allEmails.find(email => String(getEmailId(email)) === String(selectedEmailId)) || null;
+  }, [allEmails, selectedEmailId]);
+
+  const selectedEmailContext = useMemo(() => buildEmailContext(selectedEmail), [selectedEmail]);
+
   const sortedSessions = useMemo(() => {
     const source = selectedProjectId ? projectSessions : globalSessions;
     return sortSessionsNewestFirst(source);
@@ -194,6 +320,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   useEffect(() => {
     try {
+      if (selectedEmailId) {
+        localStorage.setItem(ACTIVE_EMAIL_KEY, selectedEmailId);
+      } else {
+        localStorage.removeItem(ACTIVE_EMAIL_KEY);
+      }
+    } catch {}
+  }, [selectedEmailId]);
+
+  useEffect(() => {
+    try {
       if (sessionId) {
         localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
         setActiveChatId(sessionId);
@@ -208,6 +344,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
       refreshGlobalSessions();
     }
   }, [selectedProjectId, refreshProjectSessions, refreshGlobalSessions]);
+
+  useEffect(() => {
+    if (!selectedEmailId) return;
+    const stillExists = allEmails.some(email => String(getEmailId(email)) === String(selectedEmailId));
+    if (!stillExists) setSelectedEmailId('');
+  }, [allEmails, selectedEmailId]);
 
   useEffect(() => {
     if (restoreAttempted || sessionsLoading || !sortedSessions.length) return;
@@ -353,14 +495,31 @@ export default function MainChat({ onOpenComposer, onClose }) {
     refreshGlobalSessions,
   ]);
 
+  const handleEmailChange = useCallback((event) => {
+    const nextEmailId = event.target.value || '';
+    setSelectedEmailId(nextEmailId);
+  }, []);
+
   const handleOpenInComposer = useCallback((draftOrOptions) => {
     if (typeof draftOrOptions === 'string') {
-      onOpenComposer?.({ mode: 'compose', body: draftOrOptions });
+      onOpenComposer?.({
+        mode: selectedEmailContext ? 'reply' : 'compose',
+        body: draftOrOptions,
+        emailContext: selectedEmailContext,
+        emailId: selectedEmailContext?.emailId || null,
+        threadId: selectedEmailContext?.threadId || null,
+      });
       return;
     }
 
-    onOpenComposer?.({ mode: 'compose', ...(draftOrOptions || {}) });
-  }, [onOpenComposer]);
+    onOpenComposer?.({
+      mode: selectedEmailContext ? 'reply' : 'compose',
+      emailContext: selectedEmailContext,
+      emailId: selectedEmailContext?.emailId || null,
+      threadId: selectedEmailContext?.threadId || null,
+      ...(draftOrOptions || {}),
+    });
+  }, [onOpenComposer, selectedEmailContext]);
 
   const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
     if (!wantsDraft) {
@@ -387,6 +546,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         recipient: result.recipient,
         selectedAO: result.selectedAO,
         projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+        emailContext: selectedEmailContext,
       });
     }
 
@@ -396,12 +556,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
         role: 'ely',
         content: draft,
         draft,
-        draftType: result.draftType || 'email',
+        draftType: result.draftType || (selectedEmailContext ? 'reply' : 'email'),
         messageType: 'draft',
         suggestedActions: [],
         recipient: result.recipient,
         selectedAO: result.selectedAO,
         projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+        emailContext: selectedEmailContext,
       });
       setLastDraft(draft);
     }
@@ -426,7 +587,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
 
     setMessages(prev => [...prev, ...newMessages]);
-  }, [state.currentProject?.id]);
+  }, [state.currentProject?.id, selectedEmailContext]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -437,7 +598,14 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    const userMsg = { id: uid(), role: 'user', content: text };
+    const userMsg = {
+      id: uid(),
+      role: 'user',
+      content: text,
+      projectId: selectedProjectId || null,
+      emailContext: selectedEmailContext,
+    };
+
     setMessages(prev => [...prev, userMsg]);
 
     try {
@@ -445,9 +613,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
       const result = await send(text, {
         projectId: selectedProjectId || null,
+        emailContext: selectedEmailContext,
+        emailId: selectedEmailContext?.emailId || null,
+        threadId: selectedEmailContext?.threadId || null,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
+          selectedEmailContext,
+          selectedEmailId: selectedEmailContext?.emailId || null,
+          selectedThreadId: selectedEmailContext?.threadId || null,
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
             : null,
@@ -482,6 +656,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     stopVoice,
     lastDraft,
     selectedProjectId,
+    selectedEmailContext,
     appendAssistantMessagesFromResult,
     refreshProjectSessions,
     refreshGlobalSessions,
@@ -508,6 +683,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setInput(event.target.value);
   };
 
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId) return null;
+    return (state.projects || []).find(project => String(project.id) === String(selectedProjectId)) || null;
+  }, [state.projects, selectedProjectId]);
+
   return (
     <div id="main-chat-overlay" className="ai-full-screen">
       <div className="ai-full-top">
@@ -529,38 +709,46 @@ export default function MainChat({ onOpenComposer, onClose }) {
           </div>
         </div>
 
-        <select
-          value={selectedProjectId}
-          onChange={handleProjectChange}
-          disabled={loading || linkingProject}
-          title="Link this chat to a project"
-          style={{
-            marginLeft: 'auto',
-            minWidth: 220,
-            maxWidth: 340,
-            height: 32,
-            borderRadius: 10,
-            border: '1px solid var(--border)',
-            background: 'var(--bg2)',
-            color: 'var(--text)',
-            fontSize: 12,
-            padding: '0 10px',
-          }}
-        >
-          <option value="">Main chat - no project linked</option>
-          {(state.projects || []).map(project => {
-            const label = [
-              project.ref || project.reference || project.project_ref,
-              project.address || project.bo_premise_address || project.premise,
-            ].filter(Boolean).join(' | ');
-
-            return (
+        <div className="main-chat-selectors">
+          <select
+            value={selectedProjectId}
+            onChange={handleProjectChange}
+            disabled={loading || linkingProject}
+            title="Link this chat to a project"
+            className="main-chat-select"
+          >
+            <option value="">Main chat - no project linked</option>
+            {(state.projects || []).map(project => (
               <option key={project.id} value={project.id}>
-                {label || project.id}
+                {projectLabel(project)}
               </option>
-            );
-          })}
-        </select>
+            ))}
+          </select>
+
+          <select
+            value={selectedEmailId}
+            onChange={handleEmailChange}
+            disabled={loading || !filteredEmails.length}
+            title="Attach an email or thread to this chat"
+            className="main-chat-select main-chat-email-select"
+          >
+            <option value="">
+              {filteredEmails.length ? 'No email thread selected' : 'No emails available'}
+            </option>
+            {filteredEmails.map(email => {
+              const id = getEmailId(email);
+              return (
+                <option key={id} value={id}>
+                  {emailLabel(email)}
+                </option>
+              );
+            })}
+          </select>
+
+          <button className="main-chat-upload-placeholder" type="button" disabled title="Upload button placeholder">
+            Upload
+          </button>
+        </div>
 
         <button className="btn btn-sm" onClick={startNewChat}>
           + New chat
@@ -570,6 +758,23 @@ export default function MainChat({ onOpenComposer, onClose }) {
           ×
         </button>
       </div>
+
+      {(selectedProject || selectedEmailContext) && (
+        <div className="main-chat-context-bar">
+          {selectedProject && (
+            <span>
+              Linked project: <strong>{projectLabel(selectedProject)}</strong>
+            </span>
+          )}
+
+          {selectedEmailContext && (
+            <span>
+              Email thread: <strong>{selectedEmailContext.subject}</strong>
+              {selectedEmailContext.fromName || selectedEmailContext.from ? ` from ${selectedEmailContext.fromName || selectedEmailContext.from}` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="ai-full-body">
         <div className={`ai-full-sidebar${sidebarOpen ? ' mob-open' : ''}`}>
@@ -608,7 +813,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                   setInput(text);
                   requestAnimationFrame(resizeTextarea);
                 }}
-                userName={state.currentUser?.email?.split('@')[0] || state.settings.name}
+                userName={state.currentUser?.email?.split('@')[0] || state.settings?.name}
               />
             ) : (
               messages.map(msg => (
@@ -638,7 +843,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
                 value={input}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedProjectId ? 'Ask Ely about this linked project...' : 'Ask Ely anything about party wall, your projects, or drafting...'}
+                placeholder={
+                  selectedEmailContext
+                    ? 'Ask Ely about the selected email thread, or draft a reply...'
+                    : selectedProjectId
+                      ? 'Ask Ely about this linked project...'
+                      : 'Ask Ely anything about party wall, your projects, or drafting...'
+                }
                 rows={1}
                 style={{ minHeight: 38, maxHeight: 140, overflowY: 'hidden', resize: 'none', lineHeight: 1.5 }}
               />
@@ -652,7 +863,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
             </div>
 
             <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>
-              {selectedProjectId ? 'This chat is linked to the selected project.' : 'AI can make mistakes. Always verify professional advice.'}
+              {selectedEmailContext
+                ? 'This message will include the selected email thread context.'
+                : selectedProjectId
+                  ? 'This chat is linked to the selected project.'
+                  : 'AI can make mistakes. Always verify professional advice.'}
             </div>
           </div>
         </div>
@@ -679,6 +894,72 @@ export default function MainChat({ onOpenComposer, onClose }) {
         .main-chat-close-btn:hover {
           background: var(--bg3);
           color: var(--text);
+        }
+
+        .main-chat-selectors {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .main-chat-select {
+          min-width: 210px;
+          max-width: 320px;
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--bg2);
+          color: var(--text);
+          font-size: 12px;
+          padding: 0 10px;
+        }
+
+        .main-chat-email-select {
+          min-width: 240px;
+          max-width: 380px;
+        }
+
+        .main-chat-upload-placeholder {
+          height: 32px;
+          border-radius: 10px;
+          border: 1px dashed var(--border);
+          background: var(--bg2);
+          color: var(--text3);
+          font-size: 12px;
+          padding: 0 10px;
+          cursor: not-allowed;
+          opacity: 0.65;
+        }
+
+        .main-chat-context-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 14px;
+          align-items: center;
+          padding: 8px 16px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg2);
+          color: var(--text2);
+          font-size: 11.5px;
+        }
+
+        .main-chat-context-bar span {
+          display: inline-flex;
+          min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .main-chat-context-bar strong {
+          color: var(--text);
+          font-weight: 600;
+          margin-left: 4px;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .main-chat-send-btn {
@@ -744,10 +1025,47 @@ export default function MainChat({ onOpenComposer, onClose }) {
           margin: 4px 0;
         }
 
+        @media (max-width: 1100px) {
+          .main-chat-selectors {
+            flex: 1;
+          }
+
+          .main-chat-select {
+            min-width: 160px;
+            max-width: 240px;
+          }
+
+          .main-chat-email-select {
+            min-width: 170px;
+            max-width: 260px;
+          }
+        }
+
         @media (max-width: 820px) {
-          .ai-full-top select {
-            min-width: 120px !important;
-            max-width: 160px !important;
+          .ai-full-top {
+            gap: 8px;
+          }
+
+          .main-chat-selectors {
+            order: 10;
+            width: 100%;
+            flex-basis: 100%;
+            margin-left: 0;
+          }
+
+          .main-chat-select {
+            min-width: 0 !important;
+            max-width: none !important;
+            flex: 1;
+          }
+
+          .main-chat-email-select {
+            min-width: 0 !important;
+            max-width: none !important;
+          }
+
+          .main-chat-upload-placeholder {
+            display: none;
           }
         }
       `}</style>
