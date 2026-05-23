@@ -39,22 +39,110 @@ function safeFileName(value) {
     .slice(0, 120);
 }
 
+function formatDate(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function label(text) {
+  return escapeHtml(String(text || '').toUpperCase().split('').join(' '));
+}
+
+function statusLabel(status) {
+  const raw = String(status || '').toLowerCase();
+  if (raw === 'paid') return 'Paid';
+  if (raw === 'void') return 'Void';
+  if (raw === 'overdue') return 'Overdue';
+  return 'Awaiting Payment';
+}
+
 function buildInvoiceHtml(invoice) {
   const items = Array.isArray(invoice.items) ? invoice.items : [];
   const invoiceNumber = invoice.invoice_number || invoice.id || '';
-  const title = `Invoice-${invoiceNumber}`;
+  const invoiceLabel = String(invoiceNumber).startsWith('INV-')
+    ? invoiceNumber
+    : `INV-${invoiceNumber}`;
+
+  const projectRef =
+    invoice.project_ref ||
+    invoice.ref ||
+    invoice.project_reference ||
+    '';
+
+  const firmName =
+    invoice.firm_name ||
+    'Square One Consulting';
+
+  const firmAddress =
+    invoice.firm_address ||
+    'Suite 28, 708a High Road, London, N12 9QL';
+
+  const firmPhone =
+    invoice.firm_phone ||
+    '07889996841';
+
+  const firmEmail =
+    invoice.firm_email ||
+    'help@sq1consulting.co.uk';
+
+  const bankName =
+    invoice.bank_name ||
+    invoice.account_name ||
+    'Itzik Ltd';
+
+  const sortCode =
+    invoice.sort_code ||
+    '04-03-33';
+
+  const accountNo =
+    invoice.account_number ||
+    invoice.account_no ||
+    '67644868';
+
+  const notes =
+    invoice.notes ||
+    invoice.invoice_notes ||
+    'Thank you for your business.';
 
   const rows = items.map(item => {
     const qty = Number(item.qty || 0);
-    const unit = Number(item.unitPrice ?? item.unit_price ?? 0);
-    const total = Number(item.total ?? qty * unit);
+
+    const unit = Number(
+      item.unitPrice ??
+      item.unit_price ??
+      0
+    );
+
+    const total = Number(
+      item.total ??
+      qty * unit
+    );
 
     return `
       <tr>
-        <td>${escapeHtml(item.description || '')}</td>
-        <td class="num">${escapeHtml(qty || '')}</td>
-        <td class="num">${money(unit)}</td>
-        <td class="num">${money(total)}</td>
+        <td class="description">
+          ${escapeHtml(item.description || '')}
+        </td>
+
+        <td class="num qty">
+          ${qty || ''}
+        </td>
+
+        <td class="num unit">
+          ${money(unit)}
+        </td>
+
+        <td class="num total">
+          ${money(total)}
+        </td>
       </tr>
     `;
   }).join('');
@@ -64,206 +152,398 @@ function buildInvoiceHtml(invoice) {
 <html>
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(title)}</title>
+
+<title>
+${escapeHtml(invoiceLabel)}
+</title>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
-  color: #1f2937;
+  color: #111827;
   margin: 0;
-  padding: 42px;
-  font-size: 13px;
+  padding: 46px 54px;
+  font-size: 12.5px;
   line-height: 1.45;
+  background: #ffffff;
+}
+
+.page {
+  width: 100%;
 }
 
 .top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  border-bottom: 2px solid #1f3f77;
-  padding-bottom: 18px;
-  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: 1fr 230px;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 42px;
 }
 
-.firm {
-  font-size: 20px;
+.firm-name {
+  font-size: 19px;
   font-weight: 700;
-  color: #1f3f77;
+  margin-bottom: 9px;
+  color: #111827;
+}
+
+.firm-lines {
+  color: #374151;
+  line-height: 1.55;
+  font-size: 12.5px;
 }
 
 .invoice-title {
   text-align: right;
-  font-size: 26px;
-  font-weight: 700;
+  padding-top: 1px;
+}
+
+.invoice-title-main {
+  font-size: 29px;
+  letter-spacing: 1.5px;
+  line-height: 1;
+  font-weight: 500;
   color: #111827;
+  margin-bottom: 13px;
 }
 
-.muted {
-  color: #6b7280;
+.invoice-no {
+  font-size: 13px;
+  color: #111827;
+  font-weight: 500;
 }
 
-.grid {
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  column-gap: 24px;
+  margin-bottom: 36px;
+}
+
+.spaced-label {
+  font-size: 10px;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: 3.1px;
+  line-height: 1.2;
+  margin-bottom: 9px;
+  white-space: nowrap;
+}
+
+.value {
+  font-size: 12.5px;
+  color: #111827;
+  line-height: 1.45;
+}
+
+.two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 28px;
-  margin-bottom: 24px;
+  column-gap: 58px;
+  margin-bottom: 32px;
 }
 
-.box {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 14px 16px;
-  background: #fafafa;
-  min-height: 96px;
+.block-value {
+  min-height: 42px;
+  color: #111827;
+  line-height: 1.55;
+  font-size: 12.5px;
 }
 
-.label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  margin-bottom: 8px;
+.service-line {
+  margin-top: 24px;
+  margin-bottom: 23px;
+  color: #111827;
+  font-size: 12.5px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 22px;
+  margin-top: 0;
+  margin-bottom: 18px;
 }
 
 th {
-  background: #f3f4f6;
-  color: #374151;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .4px;
   text-align: left;
-  padding: 10px;
-  border-bottom: 1px solid #d1d5db;
+  font-size: 10px;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: 3.1px;
+  padding: 0 0 11px 0;
+  border: none;
+  white-space: nowrap;
+}
+
+th.num {
+  text-align: right;
 }
 
 td {
-  padding: 10px;
-  border-bottom: 1px solid #e5e7eb;
   vertical-align: top;
+  padding: 0 0 14px 0;
+  font-size: 12.5px;
+  color: #111827;
+  line-height: 1.5;
+  border: none;
 }
 
-.num {
+td.description {
+  width: 66%;
+  padding-right: 22px;
+}
+
+td.num {
   text-align: right;
   white-space: nowrap;
 }
 
+td.qty {
+  width: 8%;
+}
+
+td.unit {
+  width: 13%;
+}
+
+td.total {
+  width: 13%;
+}
+
 .totals {
-  width: 300px;
+  width: 230px;
   margin-left: auto;
-  margin-top: 18px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  overflow: hidden;
+  margin-top: 2px;
+  margin-bottom: 44px;
 }
 
 .total-row {
   display: flex;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 22px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-bottom: 6px;
 }
 
-.total-row:last-child {
-  border-bottom: none;
-  background: #1f3f77;
-  color: white;
+.total-row.final {
   font-weight: 700;
-  font-size: 15px;
+  margin-top: 4px;
 }
 
-.notes {
-  margin-top: 28px;
-  color: #4b5563;
-  white-space: pre-wrap;
+.footer-grid {
+  display: grid;
+  grid-template-columns:
+    118px
+    118px
+    138px
+    1fr;
+  column-gap: 26px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+.footer-value {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #111827;
+  margin-top: 7px;
+}
+
+.thanks {
+  align-self: end;
+  font-size: 12.5px;
+  color: #111827;
+  line-height: 1.45;
+  padding-top: 25px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="top">
-  <div>
-    <div class="firm">Square One Consulting</div>
-    <div class="muted">Party Wall Surveyors</div>
-  </div>
+<div class="page">
 
-  <div class="invoice-title">
-    INVOICE
-    <div class="muted" style="font-size:13px;font-weight:400;">
-      ${escapeHtml(title)}
+  <div class="top">
+
+    <div>
+      <div class="firm-name">
+        ${escapeHtml(firmName)}
+      </div>
+
+      <div class="firm-lines">
+        ${escapeHtml(firmAddress)}<br />
+        ${escapeHtml(firmPhone)}<br />
+        ${escapeHtml(firmEmail)}
+      </div>
     </div>
+
+    <div class="invoice-title">
+      <div class="invoice-title-main">
+        INVOICE
+      </div>
+
+      <div class="invoice-no">
+        ${escapeHtml(invoiceLabel)}
+      </div>
+    </div>
+
   </div>
+
+  <div class="meta-grid">
+
+    <div>
+      <div class="spaced-label">
+        ${label('Issue Date')}
+      </div>
+
+      <div class="value">
+        ${escapeHtml(formatDate(invoice.invoice_date))}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('Due Date')}
+      </div>
+
+      <div class="value">
+        ${escapeHtml(formatDate(invoice.due_date))}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('Project Ref')}
+      </div>
+
+      <div class="value">
+        ${escapeHtml(projectRef)}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('Status')}
+      </div>
+
+      <div class="value">
+        ${escapeHtml(statusLabel(invoice.status))}
+      </div>
+    </div>
+
+  </div>
+
+  <div class="two-col">
+
+    <div>
+      <div class="spaced-label">
+        ${label('Bill To')}
+      </div>
+
+      <div class="block-value">
+        ${escapeHtml(invoice.bill_to_name || '')}<br />
+        ${escapeHtml(invoice.bill_to_address || '').replace(/\n/g, '<br />')}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('In Respect Of')}
+      </div>
+
+      <div class="block-value">
+        ${escapeHtml(invoice.property_address || '').replace(/\n/g, '<br />')}
+      </div>
+    </div>
+
+  </div>
+
+  <div class="service-line">
+    Party wall surveyor services
+  </div>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>${label('Description')}</th>
+        <th class="num">${label('Qty')}</th>
+        <th class="num">${label('Unit')}</th>
+        <th class="num">${label('Total')}</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      ${rows}
+    </tbody>
+
+  </table>
+
+  <div class="totals">
+
+    <div class="total-row">
+      <span>Subtotal</span>
+      <span>${money(invoice.subtotal)}</span>
+    </div>
+
+    ${Number(invoice.vat_amount || 0) > 0 ? `
+    <div class="total-row">
+      <span>VAT</span>
+      <span>${money(invoice.vat_amount)}</span>
+    </div>
+    ` : ''}
+
+    <div class="total-row final">
+      <span>Total Due</span>
+      <span>${money(invoice.total)}</span>
+    </div>
+
+  </div>
+
+  <div class="footer-grid">
+
+    <div>
+      <div class="spaced-label">
+        ${label('Bank')}
+      </div>
+
+      <div class="footer-value">
+        ${escapeHtml(bankName)}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('Sort Code')}
+      </div>
+
+      <div class="footer-value">
+        ${escapeHtml(sortCode)}
+      </div>
+    </div>
+
+    <div>
+      <div class="spaced-label">
+        ${label('Account No.')}
+      </div>
+
+      <div class="footer-value">
+        ${escapeHtml(accountNo)}
+      </div>
+    </div>
+
+    <div class="thanks">
+      ${escapeHtml(notes)}
+    </div>
+
+  </div>
+
 </div>
-
-<div class="grid">
-  <div class="box">
-    <div class="label">Bill To</div>
-
-    <strong>${escapeHtml(invoice.bill_to_name || '')}</strong><br/>
-
-    ${escapeHtml(invoice.bill_to_address || '').replace(/\n/g, '<br/>')}
-  </div>
-
-  <div class="box">
-    <div class="label">Invoice Details</div>
-
-    <strong>Invoice No:</strong> ${escapeHtml(invoiceNumber)}<br/>
-    <strong>Date:</strong> ${escapeHtml(invoice.invoice_date || '')}<br/>
-    <strong>Due:</strong> ${escapeHtml(invoice.due_date || '')}
-  </div>
-</div>
-
-<div class="box">
-  <div class="label">In Respect Of</div>
-
-  ${escapeHtml(invoice.property_address || '').replace(/\n/g, '<br/>')}
-</div>
-
-<table>
-  <thead>
-    <tr>
-      <th>Description</th>
-      <th class="num">Qty</th>
-      <th class="num">Unit Price</th>
-      <th class="num">Total</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    ${rows || '<tr><td colspan="4">No line items</td></tr>'}
-  </tbody>
-</table>
-
-<div class="totals">
-  <div class="total-row">
-    <span>Subtotal</span>
-    <span>${money(invoice.subtotal)}</span>
-  </div>
-
-  <div class="total-row">
-    <span>VAT</span>
-    <span>${money(invoice.vat_amount)}</span>
-  </div>
-
-  <div class="total-row">
-    <span>Total Due</span>
-    <span>${money(invoice.total)}</span>
-  </div>
-</div>
-
-${invoice.notes ? `
-<div class="notes">
-  <strong>Notes:</strong><br/>
-  ${escapeHtml(invoice.notes)}
-</div>
-` : ''}
 
 </body>
 </html>
@@ -289,7 +569,11 @@ export default async function handler(req, res) {
     });
   }
 
-  const { invoice, project_id, invoice_id } = req.body || {};
+  const {
+    invoice,
+    project_id,
+    invoice_id,
+  } = req.body || {};
 
   if (!invoice) {
     return res.status(400).json({
@@ -297,8 +581,15 @@ export default async function handler(req, res) {
     });
   }
 
-  const projectId = project_id || invoice.project_id || null;
-  const invoiceId = invoice_id || invoice.id || null;
+  const projectId =
+    project_id ||
+    invoice.project_id ||
+    null;
+
+  const invoiceId =
+    invoice_id ||
+    invoice.id ||
+    null;
 
   const invoiceNumber =
     invoice.invoice_number ||
@@ -328,10 +619,10 @@ export default async function handler(req, res) {
           fileName,
           options: {
             printBackground: true,
-            marginTop: '0.4in',
-            marginRight: '0.4in',
-            marginBottom: '0.4in',
-            marginLeft: '0.4in',
+            marginTop: '0.25in',
+            marginRight: '0.25in',
+            marginBottom: '0.25in',
+            marginLeft: '0.25in',
           },
         }),
       }
@@ -348,13 +639,18 @@ export default async function handler(req, res) {
       });
     }
 
-    const fileRes = await fetch(pdfData.FileUrl);
+    const fileRes = await fetch(
+      pdfData.FileUrl
+    );
 
-    const arrayBuffer = await fileRes.arrayBuffer();
+    const arrayBuffer =
+      await fileRes.arrayBuffer();
 
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer =
+      Buffer.from(arrayBuffer);
 
-    const base64 = buffer.toString('base64');
+    const base64 =
+      buffer.toString('base64');
 
     const sb = getSupabase();
 
@@ -373,29 +669,31 @@ export default async function handler(req, res) {
     let docId = null;
 
     if (projectId) {
-      const { data: doc, error: docError } =
-        await sb
-          .from('documents')
-          .insert([
-            {
-              project_id: projectId,
-              file_name: fileName,
-              file_type: 'pdf',
-              category: 'invoice',
-              section_type: 'invoice',
-              storage_path: storagePath,
-              status: 'generated',
-              version: 1,
-              created_at: new Date().toISOString(),
-              metadata: {
-                invoice_id: invoiceId,
-                invoice_number: invoiceNumber,
-                total: invoice.total || 0,
-              },
+      const {
+        data: doc,
+        error: docError,
+      } = await sb
+        .from('documents')
+        .insert([
+          {
+            project_id: projectId,
+            file_name: fileName,
+            file_type: 'pdf',
+            category: 'invoice',
+            section_type: 'invoice',
+            storage_path: storagePath,
+            status: 'generated',
+            version: 1,
+            created_at: new Date().toISOString(),
+            metadata: {
+              invoice_id: invoiceId,
+              invoice_number: invoiceNumber,
+              total: invoice.total || 0,
             },
-          ])
-          .select('id')
-          .single();
+          },
+        ])
+        .select('id')
+        .single();
 
       if (!docError) {
         docId = doc?.id || null;
@@ -407,7 +705,8 @@ export default async function handler(req, res) {
       file_name: fileName,
       storage_path: storagePath,
       document_id: docId,
-      base64: `data:application/pdf;base64,${base64}`,
+      base64:
+        `data:application/pdf;base64,${base64}`,
     });
 
   } catch (err) {
