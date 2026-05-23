@@ -10,8 +10,27 @@ function getSavedSettings() {
   }
 }
 
+function getExplicitThemePreference() {
+  try {
+    return localStorage.getItem('ely_theme_preference') || '';
+  } catch {
+    return '';
+  }
+}
+
+function applyTheme(theme) {
+  if (typeof document === 'undefined') return;
+
+  if (theme === 'dark') {
+    document.body.classList.remove('light');
+  } else {
+    document.body.classList.add('light');
+  }
+}
+
 const savedSettings = typeof window !== 'undefined' ? getSavedSettings() : {};
-const savedTheme = savedSettings?.theme === 'dark' ? 'dark' : 'light';
+const explicitTheme = typeof window !== 'undefined' ? getExplicitThemePreference() : '';
+const savedTheme = explicitTheme === 'dark' || explicitTheme === 'light' ? explicitTheme : 'light';
 
 const initialState = {
   currentUser: null,
@@ -40,7 +59,6 @@ const initialState = {
     sigType: 'built',
     googleReview: '',
     reviewTiming: '3',
-    theme: savedTheme,
     projPrefix: 'ELY',
     invoicePrefix: 'INV',
     invoiceStartNum: 1,
@@ -59,24 +77,26 @@ const initialState = {
     sigDisclaimer: '',
     sigFirmLogoData: '',
     ...savedSettings,
+    theme: savedTheme,
   },
 };
 
-if (typeof document !== 'undefined') {
-  if (savedTheme === 'light') document.body.classList.add('light');
-  else document.body.classList.remove('light');
-}
+applyTheme(savedTheme);
 
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_USER':
       return { ...state, currentUser: action.payload };
+
     case 'SET_CURRENT_PROJECT':
       return { ...state, currentProject: action.payload };
+
     case 'CLEAR_CURRENT_PROJECT':
       return { ...state, currentProject: null };
+
     case 'SET_PROJECTS':
       return { ...state, projects: action.payload };
+
     case 'UPDATE_PROJECT': {
       const updated = state.projects.map(p =>
         p.id === action.payload.id ? { ...p, ...action.payload } : p
@@ -86,18 +106,23 @@ function reducer(state, action) {
         : state.currentProject;
       return { ...state, projects: updated, currentProject: cp };
     }
+
     case 'ADD_PROJECT':
       return { ...state, projects: [action.payload, ...state.projects] };
+
     case 'REMOVE_PROJECT':
       return {
         ...state,
         projects: state.projects.filter(p => p.id !== action.payload),
         currentProject: state.currentProject?.id === action.payload ? null : state.currentProject,
       };
+
     case 'SET_EMAILS':
       return { ...state, emails: action.payload };
+
     case 'ADD_EMAIL':
       return { ...state, emails: [action.payload, ...state.emails] };
+
     case 'UPDATE_EMAIL': {
       const updatedEmails = state.emails.map(e =>
         (e.id === action.payload.id || e.external_id === action.payload.external_id)
@@ -106,13 +131,15 @@ function reducer(state, action) {
       );
       return { ...state, emails: updatedEmails };
     }
+
     case 'SET_THEME': {
       const theme = action.payload === 'dark' ? 'dark' : 'light';
 
-      if (typeof document !== 'undefined') {
-        if (theme === 'light') document.body.classList.add('light');
-        else document.body.classList.remove('light');
-      }
+      try {
+        localStorage.setItem('ely_theme_preference', theme);
+      } catch {}
+
+      applyTheme(theme);
 
       return {
         ...state,
@@ -123,24 +150,29 @@ function reducer(state, action) {
         },
       };
     }
-    case 'SET_SETTINGS': {
-      const nextSettings = { ...state.settings, ...action.payload };
-      const nextTheme = nextSettings.theme === 'dark' ? 'dark' : 'light';
 
-      if (typeof document !== 'undefined') {
-        if (nextTheme === 'light') document.body.classList.add('light');
-        else document.body.classList.remove('light');
-      }
+    case 'SET_SETTINGS': {
+      const incoming = { ...action.payload };
+      const explicit = getExplicitThemePreference();
+      const theme = explicit === 'dark' || explicit === 'light'
+        ? explicit
+        : state.theme || 'light';
+
+      const nextSettings = {
+        ...state.settings,
+        ...incoming,
+        theme,
+      };
+
+      applyTheme(theme);
 
       return {
         ...state,
-        settings: {
-          ...nextSettings,
-          theme: nextTheme,
-        },
-        theme: nextTheme,
+        settings: nextSettings,
+        theme,
       };
     }
+
     case 'SET_CHAT_SESSION':
       return {
         ...state,
@@ -149,6 +181,7 @@ function reducer(state, action) {
           [action.payload.key]: action.payload.sessionId,
         },
       };
+
     default:
       return state;
   }
@@ -158,17 +191,17 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
-    try {
-      if (state.theme === 'light') document.body.classList.add('light');
-      else document.body.classList.remove('light');
-    } catch {}
+    applyTheme(state.theme || 'light');
   }, [state.theme]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('ely5_settings', JSON.stringify(state.settings));
+      localStorage.setItem('ely5_settings', JSON.stringify({
+        ...state.settings,
+        theme: state.theme || 'light',
+      }));
     } catch {}
-  }, [state.settings]);
+  }, [state.settings, state.theme]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
