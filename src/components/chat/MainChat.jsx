@@ -4,6 +4,7 @@ import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
+import sb from '../../supabaseClient';
 
 const ACTIVE_SESSION_KEY = 'ely_main_chat_active_session_id';
 const ACTIVE_PROJECT_KEY = 'ely_main_chat_selected_project_id';
@@ -241,6 +242,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [lastDraft, setLastDraft] = useState('');
   const [restoreAttempted, setRestoreAttempted] = useState(false);
   const [linkingProject, setLinkingProject] = useState(false);
+  const [localEmails, setLocalEmails] = useState([]);
+  const [emailsLoading, setEmailsLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -264,22 +267,54 @@ export default function MainChat({ onOpenComposer, onClose }) {
     projectId: selectedProjectId || null,
   });
 
+  const loadMainChatEmails = useCallback(async () => {
+    if (!sb) return [];
+
+    setEmailsLoading(true);
+
+    try {
+      const { data, error } = await sb
+        .from('emails')
+        .select('*')
+        .or('is_draft.is.null,is_draft.eq.false')
+        .order('received_at', { ascending: false, nullsFirst: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      const rows = Array.isArray(data) ? data : [];
+      setLocalEmails(rows);
+      return rows;
+    } catch (err) {
+      console.warn('[MainChat] loadMainChatEmails failed:', err?.message || err);
+      setLocalEmails([]);
+      return [];
+    } finally {
+      setEmailsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMainChatEmails();
+  }, [loadMainChatEmails]);
+
   const allEmails = useMemo(() => {
     const direct = Array.isArray(state.emails) ? state.emails : [];
     const inbox = Array.isArray(state.inboxEmails) ? state.inboxEmails : [];
     const sent = Array.isArray(state.sentEmails) ? state.sentEmails : [];
     const projectEmails = Array.isArray(state.projectEmails) ? state.projectEmails : [];
+    const fetched = Array.isArray(localEmails) ? localEmails : [];
 
     const byId = new Map();
 
-    [...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
+    [...fetched, ...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
       const id = getEmailId(email);
       if (!id) return;
       byId.set(String(id), email);
     });
 
     return Array.from(byId.values()).sort((a, b) => getEmailDateValue(b) - getEmailDateValue(a));
-  }, [state.emails, state.inboxEmails, state.sentEmails, state.projectEmails]);
+  }, [localEmails, state.emails, state.inboxEmails, state.sentEmails, state.projectEmails]);
 
   const filteredEmails = useMemo(() => {
     if (!selectedProjectId) return allEmails.slice(0, 100);
@@ -728,12 +763,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
           <select
             value={selectedEmailId}
             onChange={handleEmailChange}
-            disabled={loading || !filteredEmails.length}
+            disabled={loading || emailsLoading || !filteredEmails.length}
             title="Attach an email or thread to this chat"
             className="main-chat-select main-chat-email-select"
           >
             <option value="">
-              {filteredEmails.length ? 'No email thread selected' : 'No emails available'}
+              {emailsLoading
+                ? 'Loading emails...'
+                : filteredEmails.length
+                  ? 'No email thread selected'
+                  : 'No emails available'}
             </option>
             {filteredEmails.map(email => {
               const id = getEmailId(email);
@@ -744,6 +783,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
               );
             })}
           </select>
+
+          <button
+            className="main-chat-email-refresh-btn"
+            type="button"
+            onClick={loadMainChatEmails}
+            disabled={emailsLoading || loading}
+            title="Refresh email list"
+          >
+            {emailsLoading ? '…' : '↻'}
+          </button>
 
           <button className="main-chat-upload-placeholder" type="button" disabled title="Upload button placeholder">
             Upload
@@ -921,6 +970,23 @@ export default function MainChat({ onOpenComposer, onClose }) {
           max-width: 380px;
         }
 
+        .main-chat-email-refresh-btn {
+          height: 32px;
+          width: 34px;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--bg2);
+          color: var(--text2);
+          font-size: 14px;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .main-chat-email-refresh-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
         .main-chat-upload-placeholder {
           height: 32px;
           border-radius: 10px;
@@ -1066,6 +1132,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
           .main-chat-upload-placeholder {
             display: none;
+          }
+
+          .main-chat-email-refresh-btn {
+            width: 32px;
           }
         }
       `}</style>
