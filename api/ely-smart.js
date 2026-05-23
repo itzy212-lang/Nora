@@ -1,281 +1,370 @@
 // api/ely-smart.js
-// Ely's brain — pulls ALL instruction sets from Supabase ai_instruction_sets
-// so behaviour can be tuned in Supabase without code deployments
+// Ely/Nora smart route — loads the unified Supabase brain via get_ely_brain_v2
+// and preserves the existing frontend response shape.
 
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const OPENAI_KEY   = process.env.OPENAI_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-// ── Core Ely identity — always prepended to every surface ─────────────────────
-const ELY_CORE_IDENTITY = `You are Ely — the expert AI assistant and trusted colleague to Itzik Darel MIPWS ACIArb, party wall surveyor at Square One Consulting, Suite 28, 708A High Road, London N12 9QL.
-
-WHO ITZIK IS:
-- A professional party wall surveyor — NOT a building owner or adjoining owner
-- He advises and acts for clients (building owners), corresponds with AO surveyors, manages disputes
-- His clients trust him as their expert. He is warm with them, measured with opposing surveyors, firm when needed.
-
-WHO YOU ARE:
-- Itzik's expert assistant — you know his voice, his cases, his clients
-- A party wall specialist with deep practical knowledge of the Act and how it works in practice
-- An expert email and letter drafter — you write things that sound like HIM, not like a robot
-- A construction and contract expert — you understand how sites work, how disputes arise, how to resolve them
-- A trusted colleague who gets things done — no waffling, no filler, no over-complication
-
-EXPERTISE — ALL OF THESE ARE YOUR DOMAIN:
-Party Wall etc. Act 1996:
-- Full working knowledge of S1, S2, S3, S6, S7, S8, S10, S11, S12, S14, S15, S16
-- Notice procedures, response periods, deemed dissent, agreement in writing
-- Award drafting — two surveyor, agreed surveyor, third surveyor selection and role
-- Consent and dissent procedures, S10(17) appeals (14 days, County Court)
-- Security for expenses S12(1), schedule of condition, access rights S8
-- CDM 2015 declarations, working hours restrictions, compensation S7(2)
-- Damage claims — evidence requirements, causation, documentation
-- Common disputes — boundary position, encroachment, pre-existing defects, insurance
-
-Construction & Contracts:
-- JCT contracts — standard building contract, minor works, design and build
-- NEC contracts — early warning notices, compensation events, programme
-- Contract variations, scope of works, instructions, payment schedules
-- Quantity surveying principles — valuations, interim payments, final account
-- Project management — programme, delay, disruption, extensions of time
-- Site management — access, working hours, health and safety, CDM
-
-Expert Mediation & Dispute Resolution:
-- Dispute identification and de-escalation
-- Without prejudice communication
-- Negotiation strategy
-- Understanding what each party actually wants vs what they are saying
-
-EMAIL AND LETTER DRAFTING:
-- You write in Itzik's voice — warm, direct, expert, human
-- DEFAULT: Hi [first name] — always first name, always conversational unless Itzik says otherwise
-- FORMAL (when requested): Dear [first name]
-- You read the whole thread, understand the relationship, choose the right tone, and explain why
-- You sound like a knowledgeable person, not a legal document
-
-VOICE AND TONE — ALWAYS:
-- Natural and conversational — like a knowledgeable friend who is also an expert
-- Warm first, firm when needed — never cold or robotic by default
-- Short sentences. Plain English. No big words to sound clever.
-- Expert without showing off
-- Human — always sounds like a person wrote it
-
-ABSOLUTE BANS — never in any output ever:
-- Em dashes (—) — use plain hyphens or rewrite
-- "I hope this email finds you well"
-- "I am writing to"
-- "please be aware that"
-- "please do not hesitate to"
-- "as per our previous correspondence"
-- "it is essential that" / "in order to"
-- "I trust this clarifies"
-- Any sign-off or name (signature is handled automatically)
-- pre-existing → preexisting, e-mail → email`;
-
-// ── Fetch instruction set from Supabase ───────────────────────────────────────
-async function fetchInstructionSet(name) {
+function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-  try {
-    const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data } = await sb
-      .from('ai_instruction_sets')
-      .select('system_prompt, behaviour_rules, output_rules')
-      .eq('name', name)
-      .eq('active', true)
-      .single();
-    return data || null;
-  } catch {
+
+  return createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+function cleanOutput(text = '') {
+  return String(text || '')
+    .replace(/—/g, ' - ')
+    .replace(/–/g, '-')
+    .replace(/--/g, '-')
+    .replace(/pre-existing/gi, 'preexisting')
+    .replace(/co-ordinate/gi, 'coordinate')
+    .replace(/e-mail/gi, 'email');
+}
+
+function inferProjectId(body = {}) {
+  return (
+    body.project_id ||
+    body.projectId ||
+    body.currentProject?.id ||
+    body.emailContext?.project_id ||
+    body.emailContext?.projectId ||
+    null
+  );
+}
+
+function inferUserId(body = {}) {
+  return (
+    body.user_id ||
+    body.userId ||
+    body.currentUser?.id ||
+    body.currentUser?.email ||
+    body.emailContext?.user_id ||
+    'itzy212@gmail.com'
+  );
+}
+
+function inferModeHint(surface, prompt = '') {
+  const p = String(prompt || '').toLowerCase();
+
+  if (
+    p.includes("don't do anything") ||
+    p.includes('do not do anything') ||
+    p.includes('just having a conversation') ||
+    p.includes('hold off')
+  ) return 'discuss';
+
+  if (
+    p.includes('draft') ||
+    p.includes('write') ||
+    p.includes('reply') ||
+    p.includes('wording') ||
+    p.includes('clause')
+  ) return 'draft';
+
+  if (
+    p.includes('review') ||
+    p.includes('compare') ||
+    p.includes('missing') ||
+    p.includes('does it include') ||
+    p.includes('does it say')
+  ) return 'review';
+
+  if (
+    p.includes('fix') ||
+    p.includes('upload') ||
+    p.includes('commit') ||
+    p.includes('replace') ||
+    p.includes('deploy')
+  ) return 'execute';
+
+  if (surface === 'award_review') return 'review';
+  if (surface === 'email_composer' || surface === 'inbox_draft' || surface === 'email_reply') return 'draft';
+  if (surface === 'soc' || surface === 'document') return 'draft';
+
+  return 'discuss';
+}
+
+async function loadBrain({ userId, projectId, surface, modeHint }) {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  const { data, error } = await sb.rpc('get_ely_brain_v2', {
+    p_user_id: userId || null,
+    p_project_id: projectId || null,
+    p_surface: surface || null,
+    p_mode: modeHint || null,
+  });
+
+  if (error) {
+    console.warn('[ely-smart] get_ely_brain_v2 failed:', error.message);
     return null;
   }
+
+  return data || null;
 }
 
-// ── Map surface to instruction set name ───────────────────────────────────────
-function surfaceToInstructionSet(surface) {
-  const map = {
-    inbox_draft:     'inbox_draft',
-    email_composer:  'email_composer',
-    email_reply:     'email_composer',
-    project_chat:    'party_wall_discussion',
-    main_chat:       'party_wall_default',
-    soc:             'party_wall_drafting',
-    award_review:    'award_review',
-    document:        'document_finaliser',
-  };
-  return map[surface] || 'party_wall_default';
+function compactJson(value, fallback = '') {
+  try {
+    if (!value) return fallback;
+    return JSON.stringify(value, null, 2).slice(0, 12000);
+  } catch {
+    return fallback;
+  }
 }
 
-// ── Build system prompt from Supabase instruction set ─────────────────────────
-function buildSystemPromptFromInstructions(instructions, context = {}) {
-  let prompt = ELY_CORE_IDENTITY;
+function buildSystemPrompt({ brain, body, surface, modeHint, projectId }) {
+  const instruction = brain?.instruction_set || {};
+  const memories = Array.isArray(brain?.standing_memory) ? brain.standing_memory : [];
+  const projectFromBrain = brain?.project && Object.keys(brain.project || {}).length ? brain.project : null;
+  const workingContext = Array.isArray(brain?.working_context) ? brain.working_context : [];
 
-  if (instructions) {
-    if (instructions.system_prompt) {
-      prompt += `\n\n${instructions.system_prompt}`;
-    }
-    if (instructions.behaviour_rules) {
-      prompt += `\n\nBEHAVIOUR RULES:\n${instructions.behaviour_rules}`;
-    }
-    if (instructions.output_rules) {
-      prompt += `\n\nOUTPUT RULES:\n${instructions.output_rules}`;
-    }
+  const memoryText = memories
+    .slice(0, 30)
+    .map(m => `- ${m.title || m.key || m.type}: ${m.content || ''}`)
+    .join('\n');
+
+  let prompt = '';
+
+  if (instruction.system_prompt) prompt += instruction.system_prompt;
+  if (instruction.behaviour_rules) prompt += `\n\nBEHAVIOUR RULES:\n${instruction.behaviour_rules}`;
+  if (instruction.output_rules) prompt += `\n\nOUTPUT RULES:\n${instruction.output_rules}`;
+
+  prompt += `\n\nLIVE REQUEST CONTEXT:
+Surface: ${surface || 'main_chat'}
+Mode hint: ${modeHint || 'discuss'}
+Project ID: ${projectId || 'none'}`;
+
+  if (memoryText) {
+    prompt += `\n\nSTANDING MEMORY AND USER PREFERENCES:\n${memoryText}`;
   }
 
-  // Inject live project context if provided
-  if (context.currentProject) {
-    const p = context.currentProject;
-    prompt += `\n\nCURRENT PROJECT CONTEXT:
-Ref: ${p.ref || 'unknown'}
-Role: ${p.role || 'BO'} Surveyor
-Address: ${p.bo_premise_address || p.address || 'unknown'}
-Building Owner: ${p.bo_1_name || p.bo || 'unknown'}
-Status: ${p.status || 'active'}
-Works: ${p.works || 'not specified'}`;
+  const project = body.currentProject || projectFromBrain;
+
+  if (project) {
+    prompt += `\n\nCURRENT PROJECT CONTEXT:\n${compactJson(project)}`;
   }
 
-  if (context.projectsContext?.length) {
-    const summary = context.projectsContext.slice(0, 5).map(p =>
-      `${p.ref}: ${p.bo_premise_address || p.address || 'unknown'} (${p.status || 'active'})`
-    ).join('\n');
-    prompt += `\n\nACTIVE PROJECTS:\n${summary}`;
+  if (body.projectsContext?.length) {
+    prompt += `\n\nOTHER ACTIVE PROJECT CONTEXT:\n${compactJson(body.projectsContext.slice(0, 8))}`;
   }
 
-  if (context.emailContext) {
-    const e = context.emailContext;
-    prompt += `\n\nEMAIL CONTEXT:
-From: ${e.from || 'unknown'}
-Subject: ${e.subject || 'unknown'}`;
+  if (workingContext.length) {
+    prompt += `\n\nRECENT WORKING CONTEXT:\n${compactJson(workingContext.slice(0, 5))}`;
   }
+
+  if (body.emailContext) {
+    const e = body.emailContext;
+
+    prompt += `\n\nEMAIL CONTEXT SUMMARY:
+From: ${e.from || e.sender_email || e.sender_name || 'unknown'}
+Subject: ${e.subject || 'unknown'}
+Thread/message id: ${e.thread_id || e.external_id || e.id || 'unknown'}`;
+  }
+
+  prompt += `\n\nIMPORTANT ROUTING INSTRUCTIONS:
+- Use the master brain and standing memory as the authority.
+- If the user is asking about a live document, answer about that document rather than giving generic examples.
+- In award review, be collaborative: state what is missing or weak and provide copy-ready clauses where helpful.
+- If user is discussing only, do not execute.
+- If drafting, produce usable drafting in Itzik's voice.
+- Do not claim any file, database, email, deployment, or code action was done unless it was actually done.`;
 
   return prompt;
 }
 
-// ── Build messages array for OpenAI ──────────────────────────────────────────
-function buildMessages({ chatHistory, prompt, emailContext, surface, systemPrompt }) {
+function buildMessages({ body, systemPrompt }) {
+  const {
+    prompt,
+    chatHistory = [],
+    emailContext = null,
+    surface = 'main_chat',
+  } = body;
+
   const messages = [{ role: 'system', content: systemPrompt }];
 
-  // Add chat history
   if (chatHistory?.length) {
-    chatHistory.slice(-16).forEach(msg => {
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        messages.push({ role: msg.role, content: String(msg.content || '') });
+    chatHistory.slice(-18).forEach(msg => {
+      if (msg?.role === 'user' || msg?.role === 'assistant') {
+        messages.push({
+          role: msg.role,
+          content: String(msg.content || ''),
+        });
       }
     });
   }
 
-  // Build user message
-  let userContent = prompt || '';
+  let userContent = String(prompt || '');
 
-  // For email surfaces, inject the email context as part of the message
-  if (emailContext && (surface === 'email_composer' || surface === 'inbox_draft' || surface === 'email_reply')) {
-    const emailText = emailContext.threadText || emailContext.body || '';
+  if (
+    emailContext &&
+    ['email_composer', 'inbox_draft', 'email_reply'].includes(surface)
+  ) {
+    const emailText =
+      emailContext.threadText ||
+      emailContext.body ||
+      emailContext.body_preview ||
+      '';
+
     if (emailText && !chatHistory?.length) {
-      // Only inject on first message — subsequent messages use chat history
-      userContent = `${userContent}\n\nEMAIL/THREAD TO READ:\n${emailText}`;
+      userContent += `\n\nEMAIL/THREAD TO READ:\n${emailText}`;
     }
   }
 
-  if (userContent) {
-    messages.push({ role: 'user', content: userContent });
+  if (body.documentContext) {
+    userContent += `\n\nDOCUMENT CONTEXT TO USE:\n${
+      typeof body.documentContext === 'string'
+        ? body.documentContext
+        : compactJson(body.documentContext)
+    }`;
+  }
+
+  if (body.awardContext) {
+    userContent += `\n\nAWARD CONTEXT TO USE:\n${
+      typeof body.awardContext === 'string'
+        ? body.awardContext
+        : compactJson(body.awardContext)
+    }`;
+  }
+
+  if (userContent.trim()) {
+    messages.push({
+      role: 'user',
+      content: userContent.trim(),
+    });
   }
 
   return messages;
 }
 
-// ── Main handler ─────────────────────────────────────────────────────────────
+function splitDocumentReply(fullReply) {
+  let replyText = fullReply;
+  let documentText = null;
+
+  const docMatch = fullReply.match(/---\s*\n([\s\S]+?)\n\s*---/);
+
+  if (docMatch) {
+    documentText = docMatch[1].trim();
+    replyText = fullReply.replace(/---[\s\S]*?---/, '').trim();
+  }
+
+  return { replyText, documentText };
+}
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      error: 'Method not allowed',
+    });
+  }
+
+  if (!OPENAI_KEY) {
+    return res.status(500).json({
+      error: 'OPENAI_API_KEY not configured',
+    });
+  }
+
+  const body = req.body || {};
 
   const {
     prompt,
     surface = 'main_chat',
-    chatHistory = [],
-    projectsContext = [],
-    currentProject = null,
-    recentEmails = [],
     emailContext = null,
-  } = req.body;
+  } = body;
 
-  if (!prompt && !emailContext) return res.status(400).json({ error: 'No prompt provided' });
+  if (!prompt && !emailContext) {
+    return res.status(400).json({
+      error: 'No prompt provided',
+    });
+  }
 
   try {
-    // Fetch instruction set from Supabase
-    const instructionSetName = surfaceToInstructionSet(surface);
-    const instructions = await fetchInstructionSet(instructionSetName);
+    const projectId = inferProjectId(body);
+    const userId = inferUserId(body);
+    const modeHint = inferModeHint(surface, prompt);
 
-    console.log(`[ely-smart] surface=${surface} → instruction_set=${instructionSetName} → found=${!!instructions}`);
-
-    // Build system prompt from Supabase instructions + context
-    const systemPrompt = buildSystemPromptFromInstructions(instructions, {
-      currentProject,
-      projectsContext,
-      recentEmails,
-      emailContext,
+    const brain = await loadBrain({
+      userId,
+      projectId,
+      surface,
+      modeHint,
     });
 
-    // Build messages
-    const messages = buildMessages({
-      chatHistory,
-      prompt,
-      emailContext,
+    const systemPrompt = buildSystemPrompt({
+      brain,
+      body,
       surface,
+      modeHint,
+      projectId,
+    });
+
+    const messages = buildMessages({
+      body: {
+        ...body,
+        surface,
+      },
       systemPrompt,
     });
 
-    // Call OpenAI
+    console.log(
+      `[ely-smart] surface=${surface} mode=${modeHint} brain=${brain?.instruction_set?.name || 'fallback'} project=${projectId || 'none'}`
+    );
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_KEY}`,
+        Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: 3000,
-        temperature: 0.7,
+        max_tokens: 3500,
+        temperature: 0.65,
         messages,
       }),
     });
 
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || `OpenAI error ${response.status}`);
+      const err = await response.json().catch(() => ({}));
+
+      throw new Error(
+        err.error?.message ||
+        `OpenAI error ${response.status}`
+      );
     }
 
     const data = await response.json();
-    // Strip em dashes regardless of whether GPT followed the instruction
-    const rawReply = data.choices?.[0]?.message?.content || '';
-    const fullReply = rawReply
-      .replace(/—/g, ' - ')    // em dash → spaced hyphen
-      .replace(/–/g, '-')       // en dash → hyphen
-      .replace(/--/g, '-')           // double hyphen → single
-      .replace(/pre-existing/gi, 'preexisting')  // common hyphenation fix
-      .replace(/co-ordinate/gi, 'coordinate')
-      .replace(/e-mail/gi, 'email');
+    const fullReply = cleanOutput(
+      data.choices?.[0]?.message?.content || ''
+    );
 
-    // Parse replyText and documentText if the response contains them
-    let replyText = fullReply;
-    let documentText = null;
-
-    // Look for document between --- markers
-    const docMatch = fullReply.match(/---\s*\n([\s\S]+?)\n\s*---/);
-    if (docMatch) {
-      documentText = docMatch[1].trim();
-      replyText = fullReply.replace(/---[\s\S]*?---/, '').trim();
-    }
+    const {
+      replyText,
+      documentText,
+    } = splitDocumentReply(fullReply);
 
     return res.status(200).json({
       reply: fullReply,
       replyText,
       documentText,
-      instructionSet: instructionSetName,
+      instructionSet: brain?.instruction_set?.name || 'ely_master_v2_fallback',
+      mode: modeHint,
+      brainLoaded: !!brain,
       sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     });
-
   } catch (err) {
     console.error('[ely-smart] error:', err);
-    return res.status(500).json({ error: err.message });
+
+    return res.status(500).json({
+      error: err.message,
+    });
   }
 }
