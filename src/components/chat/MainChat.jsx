@@ -242,12 +242,110 @@ function projectLabel(project = {}) {
   ].filter(Boolean).join(' | ') || project.id || 'Unnamed project';
 }
 
-function emailLabel(email = {}) {
-  const from = getEmailFromLabel(email);
-  const subject = getEmailSubject(email);
-  const date = getEmailDateLabel(email);
+function isEmailLookupPrompt(text = '') {
+  const s = String(text || '').toLowerCase();
+  return (
+    s.includes('email') ||
+    s.includes('emails') ||
+    s.includes('mail') ||
+    s.includes('inbox')
+  ) && (
+    s.includes('find') ||
+    s.includes('last') ||
+    s.includes('latest') ||
+    s.includes('recent') ||
+    s.includes('from') ||
+    s.includes('search')
+  );
+}
 
-  return [from, subject, date].filter(Boolean).join(' | ');
+function extractEmailSearchTerm(text = '') {
+  const raw = String(text || '').trim();
+
+  const patterns = [
+    /(?:emails?|mail)\s+from\s+(.+)$/i,
+    /from\s+(.+)$/i,
+    /(?:last|latest|recent)\s+(?:emails?|mail)\s+from\s+(.+)$/i,
+    /find\s+(?:emails?|mail)\s+from\s+(.+)$/i,
+    /search\s+(?:emails?|mail)\s+for\s+(.+)$/i,
+  ];
+
+  for (const rx of patterns) {
+    const match = raw.match(rx);
+    if (match?.[1]) {
+      return match[1]
+        .replace(/[?.!]+$/g, '')
+        .replace(/\bplease\b/gi, '')
+        .trim()
+        .toLowerCase();
+    }
+  }
+
+  return raw
+    .replace(/can you/gi, '')
+    .replace(/find/gi, '')
+    .replace(/search/gi, '')
+    .replace(/emails?/gi, '')
+    .replace(/mail/gi, '')
+    .replace(/latest/gi, '')
+    .replace(/last/gi, '')
+    .replace(/recent/gi, '')
+    .replace(/from/gi, '')
+    .replace(/[?.!]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function emailMatchesTerm(email = {}, term = '') {
+  const q = String(term || '').toLowerCase().trim();
+  if (!q) return true;
+
+  const haystack = [
+    email.sender_name,
+    email.sender_email,
+    email.from_name,
+    email.from_email,
+    email.from,
+    email.subject,
+    email.body_preview,
+    email.preview,
+    email.snippet,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(q);
+}
+
+function formatEmailSearchResult(emails = [], term = '', prompt = '') {
+  const wantsSingle = /\b(last|latest|most recent)\b/i.test(prompt);
+  const matches = emails
+    .filter(email => emailMatchesTerm(email, term))
+    .sort((a, b) => getEmailDateValue(b) - getEmailDateValue(a));
+
+  if (!matches.length) {
+    return `I couldn't find any emails matching "${term || 'that search'}".`;
+  }
+
+  const selected = wantsSingle ? matches.slice(0, 1) : matches.slice(0, 8);
+
+  const heading = wantsSingle
+    ? `Latest email matching "${term}":`
+    : `I found ${matches.length} email${matches.length === 1 ? '' : 's'} matching "${term}". Here are the newest ${selected.length}:`;
+
+  const rows = selected.map((email, index) => {
+    const from = getEmailFromLabel(email) || 'Unknown sender';
+    const subject = getEmailSubject(email);
+    const date = getEmailDateLabel(email) || 'No date';
+    const preview = stripHtml(getEmailPreview(email)).slice(0, 260);
+
+    return `${index + 1}. ${from}
+Subject: ${subject}
+Date: ${date}${preview ? `\nPreview: ${preview}` : ''}`;
+  });
+
+  return `${heading}\n\n${rows.join('\n\n')}`;
 }
 
 export default function MainChat({ onOpenComposer, onClose }) {
@@ -730,37 +828,39 @@ export default function MainChat({ onOpenComposer, onClose }) {
     try {
       const wantsDraft = isDraftRequest(text, !!lastDraft);
 
-      const recentEmailContext = allEmails.slice(0, 50).map(email => ({
-        id: getEmailId(email),
-        threadId: getThreadId(email),
-        projectId: first(email.project_id, email.projectId),
-        from: first(email.sender_name, email.sender_email, email.from_name, email.from_email, email.from),
-        subject: getEmailSubject(email),
-        date: first(email.received_at, email.sent_at, email.date, email.created_at),
-        preview: getEmailPreview(email),
-      }));
+      if (!selectedEmailContext && isEmailLookupPrompt(text)) {
+        const term = extractEmailSearchTerm(text);
 
-      const effectiveEmailContext = selectedEmailContext || {
-        recentEmails: recentEmailContext,
-        body: recentEmailContext.length
-          ? `RECENT EMAIL INDEX:\n${JSON.stringify(recentEmailContext, null, 2)}`
-          : '',
-      };
+        let emailSource = allEmails;
+        if (!emailSource.length) {
+          emailSource = await loadMainChatEmails();
+        }
+
+        const localReply = formatEmailSearchResult(emailSource, term, text);
+
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: 'ely',
+          content: localReply,
+          messageType: 'brief',
+          suggestedActions: [],
+        }]);
+
+        return;
+      }
 
       const result = await send(text, {
         surface: selectedEmailContext ? 'email_reply' : 'main_chat',
         projectId: selectedProjectId || selectedEmailContext?.projectId || null,
-        emailContext: effectiveEmailContext,
+        emailContext: selectedEmailContext,
         emailId: selectedEmailContext?.emailId || null,
         threadId: selectedEmailContext?.threadId || null,
-        recentEmails: recentEmailContext,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
           selectedEmailContext,
           selectedEmailId: selectedEmailContext?.emailId || null,
           selectedThreadId: selectedEmailContext?.threadId || null,
-          recentEmails: recentEmailContext,
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
             : null,
@@ -797,6 +897,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     selectedProjectId,
     selectedEmailContext,
     allEmails,
+    loadMainChatEmails,
     appendAssistantMessagesFromResult,
     refreshProjectSessions,
     refreshGlobalSessions,
