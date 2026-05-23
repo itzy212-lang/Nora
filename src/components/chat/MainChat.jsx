@@ -4,6 +4,7 @@ import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
+import sb from '../../supabaseClient';
 
 const ACTIVE_SESSION_KEY = 'ely_main_chat_active_session_id';
 const ACTIVE_PROJECT_KEY = 'ely_main_chat_selected_project_id';
@@ -54,8 +55,40 @@ function getEmailPreview(email = {}) {
   return first(email.body_preview, email.preview, email.snippet, email.body_text, email.text_body, email.body);
 }
 
-function buildEmailContext(email = null) {
+function stripHtml(html = '') {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildThreadText(email = null, thread = []) {
+  if (!email) return '';
+
+  const rows = Array.isArray(thread) && thread.length ? thread : [email];
+
+  return [...rows]
+    .sort((a, b) => getEmailDateValue(a) - getEmailDateValue(b))
+    .map(item => {
+      const date = first(item.received_at, item.sent_at, item.date, item.created_at);
+      const from = getEmailFromLabel(item);
+      const subject = getEmailSubject(item);
+      const body = stripHtml(first(item.body, item.body_text, item.text_body, item.html_body, item.body_html, item.body_preview, item.preview, item.snippet));
+
+      return [
+        `--- Email ${date ? `| ${date}` : ''}${from ? ` | From: ${from}` : ''}${subject ? ` | Subject: ${subject}` : ''} ---`,
+        body || '(No body text available)',
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+function buildEmailContext(email = null, thread = []) {
   if (!email) return null;
+
+  const threadText = buildThreadText(email, thread);
 
   return {
     id: getEmailId(email),
@@ -70,7 +103,8 @@ function buildEmailContext(email = null) {
     cc: email.cc || email.cc_email || email.cc_recipients || [],
     date: first(email.received_at, email.sent_at, email.date, email.created_at),
     preview: getEmailPreview(email),
-    body: first(email.body_text, email.text_body, email.body, email.html_body, email.body_html, email.content),
+    threadText,
+    body: threadText || first(email.body_text, email.text_body, email.body, email.html_body, email.body_html, email.content),
     hasAttachment: !!(email.has_attachment || email.hasAttachments || email.attachments?.length),
     attachments: email.attachments || email.email_attachments || [],
     raw: email,
@@ -241,6 +275,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [lastDraft, setLastDraft] = useState('');
   const [restoreAttempted, setRestoreAttempted] = useState(false);
   const [linkingProject, setLinkingProject] = useState(false);
+  const [localEmails, setLocalEmails] = useState([]);
+  const [selectedEmailThread, setSelectedEmailThread] = useState([]);
+  const [emailsLoading, setEmailsLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -264,22 +301,54 @@ export default function MainChat({ onOpenComposer, onClose }) {
     projectId: selectedProjectId || null,
   });
 
+  const loadMainChatEmails = useCallback(async () => {
+    if (!sb) return [];
+
+    setEmailsLoading(true);
+
+    try {
+      const { data, error } = await sb
+        .from('emails')
+        .select('*')
+        .or('is_draft.is.null,is_draft.eq.false')
+        .order('received_at', { ascending: false, nullsFirst: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      const rows = Array.isArray(data) ? data : [];
+      setLocalEmails(rows);
+      return rows;
+    } catch (err) {
+      console.warn('[MainChat] loadMainChatEmails failed:', err?.message || err);
+      setLocalEmails([]);
+      return [];
+    } finally {
+      setEmailsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMainChatEmails();
+  }, [loadMainChatEmails]);
+
   const allEmails = useMemo(() => {
     const direct = Array.isArray(state.emails) ? state.emails : [];
     const inbox = Array.isArray(state.inboxEmails) ? state.inboxEmails : [];
     const sent = Array.isArray(state.sentEmails) ? state.sentEmails : [];
     const projectEmails = Array.isArray(state.projectEmails) ? state.projectEmails : [];
+    const fetched = Array.isArray(localEmails) ? localEmails : [];
 
     const byId = new Map();
 
-    [...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
+    [...fetched, ...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
       const id = getEmailId(email);
       if (!id) return;
       byId.set(String(id), email);
     });
 
     return Array.from(byId.values()).sort((a, b) => getEmailDateValue(b) - getEmailDateValue(a));
-  }, [state.emails, state.inboxEmails, state.sentEmails, state.projectEmails]);
+  }, [localEmails, state.emails, state.inboxEmails, state.sentEmails, state.projectEmails]);
 
   const filteredEmails = useMemo(() => {
     if (!selectedProjectId) return allEmails.slice(0, 100);
@@ -297,7 +366,49 @@ export default function MainChat({ onOpenComposer, onClose }) {
     return allEmails.find(email => String(getEmailId(email)) === String(selectedEmailId)) || null;
   }, [allEmails, selectedEmailId]);
 
-  const selectedEmailContext = useMemo(() => buildEmailContext(selectedEmail), [selectedEmail]);
+  const selectedEmailContext = useMemo(() => buildEmailContext(selectedEmail, selectedEmailThread), [selectedEmail, selectedEmailThread]);
+
+  const loadSelectedEmailThread = useCallback(async (email) => {
+    if (!email || !sb) {
+      setSelectedEmailThread(email ? [email] : []);
+      return [email].filter(Boolean);
+    }
+
+    const threadId = getThreadId(email);
+
+    if (!threadId) {
+      setSelectedEmailThread([email]);
+      return [email];
+    }
+
+    try {
+      const { data, error } = await sb
+        .from('emails')
+        .select('*')
+        .eq('thread_id', threadId)
+        .order('received_at', { ascending: true, nullsFirst: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const rows = Array.isArray(data) && data.length ? data : [email];
+      setSelectedEmailThread(rows);
+      return rows;
+    } catch (err) {
+      console.warn('[MainChat] loadSelectedEmailThread failed:', err?.message || err);
+      setSelectedEmailThread([email]);
+      return [email];
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedEmail) {
+      setSelectedEmailThread([]);
+      return;
+    }
+
+    loadSelectedEmailThread(selectedEmail);
+  }, [selectedEmail, loadSelectedEmailThread]);
 
   const sortedSessions = useMemo(() => {
     const source = selectedProjectId ? projectSessions : globalSessions;
@@ -498,7 +609,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const handleEmailChange = useCallback((event) => {
     const nextEmailId = event.target.value || '';
     setSelectedEmailId(nextEmailId);
-  }, []);
+
+    if (!nextEmailId) {
+      setSelectedEmailThread([]);
+      return;
+    }
+
+    const email = allEmails.find(item => String(getEmailId(item)) === String(nextEmailId));
+    if (email) loadSelectedEmailThread(email);
+  }, [allEmails, loadSelectedEmailThread]);
 
   const handleOpenInComposer = useCallback((draftOrOptions) => {
     if (typeof draftOrOptions === 'string') {
@@ -611,17 +730,37 @@ export default function MainChat({ onOpenComposer, onClose }) {
     try {
       const wantsDraft = isDraftRequest(text, !!lastDraft);
 
+      const recentEmailContext = allEmails.slice(0, 50).map(email => ({
+        id: getEmailId(email),
+        threadId: getThreadId(email),
+        projectId: first(email.project_id, email.projectId),
+        from: first(email.sender_name, email.sender_email, email.from_name, email.from_email, email.from),
+        subject: getEmailSubject(email),
+        date: first(email.received_at, email.sent_at, email.date, email.created_at),
+        preview: getEmailPreview(email),
+      }));
+
+      const effectiveEmailContext = selectedEmailContext || {
+        recentEmails: recentEmailContext,
+        body: recentEmailContext.length
+          ? `RECENT EMAIL INDEX:\n${JSON.stringify(recentEmailContext, null, 2)}`
+          : '',
+      };
+
       const result = await send(text, {
-        projectId: selectedProjectId || null,
-        emailContext: selectedEmailContext,
+        surface: selectedEmailContext ? 'email_reply' : 'main_chat',
+        projectId: selectedProjectId || selectedEmailContext?.projectId || null,
+        emailContext: effectiveEmailContext,
         emailId: selectedEmailContext?.emailId || null,
         threadId: selectedEmailContext?.threadId || null,
+        recentEmails: recentEmailContext,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         context: {
           previousDraft: lastDraft || null,
           selectedEmailContext,
           selectedEmailId: selectedEmailContext?.emailId || null,
           selectedThreadId: selectedEmailContext?.threadId || null,
+          recentEmails: recentEmailContext,
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
             : null,
@@ -657,6 +796,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     lastDraft,
     selectedProjectId,
     selectedEmailContext,
+    allEmails,
     appendAssistantMessagesFromResult,
     refreshProjectSessions,
     refreshGlobalSessions,
@@ -728,12 +868,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
           <select
             value={selectedEmailId}
             onChange={handleEmailChange}
-            disabled={loading || !filteredEmails.length}
+            disabled={loading || emailsLoading || !filteredEmails.length}
             title="Attach an email or thread to this chat"
             className="main-chat-select main-chat-email-select"
           >
             <option value="">
-              {filteredEmails.length ? 'No email thread selected' : 'No emails available'}
+              {emailsLoading
+                ? 'Loading emails...'
+                : filteredEmails.length
+                  ? 'No email thread selected'
+                  : 'No emails available'}
             </option>
             {filteredEmails.map(email => {
               const id = getEmailId(email);
@@ -744,6 +888,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
               );
             })}
           </select>
+
+          <button
+            className="main-chat-email-refresh-btn"
+            type="button"
+            onClick={loadMainChatEmails}
+            disabled={emailsLoading || loading}
+            title="Refresh email list"
+          >
+            {emailsLoading ? '…' : '↻'}
+          </button>
 
           <button className="main-chat-upload-placeholder" type="button" disabled title="Upload button placeholder">
             Upload
@@ -921,6 +1075,23 @@ export default function MainChat({ onOpenComposer, onClose }) {
           max-width: 380px;
         }
 
+        .main-chat-email-refresh-btn {
+          height: 32px;
+          width: 34px;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--bg2);
+          color: var(--text2);
+          font-size: 14px;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .main-chat-email-refresh-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
         .main-chat-upload-placeholder {
           height: 32px;
           border-radius: 10px;
@@ -1066,6 +1237,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
           .main-chat-upload-placeholder {
             display: none;
+          }
+
+          .main-chat-email-refresh-btn {
+            width: 32px;
           }
         }
       `}</style>
