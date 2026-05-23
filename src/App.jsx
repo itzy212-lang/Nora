@@ -58,9 +58,28 @@ export default function App() {
     }
   };
 
+  const getInitialPreviousView = () => {
+    try {
+      const stored = localStorage.getItem('ely_previous_view');
+      return stored && stored !== 'chat' ? stored : 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  };
+
+  const getInitialPreviousProjectId = () => {
+    try {
+      return localStorage.getItem('ely_previous_project_id') || '';
+    } catch {
+      return '';
+    }
+  };
+
   const [currentView, setCurrentView]       = useState(getInitialView);
+  const [previousView, setPreviousView]     = useState(getInitialPreviousView);
   const [projectView, setProjectView]       = useState(null);
   const [pendingProjectId, setPendingProjectId] = useState(getInitialProjectId);
+  const [previousProjectId, setPreviousProjectId] = useState(getInitialPreviousProjectId);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [composerOpts, setComposerOpts]     = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
@@ -111,7 +130,43 @@ export default function App() {
     }
   }, [pendingProjectId, state.projects, setCurrentProject]);
 
+  const rememberPreviousLocation = useCallback(() => {
+    const safePreviousView = currentView && currentView !== 'chat'
+      ? currentView
+      : previousView || 'dashboard';
+
+    const safePreviousProjectId =
+      projectView && projectView !== 'new' && projectView !== 'list'
+        ? projectView.id
+        : pendingProjectId || previousProjectId || '';
+
+    setPreviousView(safePreviousView);
+    setPreviousProjectId(safePreviousProjectId || '');
+
+    try {
+      localStorage.setItem('ely_previous_view', safePreviousView);
+
+      if (safePreviousProjectId) {
+        localStorage.setItem('ely_previous_project_id', safePreviousProjectId);
+      } else {
+        localStorage.removeItem('ely_previous_project_id');
+      }
+    } catch {}
+  }, [currentView, previousView, projectView, pendingProjectId, previousProjectId]);
+
   const handleNavigate = useCallback((view) => {
+    if (view === 'chat') {
+      rememberPreviousLocation();
+      setCurrentView('chat');
+      setSidebarOpen(false);
+
+      try {
+        localStorage.setItem('ely_current_view', 'chat');
+      } catch {}
+
+      return;
+    }
+
     setCurrentView(view);
     setProjectView(null);
     setPendingProjectId('');
@@ -122,7 +177,7 @@ export default function App() {
       localStorage.setItem('ely_current_view', view);
       localStorage.removeItem('ely_current_project_id');
     } catch {}
-  }, [clearCurrentProject]);
+  }, [clearCurrentProject, rememberPreviousLocation]);
 
   const handleOpenProject = useCallback((project) => {
     if (project === 'new') {
@@ -195,6 +250,46 @@ export default function App() {
     } catch {}
   }, [clearCurrentProject]);
 
+  const handleCloseMainChat = useCallback(() => {
+    const targetView = previousView && previousView !== 'chat'
+      ? previousView
+      : 'dashboard';
+
+    setCurrentView(targetView);
+    setSidebarOpen(false);
+
+    if (targetView === 'projects' && previousProjectId) {
+      const restoredProject = state.projects?.find(
+        p => String(p.id) === String(previousProjectId)
+      );
+
+      if (restoredProject) {
+        setProjectView(restoredProject);
+        setCurrentProject(restoredProject);
+        setPendingProjectId('');
+      } else {
+        setProjectView(null);
+        setPendingProjectId(previousProjectId);
+      }
+
+      try {
+        localStorage.setItem('ely_current_view', 'projects');
+        localStorage.setItem('ely_current_project_id', previousProjectId);
+      } catch {}
+
+      return;
+    }
+
+    setProjectView(null);
+    setPendingProjectId('');
+    clearCurrentProject();
+
+    try {
+      localStorage.setItem('ely_current_view', targetView);
+      localStorage.removeItem('ely_current_project_id');
+    } catch {}
+  }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
+
   if (!authChecked) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
@@ -248,7 +343,7 @@ export default function App() {
       case 'inbox':
         return <Inbox onOpenComposer={openComposer} />;
       case 'chat':
-        return <MainChat onOpenComposer={openComposer} />;
+        return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':
         return <AwardReview />;
       case 'settings':
@@ -283,7 +378,7 @@ export default function App() {
 
   const appBody = currentView === 'chat' ? (
     <>
-      <MainChat onOpenComposer={openComposer} />
+      <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />
       {composerOpts && (
         <EmailComposer
           opts={composerOpts}
