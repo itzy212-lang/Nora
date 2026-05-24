@@ -20,12 +20,23 @@ function getSupabase() {
 }
 
 function cleanOutput(text = '') {
-  return String(text || '')
+  let value = String(text || '');
+
+  value = value
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .replace(/^[ \t]*[-*•][ \t]+/gm, '')
+    .replace(/^[ \t]*[-]{3,}[ \t]*$/gm, '')
+    .replace(/^[ \t]*[_]{3,}[ \t]*$/gm, '')
+    .replace(/^[ \t]*[=]{3,}[ \t]*$/gm, '')
     .replace(/—/g, ', ')
     .replace(/–/g, '-')
-    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/--+/g, ', ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  return value;
 }
 
 function inferProjectId(body = {}) {
@@ -330,9 +341,10 @@ If a project is active, answer from the active project context first.
 Never invent party names, meetings, inspections, instructions or actions.
 Do not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.
 In discussion mode, do not draft correspondence unless explicitly asked.
-In drafting mode, produce natural professional correspondence, not reports or template letters.
-Avoid hashtags, markdown headings, consultant formatting, excessive bullet points and long dashes.
-Use ordinary paragraphs wherever possible.
+In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
+When drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
+When drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.
+The finished draft must look like a real manually written professional email or letter, not ChatGPT output.
 Refer to the legislation as the Act.
 Treat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.
 `;
@@ -446,7 +458,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'gpt-4o',
         max_tokens: 3500,
-        temperature: 0.45,
+        temperature: 0.35,
         messages,
       }),
     });
