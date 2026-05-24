@@ -325,7 +325,7 @@ function buildProjectFactsText(projectBundle) {
   return facts.join('\n');
 }
 
-function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint }) {
+function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
   let prompt =
     brain?.instruction_set?.system_prompt ||
     'You are Ely, an AI assistant for a Party Wall surveying practice.';
@@ -386,6 +386,31 @@ ${compactJson(scopedEmailContext.slice(0, 40), 24000)}
 `;
   }
 
+
+  if (draftingExamples?.length) {
+    prompt += `
+
+GOLD STANDARD DRAFTING EXAMPLES:
+${JSON.stringify(draftingExamples, null, 2)}
+
+WHEN DRAFTING:
+- mirror the tone, pacing and paragraph structure of the examples
+- write like genuine manually written professional correspondence
+- use natural prose and realistic sentence flow
+- maintain measured escalation and professional caution
+
+DO NOT USE:
+- markdown headings
+- hashtags
+- stars/asterisks
+- bold formatting
+- AI assistant formatting
+- consultant report formatting
+- excessive structuring
+- unnecessary bullet points
+`;
+  }
+
   return prompt;
 }
 
@@ -434,13 +459,29 @@ export default async function handler(req, res) {
       loadBrain({ userId, projectId, surface: body.surface, modeHint }),
     ]);
 
-    const systemPrompt = buildSystemPrompt({
+    
+    let draftingExamples = [];
+
+    try {
+      const { data } = await getSupabase()
+        .from('ai_drafting_examples')
+        .select('*')
+        .eq('active', true)
+        .limit(3);
+
+      draftingExamples = data || [];
+    } catch (err) {
+      console.warn('[ely-smart] drafting examples load failed:', err.message);
+    }
+
+const systemPrompt = buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
       projectBundle,
       scopedEmailContext,
       modeHint,
+      draftingExamples,
     });
 
     const messages = buildMessages({ body, systemPrompt });
