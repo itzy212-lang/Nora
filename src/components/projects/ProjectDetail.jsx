@@ -5,6 +5,7 @@ import NoticeServingModal from './NoticeServingModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import sb from '../../supabaseClient';
 import PizZip from 'pizzip';
+import VoiceInput from '../shared/VoiceInput';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1571,104 +1572,560 @@ function S104BSurveyorModal({ ao, onSave, onClose }) {
 
 
 function ProjectChat({ project, onOpenComposer }) {
+  const projectId = String(project?.id || '');
+  const projectRef = project?.ref || project?.name || 'this project';
+
+  const {
+    send,
+    loading,
+    sessionsLoading,
+    projectSessions,
+    loadSession,
+    refreshProjectSessions,
+    startNewSession,
+    sessionId,
+  } = useEly({ surface: 'project_chat', projectId });
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [showHistory, setShowHistory] = useState(true);
+  const [attachedFiles, setAttachedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
+
   const endRef = useRef(null);
-  const { send, loading } = useEly({ surface: 'project_chat', projectId: project.id });
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    refreshProjectSessions?.(projectId);
+  }, [projectId, refreshProjectSessions]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, loading]);
+
+  const resetChat = useCallback(() => {
+    startNewSession?.();
+    setMessages([]);
+    setInput('');
+    setAttachedFiles([]);
+    setVoiceStopSignal(v => v + 1);
+  }, [startNewSession]);
+
+  const selectSession = useCallback(async (targetSessionId) => {
+    if (!targetSessionId) return;
+
+    try {
+      const bundle = await loadSession(targetSessionId);
+      setMessages(bundle?.messages || []);
+      setAttachedFiles([]);
+      setVoiceStopSignal(v => v + 1);
+    } catch (err) {
+      alert(err.message || 'Could not load this chat.');
+    }
+  }, [loadSession]);
+
+  const insertRecordSafely = useCallback(async (table, payload) => {
+    if (!sb || !table || !payload) return null;
+
+    let workingPayload = { ...payload };
+    let lastError = null;
+
+    for (let i = 0; i < 12; i += 1) {
+      const { data, error } = await sb
+        .from(table)
+        .insert([workingPayload])
+        .select('*')
+        .single();
+
+      if (!error) return data || null;
+
+      lastError = error;
+
+      const missingColumn = error.message?.match(/Could not find the '([^']+)' column/)?.[1];
+
+      if (missingColumn && Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)) {
+        const nextPayload = { ...workingPayload };
+        delete nextPayload[missingColumn];
+        workingPayload = nextPayload;
+        continue;
+      }
+
+      console.warn(`[ProjectChat] Could not insert ${table}:`, error.message);
+      return null;
+    }
+
+    console.warn(`[ProjectChat] Could not insert ${table}:`, lastError?.message);
+    return null;
+  }, []);
+
+  const handleFilesSelected = useCallback(async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+
+    if (!files.length || !projectId) return;
+
+    setUploading(true);
+
+    const uploaded = [];
+
+    for (const file of files) {
+      const now = new Date().toISOString();
+      const safeName = safeFilePart(file.name || 'upload');
+      const storagePath = `${projectId}/${Date.now()}-${safeName}`;
+
+      let storageBucket = null;
+      let storageError = null;
+
+      try {
+        const { error } = await sb.storage
+          .from('chat-uploads')
+          .upload(storagePath, file, {
+            upsert: false,
+            contentType: file.type || 'application/octet-stream',
+          });
+
+        if (error) throw error;
+        storageBucket = 'chat-uploads';
+      } catch (err) {
+        storageError = err?.message || 'Storage upload failed';
+        console.warn('[ProjectChat] Storage upload failed:', storageError);
+      }
+
+      const uploadMeta = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file_name: file.name,
+        name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        size_bytes: file.size || 0,
+        project_id: projectId,
+        session_id: sessionId || null,
+        storage_bucket: storageBucket,
+        storage_path: storageBucket ? storagePath : null,
+        upload_status: storageBucket ? 'stored' : 'metadata_only',
+        storage_error: storageError,
+        created_at: now,
+      };
+
+      uploaded.push(uploadMeta);
+
+      await insertRecordSafely('chat_uploads', {
+        project_id: projectId,
+        session_id: sessionId || null,
+        file_name: file.name,
+        original_name: file.name,
+        name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        file_type: file.type || 'application/octet-stream',
+        size_bytes: file.size || 0,
+        storage_bucket: storageBucket,
+        storage_path: storageBucket ? storagePath : null,
+        upload_status: storageBucket ? 'stored' : 'metadata_only',
+        created_at: now,
+        metadata: {
+          source: 'project_chat',
+          storage_error: storageError,
+        },
+      });
+
+      await insertRecordSafely('project_memory', {
+        project_id: projectId,
+        source_type: 'chat_upload',
+        source_id: uploadMeta.id,
+        title: `Uploaded file: ${file.name}`,
+        summary: `File uploaded in project chat: ${file.name}. Type: ${file.type || 'unknown'}. Size: ${file.size || 0} bytes.`,
+        content: '',
+        entities: [],
+        unresolved_items: [],
+        importance_score: 0.45,
+        metadata: {
+          file_name: file.name,
+          mime_type: file.type || 'application/octet-stream',
+          size_bytes: file.size || 0,
+          storage_bucket: storageBucket,
+          storage_path: storageBucket ? storagePath : null,
+          storage_error: storageError,
+          source: 'project_chat',
+        },
+      });
+    }
+
+    setAttachedFiles(prev => [...prev, ...uploaded]);
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `${Date.now()}-upload`,
+        role: 'ely',
+        content: `Attached ${uploaded.length === 1 ? 'file' : 'files'} to this project chat:\n${uploaded.map(f => `- ${f.file_name}`).join('\n')}`,
+      },
+    ]);
+
+    setUploading(false);
+  }, [projectId, sessionId, insertRecordSafely]);
+
+  const handleVoiceTranscript = useCallback((transcript) => {
+    setInput(transcript || '');
+  }, []);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
 
-    if (!text || loading) return;
+    if ((!text && attachedFiles.length === 0) || loading || uploading) return;
+
+    const attachmentContext = attachedFiles.map(file => ({
+      id: file.id,
+      fileName: file.file_name,
+      mimeType: file.mime_type,
+      sizeBytes: file.size_bytes,
+      storageBucket: file.storage_bucket,
+      storagePath: file.storage_path,
+      uploadStatus: file.upload_status,
+    }));
+
+    const displayText = text || 'Please review the attached project file.';
+    const promptForEly = attachmentContext.length
+      ? `${displayText}\n\nAttached project file metadata:\n${attachmentContext.map(f => `- ${f.fileName} (${f.mimeType || 'unknown'}, ${f.sizeBytes || 0} bytes)`).join('\n')}`
+      : displayText;
 
     setInput('');
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
+    setAttachedFiles([]);
+    setVoiceStopSignal(v => v + 1);
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `${Date.now()}-user`,
+        role: 'user',
+        content: displayText,
+      },
+    ]);
 
     try {
-      const result = await send(text);
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: result.reply }]);
+      const result = await send(promptForEly, {
+        projectId,
+        uploadIds: attachmentContext.map(f => f.id),
+        documentContext: {
+          uploads: attachmentContext,
+          note: 'These are uploaded file metadata records. Full file parsing/extraction will be handled by the document ingestion layer.',
+        },
+        context: {
+          activeProjectId: projectId,
+          projectUploadContext: attachmentContext,
+        },
+      });
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `${Date.now()}-ely`,
+          role: 'ely',
+          content: result.reply || result.replyText || 'Done.',
+        },
+      ]);
+
+      refreshProjectSessions?.(projectId);
     } catch (err) {
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', content: `Error: ${err.message}` }]);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `${Date.now()}-error`,
+          role: 'ely',
+          content: `Error: ${err.message}`,
+        },
+      ]);
     }
-  }, [input, loading, send]);
+  }, [input, attachedFiles, loading, uploading, send, projectId, refreshProjectSessions]);
+
+  const sortedSessions = [...(projectSessions || [])].sort((a, b) => {
+    const at = new Date(a.last_message_at || a.updated_at || a.created_at || 0).getTime();
+    const bt = new Date(b.last_message_at || b.updated_at || b.created_at || 0).getTime();
+    return bt - at;
+  });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '60vh', minHeight: 400 }}>
-      <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
-        <button
-          className="btn btn-sm btn-ghost"
-          style={{ cursor: 'pointer' }}
-          onClick={() => onOpenComposer?.({ mode: 'compose', projectId: project.id })}
-        >
-          ✉ Compose email
-        </button>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-        {messages.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
-            Ask Ely anything about {project.ref}
-          </div>
-        )}
-
-        {messages.map(msg => (
-          <div key={msg.id} style={{
-            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '80%',
-            background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
-            color: msg.role === 'user' ? '#fff' : 'var(--text)',
-            padding: '10px 14px',
-            borderRadius: 12,
-            fontSize: 13,
-            lineHeight: 1.6,
-            whiteSpace: 'pre-wrap',
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: showHistory ? '230px 1fr' : '1fr',
+      gap: 14,
+      height: '60vh',
+      minHeight: 430,
+    }}>
+      {showHistory && (
+        <div style={{
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          background: 'var(--bg2)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{
+            padding: '12px 12px 10px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
           }}>
-            {msg.content}
-          </div>
-        ))}
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Chat history
+            </div>
 
-        {loading && (
-          <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>
-            ✨ Thinking…
+            <button
+              type="button"
+              onClick={resetChat}
+              className="btn btn-sm btn-ghost"
+              style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12, padding: '4px 8px' }}
+            >
+              + New
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {sessionsLoading && (
+              <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)' }}>
+                Loading chats…
+              </div>
+            )}
+
+            {!sessionsLoading && sortedSessions.length === 0 && (
+              <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                No saved project chats yet.
+              </div>
+            )}
+
+            {sortedSessions.map(session => {
+              const active = String(session.id) === String(sessionId);
+              const title = session.title || session.auto_title || 'Project chat';
+              const date = session.last_message_at || session.updated_at || session.created_at;
+
+              return (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => selectSession(session.id)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    border: 'none',
+                    borderBottom: '1px solid var(--border)',
+                    background: active ? 'var(--blue-bg)' : 'transparent',
+                    color: active ? 'var(--blue)' : 'var(--text)',
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                  }}
+                >
+                  <div style={{
+                    fontSize: 12.5,
+                    fontWeight: active ? 800 : 650,
+                    lineHeight: 1.35,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {title}
+                  </div>
+                  {date && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
+                      {new Date(date).toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          paddingBottom: 10,
+          borderBottom: '1px solid var(--border)',
+          marginBottom: 14,
+        }}>
+          <button
+            type="button"
+            onClick={() => setShowHistory(v => !v)}
+            className="btn btn-sm btn-ghost"
+            style={{ cursor: 'pointer', borderRadius: 99 }}
+          >
+            {showHistory ? 'Hide history' : 'Show history'}
+          </button>
+
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+            Project scoped chat for {projectRef}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+          {messages.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
+              Ask Ely anything about {projectRef}
+            </div>
+          )}
+
+          {messages.map(msg => (
+            <div key={msg.id} style={{
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '82%',
+              background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
+              color: msg.role === 'user' ? '#fff' : 'var(--text)',
+              padding: '10px 14px',
+              borderRadius: 12,
+              fontSize: 13,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {msg.content}
+            </div>
+          ))}
+
+          {loading && (
+            <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>
+              ✨ Thinking…
+            </div>
+          )}
+
+          <div ref={endRef} />
+        </div>
+
+        {attachedFiles.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            marginBottom: 8,
+          }}>
+            {attachedFiles.map(file => (
+              <div
+                key={file.id}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 9px',
+                  borderRadius: 99,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg3)',
+                  fontSize: 12,
+                  color: 'var(--text2)',
+                  maxWidth: 260,
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  📎 {file.file_name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAttachedFiles(prev => prev.filter(f => f.id !== file.id))}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--text3)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontSize: 14,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
-        <div ref={endRef} />
-      </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 8,
+          paddingTop: 8,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
+            onChange={handleFilesSelected}
+            style={{ display: 'none' }}
+          />
 
-      <div style={{ display: 'flex', gap: 8, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder={`Ask about ${project.ref}…`}
-          rows={2}
-          style={{
-            flex: 1,
-            padding: '9px 12px',
-            fontSize: 13,
-            resize: 'none',
-            background: 'var(--bg2)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            color: 'var(--text)',
-            outline: 'none',
-          }}
-        />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || uploading}
+            title="Upload file"
+            aria-label="Upload file"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              border: '1px solid var(--border)',
+              background: 'var(--bg2)',
+              color: 'var(--text3)',
+              cursor: loading || uploading ? 'not-allowed' : 'pointer',
+              opacity: loading || uploading ? 0.5 : 1,
+              fontSize: 22,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            +
+          </button>
 
-        <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', alignSelf: 'flex-end' }}>
-          Send
-        </button>
+          <VoiceInput
+            disabled={loading || uploading}
+            stopSignal={voiceStopSignal}
+            onTranscript={handleVoiceTranscript}
+          />
+
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={`Ask about ${projectRef}…`}
+            rows={2}
+            style={{
+              flex: 1,
+              padding: '9px 12px',
+              fontSize: 13,
+              resize: 'none',
+              background: 'var(--bg2)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              color: 'var(--text)',
+              outline: 'none',
+              minHeight: 40,
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
+            className="btn btn-primary btn-sm"
+            style={{ cursor: loading || uploading ? 'not-allowed' : 'pointer', alignSelf: 'flex-end', minWidth: 68 }}
+          >
+            {uploading ? 'Uploading…' : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   );
