@@ -685,12 +685,73 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
             {hasAtt  && <span style={{ fontSize: 11 }}>📎</span>}
             {replied && <span style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
             {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
+            {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
             {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+
+
+// ── Project communication memory helpers ─────────────────────────────────────
+function makeEmailMemoryPayload(email, projectId, source = 'manual_inbox_link') {
+  const cleanBody = stripHtml(email?.body || email?.body_preview || '');
+  return {
+    project_id: projectId,
+    source_type: 'email',
+    source_id: String(email?.id || ''),
+    title: email?.subject || 'Email',
+    summary: `${email?.sender_name || email?.sender_email || 'Unknown sender'} — ${email?.subject || 'No subject'}`,
+    content: cleanBody.slice(0, 6000),
+    metadata: {
+      source,
+      email_id: email?.id || null,
+      thread_id: email?.thread_id || null,
+      sender_name: email?.sender_name || null,
+      sender_email: email?.sender_email || null,
+      received_at: email?.received_at || null,
+      folder: email?.folder || null,
+      has_attachments: !!email?.has_attachments,
+    },
+    importance_score: email?.has_attachments ? 0.7 : 0.45,
+  };
+}
+
+async function insertProjectMemoryForEmail(email, projectId, source = 'manual_inbox_link') {
+  if (!sb || !email || !projectId) return;
+  try {
+    await sb.from('project_memory').insert([makeEmailMemoryPayload(email, projectId, source)]);
+  } catch (err) {
+    console.warn('project_memory insert warning:', err?.message || err);
+  }
+}
+
+async function linkEmailToProject(email, projectId, source = 'manual_inbox_link') {
+  if (!sb || !email || !projectId) return;
+
+  const updatePayload = {
+    project_id: projectId,
+    link_status: 'manually_linked',
+    manually_linked: true,
+    project_match_confidence: 100,
+    project_match_source: source,
+  };
+
+  await sb.from('emails').update(updatePayload).eq('id', email.id);
+
+  if (email.thread_id) {
+    await sb.from('emails').update({
+      project_id: projectId,
+      link_status: 'auto_linked',
+      project_match_confidence: 90,
+      project_match_source: 'thread_inherited',
+    }).eq('thread_id', email.thread_id).neq('id', email.id);
+  }
+
+  await insertProjectMemoryForEmail(email, projectId, source);
 }
 
 // ── Project link banner ──────────────────────────────────────────────────────
@@ -717,14 +778,14 @@ function ProjectLinkBanner({ email, onLinked }) {
   const handleLink = async () => {
     if (!selected) return;
     setSaving(true);
-    await sb.from('emails').update({ project_id: selected, link_status: 'manually_linked' }).eq('id', email.id);
-    // Also link other emails in the same thread
-    if (email.thread_id) {
-      await sb.from('emails').update({ project_id: selected, link_status: 'auto_linked' })
-        .eq('thread_id', email.thread_id).neq('id', email.id).eq('link_status', 'unlinked');
+    try {
+      await linkEmailToProject(email, selected, 'manual_preview_banner');
+      onLinked?.(selected);
+      setDismissed(true);
+    } catch (err) {
+      console.warn('Project link failed:', err?.message || err);
+      alert('Could not link this email to the project. Please try again.');
     }
-    onLinked?.(selected);
-    setDismissed(true);
     setSaving(false);
   };
 
@@ -775,11 +836,15 @@ function SaveAttachmentPopup({ email, onDismiss }) {
   const handleSave = async () => {
     if (!selected) return;
     setSaving(true);
-    // Link the email to the project and mark attachments noted
-    await sb.from('emails').update({ project_id: selected, link_status: 'manually_linked' }).eq('id', email.id);
+    try {
+      await linkEmailToProject(email, selected, 'manual_attachment_popup');
+      setDone(true);
+      onDismiss?.();
+    } catch (err) {
+      console.warn('Attachment project link failed:', err?.message || err);
+      alert('Could not link this email to the project. Please try again.');
+    }
     setSaving(false);
-    setDone(true);
-    onDismiss?.();
   };
 
   return (
@@ -819,7 +884,7 @@ function SaveAttachmentPopup({ email, onDismiss }) {
 }
 
 // ── Email preview panel ───────────────────────────────────────────────────────
-function EmailPreview({ email, onOpenReply, onDraftWithEly }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [replyDropOpen, setReplyDropOpen]   = useState(false);
   const [showSavePopup, setShowSavePopup]   = useState(false);
   const dropRef = useRef(null);
@@ -846,6 +911,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
       {showSavePopup && <SaveAttachmentPopup email={email} onDismiss={() => setShowSavePopup(false)} />}
+      <ProjectLinkBanner email={email} onLinked={(projectId) => onEmailLinked?.(email, projectId)} />
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -898,6 +964,9 @@ export default function Inbox({ onOpenComposer }) {
   const [search, setSearch]              = useState('');
   const [syncing, setSyncing]            = useState(false);
   const [checkedIds, setCheckedIds]      = useState(new Set());
+  const [bulkProjects, setBulkProjects]  = useState([]);
+  const [bulkProjectId, setBulkProjectId]= useState('');
+  const [bulkLinking, setBulkLinking]    = useState(false);
   const [replyOverlay, setReplyOverlay]  = useState(null);
   const [draftWithEly, setDraftWithEly]  = useState(false);
   const [mobileShowEmail, setMobileShowEmail] = useState(false);
@@ -909,6 +978,15 @@ export default function Inbox({ onOpenComposer }) {
     const h = e => { if (folderRef.current && !folderRef.current.contains(e.target)) setFolderOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  useEffect(() => {
+    if (!sb) return;
+    sb.from('projects').select('id,ref,bo_premise_address,bo,status')
+      .neq('status', 'closed')
+      .order('created_at', { ascending: false })
+      .limit(100)
+      .then(({ data }) => setBulkProjects(data || []));
   }, []);
 
   const loadEmails = useCallback(async () => {
@@ -1010,6 +1088,83 @@ export default function Inbox({ onOpenComposer }) {
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       setEmails(prev => prev.map(e => e.id === replyToId ? { ...e, is_replied: true } : e));
     }
+  };
+
+
+  const handleEmailLinked = (email, projectId) => {
+    setEmails(prev => prev.map(e => {
+      const sameEmail = e.id === email.id;
+      const sameThread = email.thread_id && e.thread_id === email.thread_id;
+      if (!sameEmail && !sameThread) return e;
+      return {
+        ...e,
+        project_id: projectId,
+        link_status: sameEmail ? 'manually_linked' : 'auto_linked',
+        manually_linked: sameEmail ? true : e.manually_linked,
+        project_match_confidence: sameEmail ? 100 : 90,
+        project_match_source: sameEmail ? 'manual_preview_banner' : 'thread_inherited',
+      };
+    }));
+
+    setSelectedEmail(prev => prev && (prev.id === email.id || (email.thread_id && prev.thread_id === email.thread_id))
+      ? {
+          ...prev,
+          project_id: projectId,
+          link_status: prev.id === email.id ? 'manually_linked' : 'auto_linked',
+          manually_linked: prev.id === email.id ? true : prev.manually_linked,
+          project_match_confidence: prev.id === email.id ? 100 : 90,
+          project_match_source: prev.id === email.id ? 'manual_preview_banner' : 'thread_inherited',
+        }
+      : prev);
+  };
+
+  const handleBulkLinkToProject = async () => {
+    if (!sb || checkedIds.size === 0 || !bulkProjectId) return;
+    setBulkLinking(true);
+    const ids = [...checkedIds];
+    const selectedEmails = emails.filter(e => checkedIds.has(e.id));
+
+    try {
+      await sb.from('emails').update({
+        project_id: bulkProjectId,
+        link_status: 'manually_linked',
+        manually_linked: true,
+        project_match_confidence: 100,
+        project_match_source: 'manual_bulk_inbox',
+      }).in('id', ids);
+
+      await Promise.all(selectedEmails.map(email => insertProjectMemoryForEmail(email, bulkProjectId, 'manual_bulk_inbox')));
+
+      setEmails(prev => prev.map(e => checkedIds.has(e.id)
+        ? {
+            ...e,
+            project_id: bulkProjectId,
+            link_status: 'manually_linked',
+            manually_linked: true,
+            project_match_confidence: 100,
+            project_match_source: 'manual_bulk_inbox',
+          }
+        : e));
+
+      setSelectedEmail(prev => prev && checkedIds.has(prev.id)
+        ? {
+            ...prev,
+            project_id: bulkProjectId,
+            link_status: 'manually_linked',
+            manually_linked: true,
+            project_match_confidence: 100,
+            project_match_source: 'manual_bulk_inbox',
+          }
+        : prev);
+
+      setCheckedIds(new Set());
+      setBulkProjectId('');
+    } catch (err) {
+      console.warn('Bulk project link failed:', err?.message || err);
+      alert('Could not link the selected emails. Please try again.');
+    }
+
+    setBulkLinking(false);
   };
 
   const handleDelete = async (id) => {
@@ -1117,9 +1272,22 @@ export default function Inbox({ onOpenComposer }) {
               <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread · {filtered.length} shown</span>
             </div>
             {checkedIds.size > 0 && (
-              <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
-                🗑 Delete {checkedIds.size}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <select value={bulkProjectId} onChange={e => setBulkProjectId(e.target.value)}
+                  style={{ maxWidth: 180, padding: '3px 8px', borderRadius: 99, fontSize: 11.5, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  <option value="">Link to project…</option>
+                  {bulkProjects.map(p => (
+                    <option key={p.id} value={p.id}>{p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}</option>
+                  ))}
+                </select>
+                <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
+                  style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
+                  {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
+                </button>
+                <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
+                  🗑 Delete {checkedIds.size}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -1166,7 +1334,7 @@ export default function Inbox({ onOpenComposer }) {
               </span>
             </div>
           )}
-          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} />
+          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
         </div>
       )}
     </div>
