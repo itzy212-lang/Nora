@@ -1574,6 +1574,8 @@ function S104BSurveyorModal({ ao, onSave, onClose }) {
 function ProjectChat({ project, onOpenComposer }) {
   const projectId = String(project?.id || '');
   const projectRef = project?.ref || project?.name || 'this project';
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth < 760;
 
   const {
     send,
@@ -1588,7 +1590,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
@@ -1604,13 +1606,24 @@ function ProjectChat({ project, onOpenComposer }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (!isMobile && sortedSessions.length > 0) {
+      setShowHistory(true);
+    }
+    if (isMobile) {
+      setShowHistory(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
+
   const resetChat = useCallback(() => {
     startNewSession?.();
     setMessages([]);
     setInput('');
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
-  }, [startNewSession]);
+    if (isMobile) setShowHistory(false);
+  }, [startNewSession, isMobile]);
 
   const selectSession = useCallback(async (targetSessionId) => {
     if (!targetSessionId) return;
@@ -1620,10 +1633,11 @@ function ProjectChat({ project, onOpenComposer }) {
       setMessages(bundle?.messages || []);
       setAttachedFiles([]);
       setVoiceStopSignal(v => v + 1);
+      if (isMobile) setShowHistory(false);
     } catch (err) {
       alert(err.message || 'Could not load this chat.');
     }
-  }, [loadSession]);
+  }, [loadSession, isMobile]);
 
   const insertRecordSafely = useCallback(async (table, payload) => {
     if (!sb || !table || !payload) return null;
@@ -1843,133 +1857,228 @@ function ProjectChat({ project, onOpenComposer }) {
     return bt - at;
   });
 
-  return (
+  const renderHistoryPanel = (mobile = false) => (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: showHistory ? '230px 1fr' : '1fr',
-      gap: 14,
-      height: '60vh',
-      minHeight: 430,
+      height: '100%',
+      border: mobile ? 'none' : '1px solid var(--border)',
+      borderRadius: mobile ? 0 : 16,
+      background: 'var(--bg2)',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      boxShadow: mobile ? '0 18px 60px rgba(15,23,42,0.25)' : 'none',
     }}>
-      {showHistory && (
-        <div style={{
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          background: 'var(--bg2)',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
-          <div style={{
-            padding: '12px 12px 10px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Chat history
-            </div>
+      <div style={{
+        padding: '12px 12px 10px',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+      }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Chat history
+        </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            type="button"
+            onClick={resetChat}
+            className="btn btn-sm btn-ghost"
+            style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12, padding: '4px 8px' }}
+          >
+            + New
+          </button>
+
+          {mobile && (
             <button
               type="button"
-              onClick={resetChat}
-              className="btn btn-sm btn-ghost"
-              style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12, padding: '4px 8px' }}
+              onClick={() => setShowHistory(false)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text3)',
+                cursor: 'pointer',
+                fontSize: 24,
+                lineHeight: 1,
+                padding: '0 2px',
+              }}
             >
-              + New
+              ×
             </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {sessionsLoading && (
+          <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)' }}>
+            Loading chats...
           </div>
+        )}
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {sessionsLoading && (
-              <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)' }}>
-                Loading chats…
-              </div>
-            )}
-
-            {!sessionsLoading && sortedSessions.length === 0 && (
-              <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
-                No saved project chats yet.
-              </div>
-            )}
-
-            {sortedSessions.map(session => {
-              const active = String(session.id) === String(sessionId);
-              const title = session.title || session.auto_title || 'Project chat';
-              const date = session.last_message_at || session.updated_at || session.created_at;
-
-              return (
-                <button
-                  key={session.id}
-                  type="button"
-                  onClick={() => selectSession(session.id)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border)',
-                    background: active ? 'var(--blue-bg)' : 'transparent',
-                    color: active ? 'var(--blue)' : 'var(--text)',
-                    cursor: 'pointer',
-                    padding: '10px 12px',
-                  }}
-                >
-                  <div style={{
-                    fontSize: 12.5,
-                    fontWeight: active ? 800 : 650,
-                    lineHeight: 1.35,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {title}
-                  </div>
-                  {date && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
-                      {new Date(date).toLocaleDateString('en-GB', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+        {!sessionsLoading && sortedSessions.length === 0 && (
+          <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+            No saved project chats yet.
           </div>
+        )}
+
+        {sortedSessions.map(session => {
+          const active = String(session.id) === String(sessionId);
+          const title = session.title || session.auto_title || 'Project chat';
+          const date = session.last_message_at || session.updated_at || session.created_at;
+
+          return (
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => selectSession(session.id)}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                borderBottom: '1px solid var(--border)',
+                background: active ? 'var(--blue-bg)' : 'transparent',
+                color: active ? 'var(--blue)' : 'var(--text)',
+                cursor: 'pointer',
+                padding: '10px 12px',
+              }}
+            >
+              <div style={{
+                fontSize: 12.5,
+                fontWeight: active ? 800 : 650,
+                lineHeight: 1.35,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {title}
+              </div>
+              {date && (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
+                  {new Date(date).toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'relative',
+      display: isMobile ? 'flex' : 'grid',
+      gridTemplateColumns: !isMobile && showHistory ? '230px minmax(0, 1fr)' : 'minmax(0, 1fr)',
+      gap: isMobile ? 0 : 14,
+      height: isMobile ? 'calc(100dvh - 190px)' : '60vh',
+      minHeight: isMobile ? 520 : 430,
+      width: '100%',
+      maxWidth: '100%',
+      overflow: 'hidden',
+    }}>
+      {!isMobile && showHistory && renderHistoryPanel(false)}
+
+      {isMobile && showHistory && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 900,
+          background: 'rgba(15,23,42,0.45)',
+          display: 'flex',
+          alignItems: 'stretch',
+          justifyContent: 'flex-start',
+        }}>
+          <div style={{ width: '82vw', maxWidth: 320, height: '100%' }}>
+            {renderHistoryPanel(true)}
+          </div>
+          <button
+            type="button"
+            aria-label="Close chat history"
+            onClick={() => setShowHistory(false)}
+            style={{ flex: 1, border: 'none', background: 'transparent' }}
+          />
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        width: '100%',
+        height: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        background: isMobile ? 'var(--bg)' : 'transparent',
+      }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 10,
-          paddingBottom: 10,
+          padding: isMobile ? '8px 0 10px' : '0 0 10px',
           borderBottom: '1px solid var(--border)',
-          marginBottom: 14,
+          marginBottom: 10,
+          flexShrink: 0,
         }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => setShowHistory(true)}
+              title="Chat history"
+              aria-label="Chat history"
+              className="btn btn-sm btn-ghost"
+              style={{
+                cursor: 'pointer',
+                borderRadius: 99,
+                minWidth: isMobile ? 38 : 'auto',
+                height: isMobile ? 34 : 'auto',
+                padding: isMobile ? 0 : '6px 10px',
+                fontSize: isMobile ? 20 : 12,
+                flexShrink: 0,
+              }}
+            >
+              {isMobile ? '☰' : showHistory ? 'Hide history' : 'Show history'}
+            </button>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? 14 : 13, fontWeight: 800, color: 'var(--text)', lineHeight: 1.2 }}>
+                Project Chat
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? '58vw' : 420 }}>
+                {projectRef}
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
-            onClick={() => setShowHistory(v => !v)}
+            onClick={resetChat}
             className="btn btn-sm btn-ghost"
-            style={{ cursor: 'pointer', borderRadius: 99 }}
+            style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12, flexShrink: 0 }}
           >
-            {showHistory ? 'Hide history' : 'Show history'}
+            + New
           </button>
-
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-            Project scoped chat for {projectRef}
-          </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+        <div style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          padding: isMobile ? '0 0 10px' : '0 0 12px',
+        }}>
           {messages.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: isMobile ? '50px 16px' : '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
               Ask Ely anything about {projectRef}
             </div>
@@ -1978,7 +2087,9 @@ function ProjectChat({ project, onOpenComposer }) {
           {messages.map(msg => (
             <div key={msg.id} style={{
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '82%',
+              maxWidth: isMobile ? '94%' : '82%',
+              width: 'fit-content',
+              overflowWrap: 'anywhere',
               background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
               color: msg.role === 'user' ? '#fff' : 'var(--text)',
               padding: '10px 14px',
@@ -1993,138 +2104,156 @@ function ProjectChat({ project, onOpenComposer }) {
 
           {loading && (
             <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>
-              ✨ Thinking…
+              ✨ Thinking...
             </div>
           )}
 
           <div ref={endRef} />
         </div>
 
-        {attachedFiles.length > 0 && (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            marginBottom: 8,
-          }}>
-            {attachedFiles.map(file => (
-              <div
-                key={file.id}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 9px',
-                  borderRadius: 99,
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg3)',
-                  fontSize: 12,
-                  color: 'var(--text2)',
-                  maxWidth: 260,
-                }}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📎 {file.file_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAttachedFiles(prev => prev.filter(f => f.id !== file.id))}
+        <div style={{ flexShrink: 0 }}>
+          {attachedFiles.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+              marginBottom: 8,
+              maxHeight: 74,
+              overflowY: 'auto',
+            }}>
+              {attachedFiles.map(file => (
+                <div
+                  key={file.id}
                   style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'var(--text3)',
-                    cursor: 'pointer',
-                    padding: 0,
-                    fontSize: 14,
-                    lineHeight: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 9px',
+                    borderRadius: 99,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg3)',
+                    fontSize: 12,
+                    color: 'var(--text2)',
+                    maxWidth: isMobile ? '100%' : 260,
                   }}
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    📎 {file.file_name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedFiles(prev => prev.filter(f => f.id !== file.id))}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text3)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: 14,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: isMobile ? 6 : 8,
+            paddingTop: 8,
+            borderTop: '1px solid var(--border)',
+            background: 'var(--bg)',
+            width: '100%',
+            maxWidth: '100%',
+          }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
+              onChange={handleFilesSelected}
+              style={{ display: 'none' }}
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || uploading}
+              title="Upload file"
+              aria-label="Upload file"
+              style={{
+                width: isMobile ? 40 : 38,
+                height: isMobile ? 40 : 38,
+                borderRadius: '50%',
+                border: '1px solid var(--border)',
+                background: 'var(--bg2)',
+                color: 'var(--text3)',
+                cursor: loading || uploading ? 'not-allowed' : 'pointer',
+                opacity: loading || uploading ? 0.5 : 1,
+                fontSize: 22,
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              +
+            </button>
+
+            <VoiceInput
+              disabled={loading || uploading}
+              stopSignal={voiceStopSignal}
+              onTranscript={handleVoiceTranscript}
+            />
+
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={`Ask about ${projectRef}...`}
+              rows={1}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: '10px 12px',
+                fontSize: 13,
+                resize: 'none',
+                background: 'var(--bg2)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                color: 'var(--text)',
+                outline: 'none',
+                minHeight: 40,
+                maxHeight: 96,
+                boxSizing: 'border-box',
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
+              className="btn btn-primary btn-sm"
+              style={{
+                cursor: loading || uploading ? 'not-allowed' : 'pointer',
+                alignSelf: 'flex-end',
+                minWidth: isMobile ? 44 : 68,
+                height: 40,
+                borderRadius: isMobile ? '50%' : 10,
+                padding: isMobile ? 0 : undefined,
+                flexShrink: 0,
+              }}
+            >
+              {uploading ? (isMobile ? '...' : 'Uploading...') : isMobile ? '➤' : 'Send'}
+            </button>
           </div>
-        )}
-
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 8,
-          paddingTop: 8,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
-            onChange={handleFilesSelected}
-            style={{ display: 'none' }}
-          />
-
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading || uploading}
-            title="Upload file"
-            aria-label="Upload file"
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              border: '1px solid var(--border)',
-              background: 'var(--bg2)',
-              color: 'var(--text3)',
-              cursor: loading || uploading ? 'not-allowed' : 'pointer',
-              opacity: loading || uploading ? 0.5 : 1,
-              fontSize: 22,
-              lineHeight: 1,
-              flexShrink: 0,
-            }}
-          >
-            +
-          </button>
-
-          <VoiceInput
-            disabled={loading || uploading}
-            stopSignal={voiceStopSignal}
-            onTranscript={handleVoiceTranscript}
-          />
-
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={`Ask about ${projectRef}…`}
-            rows={2}
-            style={{
-              flex: 1,
-              padding: '9px 12px',
-              fontSize: 13,
-              resize: 'none',
-              background: 'var(--bg2)',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              color: 'var(--text)',
-              outline: 'none',
-              minHeight: 40,
-            }}
-          />
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
-            className="btn btn-primary btn-sm"
-            style={{ cursor: loading || uploading ? 'not-allowed' : 'pointer', alignSelf: 'flex-end', minWidth: 68 }}
-          >
-            {uploading ? 'Uploading…' : 'Send'}
-          </button>
         </div>
       </div>
     </div>
