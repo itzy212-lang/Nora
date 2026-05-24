@@ -1,6 +1,5 @@
 // api/ely-smart.js
-// Ely/Nora smart route — loads the unified Supabase brain via get_ely_brain_v2
-// and preserves the existing frontend response shape.
+// Ely/Nora smart route — scoped project + safe email context version
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -24,10 +23,7 @@ function cleanOutput(text = '') {
   return String(text || '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
-    .replace(/--/g, '-')
-    .replace(/pre-existing/gi, 'preexisting')
-    .replace(/co-ordinate/gi, 'coordinate')
-    .replace(/e-mail/gi, 'email');
+    .replace(/--/g, '-');
 }
 
 function inferProjectId(body = {}) {
@@ -47,216 +43,244 @@ function inferUserId(body = {}) {
     body.userId ||
     body.currentUser?.id ||
     body.currentUser?.email ||
-    body.emailContext?.user_id ||
     'itzy212@gmail.com'
   );
+}
+
+async function resolveProjectFromPrompt(prompt) {
+  const sb = getSupabase();
+
+  if (!sb || !prompt) return null;
+
+  const search = String(prompt)
+    .replace(/project/gi, '')
+    .replace(/open/gi, '')
+    .replace(/load/gi, '')
+    .trim();
+
+  if (search.length < 3) return null;
+
+  const { data, error } = await sb
+    .from('projects')
+    .select(`
+      id,
+      name,
+      ref,
+      bo_premise_address,
+      ao_premise_address
+    `)
+    .or([
+      `name.ilike.%${search}%`,
+      `ref.ilike.%${search}%`,
+      `bo_premise_address.ilike.%${search}%`,
+      `ao_premise_address.ilike.%${search}%`
+    ].join(','))
+    .limit(5);
+
+  if (error) {
+    console.warn('[ely-smart] project resolver error:', error.message);
+    return null;
+  }
+
+  return data?.[0] || null;
+}
+
+async function buildScopedEmailContext({
+  prompt,
+  projectId,
+}) {
+  const sb = getSupabase();
+
+  if (!sb || !prompt) return null;
+
+  const lower = String(prompt).toLowerCase();
+
+  const wantsEmail =
+    lower.includes('email') ||
+    lower.includes('thread') ||
+    lower.includes('inbox');
+
+  if (!wantsEmail) return null;
+
+  let query = sb
+    .from('emails')
+    .select(`
+      id,
+      subject,
+      sender_name,
+      sender_email,
+      body_preview,
+      received_at,
+      project_id,
+      thread_id,
+      folder
+    `)
+    .order('received_at', {
+      ascending: false,
+    });
+
+  if (projectId) {
+    query = query
+      .eq('project_id', projectId)
+      .limit(20);
+  } else {
+    query = query
+      .in('folder', ['Inbox', 'Sent Items'])
+      .limit(100);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.warn('[ely-smart] email context error:', error.message);
+    return [];
+  }
+
+  return data || [];
 }
 
 function inferModeHint(surface, prompt = '') {
   const p = String(prompt || '').toLowerCase();
 
   if (
-    p.includes("don't do anything") ||
-    p.includes('do not do anything') ||
-    p.includes('just having a conversation') ||
-    p.includes('hold off')
-  ) return 'discuss';
-
-  if (
     p.includes('draft') ||
     p.includes('write') ||
-    p.includes('reply') ||
-    p.includes('wording') ||
-    p.includes('clause')
-  ) return 'draft';
+    p.includes('reply')
+  ) {
+    return 'draft';
+  }
 
   if (
     p.includes('review') ||
-    p.includes('compare') ||
-    p.includes('missing') ||
-    p.includes('does it include') ||
-    p.includes('does it say')
-  ) return 'review';
-
-  if (
-    p.includes('fix') ||
-    p.includes('upload') ||
-    p.includes('commit') ||
-    p.includes('replace') ||
-    p.includes('deploy')
-  ) return 'execute';
-
-  if (surface === 'award_review') return 'review';
-  if (surface === 'email_composer' || surface === 'inbox_draft' || surface === 'email_reply') return 'draft';
-  if (surface === 'soc' || surface === 'document') return 'draft';
+    p.includes('compare')
+  ) {
+    return 'review';
+  }
 
   return 'discuss';
 }
 
-async function loadBrain({ userId, projectId, surface, modeHint }) {
+async function loadBrain({
+  userId,
+  projectId,
+  surface,
+  modeHint,
+}) {
   const sb = getSupabase();
+
   if (!sb) return null;
 
-  const { data, error } = await sb.rpc('get_ely_brain_v2', {
-    p_user_id: userId || null,
-    p_project_id: projectId || null,
-    p_surface: surface || null,
-    p_mode: modeHint || null,
-  });
+  const { data, error } = await sb.rpc(
+    'get_ely_brain_v2',
+    {
+      p_user_id: userId || null,
+      p_project_id: projectId || null,
+      p_surface: surface || null,
+      p_mode: modeHint || null,
+    }
+  );
 
   if (error) {
-    console.warn('[ely-smart] get_ely_brain_v2 failed:', error.message);
+    console.warn('[ely-smart] brain load failed:', error.message);
     return null;
   }
 
   return data || null;
 }
 
-function compactJson(value, fallback = '') {
+function compactJson(value) {
   try {
-    if (!value) return fallback;
     return JSON.stringify(value, null, 2).slice(0, 12000);
   } catch {
-    return fallback;
+    return '';
   }
 }
 
-function buildSystemPrompt({ brain, body, surface, modeHint, projectId }) {
-  const instruction = brain?.instruction_set || {};
-  const memories = Array.isArray(brain?.standing_memory) ? brain.standing_memory : [];
-  const projectFromBrain = brain?.project && Object.keys(brain.project || {}).length ? brain.project : null;
-  const workingContext = Array.isArray(brain?.working_context) ? brain.working_context : [];
+function buildSystemPrompt({
+  brain,
+  projectId,
+  resolvedProject,
+  scopedEmailContext,
+}) {
+  let prompt =
+    brain?.instruction_set?.system_prompt ||
+    'You are Ely, an AI assistant for a Party Wall surveying practice.';
 
-  const memoryText = memories
-    .slice(0, 30)
-    .map(m => `- ${m.title || m.key || m.type}: ${m.content || ''}`)
-    .join('\n');
+  prompt += `
 
-  let prompt = '';
+RULES:
+- When a project is active, searches must remain inside that project first.
+- Never perform unrestricted global email hydration.
+- Global searches must remain capped.
+- Use metadata-first email searching only.
+- Do not mix unrelated project context.
+`;
 
-  if (instruction.system_prompt) prompt += instruction.system_prompt;
-  if (instruction.behaviour_rules) prompt += `\n\nBEHAVIOUR RULES:\n${instruction.behaviour_rules}`;
-  if (instruction.output_rules) prompt += `\n\nOUTPUT RULES:\n${instruction.output_rules}`;
+  prompt += `
 
-  prompt += `\n\nLIVE REQUEST CONTEXT:
-Surface: ${surface || 'main_chat'}
-Mode hint: ${modeHint || 'discuss'}
-Project ID: ${projectId || 'none'}`;
+PROJECT ID:
+${projectId || 'none'}
+`;
 
-  if (memoryText) {
-    prompt += `\n\nSTANDING MEMORY AND USER PREFERENCES:\n${memoryText}`;
+  if (resolvedProject) {
+    prompt += `
+
+RESOLVED PROJECT:
+${compactJson(resolvedProject)}
+`;
   }
 
-  const project = body.currentProject || projectFromBrain;
+  if (scopedEmailContext?.length) {
+    prompt += `
 
-  if (project) {
-    prompt += `\n\nCURRENT PROJECT CONTEXT:\n${compactJson(project)}`;
+SCOPED EMAIL CONTEXT:
+${compactJson(scopedEmailContext.slice(0, 20))}
+`;
   }
-
-  if (body.projectsContext?.length) {
-    prompt += `\n\nOTHER ACTIVE PROJECT CONTEXT:\n${compactJson(body.projectsContext.slice(0, 8))}`;
-  }
-
-  if (workingContext.length) {
-    prompt += `\n\nRECENT WORKING CONTEXT:\n${compactJson(workingContext.slice(0, 5))}`;
-  }
-
-  if (body.emailContext) {
-    const e = body.emailContext;
-
-    prompt += `\n\nEMAIL CONTEXT SUMMARY:
-From: ${e.from || e.sender_email || e.sender_name || 'unknown'}
-Subject: ${e.subject || 'unknown'}
-Thread/message id: ${e.thread_id || e.external_id || e.id || 'unknown'}`;
-  }
-
-  prompt += `\n\nIMPORTANT ROUTING INSTRUCTIONS:
-- Use the master brain and standing memory as the authority.
-- If the user is asking about a live document, answer about that document rather than giving generic examples.
-- In award review, be collaborative: state what is missing or weak and provide copy-ready clauses where helpful.
-- If user is discussing only, do not execute.
-- If drafting, produce usable drafting in Itzik's voice.
-- Do not claim any file, database, email, deployment, or code action was done unless it was actually done.`;
 
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt }) {
+function buildMessages({
+  body,
+  systemPrompt,
+}) {
   const {
     prompt,
     chatHistory = [],
-    emailContext = null,
-    surface = 'main_chat',
   } = body;
 
-  const messages = [{ role: 'system', content: systemPrompt }];
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt,
+    },
+  ];
 
   if (chatHistory?.length) {
-    chatHistory.slice(-18).forEach(msg => {
-      if (msg?.role === 'user' || msg?.role === 'assistant') {
-        messages.push({
-          role: msg.role,
-          content: String(msg.content || ''),
-        });
-      }
-    });
+    chatHistory
+      .slice(-18)
+      .forEach((msg) => {
+        if (
+          msg?.role === 'user' ||
+          msg?.role === 'assistant'
+        ) {
+          messages.push({
+            role: msg.role,
+            content: String(msg.content || ''),
+          });
+        }
+      });
   }
 
-  let userContent = String(prompt || '');
-
-  if (
-    emailContext &&
-    ['email_composer', 'inbox_draft', 'email_reply'].includes(surface)
-  ) {
-    const emailText =
-      emailContext.threadText ||
-      emailContext.body ||
-      emailContext.body_preview ||
-      '';
-
-    if (emailText && !chatHistory?.length) {
-      userContent += `\n\nEMAIL/THREAD TO READ:\n${emailText}`;
-    }
-  }
-
-  if (body.documentContext) {
-    userContent += `\n\nDOCUMENT CONTEXT TO USE:\n${
-      typeof body.documentContext === 'string'
-        ? body.documentContext
-        : compactJson(body.documentContext)
-    }`;
-  }
-
-  if (body.awardContext) {
-    userContent += `\n\nAWARD CONTEXT TO USE:\n${
-      typeof body.awardContext === 'string'
-        ? body.awardContext
-        : compactJson(body.awardContext)
-    }`;
-  }
-
-  if (userContent.trim()) {
+  if (prompt?.trim()) {
     messages.push({
       role: 'user',
-      content: userContent.trim(),
+      content: prompt.trim(),
     });
   }
 
   return messages;
-}
-
-function splitDocumentReply(fullReply) {
-  let replyText = fullReply;
-  let documentText = null;
-
-  const docMatch = fullReply.match(/---\s*\n([\s\S]+?)\n\s*---/);
-
-  if (docMatch) {
-    documentText = docMatch[1].trim();
-    replyText = fullReply.replace(/---[\s\S]*?---/, '').trim();
-  }
-
-  return { replyText, documentText };
 }
 
 export default async function handler(req, res) {
@@ -268,69 +292,76 @@ export default async function handler(req, res) {
 
   if (!OPENAI_KEY) {
     return res.status(500).json({
-      error: 'OPENAI_API_KEY not configured',
-    });
-  }
-
-  const body = req.body || {};
-
-  const {
-    prompt,
-    surface = 'main_chat',
-    emailContext = null,
-  } = body;
-
-  if (!prompt && !emailContext) {
-    return res.status(400).json({
-      error: 'No prompt provided',
+      error: 'OPENAI_API_KEY missing',
     });
   }
 
   try {
-    const projectId = inferProjectId(body);
+    const body = req.body || {};
+
+    let projectId = inferProjectId(body);
+
+    const resolvedProject =
+      !projectId
+        ? await resolveProjectFromPrompt(body.prompt)
+        : null;
+
+    if (resolvedProject?.id) {
+      projectId = resolvedProject.id;
+    }
+
+    const scopedEmailContext =
+      await buildScopedEmailContext({
+        prompt: body.prompt,
+        projectId,
+      });
+
     const userId = inferUserId(body);
-    const modeHint = inferModeHint(surface, prompt);
+
+    const modeHint = inferModeHint(
+      body.surface,
+      body.prompt
+    );
 
     const brain = await loadBrain({
       userId,
       projectId,
-      surface,
+      surface: body.surface,
       modeHint,
     });
 
     const systemPrompt = buildSystemPrompt({
       brain,
-      body,
-      surface,
-      modeHint,
       projectId,
+      resolvedProject,
+      scopedEmailContext,
     });
 
     const messages = buildMessages({
-      body: {
-        ...body,
-        surface,
-      },
+      body,
       systemPrompt,
     });
 
     console.log(
-      `[ely-smart] surface=${surface} mode=${modeHint} brain=${brain?.instruction_set?.name || 'fallback'} project=${projectId || 'none'}`
+      `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0}`
     );
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: 3500,
-        temperature: 0.65,
-        messages,
-      }),
-    });
+    const response = await fetch(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 3500,
+          temperature: 0.65,
+          messages,
+        }),
+      }
+    );
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -342,23 +373,20 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
+
     const fullReply = cleanOutput(
       data.choices?.[0]?.message?.content || ''
     );
 
-    const {
-      replyText,
-      documentText,
-    } = splitDocumentReply(fullReply);
-
     return res.status(200).json({
       reply: fullReply,
-      replyText,
-      documentText,
-      instructionSet: brain?.instruction_set?.name || 'ely_master_v2_fallback',
-      mode: modeHint,
+      resolvedProject,
+      scopedEmailCount:
+        scopedEmailContext?.length || 0,
       brainLoaded: !!brain,
-      sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      sessionId: `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`,
     });
   } catch (err) {
     console.error('[ely-smart] error:', err);
