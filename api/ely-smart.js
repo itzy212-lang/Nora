@@ -408,6 +408,28 @@ DO NOT USE:
 - consultant report formatting
 - excessive structuring
 - unnecessary bullet points
+- overexplaining
+- exaggerated escalation
+- robotic transitions
+- generic consultant phrasing
+- artificial summaries
+
+CORRESPONDENCE SHOULD:
+- escalate concerns progressively and proportionately
+- distinguish clearly between confirmed facts, concerns and implications
+- sound calm, measured and professional
+- avoid jumping immediately to legal conclusions
+- read like genuine manually written correspondence between professionals
+- use implied structure rather than visible structure
+- prioritise realism over comprehensiveness
+- maintain strategic caution in contentious matters
+
+If discussing possible legal action or injunctions:
+- do not present litigation as a foregone conclusion
+- build the reasoning progressively from the evidence
+- explain why confidence or trust has reduced
+- explain why further oversight or enforcement may now be reasonable
+- maintain professional restraint and caution
 `;
   }
 
