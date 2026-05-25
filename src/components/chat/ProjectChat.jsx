@@ -4,7 +4,6 @@ import { useApp } from '../../state/appStore';
 import ChatMessage from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
-import sb from '../../supabaseClient';
 
 function safeProjectKey(projectId) {
   return String(projectId || 'no-project').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -86,6 +85,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [dictationPreview, setDictationPreview] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -166,8 +166,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     if (!el) return;
 
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
-    el.style.overflowY = el.scrollHeight > 140 ? 'auto' : 'hidden';
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+    el.style.overflowY = el.scrollHeight > 240 ? 'auto' : 'hidden';
   }, []);
 
   useEffect(() => {
@@ -177,6 +177,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    setDictationPreview('');
   }, []);
 
   const persistCurrentSessionToHistory = useCallback(() => {
@@ -243,35 +244,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     setSessions(prev => (prev || []).filter(s => s.id !== sessionId));
   }, []);
 
-  const createProjectMemoryForUpload = useCallback(async (fileRecord) => {
-    if (!projectId || !fileRecord) return;
-
-    try {
-      await sb.from('project_memory').insert({
-        project_id: String(projectId),
-        source_type: 'chat_upload',
-        source_id: fileRecord.upload_id || fileRecord.storage_path || fileRecord.id || fileRecord.file_name,
-        title: fileRecord.file_name,
-        summary: `File uploaded to project chat: ${fileRecord.file_name}${fileRecord.mime_type ? ` (${fileRecord.mime_type})` : ''}.`,
-        content: fileRecord.extracted_text || '',
-        entities: [],
-        metadata: {
-          project_id: projectId,
-          session_id: activeSessionId,
-          file_name: fileRecord.file_name,
-          mime_type: fileRecord.mime_type,
-          file_size: fileRecord.file_size,
-          storage_path: fileRecord.storage_path,
-          upload_status: fileRecord.upload_status,
-        },
-        unresolved_items: [],
-        importance_score: 40,
-      });
-    } catch (err) {
-      console.warn('[ProjectChat] project_memory upload insert failed:', err?.message || err);
-    }
-  }, [activeSessionId, projectId]);
-
   const handleFilesSelected = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
@@ -288,6 +260,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       file_size: file.size,
       upload_status: 'uploading',
       storage_path: '',
+      extracted_text: '',
       created_at: new Date().toISOString(),
     }));
 
@@ -299,67 +272,39 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       const file = files[i];
       const pendingRecord = pending[i];
 
-      const storagePath = [
-        'project-chat',
-        safeProjectKey(projectId),
-        activeSessionId || 'session',
-        `${Date.now()}_${safeFileName(file.name)}`,
-      ].join('/');
-
       let finalRecord = {
         ...pendingRecord,
-        storage_path: storagePath,
       };
 
       try {
-        const { error: storageError } = await sb.storage
-          .from('chat-uploads')
-          .upload(storagePath, file, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: file.type || 'application/octet-stream',
-          });
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', projectId || '');
+        formData.append('session_id', activeSessionId || '');
+        formData.append('user_id', getUserId(state));
+        formData.append('project_ref', project?.ref || '');
+        formData.append('project_name', project?.name || '');
 
-        if (storageError) {
-          throw storageError;
-        }
+        const response = await fetch('/api/project-chat-upload', {
+          method: 'POST',
+          body: formData,
+        });
 
-        const { data: uploadRow, error: rowError } = await sb
-          .from('chat_uploads')
-          .insert({
-            user_id: getUserId(state),
-            project_id: projectId || null,
-            session_id: activeSessionId,
-            chat_type: 'project_chat',
-            file_name: file.name,
-            mime_type: file.type || 'application/octet-stream',
-            file_size: file.size || 0,
-            storage_path: storagePath,
-            upload_status: 'uploaded',
-            is_temporary: false,
-            permanent_context: true,
-            document_kind: 'project_chat_upload',
-            metadata: {
-              source: 'ProjectChat',
-              project_id: projectId,
-              project_ref: project?.ref || null,
-            },
-          })
-          .select('id,storage_path,file_name,mime_type,file_size,upload_status')
-          .single();
+        const payload = await response.json().catch(() => ({}));
 
-        if (rowError) {
-          throw rowError;
+        if (!response.ok) {
+          throw new Error(payload?.error || `Upload failed with status ${response.status}`);
         }
 
         finalRecord = {
           ...finalRecord,
-          upload_id: uploadRow?.id,
-          storage_path: uploadRow?.storage_path || storagePath,
-          upload_status: 'uploaded',
+          upload_id: payload.upload_id,
+          storage_path: payload.storage_path || '',
+          upload_status: payload.upload_status || 'uploaded',
+          extracted_text: payload.extracted_text || '',
+          extraction_status: payload.extraction_status || '',
+          extraction_note: payload.extraction_note || '',
         };
-
-        await createProjectMemoryForUpload(finalRecord);
 
         completed.push(finalRecord);
       } catch (err) {
@@ -394,7 +339,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     }
 
     setUploading(false);
-  }, [activeSessionId, createProjectMemoryForUpload, project, projectId, state, uploading]);
+  }, [activeSessionId, project, projectId, state, uploading]);
 
   const removeAttachment = useCallback((attachmentId) => {
     setAttachments(prev => prev.filter(item => item.id !== attachmentId));
@@ -471,6 +416,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     const next = base ? `${base} ${transcript}` : transcript;
 
     setInput(next);
+    setDictationPreview(next);
 
     requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
@@ -478,6 +424,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
   const handleTextChange = (e) => {
     voiceBaseRef.current = '';
+    setDictationPreview('');
     setInput(e.target.value);
   };
 
@@ -736,6 +683,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   >
                     <span>📎 {file.file_name}</span>
                     <span>{file.upload_status === 'uploading' ? 'uploading...' : fileSizeLabel(file.file_size)}</span>
+                    {file.extraction_status === 'extracted' && <span>text extracted</span>}
+                    {file.extraction_status === 'unsupported' && <span>stored only</span>}
                     <button
                       type="button"
                       onClick={() => removeAttachment(file.id)}
@@ -757,6 +706,34 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     Upload issue: {uploadError}
                   </span>
                 )}
+              </div>
+            )}
+
+            {dictationPreview && (
+              <div style={{
+                marginBottom: 8,
+                maxHeight: 120,
+                overflowY: 'auto',
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '9px 11px',
+                fontSize: 12.5,
+                lineHeight: 1.5,
+                color: 'var(--text2)',
+                whiteSpace: 'pre-wrap',
+              }}>
+                <div style={{
+                  fontSize: 10.5,
+                  color: 'var(--text3)',
+                  marginBottom: 4,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px',
+                  fontWeight: 600,
+                }}>
+                  Dictation preview
+                </div>
+                {dictationPreview}
               </div>
             )}
 
@@ -816,8 +793,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   fontFamily: 'var(--font)',
                   outline: 'none',
                   resize: 'none',
-                  maxHeight: 140,
-                  minHeight: 38,
+                  maxHeight: 240,
+                  minHeight: 58,
                   overflowY: 'hidden',
                   lineHeight: 1.55,
                   padding: '7px 6px',
