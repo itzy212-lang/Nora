@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
+import PizZip from 'pizzip';
 
 const NOTICE_TYPES = [
   { key: 's1', label: 'Section 1 Notice', deadlineDays: 14 },
@@ -7,6 +9,30 @@ const NOTICE_TYPES = [
   { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
 
+function addDocxToZip(zip, fileName, b64) {
+  if (!zip || !b64) return;
+  zip.file(fileName, b64, { base64: true });
+}
+
+function downloadB64File(b64, fileName, mimeType) {
+  const byteCharacters = atob(b64);
+  const byteNumbers = new Array(byteCharacters.length);
+
+  for (let i = 0; i < byteCharacters.length; i += 1) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+
+  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
 
 function safeName(value) {
   return String(value || 'Document')
@@ -91,7 +117,6 @@ export default function NoticeServingModal({
   generateDocument,
   onServe,
   onServed,
-  onSave,
   onClose,
 }) {
   const lockedToSingleAO = !!ao;
@@ -142,30 +167,98 @@ export default function NoticeServingModal({
       return;
     }
 
-    const saveWorkflow = onServe || onServed || onSave;
-
-    if (typeof saveWorkflow !== 'function') {
-      alert('Notice workflow could not be saved because the save handler is not connected.');
+    if (typeof generateDocument !== 'function') {
+      alert('Document generator is not available.');
       return;
     }
+
+    const saveWorkflow = onServe || onServed;
+    const canSaveWorkflow = typeof saveWorkflow === 'function';
 
     setLoading(true);
 
     try {
+      const warnings = [];
+      let totalGenerated = 0;
+
       for (const selectedAO of selectedAOs) {
-        await saveWorkflow({
-          ao: selectedAO,
-          sections: selected,
-          includeCover,
-          noticeDate,
-          createDeadlineTask,
-        });
+        const zip = new PizZip();
+        const generatedDocs = [];
+
+        const allKeys = [...selected];
+        if (includeCover) allKeys.unshift('cover');
+
+        for (const key of allKeys) {
+          try {
+            const placeholders = buildNoticePlaceholders(project, selectedAO, {
+              noticeDate,
+              noticeType: key,
+              noticeSection: key,
+            });
+
+            const fileName = `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_${safeName(key)}.docx`;
+
+            const result = await generateDocument({
+              templateKey: key,
+              mergeData: placeholders,
+              fileName,
+              projectId: project?.id,
+              skipDownload: allKeys.length > 1,
+            });
+
+            if (result?.success && result?.docx_b64) {
+              generatedDocs.push({ fileName, b64: result.docx_b64 });
+              addDocxToZip(zip, fileName, result.docx_b64);
+            } else {
+              warnings.push(`AO${selectedAO?.num || ''} ${key}: ${result?.error || 'Document generation failed'}`);
+            }
+          } catch (err) {
+            warnings.push(`AO${selectedAO?.num || ''} ${key}: ${err.message}`);
+          }
+        }
+
+        if (generatedDocs.length > 1) {
+          const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+          downloadB64File(
+            zipB64,
+            `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_Notice_Pack.zip`,
+            'application/zip'
+          );
+        } else if (generatedDocs.length === 1) {
+          downloadB64File(
+            generatedDocs[0].b64,
+            generatedDocs[0].fileName,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          );
+        }
+
+        totalGenerated += generatedDocs.length;
+
+        if (canSaveWorkflow) {
+          await saveWorkflow({
+            ao: selectedAO,
+            sections: selected,
+            includeCover,
+            noticeDate,
+            createDeadlineTask,
+            warnings,
+            generatedCount: generatedDocs.length,
+          });
+        }
       }
 
       onClose?.();
+
+      if (!canSaveWorkflow) {
+        alert(`Documents generated, but the notice workflow was not saved because the save handler is not connected.`);
+      } else if (warnings.length) {
+        alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
+      } else {
+        alert(`Notice workflow saved. ${totalGenerated} document(s) generated.`);
+      }
     } catch (err) {
-      console.error('[NoticeServingModal] serve failed:', err);
-      alert(err?.message || 'Failed to serve notices.');
+      console.error(err);
+      alert(err.message || 'Failed to serve notices.');
     } finally {
       setLoading(false);
     }
