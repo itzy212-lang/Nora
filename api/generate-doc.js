@@ -1,310 +1,424 @@
-// api/generate-doc.js
+// api/generate-invoice-pdf.js
 
 import { createClient } from '@supabase/supabase-js';
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const API2PDF_KEY = process.env.API2PDF_API_KEY;
 
 function getSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-
   return createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
-    },
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   });
+}
+
+function money(value) {
+  return `£${Number(value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function esc(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function safeFileName(value) {
-  return String(value || 'document.docx')
-    .replace(/[^\w\s.\-()]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 160);
+  return String(value || 'Invoice').replace(/[^a-zA-Z0-9._\-\s]/g, '_').replace(/\s+/g, '_').slice(0, 120);
 }
 
-function decodeXmlEntities(value) {
-  return String(value || '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
+function buildInvoiceHtml(invoice, firm) {
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+  const invoiceNumber = invoice.invoice_number || invoice.id || '';
 
-function encodeXmlEntities(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+  const rows = items.map(item => {
+    const qty = Number(item.qty || 0);
+    const unit = Number(item.unitPrice ?? item.unit_price ?? 0);
+    const total = Number(item.total ?? qty * unit);
+    return `<tr>
+      <td>${esc(item.description || '')}</td>
+      <td class="num">${qty || ''}</td>
+      <td class="num">${money(unit)}</td>
+      <td class="num">${money(total)}</td>
+    </tr>`;
+  }).join('');
 
-function normaliseMergeData(data = {}) {
-  const out = { ...(data || {}) };
+  const firmName = firm?.firm_name || firm?.trading_name || 'Square One Consulting';
+  const firmAddress = firm?.address_line1 || '';
+  const firmTel = firm?.tel || '';
+  const firmEmail = firm?.email || '';
+  const bankName = firm?.bank_name || '';
+  const sortCode = firm?.sort_code || '';
+  const accountNo = firm?.account_number || '';
+  const footerText = firm?.footer_text || '';
 
-  Object.keys(out).forEach(key => {
-    if (out[key] === null || out[key] === undefined) {
-      out[key] = '';
-    }
+  const subtotal = Number(invoice.subtotal || invoice.total || 0);
+  const vatAmount = Number(invoice.vat_amount || 0);
+  const total = Number(invoice.total || subtotal);
 
-    if (key.includes('&')) {
-      out[key.replace(/&/g, '&amp;')] = out[key];
-    }
-
-    if (key.includes('&amp;')) {
-      out[decodeXmlEntities(key)] = out[key];
-    }
-  });
-
-  return out;
-}
-
-function simplifyDocxError(err) {
-  try {
-    if (err?.properties?.errors?.length) {
-      return err.properties.errors
-        .slice(0, 12)
-        .map(e => {
-          const explanation =
-            e?.properties?.explanation ||
-            e?.properties?.id ||
-            e?.message ||
-            'Template error';
-
-          const tag =
-            e?.properties?.xtag ||
-            e?.properties?.tag ||
-            '';
-
-          return tag ? `${tag}: ${explanation}` : explanation;
-        })
-        .join(' | ');
-    }
-
-    return err?.message || 'Document generation failed.';
-  } catch {
-    return err?.message || 'Document generation failed.';
-  }
-}
-
-function normaliseTemplateXml(xml) {
-  let out = String(xml || '');
-
-  out = out.replace(
-    /\$\{([^{}]+?)\}/g,
-    (_, tag) => `{${tag.trim()}}`
-  );
-
-  out = out.replace(
-    /\{\{([^{}]+?)\}\}/g,
-    (_, tag) => `{${tag.trim()}}`
-  );
-
-  out = out.replace(
-    /\{([A-Za-z0-9_ .:/&;\-]+?)\}/g,
-    (_, tag) => {
-      const cleaned = tag.trim();
-
-      if (!cleaned) return '';
-
-      return `{${cleaned}}`;
-    }
-  );
-
-  return out;
-}
-
-function normaliseZipTemplate(zip) {
-  const xmlFilePattern =
-    /^word\/(document|header\d+|footer\d+|footnotes|endnotes)\.xml$/;
-
-  Object.keys(zip.files).forEach(fileName => {
-    if (!xmlFilePattern.test(fileName)) return;
-
-    const file = zip.file(fileName);
-    if (!file) return;
-
-    const xml = file.asText();
-    const normalised = normaliseTemplateXml(xml);
-
-    zip.file(fileName, normalised);
-  });
-
-  return zip;
-}
-
-function renderDocx(templateB64, mergeData) {
-  if (!templateB64) {
-    throw new Error('No template_b64 provided.');
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Invoice ${esc(invoiceNumber)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1f2937;
+    font-size: 12.5px;
+    line-height: 1.5;
+    padding: 36px 44px;
   }
 
-  const buffer = Buffer.from(templateB64, 'base64');
-
-  try {
-    const zip = normaliseZipTemplate(new PizZip(buffer));
-
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-      nullGetter: () => '',
-    });
-
-    doc.render(normaliseMergeData(mergeData));
-
-    return doc.getZip().generate({
-      type: 'nodebuffer',
-      compression: 'DEFLATE',
-    });
-  } catch (err) {
-    console.error('[generate-doc] render failed:', simplifyDocxError(err));
-
-    throw new Error(simplifyDocxError(err));
+  /* ── Header ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 20px;
+    border-bottom: 2.5px solid #1f3f77;
+    margin-bottom: 24px;
   }
-}
-
-async function saveDocumentRecord({
-  projectId,
-  fileName,
-  docxB64,
-  mergeData,
-}) {
-  const sb = getSupabase();
-
-  if (!sb || !projectId) return null;
-
-  const safeName = safeFileName(
-    fileName || mergeData?.file_name || 'document.docx'
-  );
-
-  const storagePath =
-    `projects/${projectId}/documents/${Date.now()}-${safeName}`;
-
-  const { error: uploadError } = await sb.storage
-    .from('documents')
-    .upload(
-      storagePath,
-      Buffer.from(docxB64, 'base64'),
-      {
-        contentType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        upsert: true,
-      }
-    );
-
-  if (uploadError) {
-    console.warn('[generate-doc] storage upload failed:', uploadError.message);
-    return null;
+  .firm-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1f3f77;
+    margin-bottom: 4px;
+  }
+  .firm-sub { color: #6b7280; font-size: 12px; margin-bottom: 2px; }
+  .invoice-label {
+    text-align: right;
+    font-size: 30px;
+    font-weight: 700;
+    color: #1f2937;
+    letter-spacing: 1px;
+  }
+  .invoice-number {
+    text-align: right;
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 4px;
   }
 
-  const insertPayload = {
-    project_id: projectId,
-    name: safeName,
-    file_name: safeName,
-    file_type: 'docx',
-    mime_type:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    storage_path: storagePath,
-    category: mergeData?.category || 'document',
-    section_type:
-      mergeData?.section_type ||
-      mergeData?.source_template ||
-      null,
-    created_at: new Date().toISOString(),
-  };
+  /* ── Meta strip ── */
+  .meta-strip {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .meta-cell {
+    flex: 1;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #f9fafb;
+  }
+  .meta-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 5px;
+  }
+  .meta-value { font-size: 12.5px; color: #111827; font-weight: 500; }
 
-  const { data, error: insertError } = await sb
-    .from('documents')
-    .insert(insertPayload)
-    .select('id,storage_path')
-    .single();
+  /* ── Info boxes ── */
+  .info-box {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #f9fafb;
+    margin-bottom: 12px;
+  }
+  .box-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 6px;
+  }
+  .box-value { font-size: 12.5px; color: #111827; }
+  .box-value strong { font-weight: 600; }
 
-  if (insertError) {
-    console.warn('[generate-doc] document insert failed:', insertError.message);
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 0; }
+  thead th {
+    background: #f3f4f6;
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 12px;
+    border-top: 1px solid #d1d5db;
+    border-bottom: 1px solid #d1d5db;
+    text-align: left;
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 12.5px;
+    vertical-align: top;
+    color: #374151;
+  }
+  .num { text-align: right; white-space: nowrap; }
+  thead th.num { text-align: right; }
 
-    return {
-      storage_path: storagePath,
-    };
+  /* ── Totals ── */
+  .totals-wrap { display: flex; justify-content: flex-end; margin-top: 12px; margin-bottom: 24px; }
+  .totals {
+    width: 280px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 12.5px;
+    color: #374151;
+  }
+  .total-row.grand {
+    border-bottom: none;
+    background: #1f3f77;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
   }
 
-  return data;
+  /* ── Footer bank + thank you ── */
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 8px;
+  }
+  .bank-section { display: flex; gap: 28px; }
+  .bank-cell {}
+  .bank-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 3px;
+  }
+  .bank-value { font-size: 12.5px; color: #111827; font-weight: 600; }
+  .thank-you { font-size: 13px; color: #6b7280; font-style: italic; }
+  .company-footer {
+    font-size: 10px;
+    color: #9ca3af;
+    text-align: center;
+    margin-top: 18px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="firm-name">${esc(firmName)}</div>
+    ${firmAddress ? `<div class="firm-sub">${esc(firmAddress)}</div>` : ''}
+    ${firmTel ? `<div class="firm-sub">${esc(firmTel)}</div>` : ''}
+    ${firmEmail ? `<div class="firm-sub">${esc(firmEmail)}</div>` : ''}
+  </div>
+  <div>
+    <div class="invoice-label">INVOICE</div>
+    <div class="invoice-number">${esc(invoiceNumber)}</div>
+  </div>
+</div>
+
+<!-- Meta strip -->
+<div class="meta-strip">
+  <div class="meta-cell">
+    <div class="meta-label">Issued At Date</div>
+    <div class="meta-value">${esc(invoice.invoice_date || '')}</div>
+  </div>
+  <div class="meta-cell">
+    <div class="meta-label">Due Date</div>
+    <div class="meta-value">${esc(invoice.due_date || '')}</div>
+  </div>
+  ${invoice.project_ref ? `<div class="meta-cell">
+    <div class="meta-label">Project Ref</div>
+    <div class="meta-value">${esc(invoice.project_ref)}</div>
+  </div>` : ''}
+  ${invoice.status ? `<div class="meta-cell">
+    <div class="meta-label">Status</div>
+    <div class="meta-value">${esc(invoice.status)}</div>
+  </div>` : ''}
+</div>
+
+<!-- Bill To -->
+<div class="info-box">
+  <div class="box-label">Bill To</div>
+  <div class="box-value">
+    <strong>${esc(invoice.bill_to_name || '')}</strong><br/>
+    ${esc(invoice.bill_to_address || '').replace(/\n/g, '<br/>')}
+  </div>
+</div>
+
+<!-- In Respect Of -->
+${invoice.property_address ? `<div class="info-box">
+  <div class="box-label">In Respect Of</div>
+  <div class="box-value">${esc(invoice.property_address).replace(/\n/g, '<br/>')}</div>
+</div>` : ''}
+
+<!-- Line items -->
+<table>
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th class="num">Qty</th>
+      <th class="num">Unit</th>
+      <th class="num">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rows || '<tr><td colspan="4" style="color:#9ca3af;font-style:italic;">No line items</td></tr>'}
+  </tbody>
+</table>
+
+<!-- Totals -->
+<div class="totals-wrap">
+  <div class="totals">
+    <div class="total-row">
+      <span>Subtotal</span>
+      <span>${money(subtotal)}</span>
+    </div>
+    ${vatAmount > 0 ? `<div class="total-row">
+      <span>VAT</span>
+      <span>${money(vatAmount)}</span>
+    </div>` : ''}
+    <div class="total-row grand">
+      <span>Total Due</span>
+      <span>${money(total)}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Bank details + thank you -->
+<div class="footer">
+  <div class="bank-section">
+    ${bankName ? `<div class="bank-cell">
+      <div class="bank-label">Bank</div>
+      <div class="bank-value">${esc(bankName)}</div>
+    </div>` : ''}
+    ${sortCode ? `<div class="bank-cell">
+      <div class="bank-label">Sort Code</div>
+      <div class="bank-value">${esc(sortCode)}</div>
+    </div>` : ''}
+    ${accountNo ? `<div class="bank-cell">
+      <div class="bank-label">Account No.</div>
+      <div class="bank-value">${esc(accountNo)}</div>
+    </div>` : ''}
+  </div>
+  <div class="thank-you">Thank you for your business.</div>
+</div>
+
+${footerText ? `<div class="company-footer">${esc(footerText)}</div>` : ''}
+
+${invoice.notes ? `<div style="margin-top:18px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#78350f;white-space:pre-wrap;">${esc(invoice.notes)}</div>` : ''}
+
+</body>
+</html>`;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    return res.status(405).json({
-      success: false,
-      error: 'Method not allowed',
-    });
-  }
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase environment variables not configured' });
+  if (!API2PDF_KEY) return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
+
+  const { invoice, project_id, invoice_id } = req.body || {};
+  if (!invoice) return res.status(400).json({ error: 'No invoice provided' });
+
+  const sb = getSupabase();
+  const projectId = project_id || invoice.project_id || null;
+  const invoiceId = invoice_id || invoice.id || null;
+  const invoiceNumber = invoice.invoice_number || invoice.id || Date.now();
+  const fileName = safeFileName(`Invoice-${invoiceNumber}.pdf`);
+  const storagePath = `${projectId || 'unlinked'}/invoices/${Date.now()}_${fileName}`;
 
   try {
-    const {
-      template_b64,
-      merge_data = {},
-      file_name,
-      output_format = 'docx',
-      project_id,
-      projectId,
-      skip_storage = false,
-    } = req.body || {};
+    // Fetch firm settings including bank details
+    const { data: firmData } = await sb
+      .from('firm_settings')
+      .select('firm_name, trading_name, address_line1, tel, email, footer_text, bank_name, sort_code, account_number')
+      .limit(1);
+    const firm = firmData?.[0] || {};
 
-    if (!template_b64) {
-      return res.status(400).json({
-        success: false,
-        error: 'No template_b64 provided.',
-      });
+    const html = buildInvoiceHtml(invoice, firm);
+
+    const pdfRes = await fetch('https://v2.api2pdf.com/chrome/pdf/html', {
+      method: 'POST',
+      headers: { Authorization: API2PDF_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        html,
+        fileName,
+        options: {
+          printBackground: true,
+          marginTop: '0.4in',
+          marginRight: '0.45in',
+          marginBottom: '0.4in',
+          marginLeft: '0.45in',
+          format: 'A4',
+        },
+      }),
+    });
+
+    const pdfData = await pdfRes.json();
+    if (!pdfRes.ok || !pdfData?.FileUrl) {
+      return res.status(500).json({ error: pdfData?.Message || pdfData?.error || 'PDF generation failed' });
     }
 
-    const mergeData = normaliseMergeData(merge_data);
+    const fileRes = await fetch(pdfData.FileUrl);
+    const arrayBuffer = await fileRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
 
-    const resolvedProjectId =
-      project_id ||
-      projectId ||
-      mergeData.project_id ||
-      null;
+    const { error: uploadError } = await sb.storage
+      .from('documents')
+      .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
 
-    const resolvedFileName = safeFileName(
-      file_name ||
-      mergeData.file_name ||
-      'document.docx'
-    );
+    if (uploadError) throw uploadError;
 
-    const docxBuffer = renderDocx(template_b64, mergeData);
-    const docxB64 = docxBuffer.toString('base64');
-
-    let saved = null;
-
-    if (!skip_storage && resolvedProjectId) {
-      saved = await saveDocumentRecord({
-        projectId: resolvedProjectId,
-        fileName: resolvedFileName,
-        docxB64,
-        mergeData,
-      });
+    let docId = null;
+    if (projectId) {
+      const { data: doc, error: docError } = await sb
+        .from('documents')
+        .insert([{
+          project_id: projectId,
+          file_name: fileName,
+          file_type: 'pdf',
+          category: 'invoice',
+          section_type: 'invoice',
+          storage_path: storagePath,
+          status: 'generated',
+          version: 1,
+          created_at: new Date().toISOString(),
+          metadata: { invoice_id: invoiceId, invoice_number: invoiceNumber, total: invoice.total || 0 },
+        }])
+        .select('id')
+        .single();
+      if (!docError) docId = doc?.id || null;
     }
 
     return res.status(200).json({
       success: true,
-      docx_b64: docxB64,
-      pdf_b64: null,
-      storage_path: saved?.storage_path || null,
-      doc_id: saved?.id || null,
-      output_format,
+      file_name: fileName,
+      storage_path: storagePath,
+      document_id: docId,
+      base64: `data:application/pdf;base64,${base64}`,
     });
-  } catch (err) {
-    console.error('[generate-doc] failed:', err);
 
-    return res.status(500).json({
-      success: false,
-      error: err?.message || 'Document generation failed.',
-    });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Could not generate invoice PDF' });
   }
 }
