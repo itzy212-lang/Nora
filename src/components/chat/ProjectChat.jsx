@@ -70,6 +70,167 @@ function getUserId(state = {}) {
   );
 }
 
+
+function isDraftRequest(text = '', hasPreviousDraft = false) {
+  const s = String(text || '').toLowerCase();
+
+  const draftWords = [
+    'draft',
+    'write',
+    'email',
+    'letter',
+    'compose',
+    'covering',
+    'respond',
+    'reply',
+    'wording',
+    'whatsapp',
+    'text message',
+  ];
+
+  const editWords = [
+    'change',
+    'amend',
+    'revise',
+    'rewrite',
+    'update',
+    'make it',
+    'add',
+    'remove',
+    'replace',
+    'shorter',
+    'firmer',
+    'softer',
+    'more formal',
+    'less formal',
+  ];
+
+  if (draftWords.some(word => s.includes(word))) return true;
+  if (hasPreviousDraft && editWords.some(word => s.includes(word))) return true;
+
+  return false;
+}
+
+function findDraftStart(text = '') {
+  const markers = [
+    /\bSubject\s*:/i,
+    /\bDear\s+[A-Z0-9]/i,
+    /\bHi\s+[A-Z0-9]/i,
+    /\bHello\s+[A-Z0-9]/i,
+  ];
+
+  const positions = markers
+    .map(rx => {
+      const match = String(text || '').match(rx);
+      return match ? match.index : -1;
+    })
+    .filter(index => index >= 0);
+
+  if (!positions.length) return -1;
+  return Math.min(...positions);
+}
+
+function cleanBrief(raw = '') {
+  let text = String(raw || '').trim();
+
+  text = text
+    .replace(/^Thanks for the direction\.?\s*/i, '')
+    .replace(/^Sure,?\s*/i, '')
+    .replace(/Here(?:'s| is)\s+the\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
+    .replace(/Here(?:'s| is)\s+my\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
+    .replace(/^\s*-{3,}\s*/g, '')
+    .replace(/\s*-{3,}\s*$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (/^(thanks|thank you)$/i.test(text)) return '';
+  if (/^thanks for the direction/i.test(text)) return '';
+  if (/^here(?:'s| is) the draft/i.test(text)) return '';
+
+  return text;
+}
+
+function normaliseProjectDraftText(raw = '') {
+  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!text) return '';
+
+  text = text
+    .replace(/^```[a-z]*\s*/i, '')
+    .replace(/```$/i, '')
+    .replace(/^Draft\s*:\s*/i, '')
+    .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
+    .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
+    .trim();
+
+  [
+    /\n-{3,}\s*\n\s*I included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*I've included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*This draft[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*Let me know[\s\S]*$/i,
+    /\n\s*I included the[\s\S]*$/i,
+    /\n\s*I've included the[\s\S]*$/i,
+    /\n\s*Let me know if this tone[\s\S]*$/i,
+    /\n\s*Let me know if this suits[\s\S]*$/i,
+  ].forEach(rx => {
+    text = text.replace(rx, '').trim();
+  });
+
+  return text
+    .replace(/\n\s*-{3,}\s*$/g, '')
+    .replace(/^\s*-{3,}\s*\n/g, '')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Hello\s+)/i, '$1\n\n')
+    .replace(/\s*(Kind regards,|Best regards,|Regards,)\s*/i, '\n\n$1\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function splitAssistantResponse(raw = '') {
+  const text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!text) return { brief: '', draft: '', after: '' };
+
+  const draftStart = findDraftStart(text);
+
+  if (draftStart === -1) {
+    return { brief: cleanBrief(text), draft: '', after: '' };
+  }
+
+  const before = text.slice(0, draftStart).trim();
+  let draftAndAfter = text.slice(draftStart).trim();
+  let after = '';
+
+  const afterPatterns = [
+    /\n-{3,}\s*\n\s*(I included[\s\S]*)$/i,
+    /\n-{3,}\s*\n\s*(I've included[\s\S]*)$/i,
+    /\n-{3,}\s*\n\s*(This draft[\s\S]*)$/i,
+    /\n-{3,}\s*\n\s*(Let me know[\s\S]*)$/i,
+    /\n\s*(I included the[\s\S]*)$/i,
+    /\n\s*(I've included the[\s\S]*)$/i,
+    /\n\s*(Let me know if this tone[\s\S]*)$/i,
+    /\n\s*(Let me know if this suits[\s\S]*)$/i,
+  ];
+
+  for (const rx of afterPatterns) {
+    const match = draftAndAfter.match(rx);
+    if (match?.[1]) {
+      after = cleanBrief(match[1]);
+      draftAndAfter = draftAndAfter.replace(rx, '').trim();
+      break;
+    }
+  }
+
+  return {
+    brief: cleanBrief(before),
+    draft: normaliseProjectDraftText(draftAndAfter),
+    after,
+  };
+}
+
 export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const { state } = useApp();
 
@@ -86,6 +247,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [dictationPreview, setDictationPreview] = useState('');
+  const [lastDraft, setLastDraft] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -212,6 +374,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     setInput('');
     setAttachments([]);
     setUploadError('');
+    setLastDraft('');
     resetSession();
 
     if (textareaRef.current) {
@@ -235,6 +398,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     setInput('');
     setAttachments([]);
     setUploadError('');
+    setLastDraft('');
     resetSession();
   }, [resetSession, stopVoice]);
 
@@ -345,6 +509,75 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     setAttachments(prev => prev.filter(item => item.id !== attachmentId));
   }, []);
 
+  const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
+    if (!wantsDraft) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'ely',
+        content: result.reply || 'Done.',
+        suggestedActions: result.suggestedActions,
+        createdAt: new Date().toISOString(),
+      }]);
+      return;
+    }
+
+    const raw = result.draft || result.documentText || result.reply || result.replyText || '';
+    const { brief, draft, after } = splitAssistantResponse(raw);
+    const newMessages = [];
+
+    if (brief) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: brief,
+        messageType: 'brief',
+        suggestedActions: [],
+        projectId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (draft) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: draft,
+        draft,
+        draftType: result.draftType || 'email',
+        messageType: 'draft',
+        suggestedActions: [],
+        projectId,
+        createdAt: new Date().toISOString(),
+      });
+
+      setLastDraft(draft);
+    }
+
+    if (after) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: after,
+        messageType: 'brief',
+        suggestedActions: [],
+        projectId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (!newMessages.length) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: result.reply || 'Done.',
+        suggestedActions: result.suggestedActions,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    setMessages(prev => [...prev, ...newMessages]);
+  }, [projectId]);
+
   const handleSend = useCallback(async (text) => {
     const msg = (text || input).trim();
     const readyAttachments = attachments.filter(a => a.upload_status === 'uploaded');
@@ -353,6 +586,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
     stopVoice();
     setInput('');
+    setDictationPreview('');
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -371,23 +605,32 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     setMessages(prev => [...prev, userMsg]);
 
     try {
+      const wantsDraft = isDraftRequest(messageText, !!lastDraft);
+
       const result = await send(messageText, {
         projectId,
         project,
         attachments: readyAttachments,
         uploadContext: readyAttachments,
         projectContext: project,
+        projectChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
+        context: {
+          previousDraft: lastDraft || null,
+          uploadedFiles: readyAttachments,
+          uploadedExtractedText: readyAttachments
+            .filter(file => file.extracted_text)
+            .map(file => ({
+              file_name: file.file_name,
+              mime_type: file.mime_type,
+              extracted_text: file.extracted_text,
+            })),
+          projectChatInstruction: wantsDraft
+            ? 'Return any discussion separately from the draft. The draft itself must be clean final text only with no commentary inside or after it.'
+            : null,
+        },
       });
 
-      setMessages(prev => [...prev, {
-        id: uid(),
-        role: 'ely',
-        content: result.reply,
-        draft: result.draft,
-        draftType: result.draftType,
-        suggestedActions: result.suggestedActions,
-        createdAt: new Date().toISOString(),
-      }]);
+      appendAssistantMessagesFromResult(result, wantsDraft);
 
       setAttachments(prev => prev.filter(a => a.upload_status !== 'uploaded'));
     } catch (err) {
@@ -398,7 +641,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         createdAt: new Date().toISOString(),
       }]);
     }
-  }, [attachments, input, loading, project, projectId, send, stopVoice, uploading]);
+  }, [
+    appendAssistantMessagesFromResult,
+    attachments,
+    input,
+    lastDraft,
+    loading,
+    project,
+    projectId,
+    send,
+    stopVoice,
+    uploading,
+  ]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
