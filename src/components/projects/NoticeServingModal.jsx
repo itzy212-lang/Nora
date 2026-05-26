@@ -180,25 +180,6 @@ export default function NoticeServingModal({
         <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
-              Notice date
-            </div>
-
-            <input
-              type="date"
-              value={noticeDate}
-              onChange={e => setNoticeDate(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: 12,
-                border: '1px solid #d1d5db',
-                fontSize: 13,
-              }}
-            />
-          </div>
-
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
               Adjoining owner / property
             </div>
 
@@ -232,7 +213,27 @@ export default function NoticeServingModal({
                   </button>
                 );
               })}
+
             </div>
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
+              Notice date
+            </div>
+
+            <input
+              type="date"
+              value={noticeDate}
+              onChange={e => setNoticeDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                fontSize: 13,
+              }}
+            />
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
@@ -264,6 +265,40 @@ export default function NoticeServingModal({
                 );
               })}
             </div>
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
+              <input
+                type="checkbox"
+                checked={includeCover}
+                onChange={e => setIncludeCover(e.target.checked)}
+              />
+              Include covering letter
+            </label>
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
+              <input
+                type="checkbox"
+                checked={createDeadlineTask}
+                onChange={e => setCreateDeadlineTask(e.target.checked)}
+              />
+              Create deadline task
+            </label>
+          </div>
+
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            padding: '10px 14px',
+            fontSize: 12.5,
+            color: '#6b7280',
+            lineHeight: 1.55,
+          }}>
+            S1/S3/S6 create one 14-day deadline task for each selected AO. Section 10 creates one 10-day deadline task. Untick the task box if this is a duplicate or supplementary notice.
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
