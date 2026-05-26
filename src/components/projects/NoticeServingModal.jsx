@@ -45,6 +45,34 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function ordinalSuffix(day) {
+  const n = Number(day);
+  if ([11, 12, 13].includes(n % 100)) return 'th';
+  if (n % 10 === 1) return 'st';
+  if (n % 10 === 2) return 'nd';
+  if (n % 10 === 3) return 'rd';
+  return 'th';
+}
+
+function formatLongNoticeDate(value) {
+  if (!value) return '';
+
+  const [year, month, day] = String(value).split('-').map(Number);
+  if (!year || !month || !day) return '';
+
+  const date = new Date(year, month - 1, day);
+  const monthName = date.toLocaleString('en-GB', { month: 'long' });
+
+  return `${day}${ordinalSuffix(day)} ${monthName} ${year}`;
+}
+
+function addDaysIsoFromDate(value, days) {
+  const [year, month, day] = String(value || todayIso()).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
 function aoKey(item) {
   return String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
 }
@@ -103,6 +131,7 @@ export default function NoticeServingModal({
   const [selected, setSelected] = useState(defaultSections || []);
   const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
   const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
+  const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
@@ -160,7 +189,7 @@ export default function NoticeServingModal({
         for (const key of allKeys) {
           try {
             const placeholders = buildNoticePlaceholders(project, selectedAO, {
-              noticeDate: todayIso(),
+              noticeDate,
               noticeType: key,
               noticeSection: key,
             });
@@ -208,6 +237,7 @@ export default function NoticeServingModal({
             ao: selectedAO,
             sections: selected,
             includeCover,
+            noticeDate,
             createDeadlineTask,
             warnings,
             generatedCount: generatedDocs.length,
@@ -346,6 +376,49 @@ export default function NoticeServingModal({
                 })}
               </div>
             )}
+          </div>
+
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 18,
+            padding: 16,
+          }}>
+            <label style={{
+              display: 'block',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              marginBottom: 8,
+            }}>
+              Notice date
+            </label>
+
+            <input
+              type="date"
+              value={noticeDate}
+              onChange={e => setNoticeDate(e.target.value || todayIso())}
+              style={{
+                width: '100%',
+                maxWidth: 260,
+                border: '1px solid #d1d5db',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 14,
+                color: '#111827',
+                background: '#fff',
+              }}
+            />
+
+            <div style={{
+              marginTop: 8,
+              fontSize: 12.5,
+              color: '#6b7280',
+            }}>
+              Documents will show this as {formatLongNoticeDate(noticeDate)}.
+            </div>
           </div>
 
           <div style={{
