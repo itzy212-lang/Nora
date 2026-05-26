@@ -45,34 +45,6 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function ordinalSuffix(day) {
-  const n = Number(day);
-  if ([11, 12, 13].includes(n % 100)) return 'th';
-  if (n % 10 === 1) return 'st';
-  if (n % 10 === 2) return 'nd';
-  if (n % 10 === 3) return 'rd';
-  return 'th';
-}
-
-function formatLongNoticeDate(value) {
-  if (!value) return '';
-
-  const [year, month, day] = String(value).split('-').map(Number);
-  if (!year || !month || !day) return '';
-
-  const date = new Date(year, month - 1, day);
-  const monthName = date.toLocaleString('en-GB', { month: 'long' });
-
-  return `${day}${ordinalSuffix(day)} ${monthName} ${year}`;
-}
-
-function addDaysIsoFromDate(value, days) {
-  const [year, month, day] = String(value || todayIso()).split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + Number(days || 0));
-  return date.toISOString().slice(0, 10);
-}
-
 function aoKey(item) {
   return String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
 }
@@ -116,7 +88,6 @@ export default function NoticeServingModal({
   defaultSections = [],
   generateDocument,
   onServe,
-  onServed,
   onClose,
 }) {
   const lockedToSingleAO = !!ao;
@@ -132,7 +103,6 @@ export default function NoticeServingModal({
   const [selected, setSelected] = useState(defaultSections || []);
   const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
   const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
-  const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
@@ -167,8 +137,12 @@ export default function NoticeServingModal({
       return;
     }
 
-    const saveWorkflow = onServe || onServed;
-    const canSaveWorkflow = typeof saveWorkflow === 'function';
+    if (typeof generateDocument !== 'function') {
+      alert('Document generator is not available.');
+      return;
+    }
+
+    const canSaveWorkflow = typeof onServe === 'function';
 
     setLoading(true);
 
@@ -177,29 +151,6 @@ export default function NoticeServingModal({
       let totalGenerated = 0;
 
       for (const selectedAO of selectedAOs) {
-        // Save the legal/workflow state before any document generation.
-        // A broken template must never stop the AO card from showing notice served / deadlines.
-        if (canSaveWorkflow) {
-          try {
-            await saveWorkflow({
-              ao: selectedAO,
-              sections: selected,
-              includeCover,
-              noticeDate,
-              createDeadlineTask,
-            });
-          } catch (err) {
-            throw new Error(
-              `Could not save notice workflow for AO${selectedAO?.num || ''}: ${err?.message || err}`
-            );
-          }
-        }
-
-        if (typeof generateDocument !== 'function') {
-          warnings.push(`AO${selectedAO?.num || ''}: document generator is not available`);
-          continue;
-        }
-
         const zip = new PizZip();
         const generatedDocs = [];
 
@@ -209,7 +160,7 @@ export default function NoticeServingModal({
         for (const key of allKeys) {
           try {
             const placeholders = buildNoticePlaceholders(project, selectedAO, {
-              noticeDate,
+              noticeDate: todayIso(),
               noticeType: key,
               noticeSection: key,
             });
@@ -251,12 +202,23 @@ export default function NoticeServingModal({
         }
 
         totalGenerated += generatedDocs.length;
+
+        if (canSaveWorkflow) {
+          await onServe({
+            ao: selectedAO,
+            sections: selected,
+            includeCover,
+            createDeadlineTask,
+            warnings,
+            generatedCount: generatedDocs.length,
+          });
+        }
       }
 
       onClose?.();
 
       if (!canSaveWorkflow) {
-        alert('Documents generated, but the notice workflow was not saved because the save handler is not connected.');
+        alert(`Documents generated, but the notice workflow was not saved because the save handler is not connected.`);
       } else if (warnings.length) {
         alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
       } else {
@@ -384,49 +346,6 @@ export default function NoticeServingModal({
                 })}
               </div>
             )}
-          </div>
-
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            padding: 16,
-          }}>
-            <label style={{
-              display: 'block',
-              fontSize: 12,
-              fontWeight: 700,
-              color: '#6b7280',
-              textTransform: 'uppercase',
-              letterSpacing: '0.6px',
-              marginBottom: 8,
-            }}>
-              Notice date
-            </label>
-
-            <input
-              type="date"
-              value={noticeDate}
-              onChange={e => setNoticeDate(e.target.value || todayIso())}
-              style={{
-                width: '100%',
-                maxWidth: 260,
-                border: '1px solid #d1d5db',
-                borderRadius: 12,
-                padding: '10px 12px',
-                fontSize: 14,
-                color: '#111827',
-                background: '#fff',
-              }}
-            />
-
-            <div style={{
-              marginTop: 8,
-              fontSize: 12.5,
-              color: '#6b7280',
-            }}>
-              Documents will show this as {formatLongNoticeDate(noticeDate)}.
-            </div>
           </div>
 
           <div style={{
