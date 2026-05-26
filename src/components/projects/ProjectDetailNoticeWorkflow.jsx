@@ -110,17 +110,31 @@ export default function ProjectDetailNoticeWorkflow(props) {
 
   return (
     <div style={{ position: 'relative' }} onClickCapture={handleClickCapture}>
-      {noticeAO !== undefined && (
+      
+{noticeAO !== undefined && (
         <div data-notice-serving-modal="true">
           <NoticeServingModal
             project={projectForChild}
-            initialAO={noticeAO}
+            ao={noticeAO}
+            aos={projectForChild?.aos || []}
+            defaultSections={[]}
             generateDocument={generateDocument}
-            onServed={handleNoticeServed}
+            onServe={async payload => {
+              if (typeof props.handleServeNoticePack === 'function') {
+                return await props.handleServeNoticePack(payload);
+              }
+
+              if (typeof props.onServeNotice === 'function') {
+                return await props.onServeNotice(payload);
+              }
+
+              throw new Error('Notice serving handler missing from ProjectDetailNoticeWorkflow.');
+            }}
             onClose={closeNoticeModal}
           />
         </div>
       )}
+
 
       <ProjectDetail {...props} project={projectForChild} />
 
