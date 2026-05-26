@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-function normaliseSpaces(text = '') {
-  return String(text || '').replace(/\s+/g, ' ').trim();
+function cleanSpeech(text = '') {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function wordKey(word = '') {
@@ -11,8 +13,8 @@ function wordKey(word = '') {
     .trim();
 }
 
-function removeImmediateWordRepeats(text = '') {
-  const words = normaliseSpaces(text).split(' ').filter(Boolean);
+function removeImmediateRepeats(text = '') {
+  const words = cleanSpeech(text).split(' ').filter(Boolean);
   const out = [];
 
   for (const word of words) {
@@ -24,66 +26,34 @@ function removeImmediateWordRepeats(text = '') {
   return out.join(' ');
 }
 
-function removeRepeatedTail(text = '') {
-  let cleaned = removeImmediateWordRepeats(text);
+function mergeByOverlap(previous = '', next = '') {
+  const prev = cleanSpeech(previous);
+  const nxt = removeImmediateRepeats(next);
 
-  for (let phraseSize = 2; phraseSize <= 12; phraseSize++) {
-    const words = cleaned.split(' ').filter(Boolean);
-    if (words.length < phraseSize * 2) continue;
+  if (!nxt) return prev;
+  if (!prev) return nxt;
 
-    const out = [];
-    let i = 0;
+  const prevLower = prev.toLowerCase();
+  const nextLower = nxt.toLowerCase();
 
-    while (i < words.length) {
-      const phrase = words.slice(i, i + phraseSize).map(wordKey).join(' ');
-      const nextPhrase = words.slice(i + phraseSize, i + phraseSize * 2).map(wordKey).join(' ');
-
-      if (phrase && phrase === nextPhrase) {
-        out.push(...words.slice(i, i + phraseSize));
-        i += phraseSize * 2;
-      } else {
-        out.push(words[i]);
-        i += 1;
-      }
-    }
-
-    cleaned = out.join(' ');
-  }
-
-  return cleaned;
-}
-
-function mergeSpeechResult(previous = '', next = '') {
-  const prev = normaliseSpaces(previous);
-  const rawNext = normaliseSpaces(next);
-
-  if (!rawNext) return prev;
-  if (!prev) return removeRepeatedTail(rawNext);
-
-  const cleanedNext = removeRepeatedTail(rawNext);
-
-  if (cleanedNext.toLowerCase().startsWith(prev.toLowerCase())) {
-    return removeRepeatedTail(cleanedNext);
-  }
-
-  if (prev.toLowerCase().includes(cleanedNext.toLowerCase())) {
-    return removeRepeatedTail(prev);
-  }
+  if (prevLower === nextLower) return prev;
+  if (prevLower.endsWith(nextLower)) return prev;
+  if (nextLower.startsWith(prevLower)) return nxt;
 
   const prevWords = prev.split(' ').filter(Boolean);
-  const nextWords = cleanedNext.split(' ').filter(Boolean);
-  const maxOverlap = Math.min(prevWords.length, nextWords.length, 20);
+  const nextWords = nxt.split(' ').filter(Boolean);
+  const maxOverlap = Math.min(prevWords.length, nextWords.length, 24);
 
-  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
     const prevTail = prevWords.slice(-overlap).map(wordKey).join(' ');
     const nextHead = nextWords.slice(0, overlap).map(wordKey).join(' ');
 
     if (prevTail && prevTail === nextHead) {
-      return removeRepeatedTail([...prevWords, ...nextWords.slice(overlap)].join(' '));
+      return removeImmediateRepeats([...prevWords, ...nextWords.slice(overlap)].join(' '));
     }
   }
 
-  return removeRepeatedTail(`${prev} ${cleanedNext}`);
+  return removeImmediateRepeats(`${prev} ${nxt}`);
 }
 
 export default function VoiceInput({
@@ -97,15 +67,17 @@ export default function VoiceInput({
   const recognitionRef = useRef(null);
   const recordingRef = useRef(false);
   const manualStopRef = useRef(false);
-  const committedTranscriptRef = useRef('');
-  const lastRawTranscriptRef = useRef('');
+  const committedRef = useRef('');
+  const sessionFinalRef = useRef('');
+  const lastPreviewRef = useRef('');
   const restartTimerRef = useRef(null);
 
   const stopRecording = useCallback(() => {
     manualStopRef.current = true;
     recordingRef.current = false;
-    committedTranscriptRef.current = '';
-    lastRawTranscriptRef.current = '';
+    committedRef.current = '';
+    sessionFinalRef.current = '';
+    lastPreviewRef.current = '';
 
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
@@ -134,6 +106,29 @@ export default function VoiceInput({
     };
   }, []);
 
+  const emit = useCallback((fullTranscript, currentPhrase, interim, final) => {
+    const cleanFull = cleanSpeech(fullTranscript);
+    const cleanPhrase = cleanSpeech(currentPhrase);
+
+    if (cleanPhrase) {
+      lastPreviewRef.current = cleanPhrase;
+    }
+
+    onPreview?.(cleanPhrase || lastPreviewRef.current || '', {
+      recording: true,
+      interim: cleanSpeech(interim),
+      final: cleanSpeech(final),
+      currentPhrase: cleanPhrase || lastPreviewRef.current || '',
+    });
+
+    onTranscript?.(cleanFull, {
+      recording: true,
+      interim: cleanSpeech(interim),
+      final: cleanSpeech(final),
+      currentPhrase: cleanPhrase || lastPreviewRef.current || '',
+    });
+  }, [onPreview, onTranscript]);
+
   const startRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -150,58 +145,45 @@ export default function VoiceInput({
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      let finalPart = '';
-      let interimPart = '';
+      let allFinal = '';
+      let interim = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      for (let i = 0; i < event.results.length; i += 1) {
         const transcript = event.results[i]?.[0]?.transcript || '';
 
         if (event.results[i].isFinal) {
-          finalPart += ` ${transcript}`;
-        } else {
-          interimPart += ` ${transcript}`;
+          allFinal += ` ${transcript}`;
+        } else if (i >= event.resultIndex) {
+          interim += ` ${transcript}`;
         }
       }
 
-      const rawChunk = normaliseSpaces(`${finalPart} ${interimPart}`);
-      if (!rawChunk) return;
+      allFinal = cleanSpeech(allFinal);
+      interim = cleanSpeech(interim);
 
-      if (rawChunk === lastRawTranscriptRef.current && !finalPart) return;
-      lastRawTranscriptRef.current = rawChunk;
-
-      let nextTranscript;
-
-      if (finalPart.trim()) {
-        nextTranscript = mergeSpeechResult(committedTranscriptRef.current, finalPart);
-        committedTranscriptRef.current = nextTranscript;
-      } else {
-        nextTranscript = mergeSpeechResult(committedTranscriptRef.current, interimPart);
+      if (allFinal && allFinal !== sessionFinalRef.current) {
+        sessionFinalRef.current = allFinal;
       }
 
-      nextTranscript = removeRepeatedTail(nextTranscript);
+      const committedPlusFinal = mergeByOverlap(committedRef.current, sessionFinalRef.current);
+      const fullTranscript = interim
+        ? mergeByOverlap(committedPlusFinal, interim)
+        : committedPlusFinal;
 
-      const currentPhrase = removeRepeatedTail(interimPart || finalPart || rawChunk);
-      const fullTranscript = removeRepeatedTail(nextTranscript);
+      const currentPhrase = interim || sessionFinalRef.current.split(' ').slice(-10).join(' ');
 
-      onPreview?.(currentPhrase, {
-        recording: true,
-        interim: removeRepeatedTail(interimPart),
-        final: committedTranscriptRef.current,
-        currentPhrase,
-      });
-
-      onTranscript?.(fullTranscript, {
-        recording: true,
-        interim: removeRepeatedTail(interimPart),
-        final: committedTranscriptRef.current,
-        currentPhrase,
-      });
+      emit(fullTranscript, currentPhrase, interim, sessionFinalRef.current);
     };
 
     recognition.onend = () => {
       if (!recordingRef.current || manualStopRef.current || disabled) {
         setRecording(false);
         return;
+      }
+
+      if (sessionFinalRef.current) {
+        committedRef.current = mergeByOverlap(committedRef.current, sessionFinalRef.current);
+        sessionFinalRef.current = '';
       }
 
       restartTimerRef.current = setTimeout(() => {
@@ -233,15 +215,16 @@ export default function VoiceInput({
       recordingRef.current = false;
       setRecording(false);
     }
-  }, [disabled, onPreview, onTranscript]);
+  }, [disabled, emit]);
 
   const startRecording = useCallback(() => {
     if (disabled) return;
 
     manualStopRef.current = false;
     recordingRef.current = true;
-    committedTranscriptRef.current = '';
-    lastRawTranscriptRef.current = '';
+    committedRef.current = '';
+    sessionFinalRef.current = '';
+    lastPreviewRef.current = '';
 
     startRecognition();
   }, [disabled, startRecognition]);
@@ -291,10 +274,10 @@ export default function VoiceInput({
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M12 3.5a3 3 0 0 0-3 3V12a3 3 0 0 0 6 0V6.5a3 3 0 0 0-3-3z" />
-        <path d="M19 11.5v.5a7 7 0 0 1-14 0v-.5" />
-        <path d="M12 19v3" />
-        <path d="M8.5 22h7" />
+        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" />
+        <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+        <path d="M12 18v4" />
+        <path d="M8 22h8" />
       </svg>
     </button>
   );
