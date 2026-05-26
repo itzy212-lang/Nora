@@ -1,5 +1,21 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import { createClient } from '@supabase/supabase-js';
+
+function getServerClient() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) return null;
+
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
 
 function serialiseError(error) {
   if (!error) return null;
@@ -71,6 +87,92 @@ function renderDocx(templateB64, mergeData = {}) {
   };
 }
 
+async function convertDocxToPdf(docxBuffer, fileName = 'document.docx') {
+  const apiKey = process.env.API2PDF_API_KEY;
+
+  if (!apiKey) {
+    console.error('[generate-doc] API2PDF_API_KEY is not set.');
+    return null;
+  }
+
+  const supabase = getServerClient();
+
+  if (!supabase) {
+    console.error('[generate-doc] Supabase admin client is not available.');
+    return null;
+  }
+
+  const safeFileName = String(fileName || 'document.docx')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_');
+
+  const tempPath = `temp/pdf-conversion/${Date.now()}-${safeFileName.toLowerCase().endsWith('.docx') ? safeFileName : `${safeFileName}.docx`}`;
+
+  const pdfFileName = safeFileName.replace(/\.docx$/i, '.pdf');
+
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(tempPath, docxBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[generate-doc] Temporary DOCX upload failed:', uploadError.message);
+      return null;
+    }
+
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(tempPath, 300);
+
+    if (signedError || !signedData?.signedUrl) {
+      console.error('[generate-doc] Temporary signed URL failed:', signedError?.message || 'No signed URL returned');
+      return null;
+    }
+
+    const pdfResponse = await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf', {
+      method: 'POST',
+      headers: {
+        Authorization: apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: signedData.signedUrl,
+        fileName: pdfFileName,
+      }),
+    });
+
+    const pdfJson = await pdfResponse.json().catch(() => ({}));
+
+    if (!pdfResponse.ok || !pdfJson?.FileUrl) {
+      console.error('[generate-doc] API2PDF conversion failed:', pdfResponse.status, JSON.stringify(pdfJson));
+      return null;
+    }
+
+    const converted = await fetch(pdfJson.FileUrl);
+
+    if (!converted.ok) {
+      console.error('[generate-doc] API2PDF PDF download failed:', converted.status);
+      return null;
+    }
+
+    const arrayBuffer = await converted.arrayBuffer();
+
+    return Buffer.from(arrayBuffer).toString('base64');
+  } catch (error) {
+    console.error('[generate-doc] PDF conversion error:', error?.message || error);
+    return null;
+  } finally {
+    try {
+      await supabase.storage.from('documents').remove([tempPath]);
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
@@ -131,11 +233,20 @@ export default async function handler(req, res) {
       });
     }
 
+    const fileName =
+      merge_data?.file_name ||
+      merge_data?.FILE_NAME ||
+      rendered?.tdata?.file_name ||
+      rendered?.tdata?.FILE_NAME ||
+      'document.docx';
+
+    const pdfB64 = await convertDocxToPdf(rendered.buffer, fileName);
+
     return res.status(200).json({
       success: true,
       docx_b64:
         rendered.buffer.toString('base64'),
-      pdf_b64: null,
+      pdf_b64: pdfB64,
       storage_path: null,
       doc_id: null,
     });
