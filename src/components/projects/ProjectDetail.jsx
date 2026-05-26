@@ -400,7 +400,7 @@ function ModalShell({ title, children, onClose }) {
         width: 760,
         maxWidth: '96vw',
         maxHeight: '88vh',
-        overflowY: 'hidden',
+        overflowY: 'auto',
         background: '#eef1f5',
         border: '1px solid #d8dde6',
         borderRadius: 22,
