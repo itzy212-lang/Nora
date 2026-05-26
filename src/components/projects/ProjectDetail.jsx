@@ -401,7 +401,7 @@ function ModalShell({ title, children, onClose }) {
         width: 760,
         maxWidth: '96vw',
         maxHeight: '88vh',
-        overflowY: 'auto',
+        overflowY: 'hidden',
         background: '#eef1f5',
         border: '1px solid #d8dde6',
         borderRadius: 22,
@@ -2105,6 +2105,12 @@ function ProjectChat({ project, onOpenComposer }) {
     ? splitDraftMessage(msg.content)
     : { intro: msg.content, draft: '', outro: '' };
 
+  const inferredRecipient = getProjectDraftRecipient({
+    project,
+    draft: split.draft,
+    intro: split.intro,
+  });
+
   return (
     <div
       key={msg.id}
@@ -2190,11 +2196,12 @@ function ProjectChat({ project, onOpenComposer }) {
                   onOpenComposer({
                     mode: 'compose',
                     body: split.draft,
+                    to: inferredRecipient,
                     projectId: project?.id || projectId,
                   });
                 } else {
                   window.dispatchEvent(new CustomEvent('ely-compose-draft', {
-                    detail: { body: split.draft }
+                    detail: { body: split.draft, to: inferredRecipient }
                   }));
                 }
                 flashDraftAction('Draft sent to email composer');
@@ -2343,7 +2350,7 @@ function ProjectChat({ project, onOpenComposer }) {
           {dictationPreview && (
             <div style={{
               marginBottom: 8,
-              maxHeight: 120,
+              maxHeight: 44,
               overflowY: 'auto',
               background: 'var(--bg3)',
               border: '1px solid var(--border)',
@@ -2352,7 +2359,9 @@ function ProjectChat({ project, onOpenComposer }) {
               fontSize: 12.5,
               lineHeight: 1.6,
               color: 'var(--text2)',
-              whiteSpace: 'pre-wrap',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}>
               <div style={{
                 fontSize: 10.5,
@@ -2416,7 +2425,7 @@ function ProjectChat({ project, onOpenComposer }) {
               disabled={loading || uploading}
               stopSignal={voiceStopSignal}
               onTranscript={handleVoiceTranscript}
-              onPreview={(preview) => setDictationPreview(preview)}
+              onPreview={(preview, meta = {}) => setDictationPreview(meta.currentPhrase || meta.interim || preview)}
             />
 
             <textarea
@@ -2452,7 +2461,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
-              onClick={handleSend}
+              className="project-chat-send-btn" onClick={handleSend}
               disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
               className="btn btn-primary btn-sm"
               style={{
@@ -2473,6 +2482,51 @@ function ProjectChat({ project, onOpenComposer }) {
     </div>
   );
 }
+
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+  }
+  return '';
+}
+
+function getProjectDraftRecipient({ project, draft = '', intro = '' }) {
+  const haystack = `${intro || ''}\n${draft || ''}`.toLowerCase();
+
+  const boEmail = firstNonEmpty(
+    project?.bo_email,
+    project?.bo_1_email,
+    project?.building_owner_email,
+    project?.owner_email,
+  );
+
+  const aoEmail = firstNonEmpty(
+    project?.ao_email,
+    project?.ao_1_email,
+    project?.adjoining_owner_email,
+  );
+
+  const mentionsBO =
+    haystack.includes('building owner') ||
+    haystack.includes('bo ') ||
+    haystack.includes('bo,') ||
+    haystack.includes('bo.') ||
+    haystack.includes(String(project?.bo_1_name || project?.bo || '').toLowerCase());
+
+  const mentionsAO =
+    haystack.includes('adjoining owner') ||
+    haystack.includes('ao ') ||
+    haystack.includes('ao,') ||
+    haystack.includes('ao.') ||
+    haystack.includes(String(project?.ao_1_name || project?.ao || '').toLowerCase());
+
+  if (mentionsBO && boEmail) return boEmail;
+  if (mentionsAO && aoEmail) return aoEmail;
+
+  return boEmail || aoEmail || '';
+}
+
 
 function splitDraftMessage(content = '') {
   const text = String(content || '').trim();
