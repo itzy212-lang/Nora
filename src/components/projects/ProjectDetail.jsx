@@ -2083,7 +2083,7 @@ function ProjectChat({ project, onOpenComposer }) {
         <div style={{
           flex: 1,
           minHeight: 0,
-          overflowY: 'auto',
+          overflowY: 'hidden',
           overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -2134,7 +2134,9 @@ function ProjectChat({ project, onOpenComposer }) {
           borderRadius: 12,
           fontSize: 13,
           lineHeight: 1.6,
-          whiteSpace: 'pre-wrap',
+          whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
         }}>
           {split.intro}
         </div>
@@ -2350,7 +2352,7 @@ function ProjectChat({ project, onOpenComposer }) {
           {dictationPreview && (
             <div style={{
               marginBottom: 8,
-              maxHeight: 44,
+              maxHeight: 34,
               overflowY: 'auto',
               background: 'var(--bg3)',
               border: '1px solid var(--border)',
@@ -2551,8 +2553,11 @@ function splitDraftMessage(content = '') {
     /\n\s*Let me know if[\s\S]*$/i,
     /\n\s*Please let me know if[\s\S]*$/i,
     /\n\s*Happy to amend[\s\S]*$/i,
+    /\n\s*I can amend[\s\S]*$/i,
     /\n\s*I can revise[\s\S]*$/i,
+    /\n\s*I can also[\s\S]*$/i,
     /\n\s*This keeps[\s\S]*$/i,
+    /\n\s*That should[\s\S]*$/i,
   ];
 
   for (const rx of outroPatterns) {
