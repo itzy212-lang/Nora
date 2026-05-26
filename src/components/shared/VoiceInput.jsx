@@ -155,7 +155,7 @@ export default function VoiceInput({
       interimText = cleanSpeech(interimText);
 
       if (finalText) {
-        sessionFinalRef.current = finalText;
+        sessionFinalRef.current = mergeByOverlap(sessionFinalRef.current, finalText);
       }
 
       const committedPlusFinal = mergeByOverlap(committedRef.current, sessionFinalRef.current);
@@ -163,7 +163,7 @@ export default function VoiceInput({
         ? mergeByOverlap(committedPlusFinal, interimText)
         : committedPlusFinal;
 
-      const currentPhrase = interimText || finalText.split(' ').slice(-10).join(' ');
+      const currentPhrase = cleanSpeech(interimText || '');
 
       emit(fullTranscript, currentPhrase, interimText, sessionFinalRef.current);
     };
