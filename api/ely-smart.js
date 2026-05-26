@@ -191,6 +191,8 @@ async function loadProjectBundle(projectId) {
     q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
   );
 
+  const chatUploads = await loadRecentChatUploads(projectId);
+
   return {
     project_raw: project || null,
     project: normaliseProject(project || {}),
@@ -198,8 +200,45 @@ async function loadProjectBundle(projectId) {
     notices,
     documents,
     project_memory: projectMemory,
+    chat_uploads: chatUploads,
   };
 }
+
+
+async function loadRecentChatUploads(projectId) {
+  if (!projectId) return [];
+
+  return safeSelect(
+    'chat_uploads',
+    'id, project_id, session_id, file_name, mime_type, file_size, storage_path, upload_status, metadata, created_at',
+    q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
+  );
+}
+
+function buildUploadedTextContext(body = {}) {
+  const collected = [];
+
+  const sources = [
+    ...(Array.isArray(body.attachments) ? body.attachments : []),
+    ...(Array.isArray(body.uploadContext) ? body.uploadContext : []),
+    ...(Array.isArray(body.context?.uploadedFiles) ? body.context.uploadedFiles : []),
+    ...(Array.isArray(body.context?.uploadedExtractedText) ? body.context.uploadedExtractedText : []),
+  ];
+
+  sources.forEach((file) => {
+    const text = file?.extracted_text || file?.content || file?.text || '';
+    if (!text || String(text).trim().length < 20) return;
+
+    collected.push({
+      file_name: file.file_name || file.name || file.title || 'uploaded file',
+      mime_type: file.mime_type || file.type || '',
+      extracted_text: String(text).slice(0, 30000),
+    });
+  });
+
+  return collected;
+}
+
 
 function wantsEmailContext(prompt = '', projectId = null) {
   if (projectId) return true;
@@ -325,7 +364,7 @@ function buildProjectFactsText(projectBundle) {
   return facts.join('\n');
 }
 
-function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
+function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], uploadedTextContext = [] }) {
   let prompt =
     brain?.instruction_set?.system_prompt ||
     'You are Ely, an AI assistant for a Party Wall surveying practice.';
@@ -368,13 +407,21 @@ ${projectFacts}
     prompt += `
 
 PROJECT BUNDLE:
-${compactJson(projectBundle, 22000)}
+${compactJson(projectBundle, 26000)}
 `;
   } else if (resolvedProject) {
     prompt += `
 
 RESOLVED PROJECT:
 ${compactJson(resolvedProject)}
+`;
+  }
+
+  if (uploadedTextContext?.length) {
+    prompt += `
+
+UPLOADED FILE TEXT FROM THIS REQUEST:
+${compactJson(uploadedTextContext, 36000)}
 `;
   }
 
@@ -475,6 +522,8 @@ export default async function handler(req, res) {
     const userId = inferUserId(body);
     const modeHint = inferModeHint(body.surface, body.prompt);
 
+    const uploadedTextContext = buildUploadedTextContext(body);
+
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
       loadProjectBundle(projectId),
       buildScopedEmailContext({ prompt: body.prompt, projectId }),
@@ -504,6 +553,7 @@ const systemPrompt = buildSystemPrompt({
       scopedEmailContext,
       modeHint,
       draftingExamples,
+      uploadedTextContext,
     });
 
     const messages = buildMessages({ body, systemPrompt });
@@ -541,6 +591,7 @@ const systemPrompt = buildSystemPrompt({
       projectContextLoaded: !!projectBundle?.project_raw,
       adjoiningOwnerCount: projectBundle?.adjoining_owners?.length || 0,
       brainLoaded: !!brain,
+      uploadedTextCount: uploadedTextContext?.length || 0,
       sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     });
   } catch (err) {
