@@ -59,6 +59,34 @@ function addDaysIso(days) {
   return d.toISOString().slice(0, 10);
 }
 
+function addDaysIsoFromDate(value, days) {
+  const [year, month, day] = String(value || todayIso()).split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+function ordinalSuffix(day) {
+  const n = Number(day);
+  if ([11, 12, 13].includes(n % 100)) return 'th';
+  if (n % 10 === 1) return 'st';
+  if (n % 10 === 2) return 'nd';
+  if (n % 10 === 3) return 'rd';
+  return 'th';
+}
+
+function formatLongNoticeDate(value) {
+  if (!value) return '';
+
+  const [year, month, day] = String(value).split('-').map(Number);
+  if (!year || !month || !day) return '';
+
+  const date = new Date(year, month - 1, day);
+  const monthName = date.toLocaleString('en-GB', { month: 'long' });
+
+  return `${day}${ordinalSuffix(day)} ${monthName} ${year}`;
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -107,8 +135,8 @@ function joinOwnerNames(name1, name2) {
   return a || b || '';
 }
 
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false }) {
-  const noticeDate = todayIso();
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate }) {
+  const noticeDate = suppliedNoticeDate || todayIso();
   const aoNames = joinOwnerNames(ao?.name, ao?.name2);
   const boNames = joinOwnerNames(project?.bo_1_name || project?.bo, project?.bo_2_name);
   const aoPremise = aoAddress(ao);
@@ -149,7 +177,7 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false })
     PROJECT_REF: ref,
 
     NOTICE_DATE: noticeDate,
-    NOTICE_DATE_LONG: new Date(noticeDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    NOTICE_DATE_LONG: formatLongNoticeDate(noticeDate),
 
     BO_NAME: boNames,
     BO_NAMES: boNames,
@@ -2949,9 +2977,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     ao,
     sections,
     includeCover,
+    noticeDate: suppliedNoticeDate,
     createDeadlineTask = true,
   }) => {
-    const noticeDate = todayIso();
+    const noticeDate = suppliedNoticeDate || todayIso();
     const generatedDocs = [];
     const warnings = [];
 
@@ -2963,7 +2992,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     const nonS10 = sections.filter(s => ['s1', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
-      const deadline = addDaysIso(14);
+      const deadline = addDaysIsoFromDate(noticeDate, 14);
 
       await updateAORecord(ao, {
         status: 'notice_served',
@@ -2985,7 +3014,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
 
     if (sections.includes('s10')) {
-      const deadline = addDaysIso(10);
+      const deadline = addDaysIsoFromDate(noticeDate, 10);
 
       await updateAORecord(ao, {
         status: 's10',
@@ -3014,7 +3043,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     for (const key of keysToGenerate) {
       try {
-        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover });
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate });
         const result = await generateDocument({
           templateKey: key,
           mergeData,
@@ -3180,11 +3209,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, createDeadlineTask }) =>
+          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask }) =>
             handleServeNoticePack({
               ao: servedAO || noticeModal.ao,
               sections,
               includeCover,
+              noticeDate,
               createDeadlineTask,
             })
           }
