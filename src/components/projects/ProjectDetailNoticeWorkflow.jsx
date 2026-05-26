@@ -2,25 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProjectDetail from './ProjectDetail';
 import NoticeServingModal from './NoticeServingModal';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
-import sb from '../../supabaseClient';
 
-const aoAddress = ao => ao?.premise || ao?.reg_addr || ao?.address || ao?.service_address || ao?.serviceAddress || '';
+const aoAddress = ao => ao?.premise || ao?.reg_addr || ao?.address || '';
 
 function aoKeyMatches(a, target) {
   if (!a || !target) return false;
-
-  if (a.id && target.id) {
-    return String(a.id) === String(target.id);
-  }
-
-  if (a.num && target.num) {
-    return String(a.num) === String(target.num);
-  }
-
-  return (
-    String(a.name || '') === String(target.name || '') &&
-    aoAddress(a) === aoAddress(target)
-  );
+  if (a.id && target.id) return a.id === target.id;
+  if (a.num && target.num) return String(a.num) === String(target.num);
+  return a.name === target.name && aoAddress(a) === aoAddress(target);
 }
 
 function findAOFromClickTarget(target, aos) {
@@ -43,115 +32,44 @@ function findAOFromClickTarget(target, aos) {
   return null;
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
+function applyNoticeResultToProject(project, result) {
+  const completed = result?.completed || [];
+  if (!completed.length) return project;
 
-function addDaysIsoFromDate(value, days) {
-  const [year, month, day] = String(value || todayIso()).split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + Number(days || 0));
-  return date.toISOString().slice(0, 10);
-}
+  const latestPatchByAO = new Map();
 
-async function updateProjectAOs(projectId, ao, patch) {
-  const { data: freshProject, error: fetchError } = await sb
-    .from('projects')
-    .select('*')
-    .eq('id', projectId)
-    .single();
+  completed.forEach(item => {
+    const ao = item.ao;
+    const patch = item.recorded?.status_patch || null;
+    if (!ao || !patch) return;
+    latestPatchByAO.set(String(ao.id || ao.num || ao.name || ''), { ao, patch });
+  });
 
-  if (fetchError) throw fetchError;
+  const nextAOs = (project.aos || []).map(existing => {
+    let matched = null;
 
-  const currentAOs = Array.isArray(freshProject?.aos) ? freshProject.aos : [];
+    latestPatchByAO.forEach(value => {
+      if (aoKeyMatches(existing, value.ao)) matched = value;
+    });
 
-  const updatedAOs = currentAOs.map(item =>
-    aoKeyMatches(item, ao)
-      ? {
-          ...item,
-          ...patch,
-          updated_at: new Date().toISOString(),
-        }
-      : item
-  );
+    if (!matched) return existing;
 
-  const { data: savedProject, error: saveError } = await sb
-    .from('projects')
-    .update({ aos: updatedAOs })
-    .eq('id', projectId)
-    .select('*')
-    .single();
+    return {
+      ...existing,
+      ...matched.patch,
+      updated_at: new Date().toISOString(),
+    };
+  });
 
-  if (saveError) throw saveError;
-
-  return savedProject || {
-    ...freshProject,
-    aos: updatedAOs,
+  return {
+    ...project,
+    aos: nextAOs,
   };
-}
-
-async function insertNoticeRecord(projectId, ao, sections, includeCover, noticeDate) {
-  try {
-    await sb.from('notices').insert([{
-      project_id: projectId,
-      ao_id: ao?.id || String(ao?.num || ''),
-      section_1: sections.includes('s1'),
-      section_3: sections.includes('s3'),
-      section_6: sections.includes('s6'),
-      section_10: sections.includes('s10'),
-      notice_cover_letter: !!includeCover,
-      notice_date: noticeDate,
-      status: 'served',
-      template_type: sections.includes('s10') ? 's10' : 'notice_pack',
-    }]);
-  } catch (err) {
-    console.warn('[NoticeWorkflow] notices insert warning:', err?.message || err);
-  }
-}
-
-async function createDeadlineTask(project, ao, title, description, dueDate, taskType) {
-  try {
-    const aoToken = ao?.id || `AO${ao?.num || ''}`;
-
-    const { data: existing } = await sb
-      .from('tasks')
-      .select('id')
-      .eq('project_id', project.id)
-      .eq('task_type', taskType)
-      .eq('due_date', dueDate)
-      .ilike('description', `%AO_REF:${aoToken}%`)
-      .limit(1);
-
-    if (existing?.length) return existing[0];
-
-    const { data, error } = await sb
-      .from('tasks')
-      .insert([{
-        project_id: project.id,
-        title,
-        description: `${description || ''}\nAO_REF:${aoToken}`,
-        due_date: dueDate,
-        task_type: taskType,
-        status: 'open',
-        priority: 'high',
-        project_address_snapshot: aoAddress(ao) || project.bo_premise_address || project.address || '',
-      }])
-      .select('id')
-      .single();
-
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn('[NoticeWorkflow] task warning:', err?.message || err);
-    return null;
-  }
 }
 
 export default function ProjectDetailNoticeWorkflow(props) {
   const [project, setProject] = useState(props.project);
   const [noticeAO, setNoticeAO] = useState(undefined);
-  const [refreshKey, setRefreshKey] = useState(0);
-
   const { generateDocument } = useDocumentGenerator();
 
   useEffect(() => {
@@ -166,90 +84,9 @@ export default function ProjectDetailNoticeWorkflow(props) {
     setNoticeAO(undefined);
   }, []);
 
-  const persistNoticeWorkflow = useCallback(async ({
-    ao,
-    sections = [],
-    includeCover = false,
-    noticeDate: suppliedNoticeDate,
-    createDeadlineTask: shouldCreateDeadlineTask = true,
-  }) => {
-    if (!project?.id) throw new Error('No project ID found.');
-    if (!ao) throw new Error('No adjoining owner selected.');
-
-    const noticeDate = suppliedNoticeDate || todayIso();
-    const patch = {};
-
-    await insertNoticeRecord(project.id, ao, sections, includeCover, noticeDate);
-
-    const hasStandardNotice = sections.some(section => ['s1', 's3', 's6'].includes(section));
-
-    if (hasStandardNotice) {
-      const consentDeadline = addDaysIsoFromDate(noticeDate, 14);
-
-      Object.assign(patch, {
-        status: 'notice_served',
-        notice_served_date: noticeDate,
-        noticeServedDate: noticeDate,
-        consent_deadline: consentDeadline,
-        consentDeadline: consentDeadline,
-      });
-
-      if (shouldCreateDeadlineTask) {
-        await createDeadlineTask(
-          project,
-          ao,
-          `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
-          '14-day notice consent period expired. Review whether Section 10 is required.',
-          consentDeadline,
-          'notice_consent_deadline'
-        );
-      }
-    }
-
-    if (sections.includes('s10')) {
-      const s10Deadline = addDaysIsoFromDate(noticeDate, 10);
-
-      Object.assign(patch, {
-        status: 's10',
-        s10_served_date: noticeDate,
-        s10ServedDate: noticeDate,
-        s10_deadline: s10Deadline,
-        s10Deadline: s10Deadline,
-      });
-
-      if (shouldCreateDeadlineTask) {
-        await createDeadlineTask(
-          project,
-          ao,
-          `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
-          '10-day Section 10 notice period expired.',
-          s10Deadline,
-          'notice_section10_deadline'
-        );
-      }
-    }
-
-    if (!Object.keys(patch).length) {
-      return {
-        completed: [{ ao, recorded: { status_patch: {} } }],
-      };
-    }
-
-    const savedProject = await updateProjectAOs(project.id, ao, patch);
-
-    setProject(savedProject);
-    setRefreshKey(value => value + 1);
-
-    return {
-      completed: [{
-        ao,
-        recorded: {
-          status_patch: patch,
-        },
-      }],
-      project: savedProject,
-    };
-  }, [project]);
+  const handleNoticeServed = useCallback(async result => {
+    setProject(prev => applyNoticeResultToProject(prev, result));
+  }, []);
 
   const handleClickCapture = useCallback(event => {
     const button = event.target?.closest?.('button');
@@ -265,9 +102,9 @@ export default function ProjectDetailNoticeWorkflow(props) {
     event.preventDefault();
     event.stopPropagation();
 
-    const ao = findAOFromClickTarget(button, project?.aos || []);
+    const ao = findAOFromClickTarget(button, project.aos || []);
     openNoticeModal(ao || null);
-  }, [openNoticeModal, project?.aos]);
+  }, [openNoticeModal, project.aos]);
 
   const projectForChild = useMemo(() => ({ ...project }), [project]);
 
@@ -277,21 +114,15 @@ export default function ProjectDetailNoticeWorkflow(props) {
         <div data-notice-serving-modal="true">
           <NoticeServingModal
             project={projectForChild}
-            ao={noticeAO}
-            aos={projectForChild?.aos || []}
-            defaultSections={[]}
+            initialAO={noticeAO}
             generateDocument={generateDocument}
-            onServe={persistNoticeWorkflow}
+            onServed={handleNoticeServed}
             onClose={closeNoticeModal}
           />
         </div>
       )}
 
-      <ProjectDetail
-        key={`${projectForChild?.id || 'project'}-${refreshKey}`}
-        {...props}
-        project={projectForChild}
-      />
+      <ProjectDetail {...props} project={projectForChild} />
 
       <div style={{
         position: 'absolute',
