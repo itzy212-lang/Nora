@@ -142,13 +142,24 @@ function TemplatesTab() {
     setMessage('');
     try {
       const b64 = await fileToBase64(file);
-      const { error } = await sb.from('document_templates').update({
+      const payload = {
+        template_key: activeKey.current,
+        label: TEMPLATE_LABELS[activeKey.current] || activeKey.current,
         file_b64: b64,
         filename: file.name,
         file_size: file.size,
         mime_type: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        generation_mode: 'docx',
+        is_active: true,
         updated_at: new Date().toISOString(),
-      }).eq('template_key', activeKey.current);
+      };
+
+      const { error } = await sb
+        .from('document_templates')
+        .upsert(payload, {
+          onConflict: 'template_key',
+        });
+
       if (error) throw error;
       setMessage(`✅ ${file.name} uploaded successfully`);
       loadTemplates();
