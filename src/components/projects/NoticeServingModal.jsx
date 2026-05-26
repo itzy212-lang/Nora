@@ -7,30 +7,6 @@ const NOTICE_TYPES = [
   { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
 
-function addDocxToZip(zip, fileName, b64) {
-  if (!zip || !b64) return;
-  zip.file(fileName, b64, { base64: true });
-}
-
-function downloadB64File(b64, fileName, mimeType) {
-  const byteCharacters = atob(b64);
-  const byteNumbers = new Array(byteCharacters.length);
-
-  for (let i = 0; i < byteCharacters.length; i += 1) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-
-  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
-}
 
 function safeName(value) {
   return String(value || 'Document')
@@ -114,6 +90,8 @@ export default function NoticeServingModal({
   defaultSections = [],
   generateDocument,
   onServe,
+  onServed,
+  onSave,
   onClose,
 }) {
   const lockedToSingleAO = !!ao;
@@ -186,7 +164,7 @@ export default function NoticeServingModal({
 
       onClose?.();
     } catch (err) {
-      console.error(err);
+      console.error('[NoticeServingModal] serve failed:', err);
       alert(err?.message || 'Failed to serve notices.');
     } finally {
       setLoading(false);
