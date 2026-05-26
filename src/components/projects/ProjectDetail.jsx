@@ -1627,6 +1627,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
   const endRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dictationPreviewTimerRef = useRef(null);
 
   const flashDraftAction = useCallback((message) => {
     setDraftActionStatus(message);
@@ -1660,6 +1661,7 @@ function ProjectChat({ project, onOpenComposer }) {
     setMessages([]);
     setInput('');
     setDictationPreview('');
+    window.clearTimeout(dictationPreviewTimerRef.current);
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
     if (isMobile) setShowHistory(false);
@@ -1818,8 +1820,19 @@ function ProjectChat({ project, onOpenComposer }) {
     setUploading(false);
   }, [projectId, sessionId, insertRecordSafely]);
 
-  const handleVoiceTranscript = useCallback((transcript) => {
-    setInput(transcript || '');
+  const handleVoiceTranscript = useCallback((transcript, meta = {}) => {
+    const fullText = String(transcript || '').trim();
+    const currentPhrase = String(meta?.currentPhrase || meta?.interim || '').trim();
+
+    setInput(fullText);
+
+    if (currentPhrase) {
+      setDictationPreview(currentPhrase);
+      window.clearTimeout(dictationPreviewTimerRef.current);
+      dictationPreviewTimerRef.current = window.setTimeout(() => {
+        setDictationPreview('');
+      }, 1200);
+    }
   }, []);
 
   const handleSend = useCallback(async () => {
@@ -1843,6 +1856,8 @@ function ProjectChat({ project, onOpenComposer }) {
       : displayText;
 
     setInput('');
+    setDictationPreview('');
+    window.clearTimeout(dictationPreviewTimerRef.current);
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
 
@@ -2083,6 +2098,11 @@ function ProjectChat({ project, onOpenComposer }) {
                 padding: isMobile ? 0 : '6px 10px',
                 fontSize: isMobile ? 20 : 12,
                 flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1,
+                overflow: 'visible',
               }}
             >
               {isMobile ? '☰' : showHistory ? 'Hide history' : 'Show history'}
@@ -2162,9 +2182,7 @@ function ProjectChat({ project, onOpenComposer }) {
           borderRadius: 12,
           fontSize: 13,
           lineHeight: 1.6,
-          whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+          whiteSpace: 'pre-wrap',
         }}>
           {split.intro}
         </div>
@@ -2313,6 +2331,23 @@ function ProjectChat({ project, onOpenComposer }) {
           )}
         </div>
       )}
+
+      {split.outro && (
+        <div style={{
+          width: 'fit-content',
+          maxWidth: '100%',
+          overflowWrap: 'anywhere',
+          background: 'var(--bg3)',
+          color: 'var(--text)',
+          padding: '10px 14px',
+          borderRadius: 12,
+          fontSize: 13,
+          lineHeight: 1.6,
+          whiteSpace: 'pre-wrap',
+        }}>
+          {split.outro}
+        </div>
+      )}
     </div>
   );
 })}
@@ -2375,40 +2410,26 @@ function ProjectChat({ project, onOpenComposer }) {
               ))}
             </div>
           )}
-
-
           {dictationPreview && (
             <div style={{
-              marginBottom: 8,
-              maxHeight: 34,
-              overflowY: 'auto',
+              marginBottom: 6,
+              height: 24,
+              lineHeight: '24px',
+              padding: '0 10px',
+              borderRadius: 10,
               background: 'var(--bg3)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              padding: '10px 12px',
-              fontSize: 12.5,
-              lineHeight: 1.6,
               color: 'var(--text2)',
+              fontSize: 12.5,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
+              border: '1px solid var(--border)',
             }}>
-              <div style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                color: 'var(--text3)',
-                marginBottom: 4,
-                letterSpacing: '0.5px',
-              }}>
-                Dictation preview
-              </div>
-
               {dictationPreview}
             </div>
           )}
 
-          <div style={{
+<div style={{
             display: 'flex',
             alignItems: 'flex-end',
             gap: isMobile ? 6 : 8,
@@ -2455,15 +2476,21 @@ function ProjectChat({ project, onOpenComposer }) {
               disabled={loading || uploading}
               stopSignal={voiceStopSignal}
               onTranscript={handleVoiceTranscript}
-              onPreview={(preview, meta = {}) => setDictationPreview(meta.currentPhrase || meta.interim || preview)}
+              onPreview={(preview, meta = {}) => {
+                const currentPhrase = meta.currentPhrase || meta.interim || preview || '';
+                if (currentPhrase) {
+                  setDictationPreview(currentPhrase);
+                  window.clearTimeout(dictationPreviewTimerRef.current);
+                  dictationPreviewTimerRef.current = window.setTimeout(() => {
+                    setDictationPreview('');
+                  }, 1200);
+                }
+              }}
             />
 
             <textarea
               value={input}
-              onChange={e => {
-                setInput(e.target.value);
-                if (dictationPreview) setDictationPreview(e.target.value);
-              }}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -2491,9 +2518,9 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
-              className="project-chat-send-btn" onClick={handleSend}
+              className="btn btn-primary btn-sm project-chat-send-btn"
+              onClick={handleSend}
               disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
-              className="btn btn-primary btn-sm"
               style={{
                 cursor: loading || uploading ? 'not-allowed' : 'pointer',
                 alignSelf: 'flex-end',
@@ -2502,9 +2529,16 @@ function ProjectChat({ project, onOpenComposer }) {
                 borderRadius: isMobile ? '50%' : 10,
                 padding: isMobile ? 0 : undefined,
                 flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1,
+                overflow: 'visible',
               }}
             >
-              {uploading ? (isMobile ? '...' : 'Uploading...') : isMobile ? '➤' : 'Send'}
+              <span style={{ display: 'block', lineHeight: 1, transform: isMobile ? 'translateX(1px)' : 'none' }}>
+                {uploading ? (isMobile ? '...' : 'Uploading...') : isMobile ? '➤' : 'Send'}
+              </span>
             </button>
           </div>
         </div>
