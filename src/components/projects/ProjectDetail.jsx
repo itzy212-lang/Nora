@@ -1594,6 +1594,7 @@ function ProjectChat({ project, onOpenComposer }) {
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
+  const [dictationPreview, setDictationPreview] = useState('');
 
   const endRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1620,6 +1621,7 @@ function ProjectChat({ project, onOpenComposer }) {
     startNewSession?.();
     setMessages([]);
     setInput('');
+    setDictationPreview('');
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
     if (isMobile) setShowHistory(false);
@@ -2084,23 +2086,146 @@ function ProjectChat({ project, onOpenComposer }) {
             </div>
           )}
 
-          {messages.map(msg => (
-            <div key={msg.id} style={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: isMobile ? '94%' : '82%',
-              width: 'fit-content',
-              overflowWrap: 'anywhere',
-              background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
-              color: msg.role === 'user' ? '#fff' : 'var(--text)',
-              padding: '10px 14px',
-              borderRadius: 12,
-              fontSize: 13,
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-            }}>
-              {msg.content}
-            </div>
-          ))}
+          
+function splitDraftMessage(content = '') {
+  const text = String(content || '').trim();
+
+  const markers = ['Subject:', 'Dear ', 'Hi ', 'Hello '];
+  let idx = -1;
+
+  for (const marker of markers) {
+    const found = text.indexOf(marker);
+    if (found !== -1 && (idx === -1 || found < idx)) idx = found;
+  }
+
+  if (idx === -1) {
+    return { intro: text, draft: '', outro: '' };
+  }
+
+  const intro = text.slice(0, idx).trim();
+  const draft = text.slice(idx).trim();
+
+  return {
+    intro,
+    draft,
+    outro: '',
+  };
+}
+
+
+{messages.map(msg => {
+  const split = msg.role !== 'user'
+    ? splitDraftMessage(msg.content)
+    : { intro: msg.content, draft: '', outro: '' };
+
+  return (
+    <div
+      key={msg.id}
+      style={{
+        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+        maxWidth: isMobile ? '94%' : '82%',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      {split.intro && (
+        <div style={{
+          width: 'fit-content',
+          maxWidth: '100%',
+          overflowWrap: 'anywhere',
+          background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
+          color: msg.role === 'user' ? '#fff' : 'var(--text)',
+          padding: '10px 14px',
+          borderRadius: 12,
+          fontSize: 13,
+          lineHeight: 1.6,
+          whiteSpace: 'pre-wrap',
+        }}>
+          {split.intro}
+        </div>
+      )}
+
+      {split.draft && (
+        <div style={{
+          background: '#fff',
+          color: '#111827',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: '14px 16px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{
+            whiteSpace: 'pre-wrap',
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}>
+            {split.draft}
+          </div>
+
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: '1px solid #e5e7eb',
+          }}>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(split.draft)}
+              style={{
+                border: '1px solid var(--border)',
+                background: 'var(--bg2)',
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Copy draft
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('ely-compose-draft', {
+                detail: { body: split.draft }
+              }))}
+              style={{
+                border: '1px solid var(--blue)',
+                background: 'var(--blue-bg)',
+                color: 'var(--blue)',
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Open in email composer
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.print()}
+              style={{
+                border: '1px solid var(--border)',
+                background: 'var(--bg2)',
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Generate PDF
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})}
+
 
           {loading && (
             <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>
@@ -2160,6 +2285,36 @@ function ProjectChat({ project, onOpenComposer }) {
             </div>
           )}
 
+
+          {dictationPreview && (
+            <div style={{
+              marginBottom: 8,
+              maxHeight: 120,
+              overflowY: 'auto',
+              background: 'var(--bg3)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '10px 12px',
+              fontSize: 12.5,
+              lineHeight: 1.6,
+              color: 'var(--text2)',
+              whiteSpace: 'pre-wrap',
+            }}>
+              <div style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: 'var(--text3)',
+                marginBottom: 4,
+                letterSpacing: '0.5px',
+              }}>
+                Dictation preview
+              </div>
+
+              {dictationPreview}
+            </div>
+          )}
+
           <div style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -2210,7 +2365,10 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <textarea
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value);
+                if (dictationPreview) setDictationPreview(e.target.value);
+              }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -2218,7 +2376,7 @@ function ProjectChat({ project, onOpenComposer }) {
                 }
               }}
               placeholder={`Ask about ${projectRef}...`}
-              rows={1}
+              rows={2}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -2230,8 +2388,8 @@ function ProjectChat({ project, onOpenComposer }) {
                 borderRadius: 12,
                 color: 'var(--text)',
                 outline: 'none',
-                minHeight: 40,
-                maxHeight: 96,
+                minHeight: 58,
+                maxHeight: 240,
                 boxSizing: 'border-box',
               }}
             />
