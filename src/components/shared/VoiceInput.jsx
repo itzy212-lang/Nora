@@ -180,18 +180,21 @@ export default function VoiceInput({
 
       nextTranscript = removeRepeatedTail(nextTranscript);
 
-      const previewText = nextTranscript || removeRepeatedTail(interimPart) || committedTranscriptRef.current || '';
+      const currentPhrase = removeRepeatedTail(interimPart || finalPart || rawChunk);
+      const fullTranscript = removeRepeatedTail(nextTranscript);
 
-      onPreview?.(previewText, {
+      onPreview?.(currentPhrase, {
         recording: true,
         interim: removeRepeatedTail(interimPart),
         final: committedTranscriptRef.current,
+        currentPhrase,
       });
 
-      onTranscript?.(nextTranscript, {
+      onTranscript?.(fullTranscript, {
         recording: true,
         interim: removeRepeatedTail(interimPart),
         final: committedTranscriptRef.current,
+        currentPhrase,
       });
     };
 
