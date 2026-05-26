@@ -167,11 +167,6 @@ export default function NoticeServingModal({
       return;
     }
 
-    if (typeof generateDocument !== 'function') {
-      alert('Document generator is not available.');
-      return;
-    }
-
     const saveWorkflow = onServe || onServed;
     const canSaveWorkflow = typeof saveWorkflow === 'function';
 
@@ -182,6 +177,29 @@ export default function NoticeServingModal({
       let totalGenerated = 0;
 
       for (const selectedAO of selectedAOs) {
+        // Save the legal/workflow state before any document generation.
+        // A broken template must never stop the AO card from showing notice served / deadlines.
+        if (canSaveWorkflow) {
+          try {
+            await saveWorkflow({
+              ao: selectedAO,
+              sections: selected,
+              includeCover,
+              noticeDate,
+              createDeadlineTask,
+            });
+          } catch (err) {
+            throw new Error(
+              `Could not save notice workflow for AO${selectedAO?.num || ''}: ${err?.message || err}`
+            );
+          }
+        }
+
+        if (typeof generateDocument !== 'function') {
+          warnings.push(`AO${selectedAO?.num || ''}: document generator is not available`);
+          continue;
+        }
+
         const zip = new PizZip();
         const generatedDocs = [];
 
@@ -233,24 +251,12 @@ export default function NoticeServingModal({
         }
 
         totalGenerated += generatedDocs.length;
-
-        if (canSaveWorkflow) {
-          await saveWorkflow({
-            ao: selectedAO,
-            sections: selected,
-            includeCover,
-            noticeDate,
-            createDeadlineTask,
-            warnings,
-            generatedCount: generatedDocs.length,
-          });
-        }
       }
 
       onClose?.();
 
       if (!canSaveWorkflow) {
-        alert(`Documents generated, but the notice workflow was not saved because the save handler is not connected.`);
+        alert('Documents generated, but the notice workflow was not saved because the save handler is not connected.');
       } else if (warnings.length) {
         alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
       } else {
