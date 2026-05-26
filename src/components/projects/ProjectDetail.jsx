@@ -387,28 +387,6 @@ const mSection = {
 
 function ModalShell({ title, children, onClose }) {
   return (
-    <>
-      <style>{`
-        .ely-draft-action-btn {
-          transition: all 0.15s ease;
-        }
-        .ely-draft-action-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-          filter: brightness(0.98);
-        }
-        .ely-draft-action-btn:active {
-          transform: translateY(0);
-          box-shadow: none;
-        }
-        .project-chat-scroll-area {
-          padding-bottom: 8px !important;
-        }
-        .project-chat-composer {
-          padding-top: 8px !important;
-          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
-        }
-      `}</style>
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -2065,7 +2043,6 @@ function ProjectChat({ project, onOpenComposer }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <button
               type="button"
-              className="ely-draft-action-btn"
               onClick={() => setShowHistory(true)}
               title="Chat history"
               aria-label="Chat history"
@@ -2475,7 +2452,6 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
-              className="ely-draft-action-btn"
               onClick={handleSend}
               disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
               className="btn btn-primary btn-sm"
@@ -3700,6 +3676,5 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
     </div>
-    </>
   );
 }
