@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 function cleanSpeech(text = '') {
-  return String(text || '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
 function wordKey(word = '') {
@@ -42,7 +40,7 @@ function mergeByOverlap(previous = '', next = '') {
 
   const prevWords = prev.split(' ').filter(Boolean);
   const nextWords = nxt.split(' ').filter(Boolean);
-  const maxOverlap = Math.min(prevWords.length, nextWords.length, 24);
+  const maxOverlap = Math.min(prevWords.length, nextWords.length, 20);
 
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
     const prevTail = prevWords.slice(-overlap).map(wordKey).join(' ');
@@ -69,7 +67,6 @@ export default function VoiceInput({
   const manualStopRef = useRef(false);
   const committedRef = useRef('');
   const sessionFinalRef = useRef('');
-  const lastPreviewRef = useRef('');
   const restartTimerRef = useRef(null);
 
   const stopRecording = useCallback(() => {
@@ -77,7 +74,6 @@ export default function VoiceInput({
     recordingRef.current = false;
     committedRef.current = '';
     sessionFinalRef.current = '';
-    lastPreviewRef.current = '';
 
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
@@ -88,8 +84,9 @@ export default function VoiceInput({
       recognitionRef.current?.stop();
     } catch {}
 
+    onPreview?.('', { recording: false, currentPhrase: '' });
     setRecording(false);
-  }, []);
+  }, [onPreview]);
 
   useEffect(() => {
     if (!stopSignal) return;
@@ -110,22 +107,18 @@ export default function VoiceInput({
     const cleanFull = cleanSpeech(fullTranscript);
     const cleanPhrase = cleanSpeech(currentPhrase);
 
-    if (cleanPhrase) {
-      lastPreviewRef.current = cleanPhrase;
-    }
-
-    onPreview?.(cleanPhrase || lastPreviewRef.current || '', {
+    onPreview?.(cleanPhrase, {
       recording: true,
       interim: cleanSpeech(interim),
       final: cleanSpeech(final),
-      currentPhrase: cleanPhrase || lastPreviewRef.current || '',
+      currentPhrase: cleanPhrase,
     });
 
     onTranscript?.(cleanFull, {
       recording: true,
       interim: cleanSpeech(interim),
       final: cleanSpeech(final),
-      currentPhrase: cleanPhrase || lastPreviewRef.current || '',
+      currentPhrase: cleanPhrase,
     });
   }, [onPreview, onTranscript]);
 
@@ -145,38 +138,39 @@ export default function VoiceInput({
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      let allFinal = '';
-      let interim = '';
+      let finalText = '';
+      let interimText = '';
 
       for (let i = 0; i < event.results.length; i += 1) {
-        const transcript = event.results[i]?.[0]?.transcript || '';
+        const part = event.results[i]?.[0]?.transcript || '';
 
         if (event.results[i].isFinal) {
-          allFinal += ` ${transcript}`;
+          finalText += ` ${part}`;
         } else if (i >= event.resultIndex) {
-          interim += ` ${transcript}`;
+          interimText += ` ${part}`;
         }
       }
 
-      allFinal = cleanSpeech(allFinal);
-      interim = cleanSpeech(interim);
+      finalText = cleanSpeech(finalText);
+      interimText = cleanSpeech(interimText);
 
-      if (allFinal && allFinal !== sessionFinalRef.current) {
-        sessionFinalRef.current = allFinal;
+      if (finalText) {
+        sessionFinalRef.current = finalText;
       }
 
       const committedPlusFinal = mergeByOverlap(committedRef.current, sessionFinalRef.current);
-      const fullTranscript = interim
-        ? mergeByOverlap(committedPlusFinal, interim)
+      const fullTranscript = interimText
+        ? mergeByOverlap(committedPlusFinal, interimText)
         : committedPlusFinal;
 
-      const currentPhrase = interim || sessionFinalRef.current.split(' ').slice(-10).join(' ');
+      const currentPhrase = interimText || finalText.split(' ').slice(-10).join(' ');
 
-      emit(fullTranscript, currentPhrase, interim, sessionFinalRef.current);
+      emit(fullTranscript, currentPhrase, interimText, sessionFinalRef.current);
     };
 
     recognition.onend = () => {
       if (!recordingRef.current || manualStopRef.current || disabled) {
+        onPreview?.('', { recording: false, currentPhrase: '' });
         setRecording(false);
         return;
       }
@@ -197,6 +191,7 @@ export default function VoiceInput({
 
     recognition.onerror = () => {
       if (!recordingRef.current || manualStopRef.current || disabled) {
+        onPreview?.('', { recording: false, currentPhrase: '' });
         setRecording(false);
         return;
       }
@@ -213,9 +208,10 @@ export default function VoiceInput({
       setRecording(true);
     } catch {
       recordingRef.current = false;
+      onPreview?.('', { recording: false, currentPhrase: '' });
       setRecording(false);
     }
-  }, [disabled, emit]);
+  }, [disabled, emit, onPreview]);
 
   const startRecording = useCallback(() => {
     if (disabled) return;
@@ -224,7 +220,6 @@ export default function VoiceInput({
     recordingRef.current = true;
     committedRef.current = '';
     sessionFinalRef.current = '';
-    lastPreviewRef.current = '';
 
     startRecognition();
   }, [disabled, startRecognition]);
