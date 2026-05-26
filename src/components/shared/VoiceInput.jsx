@@ -88,6 +88,7 @@ function mergeSpeechResult(previous = '', next = '') {
 
 export default function VoiceInput({
   onTranscript,
+  onPreview,
   disabled = false,
   stopSignal = 0,
 }) {
@@ -179,6 +180,14 @@ export default function VoiceInput({
 
       nextTranscript = removeRepeatedTail(nextTranscript);
 
+      const previewText = nextTranscript || removeRepeatedTail(interimPart) || committedTranscriptRef.current || '';
+
+      onPreview?.(previewText, {
+        recording: true,
+        interim: removeRepeatedTail(interimPart),
+        final: committedTranscriptRef.current,
+      });
+
       onTranscript?.(nextTranscript, {
         recording: true,
         interim: removeRepeatedTail(interimPart),
@@ -221,7 +230,7 @@ export default function VoiceInput({
       recordingRef.current = false;
       setRecording(false);
     }
-  }, [disabled, onTranscript]);
+  }, [disabled, onPreview, onTranscript]);
 
   const startRecording = useCallback(() => {
     if (disabled) return;
