@@ -1,6 +1,4 @@
 import { useMemo, useState } from 'react';
-import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
-import PizZip from 'pizzip';
 
 const NOTICE_TYPES = [
   { key: 's1', label: 'Section 1 Notice', deadlineDays: 14 },
@@ -8,38 +6,6 @@ const NOTICE_TYPES = [
   { key: 's6', label: 'Section 6 Notice', deadlineDays: 14 },
   { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
-
-function addDocxToZip(zip, fileName, b64) {
-  if (!zip || !b64) return;
-  zip.file(fileName, b64, { base64: true });
-}
-
-function downloadB64File(b64, fileName, mimeType) {
-  const byteCharacters = atob(b64);
-  const byteNumbers = new Array(byteCharacters.length);
-
-  for (let i = 0; i < byteCharacters.length; i += 1) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-
-  const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
-}
-
-function safeName(value) {
-  return String(value || 'Document')
-    .replace(/[^\w\s.-]/g, '')
-    .replace(/\s+/g, '_')
-    .slice(0, 80);
-}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -57,11 +23,6 @@ function normaliseAOList({ ao, aos, project }) {
   const sources = [
     Array.isArray(aos) ? aos : [],
     Array.isArray(project?.aos) ? project.aos : [],
-    Array.isArray(project?.adjoining_owners) ? project.adjoining_owners : [],
-    Array.isArray(project?.adjoiningOwners) ? project.adjoiningOwners : [],
-    Array.isArray(project?.adjoiningowners) ? project.adjoiningowners : [],
-    Array.isArray(project?.ao_list) ? project.ao_list : [],
-    Array.isArray(project?.owners) ? project.owners : [],
     ao ? [ao] : [],
   ];
 
@@ -86,7 +47,6 @@ export default function NoticeServingModal({
   ao,
   aos = [],
   defaultSections = [],
-  generateDocument,
   onServe,
   onClose,
 }) {
@@ -100,9 +60,11 @@ export default function NoticeServingModal({
   const [selectedAOKeys, setSelectedAOKeys] = useState(
     lockedToSingleAO && ao ? [aoKey(ao)] : []
   );
+
   const [selected, setSelected] = useState(defaultSections || []);
   const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
   const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
+  const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
@@ -111,6 +73,7 @@ export default function NoticeServingModal({
     if (lockedToSingleAO) return;
 
     const key = aoKey(item);
+
     setSelectedAOKeys(prev =>
       prev.includes(key)
         ? prev.filter(v => v !== key)
@@ -137,93 +100,25 @@ export default function NoticeServingModal({
       return;
     }
 
-    if (typeof generateDocument !== 'function') {
-      alert('Document generator is not available.');
+    if (typeof onServe !== 'function') {
+      alert('Notice workflow handler is not connected.');
       return;
     }
-
-    const canSaveWorkflow = typeof onServe === 'function';
 
     setLoading(true);
 
     try {
-      const warnings = [];
-      let totalGenerated = 0;
-
       for (const selectedAO of selectedAOs) {
-        const zip = new PizZip();
-        const generatedDocs = [];
-
-        const allKeys = [...selected];
-        if (includeCover) allKeys.unshift('cover');
-
-        for (const key of allKeys) {
-          try {
-            const placeholders = buildNoticePlaceholders(project, selectedAO, {
-              noticeDate: todayIso(),
-              noticeType: key,
-              noticeSection: key,
-            });
-
-            const fileName = `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_${safeName(key)}.docx`;
-
-            const result = await generateDocument({
-              templateKey: key,
-              mergeData: placeholders,
-              fileName,
-              projectId: project?.id,
-              skipDownload: allKeys.length > 1,
-            });
-
-            if (result?.success && result?.docx_b64) {
-              generatedDocs.push({ fileName, b64: result.docx_b64 });
-              addDocxToZip(zip, fileName, result.docx_b64);
-            } else {
-              warnings.push(`AO${selectedAO?.num || ''} ${key}: ${result?.error || 'Document generation failed'}`);
-            }
-          } catch (err) {
-            warnings.push(`AO${selectedAO?.num || ''} ${key}: ${err.message}`);
-          }
-        }
-
-        if (generatedDocs.length > 1) {
-          const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-          downloadB64File(
-            zipB64,
-            `${safeName(project?.ref || 'Project')}_${safeName(selectedAO?.name || `AO${selectedAO?.num || ''}`)}_Notice_Pack.zip`,
-            'application/zip'
-          );
-        } else if (generatedDocs.length === 1) {
-          downloadB64File(
-            generatedDocs[0].b64,
-            generatedDocs[0].fileName,
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          );
-        }
-
-        totalGenerated += generatedDocs.length;
-
-        if (canSaveWorkflow) {
-          await onServe({
-            ao: selectedAO,
-            sections: selected,
-            includeCover,
-            createDeadlineTask,
-            warnings,
-            generatedCount: generatedDocs.length,
-          });
-        }
+        await onServe({
+          ao: selectedAO,
+          sections: selected,
+          includeCover,
+          createDeadlineTask,
+          noticeDate,
+        });
       }
 
       onClose?.();
-
-      if (!canSaveWorkflow) {
-        alert(`Documents generated, but the notice workflow was not saved because the save handler is not connected.`);
-      } else if (warnings.length) {
-        alert(`Notice workflow saved with warnings:\n\n${warnings.join('\n')}`);
-      } else {
-        alert(`Notice workflow saved. ${totalGenerated} document(s) generated.`);
-      }
     } catch (err) {
       console.error(err);
       alert(err.message || 'Failed to serve notices.');
@@ -268,11 +163,6 @@ export default function NoticeServingModal({
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>
               Serve Notices
             </div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
-              {lockedToSingleAO
-                ? `${ao?.name || 'Adjoining Owner'} • ${project?.ref || 'Project'}`
-                : `Select adjoining owners • ${project?.ref || 'Project'}`}
-            </div>
           </div>
 
           <button onClick={onClose} style={{
@@ -288,80 +178,65 @@ export default function NoticeServingModal({
         </div>
 
         <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            padding: 16,
-          }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: '#6b7280',
-              textTransform: 'uppercase',
-              letterSpacing: '0.6px',
-              marginBottom: 12,
-            }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
+              Notice date
+            </div>
+
+            <input
+              type="date"
+              value={noticeDate}
+              onChange={e => setNoticeDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: 12,
+                border: '1px solid #d1d5db',
+                fontSize: 13,
+              }}
+            />
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
               Adjoining owner / property
             </div>
 
-            {availableAOs.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#dc2626' }}>
-                No adjoining owners are recorded on this project.
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {availableAOs.map(item => {
-                  const key = aoKey(item);
-                  const active = selectedAOKeys.includes(key);
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {availableAOs.map(item => {
+                const key = aoKey(item);
+                const active = selectedAOKeys.includes(key);
 
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleAO(item)}
-                      disabled={lockedToSingleAO}
-                      style={{
-                        textAlign: 'left',
-                        padding: '12px 14px',
-                        borderRadius: 14,
-                        border: active ? '2px solid #2563eb' : '1px solid #e5e7eb',
-                        background: active ? '#eff6ff' : '#fff',
-                        color: active ? '#1d4ed8' : '#111827',
-                        cursor: lockedToSingleAO ? 'default' : 'pointer',
-                        fontWeight: active ? 700 : 500,
-                        opacity: lockedToSingleAO && !active ? 0.6 : 1,
-                      }}
-                    >
-                      <div>
-                        AO{item?.num || ''} — {item?.name || 'Unnamed AO'}
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleAO(item)}
+                    disabled={lockedToSingleAO}
+                    style={{
+                      textAlign: 'left',
+                      padding: '12px 14px',
+                      borderRadius: 14,
+                      border: active ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                      background: active ? '#eff6ff' : '#fff',
+                      color: active ? '#1d4ed8' : '#111827',
+                      cursor: lockedToSingleAO ? 'default' : 'pointer',
+                    }}
+                  >
+                    <div>AO{item?.num || ''} — {item?.name || 'Unnamed AO'}</div>
+                    {aoAddress(item) && (
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                        {aoAddress(item)}
                       </div>
-                      {aoAddress(item) && (
-                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4, lineHeight: 1.35 }}>
-                          {aoAddress(item)}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            padding: 16,
-          }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: '#6b7280',
-              textTransform: 'uppercase',
-              letterSpacing: '0.6px',
-              marginBottom: 12,
-            }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
               Select notices
             </div>
 
@@ -382,61 +257,13 @@ export default function NoticeServingModal({
                       background: active ? '#eff6ff' : '#fff',
                       color: active ? '#1d4ed8' : '#111827',
                       cursor: 'pointer',
-                      fontWeight: active ? 700 : 500,
                     }}
                   >
                     <div>{item.label}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 3 }}>
-                      {item.deadlineDays}-day workflow
-                    </div>
                   </button>
                 );
               })}
             </div>
-          </div>
-
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            padding: 16,
-          }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
-              <input
-                type="checkbox"
-                checked={includeCover}
-                onChange={e => setIncludeCover(e.target.checked)}
-              />
-              Include covering letter
-            </label>
-          </div>
-
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            padding: 16,
-          }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
-              <input
-                type="checkbox"
-                checked={createDeadlineTask}
-                onChange={e => setCreateDeadlineTask(e.target.checked)}
-              />
-              Create deadline task
-            </label>
-          </div>
-
-          <div style={{
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 14,
-            padding: '10px 14px',
-            fontSize: 12.5,
-            color: '#6b7280',
-            lineHeight: 1.55,
-          }}>
-            S1/S3/S6 create one 14-day deadline task for each selected AO. Section 10 creates one 10-day deadline task. Untick the task box if this is a duplicate or supplementary notice.
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -466,8 +293,6 @@ export default function NoticeServingModal({
                 background: '#2563eb',
                 color: '#fff',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.65 : 1,
-                fontWeight: 700,
               }}
             >
               {loading ? 'Serving…' : 'Serve Notice Pack'}
