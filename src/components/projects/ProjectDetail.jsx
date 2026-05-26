@@ -2087,30 +2087,6 @@ function ProjectChat({ project, onOpenComposer }) {
           )}
 
           
-function splitDraftMessage(content = '') {
-  const text = String(content || '').trim();
-
-  const markers = ['Subject:', 'Dear ', 'Hi ', 'Hello '];
-  let idx = -1;
-
-  for (const marker of markers) {
-    const found = text.indexOf(marker);
-    if (found !== -1 && (idx === -1 || found < idx)) idx = found;
-  }
-
-  if (idx === -1) {
-    return { intro: text, draft: '', outro: '' };
-  }
-
-  const intro = text.slice(0, idx).trim();
-  const draft = text.slice(idx).trim();
-
-  return {
-    intro,
-    draft,
-    outro: '',
-  };
-}
 
 
 {messages.map(msg => {
@@ -2416,6 +2392,31 @@ function splitDraftMessage(content = '') {
       </div>
     </div>
   );
+}
+
+function splitDraftMessage(content = '') {
+  const text = String(content || '').trim();
+
+  const markers = ['Subject:', 'Dear ', 'Hi ', 'Hello '];
+  let idx = -1;
+
+  for (const marker of markers) {
+    const found = text.indexOf(marker);
+    if (found !== -1 && (idx === -1 || found < idx)) idx = found;
+  }
+
+  if (idx === -1) {
+    return { intro: text, draft: '', outro: '' };
+  }
+
+  const intro = text.slice(0, idx).trim();
+  const draft = text.slice(idx).trim();
+
+  return {
+    intro,
+    draft,
+    outro: '',
+  };
 }
 
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
