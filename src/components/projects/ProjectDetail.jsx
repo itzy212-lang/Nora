@@ -869,7 +869,7 @@ function ProjectEditModal({ project, onSave, onClose }) {
             <div style={{ gridColumn: '1/-1' }}>
               <Field label="Works description">
                 <textarea
-                  rows={2}
+                  rows={1}
                   value={form.works}
                   onChange={e => setForm(f => ({ ...f, works: e.target.value }))}
                   style={{ ...mInput, resize: 'vertical' }}
@@ -1211,6 +1211,7 @@ function AOCard({
             <div style={{
               margin: '8px 0',
               padding: '10px 12px',
+                lineHeight: '20px',
               background: 'var(--bg3)',
               borderRadius: 10,
               border: '1px solid var(--border)',
@@ -1795,14 +1796,17 @@ function ProjectChat({ project, onOpenComposer }) {
     const fullText = String(transcript || '').trim();
     const currentPhrase = String(meta?.currentPhrase || meta?.interim || '').trim();
 
-    setInput(fullText);
+    setInput(prev => {
+      if (prev === fullText) return prev;
+      return fullText;
+    });
 
     if (currentPhrase) {
       setDictationPreview(currentPhrase);
       window.clearTimeout(dictationPreviewTimerRef.current);
       dictationPreviewTimerRef.current = window.setTimeout(() => {
         setDictationPreview('');
-      }, 1200);
+      }, 1000);
     }
   }, []);
 
@@ -1810,6 +1814,11 @@ function ProjectChat({ project, onOpenComposer }) {
     const text = input.trim();
 
     if ((!text && attachedFiles.length === 0) || loading || uploading) return;
+
+    setVoiceStopSignal(v => v + 1);
+    setDictationPreview('');
+    window.clearTimeout(dictationPreviewTimerRef.current);
+
 
     const attachmentContext = attachedFiles.map(file => ({
       id: file.id,
@@ -1969,6 +1978,7 @@ function ProjectChat({ project, onOpenComposer }) {
                 color: active ? 'var(--blue)' : 'var(--text)',
                 cursor: 'pointer',
                 padding: '10px 12px',
+                lineHeight: '20px',
               }}
             >
               <div style={{
@@ -2402,7 +2412,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
 <div style={{
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             gap: isMobile ? 6 : 8,
             paddingTop: 8,
             borderTop: '1px solid var(--border)',
@@ -2469,11 +2479,12 @@ function ProjectChat({ project, onOpenComposer }) {
                 }
               }}
               placeholder={`Ask about ${projectRef}...`}
-              rows={2}
+              rows={1}
               style={{
                 flex: 1,
                 minWidth: 0,
                 padding: '10px 12px',
+                lineHeight: '20px',
                 fontSize: 13,
                 resize: 'none',
                 background: 'var(--bg2)',
@@ -2481,8 +2492,8 @@ function ProjectChat({ project, onOpenComposer }) {
                 borderRadius: 12,
                 color: 'var(--text)',
                 outline: 'none',
-                minHeight: 58,
-                maxHeight: 240,
+                minHeight: 44,
+                maxHeight: 44,
                 boxSizing: 'border-box',
               }}
             />
