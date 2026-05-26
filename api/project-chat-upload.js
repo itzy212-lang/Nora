@@ -1,5 +1,6 @@
 // api/project-chat-upload.js
-// Uploads project-chat files, extracts readable text where possible, and stores that text in project_memory.
+// Project chat upload route. Uploads files to Supabase, extracts readable text from PDFs/DOCX/TXT/CSV,
+// and stores the extracted text in project_memory so Ely can use uploaded documents in project chat.
 
 import { createClient } from '@supabase/supabase-js';
 import formidable from 'formidable';
@@ -75,10 +76,7 @@ async function extractText({ buffer, fileName, mimeType }) {
       };
     }
 
-    if (
-      mime.includes('wordprocessingml.document') ||
-      lower.endsWith('.docx')
-    ) {
+    if (mime.includes('wordprocessingml.document') || lower.endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer });
       const text = String(result?.value || '').trim();
 
@@ -89,12 +87,7 @@ async function extractText({ buffer, fileName, mimeType }) {
       };
     }
 
-    if (
-      mime.startsWith('text/') ||
-      mime.includes('csv') ||
-      lower.endsWith('.txt') ||
-      lower.endsWith('.csv')
-    ) {
+    if (mime.startsWith('text/') || mime.includes('csv') || lower.endsWith('.txt') || lower.endsWith('.csv')) {
       const text = buffer.toString('utf8').trim();
 
       return {
