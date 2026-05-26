@@ -31,7 +31,10 @@ function normaliseMergeData(data = {}) {
   const out = { ...(data || {}) };
 
   Object.keys(out).forEach(key => {
-    if (out[key] === null || out[key] === undefined) {
+    if (
+      out[key] === null ||
+      out[key] === undefined
+    ) {
       out[key] = '';
     }
   });
@@ -39,25 +42,124 @@ function normaliseMergeData(data = {}) {
   return out;
 }
 
+function simplifyDocxError(err) {
+  try {
+    if (err?.properties?.errors?.length) {
+      return err.properties.errors
+        .map(e => {
+          const explanation =
+            e?.properties?.explanation ||
+            e?.properties?.id ||
+            e?.message;
+
+          const tag =
+            e?.properties?.xtag ||
+            e?.properties?.tag ||
+            '';
+
+          return tag
+            ? `${tag}: ${explanation}`
+            : explanation;
+        })
+        .join(' | ');
+    }
+
+    return (
+      err?.message ||
+      JSON.stringify(err)
+    );
+  } catch {
+    return (
+      err?.message ||
+      'Unknown template error'
+    );
+  }
+}
+
 function renderDocx(templateB64, mergeData) {
   if (!templateB64) {
-    throw new Error('No template_b64 provided.');
+    throw new Error(
+      'No template_b64 provided.'
+    );
   }
 
-  const zip = new PizZip(Buffer.from(templateB64, 'base64'));
+  const contentBuffer = Buffer.from(
+    templateB64,
+    'base64'
+  );
 
-  const doc = new Docxtemplater(zip, {
-    paragraphLoop: true,
-    linebreaks: true,
-    nullGetter: () => '',
-  });
+  const zip = new PizZip(contentBuffer);
 
-  doc.render(normaliseMergeData(mergeData));
+  let lastError = null;
 
-  return doc.getZip().generate({
-    type: 'nodebuffer',
-    compression: 'DEFLATE',
-  });
+  // Try standard ${PLACEHOLDER}
+  try {
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => '',
+      delimiters: {
+        start: '${',
+        end: '}',
+      },
+    });
+
+    doc.render(
+      normaliseMergeData(mergeData)
+    );
+
+    return doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    });
+  } catch (err) {
+    lastError = err;
+
+    console.warn(
+      '[generate-doc] ${} render failed:',
+      simplifyDocxError(err)
+    );
+  }
+
+  // Fallback to normal {}
+  try {
+    const fallbackZip = new PizZip(
+      contentBuffer
+    );
+
+    const doc = new Docxtemplater(
+      fallbackZip,
+      {
+        paragraphLoop: true,
+        linebreaks: true,
+        nullGetter: () => '',
+      }
+    );
+
+    doc.render(
+      normaliseMergeData(mergeData)
+    );
+
+    return doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    });
+  } catch (fallbackErr) {
+    console.error(
+      '[generate-doc] fallback render failed:',
+      simplifyDocxError(fallbackErr)
+    );
+
+    const primary =
+      simplifyDocxError(lastError);
+
+    const secondary =
+      simplifyDocxError(fallbackErr);
+
+    throw new Error(
+      `Template render failed. Primary: ${primary}. Fallback: ${secondary}`
+    );
+  }
 }
 
 async function saveDocumentRecord({
@@ -68,26 +170,31 @@ async function saveDocumentRecord({
 }) {
   const sb = getSupabase();
 
-  if (!sb || !projectId) return null;
+  if (!sb || !projectId) {
+    return null;
+  }
 
   const safeName = safeFileName(
-    fileName || mergeData?.file_name || 'document.docx'
+    fileName ||
+    mergeData?.file_name ||
+    'document.docx'
   );
 
   const storagePath =
     `projects/${projectId}/documents/${Date.now()}-${safeName}`;
 
-  const { error: uploadError } = await sb.storage
-    .from('documents')
-    .upload(
-      storagePath,
-      Buffer.from(docxB64, 'base64'),
-      {
-        contentType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        upsert: true,
-      }
-    );
+  const { error: uploadError } =
+    await sb.storage
+      .from('documents')
+      .upload(
+        storagePath,
+        Buffer.from(docxB64, 'base64'),
+        {
+          contentType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          upsert: true,
+        }
+      );
 
   if (uploadError) {
     console.warn(
@@ -106,15 +213,21 @@ async function saveDocumentRecord({
     mime_type:
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     storage_path: storagePath,
-    category: mergeData?.category || 'document',
+    category:
+      mergeData?.category ||
+      'document',
     section_type:
       mergeData?.section_type ||
       mergeData?.source_template ||
       null,
-    created_at: new Date().toISOString(),
+    created_at:
+      new Date().toISOString(),
   };
 
-  const { data, error: insertError } = await sb
+  const {
+    data,
+    error: insertError,
+  } = await sb
     .from('documents')
     .insert(insertPayload)
     .select('id,storage_path')
@@ -122,7 +235,7 @@ async function saveDocumentRecord({
 
   if (insertError) {
     console.warn(
-      '[generate-doc] document record insert failed:',
+      '[generate-doc] document insert failed:',
       insertError.message
     );
 
@@ -134,7 +247,10 @@ async function saveDocumentRecord({
   return data;
 }
 
-export default async function handler(req, res) {
+export default async function handler(
+  req,
+  res
+) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
 
@@ -158,11 +274,13 @@ export default async function handler(req, res) {
     if (!template_b64) {
       return res.status(400).json({
         success: false,
-        error: 'No template_b64 provided.',
+        error:
+          'No template_b64 provided.',
       });
     }
 
-    const mergeData = normaliseMergeData(merge_data);
+    const mergeData =
+      normaliseMergeData(merge_data);
 
     const resolvedProjectId =
       project_id ||
@@ -170,46 +288,58 @@ export default async function handler(req, res) {
       mergeData.project_id ||
       null;
 
-    const resolvedFileName = safeFileName(
-      file_name ||
-      mergeData.file_name ||
-      'document.docx'
-    );
+    const resolvedFileName =
+      safeFileName(
+        file_name ||
+        mergeData.file_name ||
+        'document.docx'
+      );
 
     const docxBuffer = renderDocx(
       template_b64,
       mergeData
     );
 
-    const docxB64 = docxBuffer.toString('base64');
+    const docxB64 =
+      docxBuffer.toString('base64');
 
     let saved = null;
 
-    if (!skip_storage && resolvedProjectId) {
-      saved = await saveDocumentRecord({
-        projectId: resolvedProjectId,
-        fileName: resolvedFileName,
-        docxB64,
-        mergeData,
-      });
+    if (
+      !skip_storage &&
+      resolvedProjectId
+    ) {
+      saved =
+        await saveDocumentRecord({
+          projectId:
+            resolvedProjectId,
+          fileName:
+            resolvedFileName,
+          docxB64,
+          mergeData,
+        });
     }
 
     return res.status(200).json({
       success: true,
       docx_b64: docxB64,
       pdf_b64: null,
-      storage_path: saved?.storage_path || null,
+      storage_path:
+        saved?.storage_path ||
+        null,
       doc_id: saved?.id || null,
       output_format,
     });
   } catch (err) {
-    console.error('[generate-doc] failed:', err);
+    console.error(
+      '[generate-doc] failed:',
+      err
+    );
 
     return res.status(500).json({
       success: false,
       error:
-        err?.message ||
-        'Document generation failed.',
+        simplifyDocxError(err),
     });
   }
 }
