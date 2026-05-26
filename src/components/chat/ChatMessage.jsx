@@ -146,6 +146,46 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     });
   };
 
+  const handleGenerateDocument = () => {
+    if (!actionText) return;
+    onUseDraft?.(actionText);
+  };
+
+  const handleGeneratePdf = () => {
+    if (!actionText) return;
+
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+    if (!win) return;
+
+    const escaped = actionText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br />');
+
+    win.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Draft PDF</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              font-size: 12pt;
+              line-height: 1.55;
+              padding: 36px;
+              color: #111827;
+            }
+          </style>
+        </head>
+        <body>${escaped}</body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
       <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
@@ -175,6 +215,20 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
             borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
           }}>
             Open in email composer
+          </button>
+
+          <button type="button" onClick={handleGenerateDocument} style={{
+            border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
+            borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
+            Generate document
+          </button>
+
+          <button type="button" onClick={handleGeneratePdf} style={{
+            border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
+            borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
+            Generate PDF
           </button>
         </div>
       )}
