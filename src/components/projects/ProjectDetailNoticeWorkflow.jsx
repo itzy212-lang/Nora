@@ -110,8 +110,7 @@ export default function ProjectDetailNoticeWorkflow(props) {
 
   return (
     <div style={{ position: 'relative' }} onClickCapture={handleClickCapture}>
-      
-{noticeAO !== undefined && (
+      {noticeAO !== undefined && (
         <div data-notice-serving-modal="true">
           <NoticeServingModal
             project={projectForChild}
@@ -120,21 +119,37 @@ export default function ProjectDetailNoticeWorkflow(props) {
             defaultSections={[]}
             generateDocument={generateDocument}
             onServe={async payload => {
-              if (typeof props.handleServeNoticePack === 'function') {
-                return await props.handleServeNoticePack(payload);
-              }
-
               if (typeof props.onServeNotice === 'function') {
-                return await props.onServeNotice(payload);
+                const result = await props.onServeNotice(payload);
+                await handleNoticeServed(result);
+                return result;
               }
 
-              throw new Error('Notice serving handler missing from ProjectDetailNoticeWorkflow.');
+              if (typeof props.handleServeNoticePack === 'function') {
+                const result = await props.handleServeNoticePack(payload);
+                await handleNoticeServed(result);
+                return result;
+              }
+
+              return await handleNoticeServed({
+                completed: [{
+                  ao: payload.ao,
+                  recorded: {
+                    status_patch: {
+                      status: payload.sections?.includes('s10') ? 's10' : 'notice_served',
+                      notice_served_date: payload.noticeDate,
+                      noticeServedDate: payload.noticeDate,
+                      s10_served_date: payload.sections?.includes('s10') ? payload.noticeDate : undefined,
+                      s10ServedDate: payload.sections?.includes('s10') ? payload.noticeDate : undefined,
+                    },
+                  },
+                }],
+              });
             }}
             onClose={closeNoticeModal}
           />
         </div>
       )}
-
 
       <ProjectDetail {...props} project={projectForChild} />
 
