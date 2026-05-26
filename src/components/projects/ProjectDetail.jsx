@@ -1325,7 +1325,7 @@ function AOCard({
                 color: isAOAppointment ? 'var(--purple)' : 'var(--text2)',
               }}
             >
-              {loaLoading ? 'Sending…' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
+              {loaLoading ? 'Sending…' : ao.agreed_surveyor ? '🔥 Agreed Surveyor LoA' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
             </button>
 
             {!isAOAppointment && (
@@ -2778,7 +2778,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         mergeData: buildAOLOAPlaceholders(project, ao),
         fileName: buildLOAFileName('ao', project, ao),
         projectId: project.id,
-        appointmentType: role === 'AO' ? 'ao_loa' : ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa',
+        appointmentType: ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa',
         signers: [
           { name: ao.name, email: aoEmail },
           ...(ao.name2 && ao.email2 ? [{ name: ao.name2, email: ao.email2 }] : []),
