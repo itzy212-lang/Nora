@@ -387,6 +387,21 @@ const mSection = {
 
 function ModalShell({ title, children, onClose }) {
   return (
+    <>
+      <style>{`
+        .ely-draft-action-btn {
+          transition: all 0.15s ease;
+        }
+        .ely-draft-action-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+          filter: brightness(0.98);
+        }
+        .ely-draft-action-btn:active {
+          transform: translateY(0);
+          box-shadow: none;
+        }
+      `}</style>
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -1595,9 +1610,19 @@ function ProjectChat({ project, onOpenComposer }) {
   const [uploading, setUploading] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [dictationPreview, setDictationPreview] = useState('');
+  const [draftActionStatus, setDraftActionStatus] = useState('');
 
   const endRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  const flashDraftAction = useCallback((message) => {
+    setDraftActionStatus(message);
+    window.clearTimeout(window.__elyDraftActionTimer);
+    window.__elyDraftActionTimer = window.setTimeout(() => {
+      setDraftActionStatus('');
+    }, 1800);
+  }, []);
+
 
   useEffect(() => {
     refreshProjectSessions?.(projectId);
@@ -1895,6 +1920,7 @@ function ProjectChat({ project, onOpenComposer }) {
           {mobile && (
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={() => setShowHistory(false)}
               style={{
                 border: 'none',
@@ -2032,6 +2058,7 @@ function ProjectChat({ project, onOpenComposer }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={() => setShowHistory(true)}
               title="Chat history"
               aria-label="Chat history"
@@ -2150,7 +2177,15 @@ function ProjectChat({ project, onOpenComposer }) {
           }}>
             <button
               type="button"
-              onClick={() => navigator.clipboard.writeText(split.draft)}
+              className="ely-draft-action-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(split.draft);
+                  flashDraftAction('Draft copied');
+                } catch {
+                  flashDraftAction('Copy failed');
+                }
+              }}
               style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg2)',
@@ -2165,9 +2200,21 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('ely-compose-draft', {
-                detail: { body: split.draft }
-              }))}
+              className="ely-draft-action-btn"
+              onClick={() => {
+                if (typeof onOpenComposer === 'function') {
+                  onOpenComposer({
+                    mode: 'compose',
+                    body: split.draft,
+                    projectId: project?.id || projectId,
+                  });
+                } else {
+                  window.dispatchEvent(new CustomEvent('ely-compose-draft', {
+                    detail: { body: split.draft }
+                  }));
+                }
+                flashDraftAction('Draft sent to email composer');
+              }}
               style={{
                 border: '1px solid var(--blue)',
                 background: 'var(--blue-bg)',
@@ -2183,7 +2230,43 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
-              onClick={() => window.print()}
+              className="ely-draft-action-btn"
+              onClick={() => {
+                const win = window.open('', '_blank', 'noopener,noreferrer');
+                if (!win) {
+                  flashDraftAction('Popup blocked');
+                  return;
+                }
+
+                const escaped = split.draft
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/\n/g, '<br />');
+
+                win.document.write(`
+                  <!doctype html>
+                  <html>
+                    <head>
+                      <title>Draft PDF</title>
+                      <style>
+                        body {
+                          font-family: Arial, sans-serif;
+                          font-size: 12pt;
+                          line-height: 1.55;
+                          padding: 36px;
+                          color: #111827;
+                        }
+                      </style>
+                    </head>
+                    <body>${escaped}</body>
+                  </html>
+                `);
+                win.document.close();
+                win.focus();
+                setTimeout(() => win.print(), 300);
+                flashDraftAction('PDF window opened');
+              }}
               style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg2)',
@@ -2196,6 +2279,17 @@ function ProjectChat({ project, onOpenComposer }) {
               Generate PDF
             </button>
           </div>
+
+          {draftActionStatus && (
+            <div style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: 'var(--green)',
+              fontWeight: 600,
+            }}>
+              {draftActionStatus}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2312,6 +2406,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || uploading}
               title="Upload file"
@@ -2372,6 +2467,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={handleSend}
               disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
               className="btn btn-primary btn-sm"
@@ -3582,5 +3678,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
     </div>
+    </>
   );
 }
