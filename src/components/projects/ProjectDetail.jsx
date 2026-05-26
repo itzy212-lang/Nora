@@ -387,6 +387,28 @@ const mSection = {
 
 function ModalShell({ title, children, onClose }) {
   return (
+    <>
+      <style>{`
+        .ely-draft-action-btn {
+          transition: all 0.15s ease;
+        }
+        .ely-draft-action-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+          filter: brightness(0.98);
+        }
+        .ely-draft-action-btn:active {
+          transform: translateY(0);
+          box-shadow: none;
+        }
+        .project-chat-scroll-area {
+          padding-bottom: 8px !important;
+        }
+        .project-chat-composer {
+          padding-top: 8px !important;
+          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+        }
+      `}</style>
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -2043,6 +2065,7 @@ function ProjectChat({ project, onOpenComposer }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={() => setShowHistory(true)}
               title="Chat history"
               aria-label="Chat history"
@@ -2140,13 +2163,13 @@ function ProjectChat({ project, onOpenComposer }) {
           color: '#111827',
           border: '1px solid var(--border)',
           borderRadius: 14,
-          padding: '14px 16px',
+          padding: '12px 14px',
           boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
         }}>
           <div style={{
             whiteSpace: 'pre-wrap',
             fontSize: 13,
-            lineHeight: 1.7,
+            lineHeight: 1.55,
           }}>
             {split.draft}
           </div>
@@ -2155,7 +2178,7 @@ function ProjectChat({ project, onOpenComposer }) {
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
-            marginTop: 12,
+            marginTop: 10,
             paddingTop: 10,
             borderTop: '1px solid #e5e7eb',
           }}>
@@ -2416,6 +2439,7 @@ function ProjectChat({ project, onOpenComposer }) {
               disabled={loading || uploading}
               stopSignal={voiceStopSignal}
               onTranscript={handleVoiceTranscript}
+              onPreview={(preview) => setDictationPreview(preview)}
             />
 
             <textarea
@@ -2451,6 +2475,7 @@ function ProjectChat({ project, onOpenComposer }) {
 
             <button
               type="button"
+              className="ely-draft-action-btn"
               onClick={handleSend}
               disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
               className="btn btn-primary btn-sm"
@@ -2489,13 +2514,27 @@ function splitDraftMessage(content = '') {
   }
 
   const intro = text.slice(0, idx).trim();
-  const draft = text.slice(idx).trim();
+  let draft = text.slice(idx).trim();
+  let outro = '';
 
-  return {
-    intro,
-    draft,
-    outro: '',
-  };
+  const outroPatterns = [
+    /\n\s*Let me know if[\s\S]*$/i,
+    /\n\s*Please let me know if[\s\S]*$/i,
+    /\n\s*Happy to amend[\s\S]*$/i,
+    /\n\s*I can revise[\s\S]*$/i,
+    /\n\s*This keeps[\s\S]*$/i,
+  ];
+
+  for (const rx of outroPatterns) {
+    const match = draft.match(rx);
+    if (match) {
+      outro = match[0].trim();
+      draft = draft.replace(rx, '').trim();
+      break;
+    }
+  }
+
+  return { intro, draft, outro };
 }
 
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
@@ -3452,7 +3491,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             </div>
 
             <div
-              style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }}
+              style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
               onClick={() => onOpenSOC?.(project)}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--purple)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
@@ -3488,7 +3527,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
             
             <div
-              style={{ ...card({ padding: '14px 16px', cursor: 'pointer' }) }}
+              style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
               onClick={() => setNoticeModal({ ao: null, defaultSections: [] })}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -3661,5 +3700,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
     </div>
+    </>
   );
 }
