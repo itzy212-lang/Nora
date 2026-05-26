@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
+import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import sb from '../../supabaseClient';
 import PizZip from 'pizzip';
 import VoiceInput from '../shared/VoiceInput';
@@ -137,14 +138,8 @@ function joinOwnerNames(name1, name2) {
 
 function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate }) {
   const noticeDate = suppliedNoticeDate || todayIso();
-  const aoNames = joinOwnerNames(ao?.name, ao?.name2);
-  const boNames = joinOwnerNames(project?.bo_1_name || project?.bo, project?.bo_2_name);
-  const aoPremise = aoAddress(ao);
-  const aoService = aoServiceAddress(ao);
   const boPremise = project?.bo_premise_address || project?.address || '';
-  const boService = project?.bo_service_address || project?.bo_1_service_address || project?.bo_address || boPremise;
-  const works = project?.works || '';
-  const ref = project?.ref || '';
+  const aoPremise = aoAddress(ao);
 
   const sectionLabels = {
     s1: 'Section 1',
@@ -165,60 +160,36 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
   const fileAddress = boPremise || aoPremise || 'Address not recorded';
   const fileBase = `${safeNoticeFilePart(fileLabels[sectionKey] || sectionKey)} - ${safeNoticeFilePart(fileAddress)}`;
 
+  const originalNoticeDate =
+    sectionKey === 's10'
+      ? (
+          ao?.notice_served_date ||
+          ao?.noticeServedDate ||
+          ao?.notice_date ||
+          noticeDate
+        )
+      : noticeDate;
+
+  const placeholders = buildNoticePlaceholders(project, ao, {
+    noticeType: sectionKey,
+    noticeSection: sectionLabels[sectionKey] || sectionKey,
+    noticeDate,
+    originalNoticeDate,
+    section10NoticeDate: noticeDate,
+    notifiableWorks: project?.works || '',
+    includeCover,
+  });
+
   return {
+    ...placeholders,
     project_id: project?.id || '',
     ao_id: ao?.id || String(ao?.num || ''),
     file_name: `${fileBase}.docx`,
     category: 'notice',
     section_type: sectionKey,
     source_template: sectionKey,
-
-    REF: ref,
-    PROJECT_REF: ref,
-
-    NOTICE_DATE: noticeDate,
-    NOTICE_DATE_LONG: formatLongNoticeDate(noticeDate),
-
-    BO_NAME: boNames,
-    BO_NAMES: boNames,
-    BO_NAME_1: project?.bo_1_name || project?.bo || '',
-    BO_NAME_2: project?.bo_2_name || '',
-    BO_PREMISE: boPremise,
-    BO_PROPERTY: boPremise,
-    BO_SERVICE_ADDRESS: boService,
-
-    AO_NAME: aoNames,
-    AO_NAMES: aoNames,
-    AO_NAME_1: ao?.name || '',
-    AO_NAME_2: ao?.name2 || '',
-    AO_PREMISE: aoPremise,
-    AO_PROPERTY: aoPremise,
-    AO_SERVICE_ADDRESS: aoService,
-
-    OWNER_S: ao?.name2 ? 'Owners' : 'Owner',
-    OWNER_S_POSSESSIVE: ao?.name2 ? "Owners'" : "Owner's",
-    AO_OWNER_S: ao?.name2 ? 'Adjoining Owners' : 'Adjoining Owner',
-    AO_OWNER_S_POSSESSIVE: ao?.name2 ? "Adjoining Owners'" : "Adjoining Owner's",
-
-    WORKS: works,
-    PROPOSED_WORKS: works,
-    NOTIFIABLE_WORKS: works,
-
-    NOTICE_SECTION: sectionLabels[sectionKey] || sectionKey,
-    NOTICE_SUBSECTION: '',
-    NOTICE_SECTION_FULL: sectionLabels[sectionKey] || sectionKey,
-
-    SECTION_1: sectionKey === 's1' ? 'Yes' : '',
-    SECTION_3: sectionKey === 's3' ? 'Yes' : '',
-    SECTION_6: sectionKey === 's6' ? 'Yes' : '',
-    SECTION_10: sectionKey === 's10' ? 'Yes' : '',
-
-    SURVEYOR_NAME: 'Itzik Darel',
-    SURVEYOR_FIRM: 'Square One Consulting',
-    SURVEYOR_EMAIL: 'help@sq1consulting.co.uk',
   };
 }
-
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
