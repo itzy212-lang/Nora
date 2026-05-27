@@ -2067,7 +2067,7 @@ function ProjectChat({ project, onOpenComposer }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <button
               type="button"
-              onClick={() => setShowHistory(true)}
+              onClick={() => setShowHistory(prev => isMobile ? true : !prev)}
               title="Chat history"
               aria-label="Chat history"
               className="btn btn-sm btn-ghost"
@@ -2112,8 +2112,10 @@ function ProjectChat({ project, onOpenComposer }) {
         <div style={{
           flex: 1,
           minHeight: 0,
-          overflowY: 'hidden',
+          overflowY: 'auto',
           overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
