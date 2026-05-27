@@ -19,6 +19,7 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   // Review data
   const [aoAddress, setAoAddress] = useState('');
+  const [selectedAOIndex, setSelectedAOIndex] = useState('0');
   const [socSections, setSocSections] = useState([]);
   const [siteComments, setSiteComments] = useState([]);
   const [partyDrafts, setPartyDrafts] = useState([]);
@@ -28,6 +29,23 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   const transcriptBoxRef = useRef(null);
 
   const selectedProject = projects.find(p => p.id === projectId);
+
+  const aoOptions = selectedProject?.aos || [];
+
+  const selectedAO =
+    aoOptions[Number(selectedAOIndex)] || aoOptions[0] || null;
+
+  const projectDisplayAddress =
+    selectedProject?.address ||
+    selectedProject?.premise_address ||
+    selectedProject?.bo_premise_address ||
+    '';
+
+  if (!aoAddress && selectedAO?.address) {
+    setTimeout(() => {
+      setAoAddress(selectedAO.address);
+    }, 0);
+  }
 
   // Build contact list from project data
   const getProjectContacts = useCallback(() => {
@@ -387,9 +405,52 @@ Rules:
                 ? <><div style={s.recDot} /><span style={{ color: 'var(--red)', fontWeight: 600, fontSize: 13 }}>Recording…</span></>
                 : <span style={{ color: 'var(--text3)', fontSize: 13 }}>Paused</span>}
               {selectedProject && (
-                <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 8 }}>
-                  {selectedProject.ref} — {selectedProject.address}
-                </span>
+                <div style={{
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  marginLeft: 8,
+                  width: '100%',
+                  maxWidth: 520,
+                }}>
+                  <select
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
+                    style={{
+                      ...s.select,
+                      minWidth: 180,
+                      fontSize: 12,
+                      padding: '6px 10px',
+                    }}
+                  >
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.address || p.premise_address || p.bo_premise_address || p.ref}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedAOIndex}
+                    onChange={e => {
+                      setSelectedAOIndex(e.target.value);
+                      const ao = aoOptions[Number(e.target.value)];
+                      if (ao?.address) setAoAddress(ao.address);
+                    }}
+                    style={{
+                      ...s.select,
+                      minWidth: 180,
+                      fontSize: 12,
+                      padding: '6px 10px',
+                    }}
+                  >
+                    {aoOptions.map((ao, idx) => (
+                      <option key={idx} value={idx}>
+                        {ao.address || `AO${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -446,7 +507,7 @@ Rules:
           <div style={s.field}>
             <label style={s.label}>Project</label>
             <input style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text3)' }}
-              value={selectedProject ? `${selectedProject.ref} — ${selectedProject.address}` : ''} disabled />
+              value={projectDisplayAddress} disabled />
           </div>
         </div>
       </div>
