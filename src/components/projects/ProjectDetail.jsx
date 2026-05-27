@@ -1325,7 +1325,7 @@ function AOCard({
                 color: isAOAppointment ? 'var(--purple)' : 'var(--text2)',
               }}
             >
-              {loaLoading ? 'Sending…' : ao.agreed_surveyor ? '🔥 Agreed Surveyor LoA' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
+              {loaLoading ? 'Sending…' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
             </button>
 
             {!isAOAppointment && (
@@ -2621,6 +2621,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [loaLoading, setLoaLoading] = useState(null);
+  const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(false);
   const [project, setProject] = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
   const [editingAO, setEditingAO] = useState(null);
@@ -2690,7 +2691,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const boEmail = project.bo_email || project.bo_1_email || '';
   const works = project.works || '';
   const aos = project.aos || [];
-  const hasAgreedSurveyorAO = aos.some(ao => !!ao?.agreed_surveyor || !!ao?.agreedSurveyor);
   const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
   const docs = project.documents || [];
   const projColour = getProjectColour(project);
@@ -2779,7 +2779,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         mergeData: buildAOLOAPlaceholders(project, ao),
         fileName: buildLOAFileName('ao', project, ao),
         projectId: project.id,
-        appointmentType: ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa',
+        appointmentType: role === 'AO' ? 'ao_loa' : ao.agreed_surveyor ? 'ao_agreed_surveyor_loa' : 'ao_loa',
         signers: [
           { name: ao.name, email: aoEmail },
           ...(ao.name2 && ao.email2 ? [{ name: ao.name2, email: ao.email2 }] : []),
@@ -3415,7 +3415,48 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                     </div>
                   )}
 
-                  {(role === 'BO' || hasAgreedSurveyorAO) && (
+                  {role === 'AO' && (
+                    <div style={{
+                      marginTop: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}>
+                      <div
+                        onClick={() => setBoAgreedSurveyorMode(v => !v)}
+                        role="switch"
+                        aria-checked={boAgreedSurveyorMode}
+                        title="Toggle agreed surveyor appointment for the Building Owner"
+                        style={{
+                          width: 34,
+                          height: 19,
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          position: 'relative',
+                          flexShrink: 0,
+                          background: boAgreedSurveyorMode ? 'var(--blue)' : 'var(--border2)',
+                        }}
+                      >
+                        <div style={{
+                          width: 15,
+                          height: 15,
+                          borderRadius: '50%',
+                          background: '#fff',
+                          position: 'absolute',
+                          top: 2,
+                          left: boAgreedSurveyorMode ? 17 : 2,
+                          transition: 'left 0.15s',
+                        }} />
+                      </div>
+
+                      <span style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.35 }}>
+                        Building Owner agrees to appoint me as Agreed Surveyor
+                      </span>
+                    </div>
+                  )}
+
+                  {(role === 'BO' || boAgreedSurveyorMode) && (
                     <button
                       className="btn btn-sm btn-ghost"
                       disabled={loaLoading === 'bo'}
@@ -3428,11 +3469,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                         opacity: loaLoading === 'bo' ? 0.65 : 1,
                       }}
                     >
-                      {loaLoading === 'bo'
-                        ? 'Sending…'
-                        : role === 'AO' && hasAgreedSurveyorAO
-                          ? '🔥 Send Agreed Surveyor LoA'
-                          : '📄 Send BO LoA'}
+                      {loaLoading === 'bo' ? 'Sending…' : '📄 Send BO LoA'}
                     </button>
                   )}
                 </div>
