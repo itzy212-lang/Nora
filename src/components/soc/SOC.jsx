@@ -19,17 +19,43 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   // Review data
   const [aoAddress, setAoAddress] = useState('');
+  const [selectedAOIndex, setSelectedAOIndex] = useState('0');
   const [socSections, setSocSections] = useState([]);
   const [siteComments, setSiteComments] = useState([]);
   const [partyDrafts, setPartyDrafts] = useState([]);
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
-  const transcriptBoxRef = useRef(null);
   const finalResultsRef = useRef({});
-  const ignoreNextEndRef = useRef(false);
+  const transcriptBoxRef = useRef(null);
 
   const selectedProject = projects.find(p => p.id === projectId);
+
+  const projectAddress =
+    selectedProject?.address ||
+    selectedProject?.premise_address ||
+    selectedProject?.bo_premise_address ||
+    '';
+
+  const aoOptions = selectedProject?.aos || [];
+  const selectedAO = aoOptions[Number(selectedAOIndex)] || aoOptions[0] || null;
+
+  const selectedAOAddress =
+    selectedAO?.premise ||
+    selectedAO?.reg_addr ||
+    selectedAO?.address ||
+    '';
+
+  const displayAOAddress = aoAddress || selectedAOAddress;
+
+  function projectOptionLabel(project) {
+    return project?.address || project?.premise_address || project?.bo_premise_address || project?.ref || 'Project';
+  }
+
+  function aoOptionLabel(ao, index) {
+    const address = ao?.premise || ao?.reg_addr || ao?.address || '';
+    return address || `AO${index + 1}`;
+  }
 
   // Build contact list from project data
   const getProjectContacts = useCallback(() => {
@@ -47,17 +73,55 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   // ── Recording ──────────────────────────────────────────────────────────────
   const normaliseSpeechText = useCallback((value = '') => {
-    return String(value || '')
+    const words = String(value || '')
       .replace(/\s+/g, ' ')
-      .replace(/\s+([,.!?;:])/g, '$1')
-      .trim();
+      .trim()
+      .split(' ')
+      .filter(Boolean);
+
+    const cleaned = [];
+
+    for (const word of words) {
+      if (cleaned.length && cleaned[cleaned.length - 1].toLowerCase() === word.toLowerCase()) {
+        continue;
+      }
+
+      cleaned.push(word);
+    }
+
+    let text = cleaned.join(' ');
+
+    // Remove obvious repeated short phrases caused by mobile speech interim events.
+    for (let size = 2; size <= 6; size += 1) {
+      const parts = text.split(' ');
+      const compact = [];
+
+      for (let i = 0; i < parts.length; i += 1) {
+        const previous = compact.slice(-size).join(' ').toLowerCase();
+        const current = parts.slice(i, i + size).join(' ').toLowerCase();
+
+        if (previous && current && previous === current) {
+          i += size - 1;
+          continue;
+        }
+
+        compact.push(parts[i]);
+      }
+
+      text = compact.join(' ');
+    }
+
+    return text.trim();
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsRecording(false);
   }, []);
 
   const startRecording = useCallback(() => {
-    if (isRecording) return;
-
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('Voice recording requires Chrome or Edge. You can type your notes below.');
+      alert('Voice recording requires Chrome or Edge. You can type or paste your notes below.');
       return;
     }
 
@@ -77,80 +141,69 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     rec.onresult = (event) => {
       let interim = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const phrase = event.results[i]?.[0]?.transcript || '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const spoken = normaliseSpeechText(result?.[0]?.transcript || '');
 
-        if (event.results[i].isFinal) {
-          finalResultsRef.current[i] = phrase;
-        } else {
-          interim += phrase;
+        if (!spoken) continue;
+
+        if (result.isFinal) {
+          finalResultsRef.current[i] = spoken;
+        } else if (i >= event.resultIndex) {
+          interim = `${interim} ${spoken}`.trim();
         }
       }
 
       const finalText = Object.keys(finalResultsRef.current)
         .sort((a, b) => Number(a) - Number(b))
         .map(key => finalResultsRef.current[key])
-        .join(' ');
+        .join(' ')
+        .trim();
 
-      const liveText = normaliseSpeechText(`${finalText} ${interim}`);
+      const combined = normaliseSpeechText([finalText, interim].filter(Boolean).join(' '));
 
-      transcriptRef.current = liveText;
-      setTranscript(liveText);
+      transcriptRef.current = finalText;
+      setTranscript(combined);
 
       if (transcriptBoxRef.current) {
         transcriptBoxRef.current.scrollTop = transcriptBoxRef.current.scrollHeight;
       }
     };
 
-    rec.onend = () => {
-      setIsRecording(false);
-      recognitionRef.current = null;
-    };
-
-    rec.onerror = () => {
-      setIsRecording(false);
-      recognitionRef.current = null;
-    };
+    rec.onend = () => setIsRecording(false);
+    rec.onerror = () => setIsRecording(false);
 
     recognitionRef.current = rec;
     rec.start();
-  }, [isRecording, normaliseSpeechText]);
+  }, [normaliseSpeechText]);
 
-  const stopRecording = useCallback(() => {
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      // ignore stop errors from already-ended mobile recognition sessions
-    }
-    setIsRecording(false);
-  }, []);
-
-  const appendCurrentNote = useCallback(() => {
-    const note = normaliseSpeechText(transcriptRef.current || transcript);
-
-    if (!note) {
-      stopRecording();
-      setTranscript('');
-      transcriptRef.current = '';
-      finalResultsRef.current = {};
-      return;
-    }
+  const sendCurrentNote = useCallback(() => {
+    const note = normaliseSpeechText(transcript || transcriptRef.current);
 
     stopRecording();
 
-    setFullTranscript(prev => {
-      const cleanPrev = String(prev || '').trim();
-      return cleanPrev ? `${cleanPrev}\n${note}` : note;
-    });
+    if (!note) return;
 
+    setFullTranscript(prev => [prev, note].filter(Boolean).join('\n\n'));
     setTranscript('');
     transcriptRef.current = '';
     finalResultsRef.current = {};
   }, [normaliseSpeechText, stopRecording, transcript]);
 
+  const handleRecordSend = useCallback(() => {
+    const hasCurrentNote = !!normaliseSpeechText(transcript || transcriptRef.current);
+
+    if (isRecording || hasCurrentNote) {
+      sendCurrentNote();
+      return;
+    }
+
+    startRecording();
+  }, [isRecording, normaliseSpeechText, sendCurrentNote, startRecording, transcript]);
+
   // ── AI Generation ──────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async (notes) => {
-    const currentNote = normaliseSpeechText(transcriptRef.current || transcript);
+    const currentNote = normaliseSpeechText(transcript || transcriptRef.current);
     const text = notes || [fullTranscript, currentNote].filter(Boolean).join('\n\n');
     if (!text.trim()) { alert('No notes to process.'); return; }
     stopRecording();
@@ -353,9 +406,9 @@ Rules:
   <table style="width:100%;border-collapse:collapse;margin-bottom:18px;font-size:10.5px">
     <tbody>
       ${[
-        ["Adjoining Owner's Property", aoAddress || '—'],
+        ["Adjoining Owner's Property", displayAOAddress || '—'],
         ["Adjoining Owners", project?.aos?.map(a => a.name).join(', ') || '—'],
-        ["Building Owner's Property", project?.address || '—'],
+        ["Building Owner's Property", projectAddress || project?.address || '—'],
         ["Building Owner", project?.bo_name || '—'],
         ["Date of Inspection", today],
         ["Proposed Works", project?.works || '—'],
@@ -417,12 +470,12 @@ Rules:
             <label style={s.label}>Select project</label>
             <select style={s.select} value={projectId} onChange={e => setProjectId(e.target.value)}>
               <option value="">— Select project —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.ref} — {p.address}</option>)}
+              {projects.map(p => <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>)}
             </select>
           </div>
           <button style={{ ...s.recordBtn, opacity: !projectId ? 0.5 : 1 }} disabled={!projectId}
-            onClick={() => { setPhase('recording'); startRecording(); }}>
-            🎙️ Record
+            onClick={() => { setPhase('recording'); }}>
+            Continue
           </button>
           <div style={s.hint}>
             Just speak naturally — <strong>say the room name as you go</strong>, Ely will pick it up automatically.<br />
@@ -445,41 +498,70 @@ Rules:
           </button>
         </div>
         <div style={s.card}>
+          <div style={s.socSelectors}>
+            <div style={s.field}>
+              <label style={s.label}>Building Owner property</label>
+              <input
+                style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text2)' }}
+                value={projectAddress}
+                disabled
+              />
+            </div>
+
+            <div style={s.field}>
+              <label style={s.label}>Adjoining Owner property</label>
+              {aoOptions.length > 1 ? (
+                <select
+                  style={s.select}
+                  value={selectedAOIndex}
+                  onChange={e => {
+                    setSelectedAOIndex(e.target.value);
+                    const ao = aoOptions[Number(e.target.value)];
+                    setAoAddress(ao?.premise || ao?.reg_addr || ao?.address || '');
+                  }}
+                >
+                  {aoOptions.map((ao, idx) => (
+                    <option key={ao.id || idx} value={idx}>
+                      {aoOptionLabel(ao, idx)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text2)' }}
+                  value={displayAOAddress}
+                  disabled
+                  placeholder="No adjoining owner address recorded"
+                />
+              )}
+            </div>
+          </div>
+
           <div style={s.statusBar}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {isRecording
                 ? <><div style={s.recDot} /><span style={{ color: 'var(--red)', fontWeight: 600, fontSize: 13 }}>Recording…</span></>
-                : <span style={{ color: 'var(--text3)', fontSize: 13 }}>Paused</span>}
-              {selectedProject && (
-                <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 8 }}>
-                  {selectedProject.ref} — {selectedProject.address}
-                </span>
-              )}
+                : <span style={{ color: 'var(--text3)', fontSize: 13 }}>Ready</span>}
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {!isRecording && (
-                <button onClick={startRecording} style={s.recordBtn}>🎙️ Record</button>
-              )}
-              <button
-                onClick={appendCurrentNote}
-                style={s.primaryBtn}
-                disabled={!transcript && !isRecording}
-              >
-                ➤ Send note
-              </button>
-            </div>
+
+            <button
+              onClick={handleRecordSend}
+              style={isRecording || transcript ? s.sendBtn : s.recordBtn}
+            >
+              {isRecording || transcript ? '➤ Send' : '🎙️ Record'}
+            </button>
           </div>
 
           <div ref={transcriptBoxRef} style={s.transcript}>
-            {transcript || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Record one observation, then tap Send note…</span>}
+            {transcript || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Tap Record, dictate one observation, then tap Send…</span>}
           </div>
 
           <div>
-            <label style={{ ...s.label, display: 'block', marginBottom: 5 }}>Or type / paste notes</label>
-            <textarea style={{ ...s.input, width: '100%', minHeight: 80, resize: 'vertical', fontSize: 12.5 }}
-              placeholder="Type your notes here if not using voice…"
+            <label style={{ ...s.label, display: 'block', marginBottom: 5 }}>Stored SOC notes / paste notes</label>
+            <textarea style={{ ...s.input, width: '100%', minHeight: 110, resize: 'vertical', fontSize: 12.5 }}
+              placeholder="Each sent note appears here. You can also paste a full SOC transcript here."
               value={fullTranscript}
-              onChange={e => setFullTranscript(e.target.value)} />
+              onChange={e => { setFullTranscript(e.target.value); }} />
           </div>
 
           {processing && (
@@ -517,7 +599,7 @@ Rules:
           <div style={s.field}>
             <label style={s.label}>Project</label>
             <input style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text3)' }}
-              value={selectedProject ? `${selectedProject.ref} — ${selectedProject.address}` : ''} disabled />
+              value={projectAddress} disabled />
           </div>
         </div>
       </div>
@@ -673,6 +755,7 @@ const s = {
   sectionHeader: { display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 8 },
   sectionNum: { fontSize: 15, fontWeight: 700, color: 'var(--blue)', flexShrink: 0 },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
+  socSelectors: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' },
   select: { border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', outline: 'none' },
@@ -680,10 +763,11 @@ const s = {
   hint: { fontSize: 12, color: 'var(--text3)', background: 'var(--bg3)', borderRadius: 8, padding: '10px 14px', lineHeight: 1.7 },
   recordBtn: { background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 99, padding: '10px 24px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start' },
   stopBtn: { background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 99, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  sendBtn: { background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: 99, padding: '10px 24px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start' },
   doneBtn: { background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: 99, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer' },
   statusBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 },
   recDot: { width: 9, height: 9, borderRadius: '50%', background: 'var(--red)', flexShrink: 0 },
-  transcript: { minHeight: 160, maxHeight: 300, overflowY: 'auto', fontSize: 13.5, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)', padding: '4px 0' },
+  transcript: { minHeight: 120, maxHeight: 220, overflowY: 'auto', fontSize: 13.5, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)', padding: '4px 0' },
   processingBar: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--blue-bg)', color: 'var(--blue)', fontSize: 13, borderRadius: 8 },
   spinner: { width: 13, height: 13, border: '2px solid var(--blue)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 },
   table: { width: '100%', borderCollapse: 'collapse' },
