@@ -202,6 +202,12 @@ function sortSessionsNewestFirst(sessions = []) {
   return [...(sessions || [])].sort((a, b) => sessionTimeValue(b) - sessionTimeValue(a));
 }
 
+
+function isMobileVoiceBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
 function projectLabel(project = {}) {
   return [
     first(project.ref, project.reference, project.project_ref),
@@ -768,6 +774,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
   };
 
   const handleVoice = (transcript) => {
+    // Mobile Chrome speech recognition already re-emits previous phrases internally.
+    // Do NOT merge on mobile or the transcript snowballs exponentially.
+    if (isMobileVoiceBrowser()) {
+      setInput(cleanVoiceTranscript(transcript));
+      requestAnimationFrame(resizeTextarea);
+      textareaRef.current?.focus();
+      return;
+    }
+
     if (!voiceBaseRef.current) voiceBaseRef.current = input.trim();
 
     const next = mergeVoiceWithBase(voiceBaseRef.current, transcript);
