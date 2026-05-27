@@ -4,6 +4,7 @@ import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
+import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
 import PizZip from 'pizzip';
 import VoiceInput from '../shared/VoiceInput';
@@ -1075,6 +1076,7 @@ function AOCard({
   project,
   onOpenComposer,
   onGenerateAOLOA,
+  onGenerateAward,
   onEditAO,
   onServeNotice,
   onServeS10,
@@ -1083,6 +1085,7 @@ function AOCard({
   onNoteIntention,
   onOpenSOCForAO,
   loaLoading,
+  awardLoading,
 }) {
   const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
   const colour = getAOColour(ao, projectRole);
@@ -1326,6 +1329,21 @@ function AOCard({
               }}
             >
               {loaLoading ? 'Sending…' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
+            </button>
+
+            <button
+              className="btn btn-sm btn-ghost"
+              disabled={awardLoading}
+              onClick={() => onGenerateAward?.(ao)}
+              style={{
+                cursor: awardLoading ? 'not-allowed' : 'pointer',
+                fontSize: 12,
+                borderRadius: 99,
+                opacity: awardLoading ? 0.65 : 1,
+                color: 'var(--blue)',
+              }}
+            >
+              {awardLoading ? 'Generating…' : '🏆 Generate Award'}
             </button>
 
             {!isAOAppointment && (
@@ -2623,6 +2641,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [loaLoading, setLoaLoading] = useState(null);
+  const [awardLoading, setAwardLoading] = useState(null);
   const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(false);
   const [project, setProject] = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
@@ -2795,6 +2814,37 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       setLoaLoading(null);
     }
   }, [sendForSignature, project, role]);
+
+  const handleGenerateAward = useCallback(async (ao) => {
+    const aoKey = `ao-${ao.id || ao.num || ao.name || 'unknown'}`;
+    setAwardLoading(aoKey);
+
+    try {
+      const award = buildAwardPlaceholders(project, ao);
+
+      if (!award?.isValid) {
+        alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${(award?.missing || []).map(item => `• ${item}`).join('\n')}`);
+        return;
+      }
+
+      const result = await generateDocument({
+        templateKey: award.templateKey,
+        mergeData: award.mergeData,
+        fileName: award.fileName,
+        projectId: project.id,
+      });
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'Could not generate award.');
+      }
+
+      alert(`${award.awardTypeLabel || 'Award'} generated successfully.`);
+    } catch (err) {
+      alert(err.message || 'Could not generate award.');
+    } finally {
+      setAwardLoading(null);
+    }
+  }, [generateDocument, project]);
 
   const handleSaveProjectEdit = useCallback(async (form) => {
     const fee = String(form.fee ?? '').trim() === '' ? null : Number(form.fee);
@@ -3568,6 +3618,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onOpenComposer={onOpenComposer}
                       project={project}
                       onGenerateAOLOA={handleGenerateAOLOA}
+                      onGenerateAward={handleGenerateAward}
                       onEditAO={setEditingAO}
                       onServeNotice={handleServeNotice}
                       onServeS10={handleServeS10}
@@ -3576,6 +3627,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onNoteIntention={handleNoteIntention}
                       onOpenSOCForAO={handleOpenSOCForAO}
                       loaLoading={loaLoading === aoKey}
+                      awardLoading={awardLoading === aoKey}
                     />
                   );
                 })
