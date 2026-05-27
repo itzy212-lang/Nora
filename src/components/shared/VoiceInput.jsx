@@ -74,6 +74,29 @@ function mergeWithoutRepeating(previous = '', next = '') {
   return removeImmediateDuplicateWords(`${prev} ${curr}`);
 }
 
+function isMobileBrowser() {
+  if (typeof navigator === 'undefined') return false;
+
+  const ua = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+
+  return /Android|iPhone|iPad|iPod/i.test(ua)
+    || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function getSupportedAudioMimeType() {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/mpeg',
+  ];
+
+  if (typeof MediaRecorder === 'undefined') return '';
+
+  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
 export default function VoiceInput({
   onTranscript,
   onPreview,
@@ -81,6 +104,7 @@ export default function VoiceInput({
   stopSignal = 0,
 }) {
   const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
 
   const recognitionRef = useRef(null);
   const shouldKeepRecordingRef = useRef(false);
@@ -91,11 +115,23 @@ export default function VoiceInput({
   const sessionResultsRef = useRef({});
   const lastEmittedRef = useRef('');
 
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const mediaChunksRef = useRef([]);
+
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
     }
+  }, []);
+
+  const stopMediaTracks = useCallback(() => {
+    try {
+      mediaStreamRef.current?.getTracks?.().forEach(track => track.stop());
+    } catch {}
+
+    mediaStreamRef.current = null;
   }, []);
 
   const emit = useCallback((fullText = '', currentPhrase = '', finalText = '') => {
@@ -142,6 +178,14 @@ export default function VoiceInput({
     sessionResultsRef.current = {};
     lastEmittedRef.current = '';
 
+    try {
+      const recorder = mediaRecorderRef.current;
+
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+    } catch {}
+
     onPreview?.('', {
       recording: false,
       currentPhrase: '',
@@ -151,6 +195,121 @@ export default function VoiceInput({
 
     setRecording(false);
   }, [clearRestartTimer, onPreview]);
+
+  const sendMobileAudioForTranscription = useCallback(async (blob) => {
+    if (!blob || blob.size === 0) return;
+
+    setTranscribing(true);
+
+    try {
+      const formData = new FormData();
+      const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+
+      formData.append('audio', blob, `voice.${extension}`);
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || `Transcription failed with status ${response.status}`);
+      }
+
+      const text = cleanText(payload.text || '');
+
+      if (text) {
+        lastEmittedRef.current = text;
+
+        onPreview?.('', {
+          recording: false,
+          currentPhrase: '',
+          interim: '',
+          final: text,
+        });
+
+        onTranscript?.(text, {
+          recording: false,
+          currentPhrase: '',
+          interim: '',
+          final: text,
+        });
+      }
+    } catch (error) {
+      console.error('[VoiceInput] mobile transcription failed:', error);
+      alert(error?.message || 'Voice transcription failed. Please try again.');
+    } finally {
+      setTranscribing(false);
+      setRecording(false);
+      stopMediaTracks();
+      mediaRecorderRef.current = null;
+      mediaChunksRef.current = [];
+    }
+  }, [onPreview, onTranscript, stopMediaTracks]);
+
+  const startMobileRecording = useCallback(async () => {
+    if (disabled || transcribing) return;
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      alert('Audio recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      manualStopRef.current = false;
+      shouldKeepRecordingRef.current = true;
+      mediaChunksRef.current = [];
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = getSupportedAudioMimeType();
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size > 0) {
+          mediaChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        shouldKeepRecordingRef.current = false;
+
+        const type = recorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(mediaChunksRef.current, { type });
+
+        sendMobileAudioForTranscription(blob);
+      };
+
+      recorder.onerror = () => {
+        shouldKeepRecordingRef.current = false;
+        setRecording(false);
+        stopMediaTracks();
+      };
+
+      recorder.start();
+      setRecording(true);
+
+      onPreview?.('Recording audio…', {
+        recording: true,
+        currentPhrase: 'Recording audio…',
+        interim: '',
+        final: '',
+      });
+    } catch (error) {
+      console.error('[VoiceInput] mobile recording failed:', error);
+      shouldKeepRecordingRef.current = false;
+      setRecording(false);
+      stopMediaTracks();
+      alert(error?.message || 'Could not start voice recording.');
+    }
+  }, [disabled, onPreview, sendMobileAudioForTranscription, stopMediaTracks, transcribing]);
 
   const startRecognitionSession = useCallback(() => {
     if (disabled || manualStopRef.current || !shouldKeepRecordingRef.current) {
@@ -218,8 +377,6 @@ export default function VoiceInput({
       }
 
       sessionResultsRef.current = {};
-
-      // Keep the mic visually active and restart quietly after Chrome ends on silence.
       setRecording(true);
 
       restartTimerRef.current = setTimeout(() => {
@@ -252,7 +409,7 @@ export default function VoiceInput({
     }
   }, [clearRestartTimer, disabled, emit]);
 
-  const startRecording = useCallback(() => {
+  const startDesktopRecording = useCallback(() => {
     if (disabled) return;
 
     manualStopRef.current = false;
@@ -265,15 +422,20 @@ export default function VoiceInput({
   }, [disabled, startRecognitionSession]);
 
   const toggleRecording = useCallback(() => {
-    if (disabled) return;
+    if (disabled || transcribing) return;
 
     if (shouldKeepRecordingRef.current || recording) {
       stopRecording();
       return;
     }
 
-    startRecording();
-  }, [disabled, recording, startRecording, stopRecording]);
+    if (isMobileBrowser()) {
+      startMobileRecording();
+      return;
+    }
+
+    startDesktopRecording();
+  }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
 
   useEffect(() => {
     if (!stopSignal) return;
@@ -291,17 +453,26 @@ export default function VoiceInput({
       try {
         recognitionRef.current?.stop?.();
       } catch {}
+
+      try {
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+      } catch {}
+
+      stopMediaTracks();
     };
-  }, [clearRestartTimer]);
+  }, [clearRestartTimer, stopMediaTracks]);
+
+  const active = recording || transcribing;
 
   return (
     <button
       type="button"
-      className={`voice-btn${recording ? ' listening recording' : ''}`}
+      className={`voice-btn${active ? ' listening recording' : ''}`}
       onClick={toggleRecording}
-      disabled={disabled}
-      title={recording ? 'Stop recording' : 'Voice input'}
-      aria-label={recording ? 'Stop recording' : 'Voice input'}
+      disabled={disabled || transcribing}
+      title={transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Voice input'}
+      aria-label={transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Voice input'}
       style={{
         width: 38,
         height: 38,
@@ -311,9 +482,9 @@ export default function VoiceInput({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: recording ? '#ef4444' : '#9ca3af',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.45 : 1,
+        color: active ? '#ef4444' : '#9ca3af',
+        cursor: disabled || transcribing ? 'not-allowed' : 'pointer',
+        opacity: disabled || transcribing ? 0.45 : 1,
         flexShrink: 0,
         padding: 0,
       }}
