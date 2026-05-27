@@ -1,99 +1,77 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-function basicClean(text = '') {
-  return String(text || '').replace(/\s+/g, ' ').trim();
+function cleanText(value = '') {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trim();
 }
 
-function wordKey(word = '') {
-  return String(word || '')
+function wordKey(value = '') {
+  return String(value || '')
     .toLowerCase()
     .replace(/[.,!?;:()[\]{}"“”‘’]/g, '')
     .trim();
 }
 
-function collapseImmediateDuplicateWords(text = '') {
-  const words = basicClean(text).split(' ').filter(Boolean);
-  const out = [];
+function removeImmediateDuplicateWords(value = '') {
+  const words = cleanText(value).split(' ').filter(Boolean);
+  const output = [];
 
   for (const word of words) {
-    const prev = out[out.length - 1];
-    if (prev && wordKey(prev) === wordKey(word)) continue;
-    out.push(word);
-  }
+    const previous = output[output.length - 1];
 
-  return out.join(' ');
-}
-
-function collapseAdjacentRepeatedPhrases(text = '') {
-  let words = collapseImmediateDuplicateWords(text).split(' ').filter(Boolean);
-
-  // Android Chrome can repeat whole interim/final chunks, for example:
-  // "serve section ten serve section ten notice". This removes adjacent repeated
-  // word groups without touching the rest of the sentence.
-  for (let size = Math.min(8, Math.floor(words.length / 2)); size >= 2; size -= 1) {
-    let i = 0;
-    const next = [];
-
-    while (i < words.length) {
-      const a = words.slice(i, i + size).map(wordKey).join(' ');
-      const b = words.slice(i + size, i + size * 2).map(wordKey).join(' ');
-
-      if (a && a === b) {
-        next.push(...words.slice(i, i + size));
-        i += size * 2;
-      } else {
-        next.push(words[i]);
-        i += 1;
-      }
+    if (previous && wordKey(previous) === wordKey(word)) {
+      continue;
     }
 
-    words = next;
+    output.push(word);
   }
 
-  return words.join(' ');
+  return output.join(' ').trim();
 }
 
-function cleanSpeech(text = '') {
-  return collapseAdjacentRepeatedPhrases(text);
-}
+function appendWithOverlap(previous = '', next = '') {
+  const prev = removeImmediateDuplicateWords(previous);
+  const curr = removeImmediateDuplicateWords(next);
 
-function mergeByOverlap(previous = '', next = '') {
-  const prev = cleanSpeech(previous);
-  const nxt = cleanSpeech(next);
-
-  if (!nxt) return prev;
-  if (!prev) return nxt;
+  if (!curr) return prev;
+  if (!prev) return curr;
 
   const prevLower = prev.toLowerCase();
-  const nextLower = nxt.toLowerCase();
+  const currLower = curr.toLowerCase();
 
-  if (prevLower === nextLower) return prev;
-  if (prevLower.endsWith(nextLower)) return prev;
-  if (nextLower.startsWith(prevLower)) return nxt;
+  if (prevLower === currLower) return prev;
+  if (prevLower.endsWith(currLower)) return prev;
+  if (currLower.startsWith(prevLower)) return curr;
 
   const prevWords = prev.split(' ').filter(Boolean);
-  const nextWords = nxt.split(' ').filter(Boolean);
-  const maxOverlap = Math.min(prevWords.length, nextWords.length, 30);
+  const currWords = curr.split(' ').filter(Boolean);
+  const maxOverlap = Math.min(prevWords.length, currWords.length, 20);
 
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
     const prevTail = prevWords.slice(-overlap).map(wordKey).join(' ');
-    const nextHead = nextWords.slice(0, overlap).map(wordKey).join(' ');
+    const currHead = currWords.slice(0, overlap).map(wordKey).join(' ');
 
-    if (prevTail && prevTail === nextHead) {
-      return cleanSpeech([...prevWords, ...nextWords.slice(overlap)].join(' '));
+    if (prevTail && prevTail === currHead) {
+      return removeImmediateDuplicateWords([
+        ...prevWords,
+        ...currWords.slice(overlap),
+      ].join(' '));
     }
   }
 
-  return cleanSpeech(`${prev} ${nxt}`);
+  return removeImmediateDuplicateWords(`${prev} ${curr}`);
 }
 
-function finalTextFromMap(finalResults) {
-  return Object.keys(finalResults.current)
+function orderedResultText(results = {}) {
+  return Object.keys(results)
     .map(Number)
     .sort((a, b) => a - b)
-    .map(index => finalResults.current[index])
+    .map(index => results[index])
     .filter(Boolean)
-    .join(' ');
+    .join(' ')
+    .trim();
 }
 
 export default function VoiceInput({
@@ -107,25 +85,56 @@ export default function VoiceInput({
   const recognitionRef = useRef(null);
   const recordingRef = useRef(false);
   const manualStopRef = useRef(false);
-  const committedRef = useRef('');
-  const sessionFinalRef = useRef('');
-  const finalResultsRef = useRef({});
   const restartTimerRef = useRef(null);
 
-  const clearSpeechState = useCallback(() => {
-    committedRef.current = '';
-    sessionFinalRef.current = '';
-    finalResultsRef.current = {};
-  }, []);
+  const committedRef = useRef('');
+  const resultMapRef = useRef({});
+  const lastEmittedRef = useRef('');
 
-  const stopRecording = useCallback(() => {
-    manualStopRef.current = true;
-    recordingRef.current = false;
-
+  const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
     }
+  }, []);
+
+  const resetSpeechState = useCallback(() => {
+    committedRef.current = '';
+    resultMapRef.current = {};
+    lastEmittedRef.current = '';
+  }, []);
+
+  const emit = useCallback((fullText = '', currentPhrase = '', interim = '', finalText = '') => {
+    const cleanFull = removeImmediateDuplicateWords(fullText);
+    const cleanPhrase = removeImmediateDuplicateWords(currentPhrase);
+    const cleanInterim = removeImmediateDuplicateWords(interim);
+    const cleanFinal = removeImmediateDuplicateWords(finalText);
+
+    if (cleanFull === lastEmittedRef.current && !cleanPhrase) {
+      return;
+    }
+
+    lastEmittedRef.current = cleanFull;
+
+    onPreview?.(cleanPhrase, {
+      recording: recordingRef.current,
+      currentPhrase: cleanPhrase,
+      interim: cleanInterim,
+      final: cleanFinal,
+    });
+
+    onTranscript?.(cleanFull, {
+      recording: recordingRef.current,
+      currentPhrase: cleanPhrase,
+      interim: cleanInterim,
+      final: cleanFinal,
+    });
+  }, [onPreview, onTranscript]);
+
+  const stopRecording = useCallback(() => {
+    manualStopRef.current = true;
+    recordingRef.current = false;
+    clearRestartTimer();
 
     try {
       recognitionRef.current?.abort?.();
@@ -136,60 +145,30 @@ export default function VoiceInput({
     } catch {}
 
     recognitionRef.current = null;
-    clearSpeechState();
-    onPreview?.('', { recording: false, currentPhrase: '', interim: '', final: '' });
+    resetSpeechState();
+
+    onPreview?.('', {
+      recording: false,
+      currentPhrase: '',
+      interim: '',
+      final: '',
+    });
+
     setRecording(false);
-  }, [clearSpeechState, onPreview]);
-
-  useEffect(() => {
-    if (!stopSignal) return;
-    stopRecording();
-  }, [stopSignal, stopRecording]);
-
-  useEffect(() => {
-    return () => {
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-
-      try {
-        recognitionRef.current?.abort?.();
-      } catch {}
-
-      try {
-        recognitionRef.current?.stop?.();
-      } catch {}
-    };
-  }, []);
-
-  const emit = useCallback((fullTranscript, currentPhrase, interim, final) => {
-    if (!recordingRef.current || manualStopRef.current) return;
-
-    const cleanFull = cleanSpeech(fullTranscript);
-    const cleanPhrase = cleanSpeech(currentPhrase);
-    const cleanInterim = cleanSpeech(interim);
-    const cleanFinal = cleanSpeech(final);
-
-    onPreview?.(cleanPhrase, {
-      recording: true,
-      interim: cleanInterim,
-      final: cleanFinal,
-      currentPhrase: cleanPhrase,
-    });
-
-    onTranscript?.(cleanFull, {
-      recording: true,
-      interim: cleanInterim,
-      final: cleanFinal,
-      currentPhrase: cleanPhrase,
-    });
-  }, [onPreview, onTranscript]);
+  }, [clearRestartTimer, onPreview, resetSpeechState]);
 
   const startRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       alert('Voice input is not supported in this browser. Please use Chrome.');
+      recordingRef.current = false;
+      setRecording(false);
       return;
     }
+
+    clearRestartTimer();
+    resultMapRef.current = {};
 
     const recognition = new SpeechRecognition();
 
@@ -198,63 +177,77 @@ export default function VoiceInput({
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    finalResultsRef.current = {};
-    sessionFinalRef.current = '';
+    recognition.onstart = () => {
+      if (manualStopRef.current) return;
+
+      recordingRef.current = true;
+      setRecording(true);
+    };
 
     recognition.onresult = (event) => {
       if (!recordingRef.current || manualStopRef.current) return;
 
-      let interimText = '';
+      let latestInterim = '';
 
       for (let i = 0; i < event.results.length; i += 1) {
-        const part = event.results[i]?.[0]?.transcript || '';
+        const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
+
+        if (!spoken) continue;
 
         if (event.results[i].isFinal) {
-          finalResultsRef.current[i] = cleanSpeech(part);
+          resultMapRef.current[i] = spoken;
         } else if (i >= event.resultIndex) {
-          interimText += ` ${part}`;
+          latestInterim = spoken;
         }
       }
 
-      sessionFinalRef.current = cleanSpeech(finalTextFromMap(finalResultsRef));
-      interimText = cleanSpeech(interimText);
+      const finalText = removeImmediateDuplicateWords(orderedResultText(resultMapRef.current));
 
-      const committedPlusFinal = mergeByOverlap(committedRef.current, sessionFinalRef.current);
-      const fullTranscript = interimText
-        ? mergeByOverlap(committedPlusFinal, interimText)
-        : committedPlusFinal;
+      const sessionText = latestInterim
+        ? appendWithOverlap(finalText, latestInterim)
+        : finalText;
 
-      const currentPhrase = interimText;
+      const fullText = appendWithOverlap(committedRef.current, sessionText);
 
-      emit(fullTranscript, currentPhrase, interimText, sessionFinalRef.current);
+      emit(fullText, latestInterim, latestInterim, finalText);
     };
 
     recognition.onend = () => {
       if (!recordingRef.current || manualStopRef.current || disabled) {
-        onPreview?.('', { recording: false, currentPhrase: '', interim: '', final: '' });
+        onPreview?.('', {
+          recording: false,
+          currentPhrase: '',
+          interim: '',
+          final: '',
+        });
+
         setRecording(false);
         return;
       }
 
-      if (sessionFinalRef.current) {
-        committedRef.current = mergeByOverlap(committedRef.current, sessionFinalRef.current);
+      const sessionText = removeImmediateDuplicateWords(orderedResultText(resultMapRef.current));
+
+      if (sessionText) {
+        committedRef.current = appendWithOverlap(committedRef.current, sessionText);
       }
 
-      finalResultsRef.current = {};
-      sessionFinalRef.current = '';
+      resultMapRef.current = {};
 
       restartTimerRef.current = setTimeout(() => {
         if (!recordingRef.current || manualStopRef.current || disabled) return;
-
-        try {
-          recognition.start();
-        } catch {}
-      }, 250);
+        startRecognition();
+      }, 180);
     };
 
     recognition.onerror = () => {
       if (!recordingRef.current || manualStopRef.current || disabled) {
-        onPreview?.('', { recording: false, currentPhrase: '', interim: '', final: '' });
+        onPreview?.('', {
+          recording: false,
+          currentPhrase: '',
+          interim: '',
+          final: '',
+        });
+
         setRecording(false);
         return;
       }
@@ -268,24 +261,21 @@ export default function VoiceInput({
 
     try {
       recognition.start();
-      setRecording(true);
     } catch {
       recordingRef.current = false;
-      clearSpeechState();
-      onPreview?.('', { recording: false, currentPhrase: '', interim: '', final: '' });
       setRecording(false);
     }
-  }, [clearSpeechState, disabled, emit, onPreview]);
+  }, [clearRestartTimer, disabled, emit, onPreview]);
 
   const startRecording = useCallback(() => {
     if (disabled) return;
 
     manualStopRef.current = false;
     recordingRef.current = true;
-    clearSpeechState();
+    resetSpeechState();
 
     startRecognition();
-  }, [clearSpeechState, disabled, startRecognition]);
+  }, [disabled, resetSpeechState, startRecognition]);
 
   const toggleRecording = useCallback(() => {
     if (disabled) return;
@@ -297,6 +287,25 @@ export default function VoiceInput({
 
     startRecording();
   }, [disabled, recording, startRecording, stopRecording]);
+
+  useEffect(() => {
+    if (!stopSignal) return;
+    stopRecording();
+  }, [stopSignal, stopRecording]);
+
+  useEffect(() => {
+    return () => {
+      clearRestartTimer();
+
+      try {
+        recognitionRef.current?.abort?.();
+      } catch {}
+
+      try {
+        recognitionRef.current?.stop?.();
+      } catch {}
+    };
+  }, [clearRestartTimer]);
 
   return (
     <button
