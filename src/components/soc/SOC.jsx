@@ -19,7 +19,6 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   // Review data
   const [aoAddress, setAoAddress] = useState('');
-  const [selectedAOIndex, setSelectedAOIndex] = useState('0');
   const [socSections, setSocSections] = useState([]);
   const [siteComments, setSiteComments] = useState([]);
   const [partyDrafts, setPartyDrafts] = useState([]);
@@ -27,25 +26,10 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
   const transcriptBoxRef = useRef(null);
+  const finalResultsRef = useRef({});
+  const ignoreNextEndRef = useRef(false);
 
   const selectedProject = projects.find(p => p.id === projectId);
-
-  const aoOptions = selectedProject?.aos || [];
-
-  const selectedAO =
-    aoOptions[Number(selectedAOIndex)] || aoOptions[0] || null;
-
-  const projectDisplayAddress =
-    selectedProject?.address ||
-    selectedProject?.premise_address ||
-    selectedProject?.bo_premise_address ||
-    '';
-
-  if (!aoAddress && selectedAO?.address) {
-    setTimeout(() => {
-      setAoAddress(selectedAO.address);
-    }, 0);
-  }
 
   // Build contact list from project data
   const getProjectContacts = useCallback(() => {
@@ -62,50 +46,113 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   }, [selectedProject]);
 
   // ── Recording ──────────────────────────────────────────────────────────────
+  const normaliseSpeechText = useCallback((value = '') => {
+    return String(value || '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s+([,.!?;:])/g, '$1')
+      .trim();
+  }, []);
+
   const startRecording = useCallback(() => {
+    if (isRecording) return;
+
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       alert('Voice recording requires Chrome or Edge. You can type your notes below.');
       return;
     }
+
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
+
+    finalResultsRef.current = {};
+    transcriptRef.current = '';
+    setTranscript('');
+
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = 'en-GB';
+
     rec.onstart = () => setIsRecording(true);
-    rec.onresult = (e) => {
-      let interim = '', finalChunk = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalChunk += e.results[i][0].transcript + ' ';
-        else interim += e.results[i][0].transcript;
-      }
-      if (finalChunk) {
-        transcriptRef.current += finalChunk;
-        setFullTranscript(transcriptRef.current);
-        const last = transcriptRef.current.toLowerCase().slice(-80);
-        if (last.includes('soc complete') || last.includes('schedule complete') || last.includes('s o c complete')) {
-          rec.stop();
-          handleGenerate(transcriptRef.current);
-          return;
+
+    rec.onresult = (event) => {
+      let interim = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const phrase = event.results[i]?.[0]?.transcript || '';
+
+        if (event.results[i].isFinal) {
+          finalResultsRef.current[i] = phrase;
+        } else {
+          interim += phrase;
         }
       }
-      setTranscript(transcriptRef.current + interim);
-      if (transcriptBoxRef.current) transcriptBoxRef.current.scrollTop = transcriptBoxRef.current.scrollHeight;
+
+      const finalText = Object.keys(finalResultsRef.current)
+        .sort((a, b) => Number(a) - Number(b))
+        .map(key => finalResultsRef.current[key])
+        .join(' ');
+
+      const liveText = normaliseSpeechText(`${finalText} ${interim}`);
+
+      transcriptRef.current = liveText;
+      setTranscript(liveText);
+
+      if (transcriptBoxRef.current) {
+        transcriptBoxRef.current.scrollTop = transcriptBoxRef.current.scrollHeight;
+      }
     };
-    rec.onend = () => setIsRecording(false);
-    rec.onerror = () => setIsRecording(false);
+
+    rec.onend = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
+
+    rec.onerror = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
+
     recognitionRef.current = rec;
     rec.start();
-  }, []);
+  }, [isRecording, normaliseSpeechText]);
 
   const stopRecording = useCallback(() => {
-    recognitionRef.current?.stop();
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // ignore stop errors from already-ended mobile recognition sessions
+    }
     setIsRecording(false);
   }, []);
 
+  const appendCurrentNote = useCallback(() => {
+    const note = normaliseSpeechText(transcriptRef.current || transcript);
+
+    if (!note) {
+      stopRecording();
+      setTranscript('');
+      transcriptRef.current = '';
+      finalResultsRef.current = {};
+      return;
+    }
+
+    stopRecording();
+
+    setFullTranscript(prev => {
+      const cleanPrev = String(prev || '').trim();
+      return cleanPrev ? `${cleanPrev}\n${note}` : note;
+    });
+
+    setTranscript('');
+    transcriptRef.current = '';
+    finalResultsRef.current = {};
+  }, [normaliseSpeechText, stopRecording, transcript]);
+
   // ── AI Generation ──────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async (notes) => {
-    const text = notes || fullTranscript || transcriptRef.current;
+    const currentNote = normaliseSpeechText(transcriptRef.current || transcript);
+    const text = notes || [fullTranscript, currentNote].filter(Boolean).join('
+');
     if (!text.trim()) { alert('No notes to process.'); return; }
     stopRecording();
     setProcessing(true);
@@ -203,7 +250,7 @@ Rules:
     } finally {
       setProcessing(false);
     }
-  }, [fullTranscript, projectId, projects, stopRecording]);
+  }, [fullTranscript, normaliseSpeechText, projectId, projects, stopRecording, transcript]);
 
   // ── Editing helpers ────────────────────────────────────────────────────────
   const updateRow = (secId, rowId, field, val) =>
@@ -376,7 +423,7 @@ Rules:
           </div>
           <button style={{ ...s.recordBtn, opacity: !projectId ? 0.5 : 1 }} disabled={!projectId}
             onClick={() => { setPhase('recording'); startRecording(); }}>
-            🎙️ Start Recording
+            🎙️ Record
           </button>
           <div style={s.hint}>
             Just speak naturally — <strong>say the room name as you go</strong>, Ely will pick it up automatically.<br />
@@ -405,63 +452,27 @@ Rules:
                 ? <><div style={s.recDot} /><span style={{ color: 'var(--red)', fontWeight: 600, fontSize: 13 }}>Recording…</span></>
                 : <span style={{ color: 'var(--text3)', fontSize: 13 }}>Paused</span>}
               {selectedProject && (
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                  marginLeft: 8,
-                  width: '100%',
-                  maxWidth: 520,
-                }}>
-                  <select
-                    value={projectId}
-                    onChange={e => setProjectId(e.target.value)}
-                    style={{
-                      ...s.select,
-                      minWidth: 180,
-                      fontSize: 12,
-                      padding: '6px 10px',
-                    }}
-                  >
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.address || p.premise_address || p.bo_premise_address || p.ref}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={selectedAOIndex}
-                    onChange={e => {
-                      setSelectedAOIndex(e.target.value);
-                      const ao = aoOptions[Number(e.target.value)];
-                      if (ao?.address) setAoAddress(ao.address);
-                    }}
-                    style={{
-                      ...s.select,
-                      minWidth: 180,
-                      fontSize: 12,
-                      padding: '6px 10px',
-                    }}
-                  >
-                    {aoOptions.map((ao, idx) => (
-                      <option key={idx} value={idx}>
-                        {ao.address || `AO${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 8 }}>
+                  {selectedProject.ref} — {selectedProject.address}
+                </span>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {isRecording
-                ? <button onClick={stopRecording} style={s.stopBtn}>⏸ Pause</button>
-                : <button onClick={startRecording} style={s.recordBtn}>🎙️ Resume</button>}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {!isRecording && (
+                <button onClick={startRecording} style={s.recordBtn}>🎙️ Record</button>
+              )}
+              <button
+                onClick={appendCurrentNote}
+                style={s.primaryBtn}
+                disabled={!transcript && !isRecording}
+              >
+                ➤ Send note
+              </button>
             </div>
           </div>
 
           <div ref={transcriptBoxRef} style={s.transcript}>
-            {transcript || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Start speaking — transcript appears here…</span>}
+            {transcript || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>Record one observation, then tap Send note…</span>}
           </div>
 
           <div>
@@ -469,7 +480,7 @@ Rules:
             <textarea style={{ ...s.input, width: '100%', minHeight: 80, resize: 'vertical', fontSize: 12.5 }}
               placeholder="Type your notes here if not using voice…"
               value={fullTranscript}
-              onChange={e => { setFullTranscript(e.target.value); transcriptRef.current = e.target.value; }} />
+              onChange={e => setFullTranscript(e.target.value)} />
           </div>
 
           {processing && (
@@ -507,7 +518,7 @@ Rules:
           <div style={s.field}>
             <label style={s.label}>Project</label>
             <input style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text3)' }}
-              value={projectDisplayAddress} disabled />
+              value={selectedProject ? `${selectedProject.ref} — ${selectedProject.address}` : ''} disabled />
           </div>
         </div>
       </div>
