@@ -3136,14 +3136,24 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [onOpenSOC, project]);
 
   const handleRaiseInvoice = useCallback(() => {
+    const boBillToName = bo || project.bo_1_name || project.bo_name || appointmentName || '';
+    const boBillToAddress =
+      project.bo_service_address ||
+      project.bo_1_service_address ||
+      project.bo_address ||
+      project.bo_premise_address ||
+      project.address ||
+      boAddress ||
+      '';
+
     onRaiseInvoice?.({
       property_address: appointmentAddress || boAddress,
-      bill_to_name: appointmentName || bo,
-      bill_to_address: role === 'AO' ? aoServiceAddress(primaryAO) : project.bo_address || project.bo_service_address || '',
+      bill_to_name: boBillToName,
+      bill_to_address: boBillToAddress,
       role,
       project_id: project.id,
     });
-  }, [onRaiseInvoice, project, appointmentAddress, appointmentName, boAddress, bo, role, primaryAO]);
+  }, [onRaiseInvoice, project, appointmentAddress, appointmentName, boAddress, bo, role]);
 
 
   const handleDeleteProject = useCallback(async () => {
