@@ -151,8 +151,7 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   // ── AI Generation ──────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async (notes) => {
     const currentNote = normaliseSpeechText(transcriptRef.current || transcript);
-    const text = notes || [fullTranscript, currentNote].filter(Boolean).join('
-');
+    const text = notes || [fullTranscript, currentNote].filter(Boolean).join('\n\n');
     if (!text.trim()) { alert('No notes to process.'); return; }
     stopRecording();
     setProcessing(true);
