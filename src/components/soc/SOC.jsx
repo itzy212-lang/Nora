@@ -26,7 +26,8 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
-  const finalResultsRef = useRef({});
+  const committedSpeechRef = useRef('');
+  const lastDisplaySpeechRef = useRef('');
   const transcriptBoxRef = useRef(null);
 
   const selectedProject = projects.find(p => p.id === projectId);
@@ -73,46 +74,90 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
   // ── Recording ──────────────────────────────────────────────────────────────
   const normaliseSpeechText = useCallback((value = '') => {
-    const words = String(value || '')
+    return String(value || '')
       .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ')
-      .filter(Boolean);
+      .replace(/\s+([,.!?;:])/g, '$1')
+      .trim();
+  }, []);
 
-    const cleaned = [];
+  const removeImmediateDuplication = useCallback((value = '') => {
+    let words = normaliseSpeechText(value).split(' ').filter(Boolean);
 
-    for (const word of words) {
-      if (cleaned.length && cleaned[cleaned.length - 1].toLowerCase() === word.toLowerCase()) {
-        continue;
-      }
+    // Remove repeated single words: "the the wall" -> "the wall"
+    words = words.filter((word, index) => {
+      if (index === 0) return true;
+      return word.toLowerCase() !== words[index - 1].toLowerCase();
+    });
 
-      cleaned.push(word);
-    }
+    // Remove repeated adjacent phrases up to 12 words long.
+    let changed = true;
 
-    let text = cleaned.join(' ');
+    while (changed) {
+      changed = false;
 
-    // Remove obvious repeated short phrases caused by mobile speech interim events.
-    for (let size = 2; size <= 6; size += 1) {
-      const parts = text.split(' ');
-      const compact = [];
+      for (let size = 12; size >= 2; size -= 1) {
+        const output = [];
 
-      for (let i = 0; i < parts.length; i += 1) {
-        const previous = compact.slice(-size).join(' ').toLowerCase();
-        const current = parts.slice(i, i + size).join(' ').toLowerCase();
+        for (let i = 0; i < words.length; i += 1) {
+          const previous = output.slice(-size).join(' ').toLowerCase();
+          const current = words.slice(i, i + size).join(' ').toLowerCase();
 
-        if (previous && current && previous === current) {
-          i += size - 1;
-          continue;
+          if (previous && current && previous === current) {
+            i += size - 1;
+            changed = true;
+            continue;
+          }
+
+          output.push(words[i]);
         }
 
-        compact.push(parts[i]);
+        words = output;
       }
-
-      text = compact.join(' ');
     }
 
-    return text.trim();
-  }, []);
+    return words.join(' ').trim();
+  }, [normaliseSpeechText]);
+
+  const getNewSpeechOnly = useCallback((previous = '', next = '') => {
+    const prev = normaliseSpeechText(previous);
+    const curr = normaliseSpeechText(next);
+
+    if (!curr) return '';
+
+    if (!prev) return curr;
+
+    const prevLower = prev.toLowerCase();
+    const currLower = curr.toLowerCase();
+
+    // Android/Chrome often sends the whole phrase again. If so, only keep the new suffix.
+    if (currLower.startsWith(prevLower)) {
+      return normaliseSpeechText(curr.slice(prev.length));
+    }
+
+    // If the current phrase is already wholly contained in previous text, ignore it.
+    if (prevLower.includes(currLower)) {
+      return '';
+    }
+
+    // Find the longest overlap between the end of previous and start of current.
+    const prevWords = prev.split(' ').filter(Boolean);
+    const currWords = curr.split(' ').filter(Boolean);
+
+    let overlap = 0;
+    const max = Math.min(prevWords.length, currWords.length);
+
+    for (let size = max; size >= 1; size -= 1) {
+      const prevTail = prevWords.slice(-size).join(' ').toLowerCase();
+      const currHead = currWords.slice(0, size).join(' ').toLowerCase();
+
+      if (prevTail === currHead) {
+        overlap = size;
+        break;
+      }
+    }
+
+    return normaliseSpeechText(currWords.slice(overlap).join(' '));
+  }, [normaliseSpeechText]);
 
   const stopRecording = useCallback(() => {
     recognitionRef.current?.stop();
@@ -128,7 +173,8 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
 
-    finalResultsRef.current = {};
+    committedSpeechRef.current = '';
+    lastDisplaySpeechRef.current = '';
     transcriptRef.current = '';
     setTranscript('');
 
@@ -139,31 +185,38 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     rec.onstart = () => setIsRecording(true);
 
     rec.onresult = (event) => {
-      let interim = '';
+      let latestInterim = '';
 
-      for (let i = 0; i < event.results.length; i += 1) {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         const spoken = normaliseSpeechText(result?.[0]?.transcript || '');
 
         if (!spoken) continue;
 
         if (result.isFinal) {
-          finalResultsRef.current[i] = spoken;
-        } else if (i >= event.resultIndex) {
-          interim = `${interim} ${spoken}`.trim();
+          const addition = getNewSpeechOnly(committedSpeechRef.current, spoken);
+
+          if (addition) {
+            committedSpeechRef.current = removeImmediateDuplication(
+              [committedSpeechRef.current, addition].filter(Boolean).join(' ')
+            );
+          }
+        } else {
+          latestInterim = spoken;
         }
       }
 
-      const finalText = Object.keys(finalResultsRef.current)
-        .sort((a, b) => Number(a) - Number(b))
-        .map(key => finalResultsRef.current[key])
-        .join(' ')
-        .trim();
+      const interimAddition = getNewSpeechOnly(committedSpeechRef.current, latestInterim);
+      const displayText = removeImmediateDuplication(
+        [committedSpeechRef.current, interimAddition].filter(Boolean).join(' ')
+      );
 
-      const combined = normaliseSpeechText([finalText, interim].filter(Boolean).join(' '));
-
-      transcriptRef.current = finalText;
-      setTranscript(combined);
+      // Avoid constantly re-setting the same text, which contributes to duplicated mobile state.
+      if (displayText !== lastDisplaySpeechRef.current) {
+        lastDisplaySpeechRef.current = displayText;
+        transcriptRef.current = displayText;
+        setTranscript(displayText);
+      }
 
       if (transcriptBoxRef.current) {
         transcriptBoxRef.current.scrollTop = transcriptBoxRef.current.scrollHeight;
@@ -175,10 +228,10 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
 
     recognitionRef.current = rec;
     rec.start();
-  }, [normaliseSpeechText]);
+  }, [getNewSpeechOnly, normaliseSpeechText, removeImmediateDuplication]);
 
   const sendCurrentNote = useCallback(() => {
-    const note = normaliseSpeechText(transcript || transcriptRef.current);
+    const note = removeImmediateDuplication(transcript || transcriptRef.current || committedSpeechRef.current);
 
     stopRecording();
 
@@ -187,11 +240,12 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     setFullTranscript(prev => [prev, note].filter(Boolean).join('\n\n'));
     setTranscript('');
     transcriptRef.current = '';
-    finalResultsRef.current = {};
-  }, [normaliseSpeechText, stopRecording, transcript]);
+    committedSpeechRef.current = '';
+    lastDisplaySpeechRef.current = '';
+  }, [removeImmediateDuplication, stopRecording, transcript]);
 
   const handleRecordSend = useCallback(() => {
-    const hasCurrentNote = !!normaliseSpeechText(transcript || transcriptRef.current);
+    const hasCurrentNote = !!removeImmediateDuplication(transcript || transcriptRef.current || committedSpeechRef.current);
 
     if (isRecording || hasCurrentNote) {
       sendCurrentNote();
@@ -199,11 +253,11 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     }
 
     startRecording();
-  }, [isRecording, normaliseSpeechText, sendCurrentNote, startRecording, transcript]);
+  }, [isRecording, removeImmediateDuplication, sendCurrentNote, startRecording, transcript]);
 
   // ── AI Generation ──────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async (notes) => {
-    const currentNote = normaliseSpeechText(transcript || transcriptRef.current);
+    const currentNote = removeImmediateDuplication(transcript || transcriptRef.current || committedSpeechRef.current);
     const text = notes || [fullTranscript, currentNote].filter(Boolean).join('\n\n');
     if (!text.trim()) { alert('No notes to process.'); return; }
     stopRecording();
@@ -302,7 +356,7 @@ Rules:
     } finally {
       setProcessing(false);
     }
-  }, [fullTranscript, normaliseSpeechText, projectId, projects, stopRecording, transcript]);
+  }, [fullTranscript, projectId, projects, removeImmediateDuplication, stopRecording, transcript]);
 
   // ── Editing helpers ────────────────────────────────────────────────────────
   const updateRow = (secId, rowId, field, val) =>
