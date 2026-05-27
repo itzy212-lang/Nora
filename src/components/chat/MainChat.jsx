@@ -209,6 +209,69 @@ function projectLabel(project = {}) {
   ].filter(Boolean).join(' | ') || project.id || 'Unnamed project';
 }
 
+function cleanVoiceWord(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[.,!?;:()[\]{}"“”‘’]/g, '')
+    .trim();
+}
+
+function cleanVoiceTranscript(value = '') {
+  let words = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+
+  words = words.filter((word, index) => {
+    if (index === 0) return true;
+    return cleanVoiceWord(word) !== cleanVoiceWord(words[index - 1]);
+  });
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (let size = Math.min(10, Math.floor(words.length / 2)); size >= 2; size -= 1) {
+      const output = [];
+
+      for (let i = 0; i < words.length; i += 1) {
+        const previous = output.slice(-size).map(cleanVoiceWord).join(' ');
+        const current = words.slice(i, i + size).map(cleanVoiceWord).join(' ');
+
+        if (previous && current && previous === current) {
+          i += size - 1;
+          changed = true;
+          continue;
+        }
+
+        output.push(words[i]);
+      }
+
+      words = output;
+    }
+  }
+
+  return words.join(' ').trim();
+}
+
+function mergeVoiceWithBase(base = '', transcript = '') {
+  const cleanBase = cleanVoiceTranscript(base);
+  const cleanTranscript = cleanVoiceTranscript(transcript);
+
+  if (!cleanBase) return cleanTranscript;
+  if (!cleanTranscript) return cleanBase;
+
+  const baseLower = cleanBase.toLowerCase();
+  const transcriptLower = cleanTranscript.toLowerCase();
+
+  if (transcriptLower.startsWith(baseLower)) return cleanTranscript;
+  if (baseLower.endsWith(transcriptLower)) return cleanBase;
+
+  return cleanVoiceTranscript(`${cleanBase} ${cleanTranscript}`);
+}
+
 function emailLabel(email = {}) {
   const from = getEmailFromLabel(email);
   const subject = getEmailSubject(email);
@@ -706,8 +769,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const handleVoice = (transcript) => {
     if (!voiceBaseRef.current) voiceBaseRef.current = input.trim();
-    const base = voiceBaseRef.current;
-    const next = base ? `${base} ${transcript}` : transcript;
+
+    const next = mergeVoiceWithBase(voiceBaseRef.current, transcript);
+
     setInput(next);
     requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
