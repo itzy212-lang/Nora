@@ -41,6 +41,39 @@ function orderedResultText(results = {}) {
     .trim();
 }
 
+function mergeWithoutRepeating(previous = '', next = '') {
+  const prev = removeImmediateDuplicateWords(previous);
+  const curr = removeImmediateDuplicateWords(next);
+
+  if (!curr) return prev;
+  if (!prev) return curr;
+
+  const prevLower = prev.toLowerCase();
+  const currLower = curr.toLowerCase();
+
+  if (prevLower === currLower) return prev;
+  if (prevLower.endsWith(currLower)) return prev;
+  if (currLower.startsWith(prevLower)) return curr;
+
+  const prevWords = prev.split(' ').filter(Boolean);
+  const currWords = curr.split(' ').filter(Boolean);
+  const maxOverlap = Math.min(prevWords.length, currWords.length, 20);
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    const prevTail = prevWords.slice(-size).map(wordKey).join(' ');
+    const currHead = currWords.slice(0, size).map(wordKey).join(' ');
+
+    if (prevTail && prevTail === currHead) {
+      return removeImmediateDuplicateWords([
+        ...prevWords,
+        ...currWords.slice(size),
+      ].join(' '));
+    }
+  }
+
+  return removeImmediateDuplicateWords(`${prev} ${curr}`);
+}
+
 export default function VoiceInput({
   onTranscript,
   onPreview,
@@ -50,19 +83,51 @@ export default function VoiceInput({
   const [recording, setRecording] = useState(false);
 
   const recognitionRef = useRef(null);
-  const recordingRef = useRef(false);
+  const shouldKeepRecordingRef = useRef(false);
   const manualStopRef = useRef(false);
-  const resultsRef = useRef({});
-  const lastTranscriptRef = useRef('');
+  const restartTimerRef = useRef(null);
 
-  const resetSpeechState = useCallback(() => {
-    resultsRef.current = {};
-    lastTranscriptRef.current = '';
+  const committedRef = useRef('');
+  const sessionResultsRef = useRef({});
+  const lastEmittedRef = useRef('');
+
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
   }, []);
+
+  const emit = useCallback((fullText = '', currentPhrase = '', finalText = '') => {
+    const cleanFull = removeImmediateDuplicateWords(fullText);
+    const cleanPhrase = removeImmediateDuplicateWords(currentPhrase);
+    const cleanFinal = removeImmediateDuplicateWords(finalText);
+
+    if (cleanFull === lastEmittedRef.current && !cleanPhrase) {
+      return;
+    }
+
+    lastEmittedRef.current = cleanFull;
+
+    onPreview?.(cleanPhrase, {
+      recording: shouldKeepRecordingRef.current,
+      currentPhrase: cleanPhrase,
+      interim: cleanPhrase,
+      final: cleanFinal,
+    });
+
+    onTranscript?.(cleanFull, {
+      recording: shouldKeepRecordingRef.current,
+      currentPhrase: cleanPhrase,
+      interim: cleanPhrase,
+      final: cleanFinal,
+    });
+  }, [onPreview, onTranscript]);
 
   const stopRecording = useCallback(() => {
     manualStopRef.current = true;
-    recordingRef.current = false;
+    shouldKeepRecordingRef.current = false;
+    clearRestartTimer();
 
     try {
       recognitionRef.current?.abort?.();
@@ -73,7 +138,9 @@ export default function VoiceInput({
     } catch {}
 
     recognitionRef.current = null;
-    resetSpeechState();
+    committedRef.current = '';
+    sessionResultsRef.current = {};
+    lastEmittedRef.current = '';
 
     onPreview?.('', {
       recording: false,
@@ -83,21 +150,25 @@ export default function VoiceInput({
     });
 
     setRecording(false);
-  }, [onPreview, resetSpeechState]);
+  }, [clearRestartTimer, onPreview]);
 
-  const startRecording = useCallback(() => {
-    if (disabled) return;
+  const startRecognitionSession = useCallback(() => {
+    if (disabled || manualStopRef.current || !shouldKeepRecordingRef.current) {
+      setRecording(false);
+      return;
+    }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       alert('Voice input is not supported in this browser. Please use Chrome.');
+      shouldKeepRecordingRef.current = false;
+      setRecording(false);
       return;
     }
 
-    manualStopRef.current = false;
-    recordingRef.current = true;
-    resetSpeechState();
+    clearRestartTimer();
+    sessionResultsRef.current = {};
 
     const recognition = new SpeechRecognition();
 
@@ -107,12 +178,12 @@ export default function VoiceInput({
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      if (manualStopRef.current) return;
+      if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
       setRecording(true);
     };
 
     recognition.onresult = (event) => {
-      if (!recordingRef.current || manualStopRef.current) return;
+      if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
       let latestInterim = '';
 
@@ -121,77 +192,82 @@ export default function VoiceInput({
 
         if (!spoken) continue;
 
-        // Critical rule:
-        // Replace each recognition result by its index.
-        // Never append interim/final chunks manually.
-        resultsRef.current[i] = spoken;
+        sessionResultsRef.current[i] = spoken;
 
         if (!event.results[i].isFinal && i >= event.resultIndex) {
           latestInterim = spoken;
         }
       }
 
-      const transcript = removeImmediateDuplicateWords(orderedResultText(resultsRef.current));
+      const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
+      const fullText = mergeWithoutRepeating(committedRef.current, sessionText);
 
-      if (transcript === lastTranscriptRef.current && !latestInterim) {
-        return;
-      }
-
-      lastTranscriptRef.current = transcript;
-
-      onPreview?.(cleanText(latestInterim), {
-        recording: true,
-        currentPhrase: cleanText(latestInterim),
-        interim: cleanText(latestInterim),
-        final: transcript,
-      });
-
-      onTranscript?.(transcript, {
-        recording: true,
-        currentPhrase: cleanText(latestInterim),
-        interim: cleanText(latestInterim),
-        final: transcript,
-      });
+      emit(fullText, latestInterim, sessionText);
     };
 
     recognition.onend = () => {
-      if (manualStopRef.current || disabled) {
+      if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
       }
 
-      // Browser may end naturally. Mark as not recording rather than stitching/restarting,
-      // because stitching was the source of duplicate phrases.
-      recordingRef.current = false;
-      setRecording(false);
+      const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
 
-      onPreview?.('', {
-        recording: false,
-        currentPhrase: '',
-        interim: '',
-        final: lastTranscriptRef.current,
-      });
+      if (sessionText) {
+        committedRef.current = mergeWithoutRepeating(committedRef.current, sessionText);
+      }
+
+      sessionResultsRef.current = {};
+
+      // Keep the mic visually active and restart quietly after Chrome ends on silence.
+      setRecording(true);
+
+      restartTimerRef.current = setTimeout(() => {
+        if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) return;
+        startRecognitionSession();
+      }, 180);
     };
 
     recognition.onerror = () => {
-      recordingRef.current = false;
-      setRecording(false);
+      if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
+        setRecording(false);
+        return;
+      }
+
+      try {
+        recognition.stop();
+      } catch {}
     };
 
     recognitionRef.current = recognition;
 
     try {
       recognition.start();
+      setRecording(true);
     } catch {
-      recordingRef.current = false;
-      setRecording(false);
+      restartTimerRef.current = setTimeout(() => {
+        if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) return;
+        startRecognitionSession();
+      }, 250);
     }
-  }, [disabled, onPreview, onTranscript, resetSpeechState]);
+  }, [clearRestartTimer, disabled, emit]);
+
+  const startRecording = useCallback(() => {
+    if (disabled) return;
+
+    manualStopRef.current = false;
+    shouldKeepRecordingRef.current = true;
+    committedRef.current = '';
+    sessionResultsRef.current = {};
+    lastEmittedRef.current = '';
+
+    startRecognitionSession();
+  }, [disabled, startRecognitionSession]);
 
   const toggleRecording = useCallback(() => {
     if (disabled) return;
 
-    if (recordingRef.current || recording) {
+    if (shouldKeepRecordingRef.current || recording) {
       stopRecording();
       return;
     }
@@ -206,6 +282,8 @@ export default function VoiceInput({
 
   useEffect(() => {
     return () => {
+      clearRestartTimer();
+
       try {
         recognitionRef.current?.abort?.();
       } catch {}
@@ -214,7 +292,7 @@ export default function VoiceInput({
         recognitionRef.current?.stop?.();
       } catch {}
     };
-  }, []);
+  }, [clearRestartTimer]);
 
   return (
     <button
