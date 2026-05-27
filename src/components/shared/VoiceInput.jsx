@@ -31,39 +31,6 @@ function removeImmediateDuplicateWords(value = '') {
   return output.join(' ').trim();
 }
 
-function appendWithOverlap(previous = '', next = '') {
-  const prev = removeImmediateDuplicateWords(previous);
-  const curr = removeImmediateDuplicateWords(next);
-
-  if (!curr) return prev;
-  if (!prev) return curr;
-
-  const prevLower = prev.toLowerCase();
-  const currLower = curr.toLowerCase();
-
-  if (prevLower === currLower) return prev;
-  if (prevLower.endsWith(currLower)) return prev;
-  if (currLower.startsWith(prevLower)) return curr;
-
-  const prevWords = prev.split(' ').filter(Boolean);
-  const currWords = curr.split(' ').filter(Boolean);
-  const maxOverlap = Math.min(prevWords.length, currWords.length, 20);
-
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    const prevTail = prevWords.slice(-overlap).map(wordKey).join(' ');
-    const currHead = currWords.slice(0, overlap).map(wordKey).join(' ');
-
-    if (prevTail && prevTail === currHead) {
-      return removeImmediateDuplicateWords([
-        ...prevWords,
-        ...currWords.slice(overlap),
-      ].join(' '));
-    }
-  }
-
-  return removeImmediateDuplicateWords(`${prev} ${curr}`);
-}
-
 function orderedResultText(results = {}) {
   return Object.keys(results)
     .map(Number)
@@ -85,56 +52,17 @@ export default function VoiceInput({
   const recognitionRef = useRef(null);
   const recordingRef = useRef(false);
   const manualStopRef = useRef(false);
-  const restartTimerRef = useRef(null);
-
-  const committedRef = useRef('');
-  const resultMapRef = useRef({});
-  const lastEmittedRef = useRef('');
-
-  const clearRestartTimer = useCallback(() => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-  }, []);
+  const resultsRef = useRef({});
+  const lastTranscriptRef = useRef('');
 
   const resetSpeechState = useCallback(() => {
-    committedRef.current = '';
-    resultMapRef.current = {};
-    lastEmittedRef.current = '';
+    resultsRef.current = {};
+    lastTranscriptRef.current = '';
   }, []);
-
-  const emit = useCallback((fullText = '', currentPhrase = '', interim = '', finalText = '') => {
-    const cleanFull = removeImmediateDuplicateWords(fullText);
-    const cleanPhrase = removeImmediateDuplicateWords(currentPhrase);
-    const cleanInterim = removeImmediateDuplicateWords(interim);
-    const cleanFinal = removeImmediateDuplicateWords(finalText);
-
-    if (cleanFull === lastEmittedRef.current && !cleanPhrase) {
-      return;
-    }
-
-    lastEmittedRef.current = cleanFull;
-
-    onPreview?.(cleanPhrase, {
-      recording: recordingRef.current,
-      currentPhrase: cleanPhrase,
-      interim: cleanInterim,
-      final: cleanFinal,
-    });
-
-    onTranscript?.(cleanFull, {
-      recording: recordingRef.current,
-      currentPhrase: cleanPhrase,
-      interim: cleanInterim,
-      final: cleanFinal,
-    });
-  }, [onPreview, onTranscript]);
 
   const stopRecording = useCallback(() => {
     manualStopRef.current = true;
     recordingRef.current = false;
-    clearRestartTimer();
 
     try {
       recognitionRef.current?.abort?.();
@@ -155,20 +83,21 @@ export default function VoiceInput({
     });
 
     setRecording(false);
-  }, [clearRestartTimer, onPreview, resetSpeechState]);
+  }, [onPreview, resetSpeechState]);
 
-  const startRecognition = useCallback(() => {
+  const startRecording = useCallback(() => {
+    if (disabled) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       alert('Voice input is not supported in this browser. Please use Chrome.');
-      recordingRef.current = false;
-      setRecording(false);
       return;
     }
 
-    clearRestartTimer();
-    resultMapRef.current = {};
+    manualStopRef.current = false;
+    recordingRef.current = true;
+    resetSpeechState();
 
     const recognition = new SpeechRecognition();
 
@@ -179,8 +108,6 @@ export default function VoiceInput({
 
     recognition.onstart = () => {
       if (manualStopRef.current) return;
-
-      recordingRef.current = true;
       setRecording(true);
     };
 
@@ -194,67 +121,61 @@ export default function VoiceInput({
 
         if (!spoken) continue;
 
-        if (event.results[i].isFinal) {
-          resultMapRef.current[i] = spoken;
-        } else if (i >= event.resultIndex) {
+        // Critical rule:
+        // Replace each recognition result by its index.
+        // Never append interim/final chunks manually.
+        resultsRef.current[i] = spoken;
+
+        if (!event.results[i].isFinal && i >= event.resultIndex) {
           latestInterim = spoken;
         }
       }
 
-      const finalText = removeImmediateDuplicateWords(orderedResultText(resultMapRef.current));
+      const transcript = removeImmediateDuplicateWords(orderedResultText(resultsRef.current));
 
-      const sessionText = latestInterim
-        ? appendWithOverlap(finalText, latestInterim)
-        : finalText;
+      if (transcript === lastTranscriptRef.current && !latestInterim) {
+        return;
+      }
 
-      const fullText = appendWithOverlap(committedRef.current, sessionText);
+      lastTranscriptRef.current = transcript;
 
-      emit(fullText, latestInterim, latestInterim, finalText);
+      onPreview?.(cleanText(latestInterim), {
+        recording: true,
+        currentPhrase: cleanText(latestInterim),
+        interim: cleanText(latestInterim),
+        final: transcript,
+      });
+
+      onTranscript?.(transcript, {
+        recording: true,
+        currentPhrase: cleanText(latestInterim),
+        interim: cleanText(latestInterim),
+        final: transcript,
+      });
     };
 
     recognition.onend = () => {
-      if (!recordingRef.current || manualStopRef.current || disabled) {
-        onPreview?.('', {
-          recording: false,
-          currentPhrase: '',
-          interim: '',
-          final: '',
-        });
-
+      if (manualStopRef.current || disabled) {
         setRecording(false);
         return;
       }
 
-      const sessionText = removeImmediateDuplicateWords(orderedResultText(resultMapRef.current));
+      // Browser may end naturally. Mark as not recording rather than stitching/restarting,
+      // because stitching was the source of duplicate phrases.
+      recordingRef.current = false;
+      setRecording(false);
 
-      if (sessionText) {
-        committedRef.current = appendWithOverlap(committedRef.current, sessionText);
-      }
-
-      resultMapRef.current = {};
-
-      restartTimerRef.current = setTimeout(() => {
-        if (!recordingRef.current || manualStopRef.current || disabled) return;
-        startRecognition();
-      }, 180);
+      onPreview?.('', {
+        recording: false,
+        currentPhrase: '',
+        interim: '',
+        final: lastTranscriptRef.current,
+      });
     };
 
     recognition.onerror = () => {
-      if (!recordingRef.current || manualStopRef.current || disabled) {
-        onPreview?.('', {
-          recording: false,
-          currentPhrase: '',
-          interim: '',
-          final: '',
-        });
-
-        setRecording(false);
-        return;
-      }
-
-      try {
-        recognition.stop();
-      } catch {}
+      recordingRef.current = false;
+      setRecording(false);
     };
 
     recognitionRef.current = recognition;
@@ -265,17 +186,7 @@ export default function VoiceInput({
       recordingRef.current = false;
       setRecording(false);
     }
-  }, [clearRestartTimer, disabled, emit, onPreview]);
-
-  const startRecording = useCallback(() => {
-    if (disabled) return;
-
-    manualStopRef.current = false;
-    recordingRef.current = true;
-    resetSpeechState();
-
-    startRecognition();
-  }, [disabled, resetSpeechState, startRecognition]);
+  }, [disabled, onPreview, onTranscript, resetSpeechState]);
 
   const toggleRecording = useCallback(() => {
     if (disabled) return;
@@ -295,8 +206,6 @@ export default function VoiceInput({
 
   useEffect(() => {
     return () => {
-      clearRestartTimer();
-
       try {
         recognitionRef.current?.abort?.();
       } catch {}
@@ -305,7 +214,7 @@ export default function VoiceInput({
         recognitionRef.current?.stop?.();
       } catch {}
     };
-  }, [clearRestartTimer]);
+  }, []);
 
   return (
     <button
