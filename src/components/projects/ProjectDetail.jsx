@@ -2690,6 +2690,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const boEmail = project.bo_email || project.bo_1_email || '';
   const works = project.works || '';
   const aos = project.aos || [];
+  const hasAgreedSurveyorAO = aos.some(ao => !!ao?.agreed_surveyor || !!ao?.agreedSurveyor);
   const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
   const docs = project.documents || [];
   const projColour = getProjectColour(project);
@@ -3414,7 +3415,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                     </div>
                   )}
 
-                  {role === 'BO' && (
+                  {(role === 'BO' || hasAgreedSurveyorAO) && (
                     <button
                       className="btn btn-sm btn-ghost"
                       disabled={loaLoading === 'bo'}
@@ -3427,7 +3428,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                         opacity: loaLoading === 'bo' ? 0.65 : 1,
                       }}
                     >
-                      {loaLoading === 'bo' ? 'Sending…' : '📄 Send BO LoA'}
+                      {loaLoading === 'bo'
+                        ? 'Sending…'
+                        : role === 'AO' && hasAgreedSurveyorAO
+                          ? '🔥 Send Agreed Surveyor LoA'
+                          : '📄 Send BO LoA'}
                     </button>
                   )}
                 </div>
