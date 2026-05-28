@@ -111,9 +111,9 @@ function detectAwardType(project = {}, ao = {}, options = {}) {
 }
 
 function templateKeyForAwardType(type) {
-  if (type === 'agreed_surveyor') return 'award_agreed_surveyor';
-  if (type === 's104b') return 'award_s104b';
-  return 'award_two_surveyor';
+  if (type === 'agreed_surveyor') return 'award_as';
+  if (type === 's104b') return 'award_s10';
+  return 'award_2s';
 }
 
 function awardTypeLabel(type) {
