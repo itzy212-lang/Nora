@@ -13,6 +13,7 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   const [fullTranscript, setFullTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [pdfProcessing, setPdfProcessing] = useState(false);
   const [selectedAOIndex, setSelectedAOIndex] = useState('0');
   const [previewHtml, setPreviewHtml] = useState('');
   const [structuredData, setStructuredData] = useState(null);
@@ -315,96 +316,50 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     }
   }, [fullTranscript, projectId, removeImmediateDuplication, selectedAO, selectedAOAddress, selectedAOIndex, stopRecording, transcript]);
 
-  const printPreview = useCallback(() => {
+  const printPreview = useCallback(async () => {
     if (!previewHtml) return;
 
-    const printCss = `
-      <style>
-        @media print {
-          @page {
-            size: A4;
-            margin: 12mm;
-          }
+    setPdfProcessing(true);
 
-          html,
-          body {
-            width: 210mm !important;
-            min-height: 297mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-            overflow: visible !important;
-          }
+    try {
+      const filenameBase = selectedAOAddress || projectAddress || 'Schedule of Condition';
+      const safeFilename = `Schedule of Condition - ${filenameBase}`
+        .replace(/[\\/:*?"<>|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-          body {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+      const response = await fetch('/api/export-soc-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: previewHtml,
+          filename: `${safeFilename}.pdf`,
+          ao_address: selectedAOAddress,
+        }),
+      });
 
-          .soc-document {
-            width: 100% !important;
-            max-width: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-            background: #ffffff !important;
-          }
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || payload.details || 'Could not generate PDF.');
+      }
 
-          table {
-            page-break-inside: auto;
-          }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
 
-          tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-          }
+      link.href = url;
+      link.download = `${safeFilename}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
 
-          thead {
-            display: table-header-group;
-          }
-        }
-
-        @media screen {
-          html,
-          body {
-            width: 210mm !important;
-            min-height: 297mm !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-            overflow: visible !important;
-          }
-
-          .soc-document {
-            width: 100% !important;
-            max-width: none !important;
-            margin: 0 auto !important;
-            box-shadow: none !important;
-          }
-        }
-      </style>
-    `;
-
-    const html = previewHtml.includes('</head>')
-      ? previewHtml.replace('</head>', `${printCss}</head>`)
-      : `<!DOCTYPE html><html><head>${printCss}</head><body>${previewHtml}</body></html>`;
-
-    const win = window.open('', '_blank', 'width=1200,height=900');
-
-    if (!win) {
-      alert('Please allow pop-ups to download the SOC PDF.');
-      return;
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Error downloading SOC PDF: ' + (err.message || err));
+    } finally {
+      setPdfProcessing(false);
     }
-
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-
-    setTimeout(() => {
-      win.focus();
-      win.print();
-    }, 800);
-  }, [previewHtml]);
+  }, [previewHtml, projectAddress, selectedAOAddress]);
 
   const sendSOCByEmail = useCallback(() => {
     onOpenComposer?.({
@@ -520,7 +475,7 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>Back</button>
           <button onClick={sendSOCByEmail} style={s.secondaryBtn}>Send SOC by Email</button>
-          <button onClick={printPreview} style={s.primaryBtn}>Download PDF</button>
+          <button onClick={printPreview} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }} disabled={pdfProcessing}>{pdfProcessing ? 'Generating PDF...' : 'Download PDF'}</button>
         </div>
       </div>
 
