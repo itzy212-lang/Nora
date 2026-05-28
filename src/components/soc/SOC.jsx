@@ -318,10 +318,92 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   const printPreview = useCallback(() => {
     if (!previewHtml) return;
 
-    const win = window.open('', '_blank');
-    win.document.write(previewHtml);
+    const printCss = `
+      <style>
+        @media print {
+          @page {
+            size: A4;
+            margin: 12mm;
+          }
+
+          html,
+          body {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .soc-document {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+          }
+
+          table {
+            page-break-inside: auto;
+          }
+
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+
+          thead {
+            display: table-header-group;
+          }
+        }
+
+        @media screen {
+          html,
+          body {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            overflow: visible !important;
+          }
+
+          .soc-document {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
+          }
+        }
+      </style>
+    `;
+
+    const html = previewHtml.includes('</head>')
+      ? previewHtml.replace('</head>', `${printCss}</head>`)
+      : `<!DOCTYPE html><html><head>${printCss}</head><body>${previewHtml}</body></html>`;
+
+    const win = window.open('', '_blank', 'width=1200,height=900');
+
+    if (!win) {
+      alert('Please allow pop-ups to download the SOC PDF.');
+      return;
+    }
+
+    win.document.open();
+    win.document.write(html);
     win.document.close();
-    setTimeout(() => win.print(), 600);
+
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 800);
   }, [previewHtml]);
 
   const sendSOCByEmail = useCallback(() => {
@@ -329,7 +411,7 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
       mode: 'compose',
       to: '',
       subject: `Schedule of Condition - ${selectedAOAddress || projectAddress || ''}`,
-      body: `Dear [Recipient],\n\nPlease find attached the Schedule of Condition prepared in connection with the proposed works at ${projectAddress || '[Building Owner property]'}.\n\nThis schedule records the existing condition of the adjoining property at ${selectedAOAddress || '[Adjoining Owner property]'} prior to commencement of the notified works.\n\nPlease do not hesitate to contact me should you require any further information.\n\nYours sincerely,\nItzik`,
+      body: `Dear [Recipient]\n\nPlease find attached the Schedule of Condition prepared in connection with the proposed works at ${projectAddress || '[Building Owner property]'}.\n\nThis schedule records the existing condition of the adjoining property at ${selectedAOAddress || '[Adjoining Owner property]'} prior to commencement of the notified works.\n\nPlease do not hesitate to contact me should you require any further information.\n\nYours sincerely\nItzik`,
       projectId,
     });
   }, [onOpenComposer, projectAddress, projectId, selectedAOAddress]);
