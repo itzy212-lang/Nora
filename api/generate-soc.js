@@ -112,6 +112,28 @@ function normaliseSections(sections = []) {
     .filter((section) => section.title || section.rows.length);
 }
 
+function buildPartyDrafts(emailsRequired = [], projectMeta = {}) {
+  if (!Array.isArray(emailsRequired)) return [];
+
+  return emailsRequired
+    .filter((email) => email && (email.recipient_type || email.subject || email.body || email.reason))
+    .map((email, index) => {
+      const party = email.recipient_type || email.party || 'Relevant Party';
+      const subject = email.subject || `Schedule of Condition follow-up - ${projectMeta.ao_address || projectMeta.bo_address || ''}`;
+      const reason = email.reason ? `\n\nReason identified from SOC notes: ${email.reason}` : '';
+      const body = email.body || `Dear ${party},\n\nFollowing the Schedule of Condition inspection, I wanted to raise the following point for your attention.\n\n${email.reason || ''}\n\nKind regards\nItzik`;
+
+      return {
+        id: `soc-email-${index + 1}`,
+        party,
+        recipient_type: party,
+        subject,
+        body: `${body}${reason}`.trim(),
+        reason: email.reason || '',
+      };
+    });
+}
+
 function fixedIntroduction(projectMeta = {}) {
   const boAddress = projectMeta.bo_address || '[bo_address]';
   const aoAddressText = projectMeta.ao_address || '[ao_address]';
@@ -257,9 +279,18 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
 
 async function extractStructuredData(message, projectMeta, apiKey) {
   const prompt = `
-You are a Schedule of Condition assistant for a Party Wall surveyor.
+You are an expert Party Wall Surveyor preparing a high-quality Schedule of Condition under the Party Wall etc. Act 1996.
 
-Convert the following site notes into structured JSON.
+You must convert raw dictated site notes into structured JSON.
+
+IMPORTANT:
+- Do not merely transcribe or lightly organise the notes.
+- Interpret the notes as an experienced Party Wall Surveyor.
+- Rewrite condition observations in polished, professional, surveyor-grade language suitable for inclusion in a formal Schedule of Condition.
+- Preserve factual accuracy and measurements exactly.
+- Do not invent defects, locations, causes or measurements.
+- Do not overstate observations.
+- Do not include legal conclusions inside the condition schedule unless they are part of a separate Notes / Observations section.
 
 Return only valid JSON. No markdown, no backticks, no preamble.
 
@@ -275,32 +306,103 @@ Required structure:
   "sections": [
     {
       "number": 2,
-      "title": "exact dictated heading",
+      "title": "exact dictated heading where available",
       "rows": [
-        { "ref": "FE-01", "observation": "formal observation", "action": "Record only" }
+        {
+          "ref": "RE-01",
+          "observation": "professionally drafted surveyor-grade condition observation",
+          "action": "Record only"
+        }
       ]
     }
   ],
   "discussion": [],
-  "general_notes": []
+  "general_notes": [],
+  "actions": [
+    {
+      "type": "calculation | investigation | follow_up | access | other",
+      "party": "Surveyor | Building Owner | Adjoining Owner | Structural Engineer | Architect | Other",
+      "description": "clear action required"
+    }
+  ],
+  "award_notes": [
+    {
+      "topic": "enclosure | access | fence | horticulture | section_1_5 | security | other",
+      "description": "award-relevant note"
+    }
+  ],
+  "emails_required": [
+    {
+      "recipient_type": "Building Owner | Adjoining Owner | Structural Engineer | Architect | Other",
+      "subject": "short email subject",
+      "reason": "why the email is needed",
+      "body": "professional draft email body"
+    }
+  ]
 }
 
-Rules:
-- Use sections[].rows[].ref, observation and action.
-- Leave introduction blank. The system inserts the introduction separately.
-- Preserve dictated room or area headings exactly as section titles. Do not rename, generalise, simplify or reinterpret them.
-- A standalone heading line such as "Utility Area to Rear of Garage", "Cloakroom / WC off Utility", "Garage Roof" or "Front Driveway / Paving" must become a section title exactly as written.
-- Section 2 must be the first dictated room or area heading in the notes. Do not replace it with a generic category such as "Internal Walls and Ceilings".
-- Keep all observations that follow a heading inside that heading until the next clear dictated heading appears.
-- Do not split windows, floors, ceilings or skirtings into separate sections unless the user dictated those as separate headings.
-- Do not invent headings. Do not create generic headings unless the notes contain no usable heading at all.
-- Do not invent defects not mentioned.
-- Preserve measurements exactly as given.
-- Use formal, third-person surveying language.
-- Use Record only where no further action is required.
-- Section numbers start at 2 because section 1 is added automatically.
-- Only populate discussion where the notes clearly require a separate discussion or recommendation item. Otherwise return an empty array.
-- General notes should only contain final general notes dictated under a General Notes heading.
+Core rules for Schedule of Condition observations:
+- The SOC sections must only contain physical condition observations and neutral inspection notes.
+- Use high-end surveyor wording.
+- Every observation must be written in formal third-person language.
+- Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues".
+- Replace casual wording with professional phrasing such as:
+  - "appeared to exhibit upward displacement"
+  - "was noted to be defective"
+  - "was observed to extend"
+  - "no visible defects were noted"
+  - "no sticking or binding was noted during operation"
+  - "the element was substantially obscured by vegetation and could not be fully inspected"
+- Where a defect affects operation, state that clearly as an existing operational defect.
+- Preserve measurements exactly as dictated.
+- Do not diagnose cause unless explicitly dictated.
+- Do not state liability or causation.
+
+Heading and grouping rules:
+- Preserve dictated room or area headings exactly where the user has clearly dictated a heading.
+- A standalone heading line such as "Rear Elevation", "First Floor Landing", "Stairs", "Utility Area to Rear of Garage", "Cloakroom / WC off Utility", "Garage Roof", "Fence" or "Front Driveway / Paving" must become a section title exactly as written.
+- If the user does not dictate a heading, create a sensible inspection-area heading, but do not create unnecessary micro-sections.
+- Keep windows, floors, ceilings, skirtings and doors within the same room or area unless the user dictated them as separate headings.
+- Section 2 must be the first dictated room or inspection area. Section 1 is added automatically by the system.
+
+What must NOT go into normal SOC condition rows:
+- reminders to the surveyor
+- "I need to..."
+- "we need to..."
+- legal analysis
+- enclosure cost discussions
+- award drafting issues
+- requests for structural engineer confirmation
+- correspondence requirements
+- access negotiation points
+- square metre calculation reminders
+
+Where these items should go:
+- Put surveyor reminders and calculations in actions[].
+- Put matters relevant to the Party Wall Award in award_notes[].
+- Put required emails in emails_required[].
+- If the user clearly wants these contextual matters retained in the SOC, include them only in a final section titled "Notes / Observations", not mixed into the physical condition sections.
+
+Emails:
+- If the notes indicate that the surveyor needs to write to, speak to, ask, confirm with, or discuss something with the Building Owner, Adjoining Owner, Structural Engineer, Architect or another party, create an emails_required[] item.
+- Draft the email in the first person as the surveyor.
+- Keep the email concise, professional and practical.
+- Do not include an email unless the notes clearly imply one is needed.
+
+Actions:
+- Create actions[] for calculations, further checks, inspections, confirmations or follow-up work.
+- Examples: calculate enclosure area, confirm wall status, request access, confirm fence ownership, obtain engineer comment.
+
+Award notes:
+- Create award_notes[] for matters that may need clauses or consideration in the Party Wall Award.
+- Examples: enclosure, line of junction access, fence removal/reinstatement, horticultural protection, damage/replacement obligations.
+
+Introduction:
+- Leave introduction blank. The system inserts the fixed introduction separately.
+
+General notes:
+- Only use general_notes for genuinely general inspection notes.
+- Do not use general_notes as a dumping ground for legal or award matters.
 
 Project context:
 Adjoining Owner property: ${projectMeta.ao_address || ''}
@@ -309,7 +411,7 @@ Inspection date: ${projectMeta.inspection_date || ''}
 Proposed works: ${projectMeta.proposed_works || ''}
 Prepared by: ${projectMeta.prepared_by || ''}
 
-Site notes:
+Raw dictated notes:
 ${message}
 `;
 
@@ -321,12 +423,12 @@ ${message}
     },
     body: JSON.stringify({
       model: 'gpt-4.1-mini',
-      temperature: 0.1,
+      temperature: 0.15,
       messages: [
         {
           role: 'system',
           content:
-            'Return only valid JSON for a Schedule of Condition. Preserve dictated room and area headings exactly. Leave the introduction blank.',
+            'You are an expert Party Wall Surveyor. Return only valid JSON. Produce polished surveyor-grade Schedule of Condition wording and separate actions, award notes and required emails from the SOC observations.',
         },
         { role: 'user', content: prompt },
       ],
@@ -471,7 +573,12 @@ export default async function handler(req, res) {
       proposed_works: projectMeta.proposed_works || dataForRender.proposed_works || '',
       prepared_by: projectMeta.prepared_by || dataForRender.prepared_by || '',
       sections: normaliseSections(dataForRender.sections || []),
+      actions: Array.isArray(dataForRender.actions) ? dataForRender.actions : [],
+      award_notes: Array.isArray(dataForRender.award_notes) ? dataForRender.award_notes : [],
+      emails_required: Array.isArray(dataForRender.emails_required) ? dataForRender.emails_required : [],
     };
+
+    const partyDrafts = buildPartyDrafts(dataForRender.emails_required, projectMeta);
 
     const renderedContent = renderSocContent(dataForRender, config, projectMeta);
     const preview_html = htmlTemplate.replace('{{SOC_CONTENT}}', renderedContent);
@@ -522,6 +629,10 @@ export default async function handler(req, res) {
       structured_data: dataForRender,
       report_id,
       project_meta: projectMeta,
+      partyDrafts,
+      actions: dataForRender.actions,
+      award_notes: dataForRender.award_notes,
+      emails_required: dataForRender.emails_required,
     });
   } catch (err) {
     console.error('[generate-soc] fatal error:', err);
