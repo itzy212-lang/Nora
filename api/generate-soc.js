@@ -51,6 +51,7 @@ function nl2p(value) {
 
 function ownerNameFromProject(project = {}) {
   if (project.bo_company) return project.bo_company;
+
   return [project.bo_1_name, project.bo_2_name, project.bo_name]
     .filter(Boolean)
     .join(' & ');
@@ -86,6 +87,7 @@ function aoMatches(ao = {}, aoId = '', index = -1) {
 function pickAO(project = {}, aoId = '') {
   const aos = Array.isArray(project.aos) ? project.aos : [];
   if (!aos.length) return null;
+
   return aos.find((ao, index) => aoMatches(ao, aoId, index)) || aos[0];
 }
 
@@ -110,14 +112,14 @@ function normaliseSections(sections = []) {
     .filter((section) => section.title || section.rows.length);
 }
 
-function defaultIntroduction(projectMeta = {}) {
-  const boAddress = projectMeta.bo_address || '[Building Owner property]';
-  const aoAddressText = projectMeta.ao_address || '[Adjoining Owner property]';
+function fixedIntroduction(projectMeta = {}) {
+  const boAddress = projectMeta.bo_address || '[bo_address]';
+  const aoAddressText = projectMeta.ao_address || '[ao_address]';
 
   return [
-    `This Schedule of Conditions has been prepared in connection with the proposed works at the Building Owner's property, ${boAddress}. The purpose of this document is to record the existing condition of the Adjoining Owner's property at ${aoAddressText} prior to the commencement of the notified works.`,
-    'The inspection was visual only. No opening-up works, testing or intrusive investigations were carried out. Where access was restricted or elements were concealed behind fixed finishes, furniture or stored items, this has been noted where relevant.',
-    'Photographs taken at the time of inspection are retained on file and should be read together with this written schedule.'
+    `This Schedule of Conditions has been prepared pursuant to the Party Wall etc. Act 1996 in connection with the proposed notifiable works at the Building Owner's property, ${boAddress}. The purpose of this document is to record the existing condition of the Adjoining Owner's property at ${aoAddressText}, prior to the commencement of those works, thereby establishing a contemporaneous baseline record against which any claims of damage arising during or after the execution of the works may be assessed.`,
+    'The inspection was conducted by way of visual survey only. No opening-up works, testing or investigations were carried out. Where access was restricted or elements were concealed behind fixed finishes or furniture, this has been noted accordingly. Photographs taken at the time of inspection are to be retained by the surveyors and not appended to this written schedule or the party wall award.',
+    'All references to left and right are made when facing the relevant elevation. Crack widths are classified in accordance with the crack classification table appended to this schedule.',
   ].join('\n\n');
 }
 
@@ -127,10 +129,16 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   const inspDate = projectMeta.inspection_date || data.inspection_date || '';
   const proposedWorks = projectMeta.proposed_works || data.proposed_works || '';
   const preparedBy = projectMeta.prepared_by || data.prepared_by || '';
-  const photoRecord = projectMeta.photo_record || data.photo_record || 'Photographic thumbnails are not appended to this schedule with the originals saved on file.';
-  const introduction = data.introduction || defaultIntroduction(projectMeta);
+  const photoRecord =
+    projectMeta.photo_record ||
+    data.photo_record ||
+    'Photographic thumbnails are not appended to this schedule with the originals saved on file.';
+
+  const introduction = fixedIntroduction(projectMeta);
   const sections = normaliseSections(data.sections || []);
-  const discussion = (data.discussion || data.discussion_items || []).filter((item) => item && (item.item || item.title || item.body));
+  const discussion = (data.discussion || data.discussion_items || []).filter(
+    (item) => item && (item.item || item.title || item.body)
+  );
   const generalNotes = (data.general_notes || []).filter(Boolean);
   const crackClass = data.crack_classification || config.crack_classification || [
     { width: 'Up to 0.1mm', expression: 'Hairline' },
@@ -140,42 +148,46 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     { width: '15.1mm to 25mm', expression: 'Severe' },
   ];
 
-  let html = '<div class="soc-document">'
-    + '<div class="soc-title-block">'
-    + '<div class="soc-main-title">SCHEDULE OF CONDITIONS</div>'
-    + '<div class="soc-subtitle">Party Wall etc. Act 1996</div>'
-    + '</div>'
-    + '<table class="soc-cover-table"><tbody>'
-    + `<tr><td class="cover-label">Adjoining Owner's Property</td><td>${esc(aoAddressText)}</td></tr>`
-    + `<tr><td class="cover-label">Building Owner's Property</td><td>${esc(boAddress)}</td></tr>`
-    + `<tr><td class="cover-label">Date of Inspection</td><td>${esc(inspDate)}</td></tr>`
-    + `<tr><td class="cover-label">Proposed Works</td><td>${esc(proposedWorks)}</td></tr>`
-    + `<tr><td class="cover-label">Prepared By</td><td>${esc(preparedBy)}</td></tr>`
-    + `<tr><td class="cover-label">Photographic Record</td><td>${esc(photoRecord)}</td></tr>`
-    + '</tbody></table>'
-    + '<div class="soc-section-heading">1. Introduction</div>'
-    + `<div class="soc-intro-box">${nl2p(introduction)}</div>`;
+  let html =
+    '<div class="soc-document">' +
+    '<div class="soc-title-block">' +
+    '<div class="soc-main-title">SCHEDULE OF CONDITIONS</div>' +
+    '<div class="soc-subtitle">Party Wall etc. Act 1996</div>' +
+    '</div>' +
+    '<table class="soc-cover-table"><tbody>' +
+    `<tr><td class="cover-label">Adjoining Owner's Property</td><td>${esc(aoAddressText)}</td></tr>` +
+    `<tr><td class="cover-label">Building Owner's Property</td><td>${esc(boAddress)}</td></tr>` +
+    `<tr><td class="cover-label">Date of Inspection</td><td>${esc(inspDate)}</td></tr>` +
+    `<tr><td class="cover-label">Proposed Works</td><td>${esc(proposedWorks)}</td></tr>` +
+    `<tr><td class="cover-label">Prepared By</td><td>${esc(preparedBy)}</td></tr>` +
+    `<tr><td class="cover-label">Photographic Record</td><td>${esc(photoRecord)}</td></tr>` +
+    '</tbody></table>' +
+    '<div class="soc-section-heading">1. Introduction</div>' +
+    `<div class="soc-intro-box">${nl2p(introduction)}</div>`;
 
   sections.forEach((section, index) => {
     const secNum = esc(String(index + 2));
     const secTitle = esc(section.title || '');
     const rows = section.rows || [];
 
-    html += `<div class="soc-section-heading">${secNum}. ${secTitle}</div>`
-      + '<table class="soc-obs-table">'
-      + '<thead><tr>'
-      + '<th class="col-ref">Ref</th>'
-      + `<th class="col-obs">Observation / Description - ${secTitle}</th>`
-      + '<th class="col-action">Action Required</th>'
-      + '</tr></thead><tbody>';
+    html +=
+      `<div class="soc-section-heading">${secNum}. ${secTitle}</div>` +
+      '<table class="soc-obs-table">' +
+      '<thead><tr>' +
+      '<th class="col-ref">Ref</th>' +
+      `<th class="col-obs">Observation / Description - ${secTitle}</th>` +
+      '<th class="col-action">Action Required</th>' +
+      '</tr></thead><tbody>';
 
     rows.forEach((row, rowIndex) => {
       const rowClass = rowIndex % 2 === 0 ? '' : ' class="alt-row"';
-      html += `<tr${rowClass}>`
-        + `<td class="cell-ref">${esc(row.ref || '')}</td>`
-        + `<td class="cell-obs">${esc(row.observation || '')}</td>`
-        + `<td class="cell-action">${esc(row.action || '')}</td>`
-        + '</tr>';
+
+      html +=
+        `<tr${rowClass}>` +
+        `<td class="cell-ref">${esc(row.ref || '')}</td>` +
+        `<td class="cell-obs">${esc(row.observation || '')}</td>` +
+        `<td class="cell-action">${esc(row.action || '')}</td>` +
+        '</tr>';
     });
 
     html += '</tbody></table>';
@@ -184,20 +196,23 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   let nextSectionNumber = sections.length + 2;
 
   if (discussion.length > 0) {
-    html += `<div class="soc-section-heading">${nextSectionNumber}. Discussion Items &amp; Recommendations</div>`
-      + '<table class="soc-obs-table"><thead><tr>'
-      + '<th class="col-ref">Item</th>'
-      + '<th class="col-obs" colspan="2">Discussion / Recommendation</th>'
-      + '</tr></thead><tbody>';
+    html +=
+      `<div class="soc-section-heading">${nextSectionNumber}. Discussion Items &amp; Recommendations</div>` +
+      '<table class="soc-obs-table"><thead><tr>' +
+      '<th class="col-ref">Item</th>' +
+      '<th class="col-obs" colspan="2">Discussion / Recommendation</th>' +
+      '</tr></thead><tbody>';
 
     discussion.forEach((item, index) => {
       const rowClass = index % 2 === 0 ? '' : ' class="alt-row"';
       const label = item.item || String(index + 1);
       const title = item.title ? `<strong>${esc(item.title)}:</strong> ` : '';
-      html += `<tr${rowClass}>`
-        + `<td class="cell-ref">${esc(label)}</td>`
-        + `<td class="cell-obs" colspan="2">${title}${esc(item.body || '')}</td>`
-        + '</tr>';
+
+      html +=
+        `<tr${rowClass}>` +
+        `<td class="cell-ref">${esc(label)}</td>` +
+        `<td class="cell-obs" colspan="2">${title}${esc(item.body || '')}</td>` +
+        '</tr>';
     });
 
     html += '</tbody></table>';
@@ -205,8 +220,9 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   }
 
   if (generalNotes.length > 0) {
-    html += `<div class="soc-section-heading">${nextSectionNumber}. General Notes</div>`
-      + '<div class="soc-intro-box"><ol class="soc-notes-list">';
+    html +=
+      `<div class="soc-section-heading">${nextSectionNumber}. General Notes</div>` +
+      '<div class="soc-intro-box"><ol class="soc-notes-list">';
 
     generalNotes.forEach((note) => {
       html += `<li>${esc(note)}</li>`;
@@ -216,22 +232,26 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     nextSectionNumber += 1;
   }
 
-  html += `<div class="soc-section-heading">${nextSectionNumber}. Crack Classification</div>`
-    + '<div class="soc-intro-box"><p>The following classification table is used as reference when describing crack widths observed during this inspection:</p></div>'
-    + '<table class="soc-obs-table"><thead><tr>'
-    + '<th style="width:50%;text-align:left">Approximate Crack Width</th>'
-    + '<th style="width:50%;text-align:left">Associated Expression</th>'
-    + '</tr></thead><tbody>';
+  html +=
+    `<div class="soc-section-heading">${nextSectionNumber}. Crack Classification</div>` +
+    '<div class="soc-intro-box"><p>The following classification table is used as reference when describing crack widths observed during this inspection:</p></div>' +
+    '<table class="soc-obs-table"><thead><tr>' +
+    '<th style="width:50%;text-align:left">Approximate Crack Width</th>' +
+    '<th style="width:50%;text-align:left">Associated Expression</th>' +
+    '</tr></thead><tbody>';
 
   crackClass.forEach((item, index) => {
     const rowClass = index % 2 === 0 ? '' : ' class="alt-row"';
-    html += `<tr${rowClass}>`
-      + `<td style="padding:7px 12px;border:1px solid #c8c8c8">${esc(item.width)}</td>`
-      + `<td style="padding:7px 12px;border:1px solid #c8c8c8">${esc(item.expression)}</td>`
-      + '</tr>';
+
+    html +=
+      `<tr${rowClass}>` +
+      `<td style="padding:7px 12px;border:1px solid #c8c8c8">${esc(item.width)}</td>` +
+      `<td style="padding:7px 12px;border:1px solid #c8c8c8">${esc(item.expression)}</td>` +
+      '</tr>';
   });
 
   html += '</tbody></table></div>';
+
   return html;
 }
 
@@ -267,6 +287,7 @@ Required structure:
 
 Rules:
 - Use sections[].rows[].ref, observation and action.
+- Leave introduction blank. The system inserts the introduction separately.
 - Preserve dictated room or area headings exactly as section titles. Do not rename, generalise, simplify or reinterpret them.
 - A standalone heading line such as "Utility Area to Rear of Garage", "Cloakroom / WC off Utility", "Garage Roof" or "Front Driveway / Paving" must become a section title exactly as written.
 - Section 2 must be the first dictated room or area heading in the notes. Do not replace it with a generic category such as "Internal Walls and Ceilings".
@@ -302,7 +323,11 @@ ${message}
       model: 'gpt-4.1-mini',
       temperature: 0.1,
       messages: [
-        { role: 'system', content: 'Return only valid JSON for a Schedule of Condition. Preserve dictated room and area headings exactly.' },
+        {
+          role: 'system',
+          content:
+            'Return only valid JSON for a Schedule of Condition. Preserve dictated room and area headings exactly. Leave the introduction blank.',
+        },
         { role: 'user', content: prompt },
       ],
     }),
@@ -315,11 +340,17 @@ ${message}
   }
 
   const raw = payload.choices?.[0]?.message?.content || '';
+
   return JSON.parse(raw.replace(/```json|```/g, '').trim());
 }
 
 async function getSocDate(projectId, aoId, selectedAO) {
-  const aoDate = selectedAO?.soc_date || selectedAO?.soc_agreed_date || selectedAO?.schedule_of_condition_date || selectedAO?.scheduleOfConditionDate;
+  const aoDate =
+    selectedAO?.soc_date ||
+    selectedAO?.soc_agreed_date ||
+    selectedAO?.schedule_of_condition_date ||
+    selectedAO?.scheduleOfConditionDate;
+
   if (aoDate) return formatLongDate(aoDate);
 
   try {
@@ -334,6 +365,7 @@ async function getSocDate(projectId, aoId, selectedAO) {
     if (aoId) query = query.eq('ao_id', String(aoId));
 
     const { data, error } = await query;
+
     if (!error && data?.[0]?.due_date) return formatLongDate(data[0].due_date);
   } catch (err) {
     console.warn('[generate-soc] task date lookup warning:', err.message);
@@ -373,7 +405,10 @@ export default async function handler(req, res) {
       .single();
 
     if (projectError || !project) {
-      return res.status(404).json({ error: 'Project not found', details: projectError?.message });
+      return res.status(404).json({
+        error: 'Project not found',
+        details: projectError?.message,
+      });
     }
 
     const selectedAO = pickAO(project, ao_id);
@@ -402,7 +437,10 @@ export default async function handler(req, res) {
       .single();
 
     if (templateError || !template) {
-      return res.status(500).json({ error: 'SOC template missing from document_templates', details: templateError?.message });
+      return res.status(500).json({
+        error: 'SOC template missing from document_templates',
+        details: templateError?.message,
+      });
     }
 
     const config = template.renderer_config || {};
@@ -416,6 +454,7 @@ export default async function handler(req, res) {
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
+
       if (!apiKey) {
         return res.status(500).json({ error: 'Missing OpenAI API key' });
       }
@@ -425,6 +464,7 @@ export default async function handler(req, res) {
 
     dataForRender = {
       ...dataForRender,
+      introduction: fixedIntroduction(projectMeta),
       ao_address: projectMeta.ao_address || dataForRender.ao_address || '',
       bo_address: projectMeta.bo_address || dataForRender.bo_address || '',
       inspection_date: projectMeta.inspection_date || dataForRender.inspection_date || '',
@@ -485,6 +525,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[generate-soc] fatal error:', err);
-    return res.status(500).json({ error: err.message || 'SOC generation failed' });
+
+    return res.status(500).json({
+      error: err.message || 'SOC generation failed',
+    });
   }
 }
