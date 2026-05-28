@@ -92,19 +92,22 @@ function pickAO(project = {}, aoId = '') {
 function normaliseSections(sections = []) {
   if (!Array.isArray(sections)) return [];
 
-  return sections.map((section, index) => {
-    const rows = section.rows || section.elements || [];
+  return sections
+    .filter(Boolean)
+    .map((section, index) => {
+      const rows = section.rows || section.elements || [];
 
-    return {
-      number: section.number || index + 2,
-      title: section.title || section.room || section.name || '',
-      rows: rows.map((row) => ({
-        ref: row.ref || '',
-        observation: row.observation || row.description || row.condition || row.obs || '',
-        action: row.action || row.action_required || 'Record only',
-      })),
-    };
-  });
+      return {
+        number: section.number || index + 2,
+        title: section.title || section.room || section.name || '',
+        rows: rows.map((row) => ({
+          ref: row.ref || '',
+          observation: row.observation || row.description || row.condition || row.obs || '',
+          action: row.action || row.action_required || 'Record only',
+        })),
+      };
+    })
+    .filter((section) => section.title || section.rows.length);
 }
 
 function defaultIntroduction(projectMeta = {}) {
@@ -127,8 +130,8 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   const photoRecord = projectMeta.photo_record || data.photo_record || 'Photographic thumbnails are not appended to this schedule with the originals saved on file.';
   const introduction = data.introduction || defaultIntroduction(projectMeta);
   const sections = normaliseSections(data.sections || []);
-  const discussion = data.discussion || data.discussion_items || [];
-  const generalNotes = data.general_notes || [];
+  const discussion = (data.discussion || data.discussion_items || []).filter((item) => item && (item.item || item.title || item.body));
+  const generalNotes = (data.general_notes || []).filter(Boolean);
   const crackClass = data.crack_classification || config.crack_classification || [
     { width: 'Up to 0.1mm', expression: 'Hairline' },
     { width: '0.1mm to 1.0mm', expression: 'Very Slight' },
@@ -153,8 +156,8 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     + '<div class="soc-section-heading">1. Introduction</div>'
     + `<div class="soc-intro-box">${nl2p(introduction)}</div>`;
 
-  sections.forEach((section) => {
-    const secNum = esc(String(section.number || ''));
+  sections.forEach((section, index) => {
+    const secNum = esc(String(index + 2));
     const secTitle = esc(section.title || '');
     const rows = section.rows || [];
 
@@ -166,8 +169,8 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
       + '<th class="col-action">Action Required</th>'
       + '</tr></thead><tbody>';
 
-    rows.forEach((row, index) => {
-      const rowClass = index % 2 === 0 ? '' : ' class="alt-row"';
+    rows.forEach((row, rowIndex) => {
+      const rowClass = rowIndex % 2 === 0 ? '' : ' class="alt-row"';
       html += `<tr${rowClass}>`
         + `<td class="cell-ref">${esc(row.ref || '')}</td>`
         + `<td class="cell-obs">${esc(row.observation || '')}</td>`
@@ -178,8 +181,10 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     html += '</tbody></table>';
   });
 
+  let nextSectionNumber = sections.length + 2;
+
   if (discussion.length > 0) {
-    html += '<div class="soc-section-heading">8. Discussion Items &amp; Recommendations</div>'
+    html += `<div class="soc-section-heading">${nextSectionNumber}. Discussion Items &amp; Recommendations</div>`
       + '<table class="soc-obs-table"><thead><tr>'
       + '<th class="col-ref">Item</th>'
       + '<th class="col-obs" colspan="2">Discussion / Recommendation</th>'
@@ -187,17 +192,20 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
 
     discussion.forEach((item, index) => {
       const rowClass = index % 2 === 0 ? '' : ' class="alt-row"';
+      const label = item.item || String(index + 1);
+      const title = item.title ? `<strong>${esc(item.title)}:</strong> ` : '';
       html += `<tr${rowClass}>`
-        + `<td class="cell-ref">${esc(item.item || '')}</td>`
-        + `<td class="cell-obs" colspan="2"><strong>${esc(item.title || '')}:</strong> ${esc(item.body || '')}</td>`
+        + `<td class="cell-ref">${esc(label)}</td>`
+        + `<td class="cell-obs" colspan="2">${title}${esc(item.body || '')}</td>`
         + '</tr>';
     });
 
     html += '</tbody></table>';
+    nextSectionNumber += 1;
   }
 
   if (generalNotes.length > 0) {
-    html += '<div class="soc-section-heading">9. General Notes</div>'
+    html += `<div class="soc-section-heading">${nextSectionNumber}. General Notes</div>`
       + '<div class="soc-intro-box"><ol class="soc-notes-list">';
 
     generalNotes.forEach((note) => {
@@ -205,9 +213,10 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     });
 
     html += '</ol></div>';
+    nextSectionNumber += 1;
   }
 
-  html += '<div class="soc-section-heading">10. Crack Classification</div>'
+  html += `<div class="soc-section-heading">${nextSectionNumber}. Crack Classification</div>`
     + '<div class="soc-intro-box"><p>The following classification table is used as reference when describing crack widths observed during this inspection:</p></div>'
     + '<table class="soc-obs-table"><thead><tr>'
     + '<th style="width:50%;text-align:left">Approximate Crack Width</th>'
@@ -246,7 +255,7 @@ Required structure:
   "sections": [
     {
       "number": 2,
-      "title": "Front Elevation",
+      "title": "exact dictated heading",
       "rows": [
         { "ref": "FE-01", "observation": "formal observation", "action": "Record only" }
       ]
@@ -258,11 +267,19 @@ Required structure:
 
 Rules:
 - Use sections[].rows[].ref, observation and action.
+- Preserve dictated room or area headings exactly as section titles. Do not rename, generalise, simplify or reinterpret them.
+- A standalone heading line such as "Utility Area to Rear of Garage", "Cloakroom / WC off Utility", "Garage Roof" or "Front Driveway / Paving" must become a section title exactly as written.
+- Section 2 must be the first dictated room or area heading in the notes. Do not replace it with a generic category such as "Internal Walls and Ceilings".
+- Keep all observations that follow a heading inside that heading until the next clear dictated heading appears.
+- Do not split windows, floors, ceilings or skirtings into separate sections unless the user dictated those as separate headings.
+- Do not invent headings. Do not create generic headings unless the notes contain no usable heading at all.
 - Do not invent defects not mentioned.
 - Preserve measurements exactly as given.
 - Use formal, third-person surveying language.
 - Use Record only where no further action is required.
 - Section numbers start at 2 because section 1 is added automatically.
+- Only populate discussion where the notes clearly require a separate discussion or recommendation item. Otherwise return an empty array.
+- General notes should only contain final general notes dictated under a General Notes heading.
 
 Project context:
 Adjoining Owner property: ${projectMeta.ao_address || ''}
@@ -283,9 +300,9 @@ ${message}
     },
     body: JSON.stringify({
       model: 'gpt-4.1-mini',
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
-        { role: 'system', content: 'Return only valid JSON for a Schedule of Condition.' },
+        { role: 'system', content: 'Return only valid JSON for a Schedule of Condition. Preserve dictated room and area headings exactly.' },
         { role: 'user', content: prompt },
       ],
     }),
