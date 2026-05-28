@@ -89,6 +89,29 @@ function formatLongNoticeDate(value) {
   return `${day}${ordinalSuffix(day)} ${monthName} ${year}`;
 }
 
+function aoSOCDate(ao) {
+  return ao?.soc_agreed_date || ao?.soc_date || ao?.schedule_of_condition_date || ao?.scheduleOfConditionDate || '';
+}
+
+function aoSOCTime(ao) {
+  return ao?.soc_time || ao?.socTime || '';
+}
+
+function fmtTime(value) {
+  if (!value) return '';
+
+  const [hours, minutes = '00'] = String(value).split(':');
+  const h = Number(hours);
+
+  if (!Number.isFinite(h)) return String(value);
+
+  return `${String(h).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function formatSOCBadgeDate(value) {
+  return formatLongNoticeDate(value) || fmtDate(value) || value || '';
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -1101,6 +1124,12 @@ function AOCard({
   const statusMeta = getAOStatusMeta(ao, projectRole);
   const statusLabel = statusMeta.label;
   const statusColour = statusMeta.colour || colour;
+  const socDate = aoSOCDate(ao);
+  const socTime = aoSOCTime(ao);
+  const socStatus = String(ao?.soc_status || '').toLowerCase();
+  const socLabel = socDate
+    ? `SOC booked - ${formatSOCBadgeDate(socDate)}${socTime ? ` - ${fmtTime(socTime)}` : ''}${socStatus === 'complete' ? ' - complete' : ''}`
+    : '';
 
   return (
     <div style={{ ...card({ marginBottom: 12, overflow: 'hidden' }) }}>
@@ -1111,7 +1140,7 @@ function AOCard({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: colour }}>
-                AO{ao.num} — {(ao.name || '').toUpperCase()}
+                AO{ao.num} - {(ao.name || '').toUpperCase()}
               </div>
               {aoName2(ao) && (
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>
@@ -1158,6 +1187,24 @@ function AOCard({
             </div>
           )}
 
+          {socLabel && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              margin: '6px 0',
+              padding: '4px 12px',
+              borderRadius: 99,
+              fontSize: 12,
+              fontWeight: 700,
+              background: socStatus === 'complete' ? 'var(--green-bg)' : 'var(--purple-bg)',
+              color: socStatus === 'complete' ? 'var(--green)' : 'var(--purple)',
+              border: `1px solid ${socStatus === 'complete' ? 'var(--green)' : 'var(--purple)'}`,
+            }}>
+              📋 {socLabel}
+            </div>
+          )}
+
           {!isAOAppointment && noticed && cd && (
             <div style={{
               display: 'inline-flex',
@@ -1171,7 +1218,7 @@ function AOCard({
               background: days !== null && days <= 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
               color: days !== null && days <= 0 ? 'var(--red)' : days !== null && days <= 7 ? 'var(--amber)' : 'var(--green)',
             }}>
-              ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline — ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline — ${days}d`}
+              ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline - ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline - ${days}d`}
             </div>
           )}
 
@@ -1231,7 +1278,7 @@ function AOCard({
               </div>
 
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--blue)', lineHeight: 1.5 }}>
-                {survName}{survFirm ? ` — ${survFirm}` : ''}
+                {survName}{survFirm ? ` - ${survFirm}` : ''}
               </div>
 
               {survEmail && (
