@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
 
 function uid() { return Math.random().toString(36).slice(2); }
@@ -43,6 +43,33 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
     selectedAO?.address ||
     selectedAO?.ao_premise_address ||
     '';
+
+  useEffect(() => {
+    if (!defaultProjectId) return;
+
+    setProjectId(defaultProjectId);
+    setSelectedAOIndex('0');
+    setPreviewHtml('');
+    setStructuredData(null);
+    setReportId(null);
+    setPartyDrafts([]);
+    setPhase('recording');
+  }, [defaultProjectId]);
+
+  useEffect(() => {
+    setSelectedAOIndex('0');
+    setPreviewHtml('');
+    setStructuredData(null);
+    setReportId(null);
+    setPartyDrafts([]);
+  }, [projectId]);
+
+  useEffect(() => {
+    setPreviewHtml('');
+    setStructuredData(null);
+    setReportId(null);
+    setPartyDrafts([]);
+  }, [selectedAOIndex]);
 
   function projectOptionLabel(project) {
     return project?.address || project?.premise_address || project?.bo_premise_address || project?.ref || 'Project';
