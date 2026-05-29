@@ -51,7 +51,7 @@ export default async function handler(req, res) {
 
     const transcription = await client.audio.transcriptions.create({
       file: fs.createReadStream(filePath),
-      model: 'gpt-4o-mini-transcribe',
+      model: 'whisper-1',
     });
 
     return res.status(200).json({
