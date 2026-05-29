@@ -279,7 +279,7 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
 
 async function extractStructuredData(message, projectMeta, apiKey) {
   const prompt = `
-You are an expert Party Wall Surveyor preparing a high-quality Schedule of Condition under the Party Wall etc. Act 1996.
+You are an expert Party Wall Surveyor preparing a high-quality Schedule of Condition under the Party Wall etc. Act 1996. Always use British English spelling and terminology throughout.
 
 You must convert raw dictated site notes into structured JSON.
 
@@ -428,7 +428,7 @@ ${message}
         {
           role: 'system',
           content:
-            'You are an expert Party Wall Surveyor. Return only valid JSON. Produce polished surveyor-grade Schedule of Condition wording and separate actions, award notes and required emails from the SOC observations.',
+            'You are an expert Party Wall Surveyor. Return only valid JSON. Produce polished surveyor-grade Schedule of Condition wording using British English spelling and terminology. Separate actions, award notes and required emails from the SOC observations.',
         },
         { role: 'user', content: prompt },
       ],
