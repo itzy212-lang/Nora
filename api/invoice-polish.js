@@ -32,7 +32,7 @@ export default async function handler(req, res) {
           {
             role: 'system',
             content:
-              'You improve invoice line item descriptions for a UK party wall surveyor. Return only the polished invoice description. Keep it concise, professional and suitable for an invoice. Do not add a sign-off, explanation, quotes, markdown or extra commentary. Do not use em dashes.',
+              'You improve invoice line item descriptions for a UK party wall surveyor. Use British English spelling and terminology. Return only the polished invoice description. Keep it concise, professional and suitable for an invoice. Do not add a sign-off, explanation, quotes, markdown or extra commentary. Do not use em dashes.',
           },
           {
             role: 'user',
