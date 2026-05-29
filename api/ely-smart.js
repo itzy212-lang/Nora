@@ -30,7 +30,6 @@ function cleanOutput(text = '') {
     .replace(/^[ \t]*[-]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[_]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[=]{3,}[ \t]*$/gm, '')
-    .replace(/-/g, ', ')
     .replace(/–/g, '-')
     .replace(/--+/g, ', ')
     .replace(/\n{3,}/g, '\n\n')
@@ -76,6 +75,27 @@ function firstNonEmpty(...values) {
   return '';
 }
 
+function stripHtml(value = '') {
+  return String(value || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function normaliseProject(project = {}) {
   if (!project) return null;
 
@@ -104,6 +124,48 @@ function normaliseProject(project = {}) {
       service_address: firstNonEmpty(project.ao_service_address, project.ao_1_service_address),
     },
   };
+}
+
+function normaliseEmailRecord(email = {}) {
+  if (!email) return null;
+
+  const body = firstNonEmpty(
+    email.body_text,
+    email.text_body,
+    email.body,
+    email.html_body,
+    email.body_html,
+    email.content,
+    email.preview,
+    email.body_preview,
+    email.snippet
+  );
+
+  return {
+    id: firstNonEmpty(email.id, email.email_id, email.message_id, email.external_id, email.outlook_id, email.internet_message_id),
+    thread_id: firstNonEmpty(email.thread_id, email.conversation_id, email.conversationId, email.graph_conversation_id, email.internet_thread_id),
+    project_id: firstNonEmpty(email.project_id, email.projectId),
+    folder: firstNonEmpty(email.folder, email.mail_folder, email.direction),
+    from: firstNonEmpty(email.from, email.from_name, email.sender_name, email.from_email, email.sender_email, email.email_from),
+    from_email: firstNonEmpty(email.from_email, email.sender_email, email.email_from),
+    to: email.to || email.to_email || email.recipients || email.to_recipients || '',
+    cc: email.cc || email.cc_email || email.cc_recipients || '',
+    subject: firstNonEmpty(email.subject, email.title),
+    date: firstNonEmpty(email.received_at, email.sent_at, email.date, email.created_at, email.updated_at),
+    body: stripHtml(body).slice(0, 12000),
+  };
+}
+
+function buildSuppliedEmailContext(body = {}) {
+  const supplied = body.emailContext || body.context?.selectedEmailContext || null;
+  if (!supplied) return null;
+
+  return normaliseEmailRecord({
+    ...supplied,
+    id: firstNonEmpty(supplied.id, supplied.emailId, body.emailId),
+    thread_id: firstNonEmpty(supplied.threadId, supplied.thread_id, supplied.conversationId, body.threadId),
+    project_id: firstNonEmpty(supplied.projectId, supplied.project_id, body.projectId, body.project_id),
+  });
 }
 
 async function safeSelect(table, select, buildQuery) {
@@ -201,15 +263,58 @@ async function loadProjectBundle(projectId) {
   };
 }
 
-function wantsEmailContext(prompt = '', projectId = null) {
+function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
+  if (suppliedEmailContext || threadId || emailId) return true;
   if (projectId) return true;
-  const lower = String(prompt).toLowerCase();
-  return lower.includes('email') || lower.includes('thread') || lower.includes('inbox');
+  const lower = String(prompt || '').toLowerCase();
+  return lower.includes('email') || lower.includes('thread') || lower.includes('inbox') || lower.includes('reply');
 }
 
-async function buildScopedEmailContext({ prompt, projectId }) {
+async function buildScopedEmailContext({ prompt, projectId, emailContext = null, threadId = null, emailId = null }) {
   const sb = getSupabase();
-  if (!sb || !wantsEmailContext(prompt, projectId)) return [];
+  const suppliedEmail = emailContext ? normaliseEmailRecord(emailContext) : null;
+
+  if (!sb && suppliedEmail) return [suppliedEmail];
+  if (!sb || !wantsEmailContext(prompt, projectId, suppliedEmail, threadId, emailId)) return suppliedEmail ? [suppliedEmail] : [];
+
+  const directThreadId = firstNonEmpty(threadId, suppliedEmail?.thread_id);
+  const directEmailId = firstNonEmpty(emailId, suppliedEmail?.id);
+
+  if (directThreadId) {
+    try {
+      let threadQuery = sb
+        .from('emails')
+        .select('*')
+        .eq('thread_id', directThreadId)
+        .order('received_at', { ascending: true })
+        .limit(80);
+
+      if (projectId) threadQuery = threadQuery.eq('project_id', projectId);
+
+      const { data, error } = await threadQuery;
+      if (!error && data?.length) {
+        const rows = data.map(normaliseEmailRecord).filter(Boolean);
+        if (suppliedEmail && !rows.some(row => String(row.id) === String(suppliedEmail.id))) rows.push(suppliedEmail);
+        return rows;
+      }
+    } catch (err) {
+      console.warn('[ely-smart] direct thread context skipped:', err.message);
+    }
+  }
+
+  if (directEmailId) {
+    try {
+      const { data, error } = await sb
+        .from('emails')
+        .select('*')
+        .eq('id', directEmailId)
+        .limit(1);
+
+      if (!error && data?.length) return data.map(normaliseEmailRecord).filter(Boolean);
+    } catch (err) {
+      console.warn('[ely-smart] direct email context skipped:', err.message);
+    }
+  }
 
   let query = sb
     .from('emails')
@@ -226,42 +331,20 @@ async function buildScopedEmailContext({ prompt, projectId }) {
 
   if (error) {
     console.warn('[ely-smart] email context error:', error.message);
-    return [];
+    return suppliedEmail ? [suppliedEmail] : [];
   }
 
-  const emails = data || [];
-  const threadIds = [...new Set(emails.map(e => e.thread_id).filter(Boolean))].slice(0, 12);
-
-  if (!projectId || threadIds.length === 0) return emails;
-
-  try {
-    const { data: threadEmails, error: threadError } = await sb
-      .from('emails')
-      .select('*')
-      .eq('project_id', projectId)
-      .in('thread_id', threadIds)
-      .order('received_at', { ascending: true })
-      .limit(120);
-
-    if (!threadError && threadEmails?.length) {
-      const byId = new Map();
-      [...emails, ...threadEmails].forEach(e => byId.set(e.id, e));
-      return Array.from(byId.values()).sort((a, b) => {
-        const at = new Date(a.received_at || a.created_at || 0).getTime();
-        const bt = new Date(b.received_at || b.created_at || 0).getTime();
-        return bt - at;
-      });
-    }
-  } catch (err) {
-    console.warn('[ely-smart] thread expansion skipped:', err.message);
-  }
-
+  const emails = (data || []).map(normaliseEmailRecord).filter(Boolean);
+  if (suppliedEmail && !emails.some(row => String(row.id) === String(suppliedEmail.id))) emails.unshift(suppliedEmail);
   return emails;
 }
 
-function inferModeHint(surface, prompt = '') {
-  const p = String(prompt || '').toLowerCase();
+function inferModeHint(surface, prompt = '', body = {}) {
+  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
+  if (explicitMode.includes('email_thread_summary')) return 'email_summary';
+  if (explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) return 'draft';
 
+  const p = String(prompt || '').toLowerCase();
   const explicitDraft =
     p.includes('draft') ||
     p.includes('write a letter') ||
@@ -269,12 +352,12 @@ function inferModeHint(surface, prompt = '') {
     p.includes('prepare a letter') ||
     p.includes('prepare an email') ||
     p.includes('compose') ||
-    p.includes('respond to');
+    p.includes('respond to') ||
+    p.includes('reply');
 
   if (explicitDraft) return 'draft';
-
   if (p.includes('review') || p.includes('compare')) return 'review';
-
+  if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId)) return 'email_summary';
   return 'discuss';
 }
 
@@ -325,10 +408,54 @@ function buildProjectFactsText(projectBundle) {
   return facts.join('\n');
 }
 
+function buildEmailContextText({ body = {}, scopedEmailContext = [] }) {
+  const supplied = buildSuppliedEmailContext(body);
+  const emails = [];
+
+  if (supplied) emails.push(supplied);
+  (scopedEmailContext || []).forEach(email => {
+    const normalised = normaliseEmailRecord(email);
+    if (!normalised) return;
+    const key = normalised.id || `${normalised.thread_id}-${normalised.date}-${normalised.subject}`;
+    if (!emails.some(existing => (existing.id || `${existing.thread_id}-${existing.date}-${existing.subject}`) === key)) emails.push(normalised);
+  });
+
+  if (!emails.length) return '';
+
+  const selected = emails[0];
+  const thread = emails.slice(0, 20);
+
+  return `
+ACTIVE SELECTED EMAIL CONTEXT:
+The user is drafting, discussing, or preparing a response in relation to the selected email/thread below. Treat this email/thread as primary context. Do not ignore it. Do not answer generically if this context is present.
+
+Selected email:
+From: ${selected.from || ''}
+From email: ${selected.from_email || ''}
+To: ${Array.isArray(selected.to) ? selected.to.join(', ') : selected.to || ''}
+Cc: ${Array.isArray(selected.cc) ? selected.cc.join(', ') : selected.cc || ''}
+Subject: ${selected.subject || ''}
+Date: ${selected.date || ''}
+Thread ID: ${selected.thread_id || ''}
+Email ID: ${selected.id || ''}
+
+Selected email body:
+${selected.body || ''}
+
+Available thread context (${thread.length} message${thread.length === 1 ? '' : 's'}):
+${thread.map((email, index) => `
+Message ${index + 1}
+From: ${email.from || ''}
+Subject: ${email.subject || ''}
+Date: ${email.date || ''}
+Body:
+${email.body || ''}
+`).join('\n')}
+`.trim();
+}
+
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
-  let prompt =
-    brain?.instruction_set?.system_prompt ||
-    'You are Ely, an AI assistant for a Party Wall surveying practice.';
+  let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice.';
 
   prompt += `
 
@@ -343,19 +470,8 @@ Do not fixate on one issue. Before responding, consider the legal, procedural, e
 In discussion mode, do not draft correspondence unless explicitly asked.
 In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
 
-REASONING BEFORE DRAFTING:
-When drafting correspondence, do not simply convert the user's words into an email or letter. First identify the professional objective, the audience, the desired outcome, and the strongest reasonable argument supporting that outcome.
-Before drafting any email, letter, message or formal response:
-1. Identify what the user is trying to achieve.
-2. Identify who the correspondence is being sent to and what that recipient is likely to resist or misunderstand.
-3. Identify the desired practical outcome.
-4. Identify the strongest reasonable argument for that outcome.
-5. Identify what concerns, assumptions, implications or strategic points are present but not expressly stated.
-6. Construct the reasoning before drafting the correspondence.
-The finished draft should reflect the reasoning behind the position, not merely repeat the facts provided. It should explain why the proposed position is reasonable, why the requested action is justified, why any alternative approach may be premature or inadequate, and how the proposal assists fair resolution.
-When appropriate, persuade rather than merely inform. Build the argument progressively. Distinguish between confirmed facts, concerns, conclusions and proposals. Anticipate likely objections without becoming defensive. Draft as an experienced professional advocate for the client's position while remaining accurate, restrained and reasonable.
-For contentious correspondence, avoid generic phrases such as "we hope you understand our position", "thank you for your attention to this matter", "fair and equitable", or formulaic AI-style closing language unless the context genuinely calls for it. The draft should sound like a real professional wrote it for a real dispute.
-Where the user dictates rough facts, do not simply tidy the wording. Infer the sensible structure of the argument. For example, if a party proposes mediation but the current evidence is unilateral, explain that meaningful mediation is more likely to be productive once both parties have had the opportunity to consider a neutral expert assessment.
+EMAIL CONTEXT RULE:
+If selected email context is provided, it is authoritative. Read it before responding. For Draft With Ely and email composer workflows, base the opening response and any draft on the selected email/thread. If the user prompt is blank, summarise the selected email/thread and ask what response they would like to send, or provide a sensible first draft if the workflow asks for one.
 
 When drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
 When drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.
@@ -371,13 +487,11 @@ ${projectId || 'none'}
 `;
 
   const projectFacts = buildProjectFactsText(projectBundle);
-  if (projectFacts) {
-    prompt += `
+  if (projectFacts) prompt += `
 
 AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
-  }
 
   if (projectBundle) {
     prompt += `
@@ -401,84 +515,46 @@ ${compactJson(scopedEmailContext.slice(0, 40), 24000)}
 `;
   }
 
-
   if (draftingExamples?.length) {
     prompt += `
 
 GOLD STANDARD DRAFTING EXAMPLES:
 ${JSON.stringify(draftingExamples, null, 2)}
-
-WHEN DRAFTING:
-- mirror the tone, pacing and paragraph structure of the examples
-- write like genuine manually written professional correspondence
-- use natural prose and realistic sentence flow
-- maintain measured escalation and professional caution
-
-DO NOT USE:
-- markdown headings
-- hashtags
-- stars/asterisks
-- bold formatting
-- AI assistant formatting
-- consultant report formatting
-- excessive structuring
-- unnecessary bullet points
-- overexplaining
-- exaggerated escalation
-- robotic transitions
-- generic consultant phrasing
-- artificial summaries
-
-CORRESPONDENCE SHOULD:
-- escalate concerns progressively and proportionately
-- distinguish clearly between confirmed facts, concerns and implications
-- sound calm, measured and professional
-- avoid jumping immediately to legal conclusions
-- read like genuine manually written correspondence between professionals
-- use implied structure rather than visible structure
-- prioritise realism over comprehensiveness
-- maintain strategic caution in contentious matters
-
-If discussing possible legal action or injunctions:
-- do not present litigation as a foregone conclusion
-- build the reasoning progressively from the evidence
-- explain why confidence or trust has reduced
-- explain why further oversight or enforcement may now be reasonable
-- maintain professional restraint and caution
 `;
   }
 
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt }) {
+function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   const { prompt, chatHistory = [] } = body;
-
   const messages = [{ role: 'system', content: systemPrompt }];
+
+  const emailContextText = buildEmailContextText({ body, scopedEmailContext });
+  if (emailContextText) messages.push({ role: 'system', content: emailContextText });
 
   if (chatHistory?.length) {
     chatHistory.slice(-24).forEach((msg) => {
-      if (msg?.role === 'user' || msg?.role === 'assistant') {
-        messages.push({ role: msg.role, content: String(msg.content || '') });
-      }
+      if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
     });
   }
 
   if (prompt?.trim()) {
     messages.push({ role: 'user', content: prompt.trim() });
+  } else if (emailContextText) {
+    const mode = String(body.mode || body.workflowStage || '').toLowerCase();
+    const instruction = mode.includes('email_thread_summary') || mode.includes('summary')
+      ? 'Read the selected email/thread above and summarise what it is asking for. Then suggest the most likely response strategy in plain professional language.'
+      : 'Use the selected email/thread above as the context for this email drafting workflow.';
+    messages.push({ role: 'user', content: instruction });
   }
 
   return messages;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  if (!OPENAI_KEY) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
 
   try {
     const body = req.body || {};
@@ -488,15 +564,21 @@ export default async function handler(req, res) {
     if (resolvedProject?.id) projectId = resolvedProject.id;
 
     const userId = inferUserId(body);
-    const modeHint = inferModeHint(body.surface, body.prompt);
+    const modeHint = inferModeHint(body.surface, body.prompt, body);
+    const suppliedEmailContext = buildSuppliedEmailContext(body);
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
       loadProjectBundle(projectId),
-      buildScopedEmailContext({ prompt: body.prompt, projectId }),
+      buildScopedEmailContext({
+        prompt: body.prompt,
+        projectId,
+        emailContext: suppliedEmailContext,
+        threadId: body.threadId || body.emailContext?.threadId || body.emailContext?.thread_id,
+        emailId: body.emailId || body.emailContext?.emailId || body.emailContext?.id,
+      }),
       loadBrain({ userId, projectId, surface: body.surface, modeHint }),
     ]);
 
-    
     let draftingExamples = [];
 
     try {
@@ -511,7 +593,7 @@ export default async function handler(req, res) {
       console.warn('[ely-smart] drafting examples load failed:', err.message);
     }
 
-const systemPrompt = buildSystemPrompt({
+    const systemPrompt = buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
@@ -521,10 +603,10 @@ const systemPrompt = buildSystemPrompt({
       draftingExamples,
     });
 
-    const messages = buildMessages({ body, systemPrompt });
+    const messages = buildMessages({ body, systemPrompt, scopedEmailContext });
 
     console.log(
-      `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
+      `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} suppliedEmail=${suppliedEmailContext ? 'yes' : 'no'} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
@@ -555,6 +637,7 @@ const systemPrompt = buildSystemPrompt({
       reply: fullReply,
       resolvedProject,
       scopedEmailCount: scopedEmailContext?.length || 0,
+      selectedEmailContextLoaded: !!suppliedEmailContext,
       projectContextLoaded: !!projectBundle?.project_raw,
       adjoiningOwnerCount: projectBundle?.adjoining_owners?.length || 0,
       brainLoaded: !!brain,
