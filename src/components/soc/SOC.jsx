@@ -78,53 +78,58 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     if (!SR) return null;
 
     const rec = new SR();
-    rec.continuous = true;
+    rec.continuous = false;      // false = cleaner results on mobile Chrome
     rec.interimResults = true;
     rec.lang = 'en-GB';
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
-      committedRef.current = ''; // reset per-session; accumulated text lives in accumulatedRef
       setIsRecording(true);
     };
 
     rec.onresult = (event) => {
+      let finalText = '';
       let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Rebuild from scratch each event to avoid duplication
+      for (let i = 0; i < event.results.length; i++) {
         const r = event.results[i];
         const text = (r[0]?.transcript || '').trim();
         if (!text) continue;
         if (r.isFinal) {
-          committedRef.current = [committedRef.current, text].filter(Boolean).join(' ');
-          interim = '';
+          finalText = [finalText, text].filter(Boolean).join(' ');
         } else {
           interim = text;
         }
       }
+      // Store finals for this session (overwrite, don't append — rebuilt above)
+      if (finalText) committedRef.current = finalText;
       interimRef.current = interim;
-      // Live preview: accumulated (prior sessions) + this session + interim
+      // Preview = everything accumulated + this session finals + current interim
       const preview = [accumulatedRef.current, committedRef.current, interim].filter(Boolean).join(' ');
       setInterimText(preview);
     };
 
     rec.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return; // ignore, will restart
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
       console.warn('[SOC] speech error:', e.error);
     };
 
     rec.onend = () => {
-      // Save this session's finals into the accumulator before restarting
+      // Move this session's finals into accumulator
       if (committedRef.current) {
         accumulatedRef.current = [accumulatedRef.current, committedRef.current].filter(Boolean).join(' ');
         committedRef.current = '';
       }
+      // Auto-restart if still meant to be recording
       if (shouldRecordRef.current) {
         clearTimeout(restartTimerRef.current);
         restartTimerRef.current = setTimeout(() => {
-          if (shouldRecordRef.current && recognitionRef.current) {
-            try { recognitionRef.current.start(); } catch {}
-          }
-        }, 100);
+          if (!shouldRecordRef.current) return;
+          const newRec = buildRecognition();
+          if (!newRec) return;
+          recognitionRef.current = newRec;
+          try { newRec.start(); } catch {}
+        }, 150);
       } else {
         setIsRecording(false);
       }
