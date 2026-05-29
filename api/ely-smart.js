@@ -455,7 +455,10 @@ ${email.body || ''}
 }
 
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
-  let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice.';
+  // For email summary mode, bypass the brain system prompt entirely - it overrides the structure
+  let prompt = modeHint === 'email_summary'
+    ? 'You are Ely, an AI assistant for Itzik Darel at Square One Consulting, a Party Wall surveying practice.'
+    : (brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice.');
 
   if (modeHint === 'email_summary') {
     prompt += `
