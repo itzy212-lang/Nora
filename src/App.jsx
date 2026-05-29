@@ -378,7 +378,7 @@ export default function App() {
             onOpenComposer={openComposer}
             defaultProjectId={socProjectId}
             defaultAOIndex={socDefaultAOIndex}
-            key={socProjectId}
+            key={`${socProjectId}-${socDefaultAOIndex}`}
           />
         );
       case 'leads':
