@@ -1,14 +1,14 @@
 // api/invoice-polish.js
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!OPENAI_KEY) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  if (!ANTHROPIC_KEY) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
   const { text } = req.body || {};
@@ -19,26 +19,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${OPENAI_KEY}`,
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.2,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You improve invoice line item descriptions for a UK party wall surveyor. Use British English spelling and terminology. Return only the polished invoice description. Keep it concise, professional and suitable for an invoice. Do not add a sign-off, explanation, quotes, markdown or extra commentary. Do not use em dashes.',
-          },
-          {
-            role: 'user',
-            content: raw,
-          },
-        ],
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 256,
+        system: 'You improve invoice line item descriptions for a UK party wall surveyor. Use British English spelling and terminology. Return only the polished invoice description. Keep it concise, professional and suitable for an invoice. Do not add a sign-off, explanation, quotes, markdown or extra commentary. Do not use em dashes.',
+        messages: [{ role: 'user', content: raw }],
       }),
     });
 
@@ -50,7 +42,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const polished = data?.choices?.[0]?.message?.content?.trim();
+    const polished = data?.content?.[0]?.text?.trim();
 
     if (!polished) {
       return res.status(500).json({ error: 'No polished description returned' });
