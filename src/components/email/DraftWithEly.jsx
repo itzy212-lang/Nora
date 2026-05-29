@@ -6,8 +6,90 @@ import VoiceInput from '../shared/VoiceInput';
 import { uid } from '../../utils/formatters';
 
 /**
+ * Renders the auto-summary card with structured sections.
+ * Parses the plain-text response from ely-smart into labelled blocks.
+ */
+function SummaryCard({ text }) {
+  if (!text) return null;
+
+  // Parse sections by known headers
+  const sectionHeaders = [
+    'From:',
+    'Latest email is asking for:',
+    'Context from thread:',
+    'Suggested approach:',
+  ];
+
+  const sections = [];
+  let remaining = text.trim();
+
+  sectionHeaders.forEach((header, i) => {
+    const idx = remaining.indexOf(header);
+    if (idx === -1) return;
+
+    const afterHeader = remaining.slice(idx + header.length);
+    const nextHeaderIdx = sectionHeaders
+      .slice(i + 1)
+      .map(h => afterHeader.indexOf(h))
+      .filter(n => n >= 0)
+      .reduce((min, n) => Math.min(min, n), Infinity);
+
+    const sectionContent = nextHeaderIdx === Infinity
+      ? afterHeader.trim()
+      : afterHeader.slice(0, nextHeaderIdx).trim();
+
+    if (sectionContent) {
+      sections.push({ header: header.replace(':', ''), content: sectionContent });
+    }
+  });
+
+  // If parsing failed, just render as plain text
+  if (!sections.length) {
+    return (
+      <div style={{ fontSize: 12.5, color: 'var(--text1)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+        {text}
+      </div>
+    );
+  }
+
+  const sectionStyles = {
+    'From': { color: 'var(--text2)', fontStyle: 'italic' },
+    'Latest email is asking for': { color: 'var(--text1)' },
+    'Context from thread': { color: 'var(--text2)' },
+    'Suggested approach': { color: 'var(--blue)', fontWeight: 500 },
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {sections.map(({ header, content }) => (
+        <div key={header}>
+          <div style={{
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--text3)',
+            marginBottom: 3,
+          }}>
+            {header}
+          </div>
+          <div style={{
+            fontSize: 12.5,
+            lineHeight: 1.65,
+            whiteSpace: 'pre-wrap',
+            ...(sectionStyles[header] || {}),
+          }}>
+            {content}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * DraftWithEly — slide-in panel for drafting emails with Ely.
- * On open: automatically reads the email thread.
+ * On open: automatically reads the email thread and shows a structured summary.
  * Subsequent turns: collaborative_reply_assistant mode.
  * "Use this draft" button sends clean draft text back to composer.
  */
@@ -79,7 +161,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         emailContext: {
           from: email?.from || email?.from_email || '',
           subject: email?.subject || '',
-          body: (email?.body || email?.preview || '').slice(0, 3000),
+          body: (email?.body || email?.preview || '').slice(0, 6000),
         },
       });
 
@@ -88,9 +170,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       setMessages([{
         id: uid(),
         role: 'ely',
+        messageType: 'summary',
         content: result.reply,
-        draft: result.draft,
-        draftType: result.draftType || 'email',
       }]);
     } catch (err) {
       setMessages([{
@@ -131,7 +212,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         emailContext: {
           from: email?.from || email?.from_email || '',
           subject: email?.subject || '',
-          body: (email?.body || email?.preview || '').slice(0, 3000),
+          body: (email?.body || email?.preview || '').slice(0, 6000),
         },
       });
 
@@ -210,12 +291,35 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
           )}
 
           {messages.map(msg => (
-            <ChatMessage
-              key={msg.id}
-              msg={msg}
-              onUseDraft={applyDraftToComposer}
-              onOpenInComposer={applyDraftToComposer}
-            />
+            msg.messageType === 'summary' ? (
+              <div key={msg.id} style={{
+                background: 'var(--bg2)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '12px 14px',
+                fontSize: 12.5,
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 10,
+                  paddingBottom: 8,
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: 12 }}>✨</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Summary</span>
+                </div>
+                <SummaryCard text={msg.content} />
+              </div>
+            ) : (
+              <ChatMessage
+                key={msg.id}
+                msg={msg}
+                onUseDraft={applyDraftToComposer}
+                onOpenInComposer={applyDraftToComposer}
+              />
+            )
           ))}
 
           {loading && messages.length > 0 && (
