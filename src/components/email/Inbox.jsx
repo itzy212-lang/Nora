@@ -121,20 +121,21 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
           .join('\n\n')
       : stripHtml(email.body || email.body_preview || '');
 
-    const sigNote = firmSettings ? 'The sender has a signature — do NOT add a sign-off or name.' : '';
-    const prompt = `Read this ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'} carefully.
+    const sigNote = firmSettings ? 'Do not add a sign-off, name or signature.' : '';
+    const prompt = `Read this ${threadEmails.length > 1 ? `email thread (${threadEmails.length} emails)` : 'email'} and give me a brief plain-text summary:
 
-First provide a clear mobile-friendly synopsis only, using short headings and bullet points:
-WHO IS INVOLVED
-LATEST POSITION
-KEY ISSUES / ACTIONS
-IMPORTANT EARLIER CONTEXT
-TONE / DYNAMICS
-SUGGESTED APPROACH
+From: [sender name and firm]
 
-Do not include a draft unless the user asks for one. If a draft is requested later, provide one single draft only under a clear DRAFT REPLY heading.
+Asking for:
+- [what they are specifically requesting]
 
-Use "the Act" for normal correspondence, or "Party Wall Act" if more formal. Do not write "Party Wall etc. Act 1996" in conversational drafts. ${sigNote}`;
+Context:
+- [key background only if relevant to replying]
+
+Suggested reply:
+[1-2 sentences on best approach]
+
+No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instructions before drafting. ${sigNote}`;
 
     callEly(prompt, fullThread, true);
   }, [email, threadEmails, firmSettings]);
