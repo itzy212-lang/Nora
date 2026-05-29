@@ -624,6 +624,51 @@ export default async function handler(req, res) {
       console.warn('[generate-soc] save warning:', saveError.message);
     }
 
+    // Save raw notes to project chat so they're accessible later
+    try {
+      const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const aoLabel = ao_name || ao_names || '';
+      const chatTitle = `SOC Notes${aoLabel ? ' – ' + aoLabel : ''} – ${today}`;
+
+      const { data: sessionData } = await supabase
+        .from('ai_sessions')
+        .insert([{
+          user_id: 'itzy212@gmail.com',
+          project_id: project_id,
+          title: chatTitle,
+          auto_title: chatTitle,
+          surface: 'project_chat',
+          session_type: 'soc_notes',
+          context_scope: 'project',
+          metadata: {
+            source: 'soc_generator',
+            report_id: report_id || null,
+            ao_name: aoLabel || null,
+            created_from: 'generate-soc',
+          },
+        }])
+        .select('id')
+        .single();
+
+      if (sessionData?.id) {
+        await supabase
+          .from('ai_messages')
+          .insert([{
+            session_id: sessionData.id,
+            role: 'user',
+            content: message,
+            project_id: project_id,
+            surface: 'project_chat',
+            source_type: 'soc_notes',
+            user_id: 'itzy212@gmail.com',
+          }]);
+
+        console.log('[generate-soc] raw notes saved to project chat session:', sessionData.id);
+      }
+    } catch (chatSaveError) {
+      console.warn('[generate-soc] project chat save skipped:', chatSaveError.message);
+    }
+
     return res.status(200).json({
       preview_html,
       structured_data: dataForRender,
@@ -642,3 +687,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
