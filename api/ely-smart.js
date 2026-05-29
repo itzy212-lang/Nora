@@ -598,6 +598,7 @@ export default async function handler(req, res) {
 
     const userId = inferUserId(body);
     const modeHint = inferModeHint(body.surface, body.prompt, body);
+    console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
