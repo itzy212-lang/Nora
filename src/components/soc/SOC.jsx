@@ -3,7 +3,7 @@ import { useApp } from '../../state/appStore';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
-export default function SOC({ onOpenComposer, defaultProjectId }) {
+export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }) {
   const { state } = useApp();
   const projects = state.projects || [];
 
@@ -38,10 +38,10 @@ export default function SOC({ onOpenComposer, defaultProjectId }) {
   useEffect(() => {
     if (!defaultProjectId) return;
     setProjectId(defaultProjectId);
-    setSelectedAOIndex('0');
+    setSelectedAOIndex(defaultAOIndex != null ? String(defaultAOIndex) : '0');
     setPreviewHtml(''); setStructuredData(null); setReportId(null); setPartyDrafts([]);
     setPhase('recording');
-  }, [defaultProjectId]);
+  }, [defaultProjectId, defaultAOIndex]);
 
   useEffect(() => {
     setSelectedAOIndex('0');
