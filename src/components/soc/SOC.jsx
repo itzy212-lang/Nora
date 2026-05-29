@@ -21,7 +21,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [partyDrafts, setPartyDrafts] = useState([]);
 
   const recognitionRef = useRef(null);
-  const committedRef = useRef('');   // finalised speech since last Send
+  const accumulatedRef = useRef(''); // all finalised speech across restarts since last Send
+  const committedRef = useRef('');   // finalised speech in THIS recognition session only
   const interimRef = useRef('');     // current interim
   const restartTimerRef = useRef(null);
   const shouldRecordRef = useRef(false); // continuous recording intent
@@ -82,7 +83,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     rec.lang = 'en-GB';
     rec.maxAlternatives = 1;
 
-    rec.onstart = () => setIsRecording(true);
+    rec.onstart = () => {
+      committedRef.current = ''; // reset per-session; accumulated text lives in accumulatedRef
+      setIsRecording(true);
+    };
 
     rec.onresult = (event) => {
       let interim = '';
@@ -98,8 +102,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         }
       }
       interimRef.current = interim;
-      // Live preview: show interim on top of committed
-      const preview = [committedRef.current, interim].filter(Boolean).join(' ');
+      // Live preview: accumulated (prior sessions) + this session + interim
+      const preview = [accumulatedRef.current, committedRef.current, interim].filter(Boolean).join(' ');
       setInterimText(preview);
     };
 
@@ -109,7 +113,11 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     };
 
     rec.onend = () => {
-      // If we still want to be recording, restart immediately
+      // Save this session's finals into the accumulator before restarting
+      if (committedRef.current) {
+        accumulatedRef.current = [accumulatedRef.current, committedRef.current].filter(Boolean).join(' ');
+        committedRef.current = '';
+      }
       if (shouldRecordRef.current) {
         clearTimeout(restartTimerRef.current);
         restartTimerRef.current = setTimeout(() => {
@@ -131,6 +139,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       return;
     }
     committedRef.current = '';
+    accumulatedRef.current = '';
     interimRef.current = '';
     setInterimText('');
     shouldRecordRef.current = true;
@@ -151,12 +160,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // Send current note as a chat bubble, respond with "Noted."
   const handleSend = useCallback(() => {
-    const note = [committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
+    const note = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
     if (!note) return;
 
     stopRecording();
     setInterimText('');
     committedRef.current = '';
+    accumulatedRef.current = '';
     interimRef.current = '';
 
     const noteId = uid();
