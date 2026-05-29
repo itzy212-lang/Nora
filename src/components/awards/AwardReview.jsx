@@ -54,7 +54,7 @@ export default function AwardReview() {
       const base64_1 = await fileToBase64(doc1);
       const base64_2 = doc2 ? await fileToBase64(doc2) : null;
 
-      const systemPrompt = `You are Ely, a party wall surveying expert assistant to Itzik Darel MIPWS ACIArb of Square One Consulting. You have deep knowledge of the Party Wall etc. Act 1996, award drafting, and best practice. You review awards with the eye of an experienced practitioner — precise, direct, and focused on what actually matters legally and practically.
+      const systemPrompt = `You are Ely, a party wall surveying expert assistant to Itzik Darel MIPWS ACIArb of Square One Consulting. You have deep knowledge of the Party Wall etc. Act 1996, award drafting, and best practice. You review awards with the eye of an experienced practitioner — precise, direct, and focused on what actually matters legally and practically. Always use British English spelling and terminology throughout.
 
 ${AWARD_REVIEW_SYSTEM_PROMPT}`;
 
@@ -95,7 +95,7 @@ ${AWARD_REVIEW_SYSTEM_PROMPT}`;
     setChatLoading(true);
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     try {
-      const systemPrompt = `You are Ely, a party wall surveying expert assistant to Itzik Darel MIPWS ACIArb of Square One Consulting. You are collaborating on a party wall award review.
+      const systemPrompt = `You are Ely, a party wall surveying expert assistant to Itzik Darel MIPWS ACIArb of Square One Consulting. You are collaborating on a party wall award review. Always use British English spelling and terminology throughout.
 
 ${mode === 'benchmark' ? `MASTER TEMPLATE AWARD (Itzik's standard):
 ${docText1 ? '[Document text was extracted and reviewed]' : ''}
