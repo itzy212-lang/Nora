@@ -457,10 +457,39 @@ ${email.body || ''}
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice.';
 
-  prompt += `
+  if (modeHint === 'email_summary') {
+    prompt += `
+
+ACTIVE MODE: email_thread_summary
+
+YOUR TASK:
+You are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary. Structure your response EXACTLY like this (plain text only, no markdown, no asterisks, no hashtags):
+
+From:
+[sender name and firm]
+
+Latest email is asking for:
+[bullet points - what they are specifically requesting, taken directly from the latest email]
+
+Context from thread:
+[bullet points of relevant background from earlier in the thread that affects the response - skip if not relevant]
+
+Suggested approach:
+[1-2 plain sentences on how best to respond]
+
+RULES:
+- Focus on the LATEST email first
+- Keep it under 150 words total
+- Do not invent anything not stated in the emails
+- Do not produce a full draft at this stage
+- Do not use markdown, asterisks, hashtags or bold text
+- Treat Square One Consulting, Itzik, help@sq1consulting.co.uk as us
+`;
+  } else {
+    prompt += `
 
 ACTIVE MODE:
-${modeHint || 'discuss'}
+\${modeHint || 'discuss'}
 
 HARD RUNTIME RULES:
 Project facts loaded below are authoritative. Use the party names, addresses and roles from the project facts before asking the user for them.
@@ -479,6 +508,7 @@ The finished draft must look like a real manually written professional email or 
 Refer to the legislation as the Act.
 Treat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.
 `;
+  }
 
   prompt += `
 
