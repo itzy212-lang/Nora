@@ -85,6 +85,7 @@ export default function App() {
   const [invoiceProject, setInvoiceProject] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [socProjectId, setSocProjectId]     = useState(null);
+  const [socDefaultAOIndex, setSocDefaultAOIndex] = useState(null);
 
   const nextInvoiceNumber = settings?.next_invoice_number
     || (invoices?.length > 0
@@ -239,6 +240,20 @@ export default function App() {
 
   const handleOpenSOC = useCallback((project = null) => {
     setSocProjectId(project?.id || null);
+
+    // If opened from a specific AO card, find that AO's index in the project's aos array
+    const targetAO = project?.selectedAO || project?.selected_ao || project?.soc_target_ao || null;
+    if (targetAO && Array.isArray(project?.aos) && project.aos.length > 1) {
+      const idx = project.aos.findIndex(ao =>
+        (ao.id && ao.id === targetAO.id) ||
+        (ao.num && ao.num === targetAO.num) ||
+        (ao.premise && ao.premise === targetAO.premise)
+      );
+      setSocDefaultAOIndex(idx >= 0 ? String(idx) : null);
+    } else {
+      setSocDefaultAOIndex(null);
+    }
+
     setCurrentView('soc');
     setProjectView(null);
     setPendingProjectId('');
@@ -362,6 +377,7 @@ export default function App() {
           <SOC
             onOpenComposer={openComposer}
             defaultProjectId={socProjectId}
+            defaultAOIndex={socDefaultAOIndex}
             key={socProjectId}
           />
         );
