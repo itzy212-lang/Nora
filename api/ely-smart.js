@@ -1,5 +1,5 @@
 // api/ely-smart.js
-// Ely/Nora smart route — project-hydrated collaboration version
+// Ely/Nora smart route - project-hydrated collaboration version
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -30,7 +30,7 @@ function cleanOutput(text = '') {
     .replace(/^[ \t]*[-]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[_]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[=]{3,}[ \t]*$/gm, '')
-    .replace(/—/g, ', ')
+    .replace(/-/g, ', ')
     .replace(/–/g, '-')
     .replace(/--+/g, ', ')
     .replace(/\n{3,}/g, '\n\n')
@@ -342,6 +342,21 @@ Never invent party names, meetings, inspections, instructions or actions.
 Do not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.
 In discussion mode, do not draft correspondence unless explicitly asked.
 In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
+
+REASONING BEFORE DRAFTING:
+When drafting correspondence, do not simply convert the user's words into an email or letter. First identify the professional objective, the audience, the desired outcome, and the strongest reasonable argument supporting that outcome.
+Before drafting any email, letter, message or formal response:
+1. Identify what the user is trying to achieve.
+2. Identify who the correspondence is being sent to and what that recipient is likely to resist or misunderstand.
+3. Identify the desired practical outcome.
+4. Identify the strongest reasonable argument for that outcome.
+5. Identify what concerns, assumptions, implications or strategic points are present but not expressly stated.
+6. Construct the reasoning before drafting the correspondence.
+The finished draft should reflect the reasoning behind the position, not merely repeat the facts provided. It should explain why the proposed position is reasonable, why the requested action is justified, why any alternative approach may be premature or inadequate, and how the proposal assists fair resolution.
+When appropriate, persuade rather than merely inform. Build the argument progressively. Distinguish between confirmed facts, concerns, conclusions and proposals. Anticipate likely objections without becoming defensive. Draft as an experienced professional advocate for the client's position while remaining accurate, restrained and reasonable.
+For contentious correspondence, avoid generic phrases such as "we hope you understand our position", "thank you for your attention to this matter", "fair and equitable", or formulaic AI-style closing language unless the context genuinely calls for it. The draft should sound like a real professional wrote it for a real dispute.
+Where the user dictates rough facts, do not simply tidy the wording. Infer the sensible structure of the argument. For example, if a party proposes mediation but the current evidence is unilateral, explain that meaningful mediation is more likely to be productive once both parties have had the opportunity to consider a neutral expert assessment.
+
 When drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
 When drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.
 The finished draft must look like a real manually written professional email or letter, not ChatGPT output.
@@ -512,6 +527,8 @@ const systemPrompt = buildSystemPrompt({
       `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
     );
 
+    const temperature = modeHint === 'draft' ? 0.62 : 0.35;
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -521,7 +538,7 @@ const systemPrompt = buildSystemPrompt({
       body: JSON.stringify({
         model: 'gpt-4o',
         max_tokens: 3500,
-        temperature: 0.35,
+        temperature,
         messages,
       }),
     });
