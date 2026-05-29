@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// build: force rebuild 2026-05-29
 export default defineConfig({
   plugins: [react()],
   server: {
