@@ -22,6 +22,7 @@ import AwardReview from './components/awards/AwardReview';
 import Calendar from './components/calendar/Calendar';
 import Accounting from './components/accounting/Accounting';
 import InvoiceModal from './components/accounting/InvoiceModal';
+import Contacts from './components/shared/Contacts';
 import SOC from './components/soc/SOC';
 
 function StubView({ icon, title, subtitle }) {
@@ -384,7 +385,7 @@ export default function App() {
       case 'leads':
         return <StubView icon="🎯" title="Leads" subtitle="Track and manage incoming enquiries" />;
       case 'contacts':
-        return <StubView icon="👥" title="Contacts" subtitle="Surveyors, clients, and solicitors" />;
+        return <Contacts />;
       case 'notices':
         return <StubView icon="📋" title="Notices" subtitle="Coming soon" />;
       default:
