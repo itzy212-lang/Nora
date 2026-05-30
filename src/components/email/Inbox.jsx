@@ -868,7 +868,7 @@ function SaveAttachmentPopup({ email, onDismiss }) {
         style={{ width: '100%', padding: '6px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', marginBottom: 12, cursor: 'pointer' }}>
         <option value="">— Select project —</option>
         {projects.map(p => (
-          <option key={p.id} value={p.id}>{p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}</option>
+          <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
         ))}
       </select>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -1362,7 +1362,7 @@ export default function Inbox({ onOpenComposer }) {
                   style={{ maxWidth: 180, padding: '3px 8px', borderRadius: 99, fontSize: 11.5, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
                   <option value="">Link to project…</option>
                   {bulkProjects.map(p => (
-                    <option key={p.id} value={p.id}>{p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}</option>
+                    <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
                   ))}
                 </select>
                 <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
