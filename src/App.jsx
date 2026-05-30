@@ -45,7 +45,7 @@ export default function App() {
   const [authChecked, setAuthChecked]       = useState(false);
   const getInitialView = () => {
     try {
-      return localStorage.getItem('ely_current_view') || 'dashboard';
+      return sessionStorage.getItem('ely_current_view') || 'dashboard';
     } catch {
       return 'dashboard';
     }
@@ -53,7 +53,7 @@ export default function App() {
 
   const getInitialProjectId = () => {
     try {
-      return localStorage.getItem('ely_current_project_id') || '';
+      return sessionStorage.getItem('ely_current_project_id') || '';
     } catch {
       return '';
     }
@@ -61,7 +61,7 @@ export default function App() {
 
   const getInitialPreviousView = () => {
     try {
-      const stored = localStorage.getItem('ely_previous_view');
+      const stored = sessionStorage.getItem('ely_previous_view');
       return stored && stored !== 'chat' ? stored : 'dashboard';
     } catch {
       return 'dashboard';
@@ -70,7 +70,7 @@ export default function App() {
 
   const getInitialPreviousProjectId = () => {
     try {
-      return localStorage.getItem('ely_previous_project_id') || '';
+      return sessionStorage.getItem('ely_previous_project_id') || '';
     } catch {
       return '';
     }
@@ -115,7 +115,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('ely_current_view', currentView || 'dashboard');
+      sessionStorage.setItem('ely_current_view', currentView || 'dashboard');
     } catch {}
   }, [currentView]);
 
@@ -146,12 +146,12 @@ export default function App() {
     setPreviousProjectId(safePreviousProjectId || '');
 
     try {
-      localStorage.setItem('ely_previous_view', safePreviousView);
+      sessionStorage.setItem('ely_previous_view', safePreviousView);
 
       if (safePreviousProjectId) {
-        localStorage.setItem('ely_previous_project_id', safePreviousProjectId);
+        sessionStorage.setItem('ely_previous_project_id', safePreviousProjectId);
       } else {
-        localStorage.removeItem('ely_previous_project_id');
+        sessionStorage.removeItem('ely_previous_project_id');
       }
     } catch {}
   }, [currentView, previousView, projectView, pendingProjectId, previousProjectId]);
@@ -163,7 +163,7 @@ export default function App() {
       setSidebarOpen(false);
 
       try {
-        localStorage.setItem('ely_current_view', 'chat');
+        sessionStorage.setItem('ely_current_view', 'chat');
       } catch {}
 
       return;
@@ -176,8 +176,8 @@ export default function App() {
     setSidebarOpen(false);
 
     try {
-      localStorage.setItem('ely_current_view', view);
-      localStorage.removeItem('ely_current_project_id');
+      sessionStorage.setItem('ely_current_view', view);
+      sessionStorage.removeItem('ely_current_project_id');
     } catch {}
   }, [clearCurrentProject, rememberPreviousLocation]);
 
@@ -188,8 +188,8 @@ export default function App() {
       setPendingProjectId('');
 
       try {
-        localStorage.setItem('ely_current_view', 'projects');
-        localStorage.removeItem('ely_current_project_id');
+        sessionStorage.setItem('ely_current_view', 'projects');
+        sessionStorage.removeItem('ely_current_project_id');
       } catch {}
     } else {
       setCurrentProject(project);
@@ -198,8 +198,8 @@ export default function App() {
       setPendingProjectId('');
 
       try {
-        localStorage.setItem('ely_current_view', 'projects');
-        localStorage.setItem('ely_current_project_id', project.id);
+        sessionStorage.setItem('ely_current_view', 'projects');
+        sessionStorage.setItem('ely_current_project_id', project.id);
       } catch {}
     }
   }, [setCurrentProject]);
@@ -225,8 +225,8 @@ export default function App() {
     setPendingProjectId('');
 
     try {
-      localStorage.setItem('ely_current_view', 'accounting');
-      localStorage.removeItem('ely_current_project_id');
+      sessionStorage.setItem('ely_current_view', 'accounting');
+      sessionStorage.removeItem('ely_current_project_id');
     } catch {}
   }, []);
 
@@ -261,8 +261,8 @@ export default function App() {
     clearCurrentProject();
 
     try {
-      localStorage.setItem('ely_current_view', 'soc');
-      localStorage.removeItem('ely_current_project_id');
+      sessionStorage.setItem('ely_current_view', 'soc');
+      sessionStorage.removeItem('ely_current_project_id');
     } catch {}
   }, [clearCurrentProject]);
 
@@ -289,8 +289,8 @@ export default function App() {
       }
 
       try {
-        localStorage.setItem('ely_current_view', 'projects');
-        localStorage.setItem('ely_current_project_id', previousProjectId);
+        sessionStorage.setItem('ely_current_view', 'projects');
+        sessionStorage.setItem('ely_current_project_id', previousProjectId);
       } catch {}
 
       return;
@@ -301,8 +301,8 @@ export default function App() {
     clearCurrentProject();
 
     try {
-      localStorage.setItem('ely_current_view', targetView);
-      localStorage.removeItem('ely_current_project_id');
+      sessionStorage.setItem('ely_current_view', targetView);
+      sessionStorage.removeItem('ely_current_project_id');
     } catch {}
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
@@ -332,8 +332,8 @@ export default function App() {
             clearCurrentProject();
 
             try {
-              localStorage.setItem('ely_current_view', 'projects');
-              localStorage.removeItem('ely_current_project_id');
+              sessionStorage.setItem('ely_current_view', 'projects');
+              sessionStorage.removeItem('ely_current_project_id');
             } catch {}
           }}
           onOpenComposer={openComposer}
