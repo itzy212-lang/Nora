@@ -209,10 +209,13 @@ function isMobileVoiceBrowser() {
 }
 
 function projectLabel(project = {}) {
-  return [
-    first(project.ref, project.reference, project.project_ref),
-    first(project.address, project.bo_premise_address, project.premise),
-  ].filter(Boolean).join(' | ') || project.id || 'Unnamed project';
+  return first(
+    project.appointment_address,
+    project.address,
+    project.bo_premise_address,
+    project.premise,
+    project.works_address
+  ) || project.id || 'Unnamed project';
 }
 
 function cleanVoiceWord(value = '') {
