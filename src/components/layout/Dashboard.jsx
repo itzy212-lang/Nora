@@ -67,6 +67,14 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const [briefingLoading, setBriefingLoading] = useState(false);
 
   const [invoices, setInvoices] = useState([]);
+  const [freshLeads, setFreshLeads] = useState(leads); // start with state, refresh from DB
+
+  useEffect(() => {
+    if (!sb) return;
+    sb.from('leads').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      if (data) setFreshLeads(data);
+    });
+  }, []);
 
   useEffect(() => {
     if (!sb) return;
@@ -87,7 +95,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .filter(p => p.status !== 'complete')
     .reduce((s, p) => s + parseFloat(p.fee || 0), 0);
 
-  const leadPipeline = leads
+  const leadPipeline = freshLeads
     .filter(l => (l.lead_stage || l.status) !== 'lost')
     .reduce((s, l) => s + parseFloat(l.estimated_value || l.fee || 0), 0);
 
@@ -115,7 +123,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     })
     .reduce((s, inv) => s + parseFloat(inv.total || 0), 0);
 
-  const activeLeads = [...leads]
+  const activeLeads = [...freshLeads]
     .filter(l => {
       const stage = l.lead_stage || l.status;
       return stage === 'new' || stage === 'contacted' || stage === 'quoted' || stage === 'follow_up';
