@@ -805,7 +805,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
   return (
     <div id="main-chat-overlay" className="ai-full-screen">
       <div className="ai-full-top">
-        <button className="btn btn-ghost btn-sm" style={{ display: 'none' }} id="ai-full-mob-btn" onClick={() => setSidebarOpen(v => !v)}>
+        {/* Burger — opens chat history sidebar */}
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ padding: '4px 8px', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
+          onClick={() => setSidebarOpen(v => !v)}
+          title="Chat history"
+        >
           ☰
         </button>
 
@@ -816,74 +822,69 @@ export default function MainChat({ onOpenComposer, onClose }) {
           ✨
         </div>
 
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Ely</div>
-          <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-            Practice Assistant {linkingProject ? ' - linking project...' : ''}
+          <div style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedProject
+              ? projectLabel(selectedProject)
+              : linkingProject ? 'Linking project...' : 'Practice Assistant'}
           </div>
         </div>
 
-        <div className="main-chat-selectors">
-          <select
-            value={selectedProjectId}
-            onChange={handleProjectChange}
-            disabled={loading || linkingProject}
-            title="Link this chat to a project"
-            className="main-chat-select"
-          >
-            <option value="">Main chat - no project linked</option>
-            {(state.projects || []).map(project => (
-              <option key={project.id} value={project.id}>
-                {projectLabel(project)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedEmailId}
-            onChange={handleEmailChange}
-            disabled={loading || emailsLoading || !filteredEmails.length}
-            title="Attach an email or thread to this chat"
-            className="main-chat-select main-chat-email-select"
-          >
-            <option value="">
-              {emailsLoading
-                ? 'Loading emails...'
-                : filteredEmails.length
-                  ? 'No email thread selected'
-                  : 'No emails available'}
-            </option>
-            {filteredEmails.map(email => {
-              const id = getEmailId(email);
-              return (
-                <option key={id} value={id}>
-                  {emailLabel(email)}
-                </option>
-              );
-            })}
-          </select>
-
-          <button
-            className="main-chat-email-refresh-btn"
-            type="button"
-            onClick={loadMainChatEmails}
-            disabled={emailsLoading || loading}
-            title="Refresh email list"
-          >
-            {emailsLoading ? '…' : '↻'}
-          </button>
-
-          <button className="main-chat-upload-placeholder" type="button" disabled title="Upload button placeholder">
-            Upload
-          </button>
-        </div>
-
-        <button className="btn btn-sm" onClick={startNewChat}>
-          + New chat
+        <button className="btn btn-sm" onClick={startNewChat} style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}>
+          + New
         </button>
 
-        <button className="main-chat-close-btn" onClick={closeToDashboard} title="Close chat" aria-label="Close chat" type="button">
+        <button className="main-chat-close-btn" onClick={closeToDashboard} title="Close chat" aria-label="Close chat" type="button" style={{ flexShrink: 0 }}>
           ×
+        </button>
+      </div>
+
+      {/* Context bar — project + email selectors, hidden on mobile unless expanded */}
+      <div className="main-chat-context-selectors">
+        <select
+          value={selectedProjectId}
+          onChange={handleProjectChange}
+          disabled={loading || linkingProject}
+          title="Link this chat to a project"
+          className="main-chat-select"
+        >
+          <option value="">No project linked</option>
+          {(state.projects || []).map(project => (
+            <option key={project.id} value={project.id}>
+              {projectLabel(project)}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={selectedEmailId}
+          onChange={handleEmailChange}
+          disabled={loading || emailsLoading || !filteredEmails.length}
+          title="Attach an email or thread to this chat"
+          className="main-chat-select main-chat-email-select"
+        >
+          <option value="">
+            {emailsLoading ? 'Loading emails...' : filteredEmails.length ? 'No email linked' : 'No emails'}
+          </option>
+          {filteredEmails.map(email => {
+            const id = getEmailId(email);
+            return (
+              <option key={id} value={id}>
+                {emailLabel(email)}
+              </option>
+            );
+          })}
+        </select>
+
+        <button
+          className="main-chat-email-refresh-btn"
+          type="button"
+          onClick={loadMainChatEmails}
+          disabled={emailsLoading || loading}
+          title="Refresh email list"
+        >
+          {emailsLoading ? '…' : '↻'}
         </button>
       </div>
 
@@ -891,13 +892,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
         <div className="main-chat-context-bar">
           {selectedProject && (
             <span>
-              Linked project: <strong>{projectLabel(selectedProject)}</strong>
+              Linked: <strong>{projectLabel(selectedProject)}</strong>
             </span>
           )}
-
           {selectedEmailContext && (
             <span>
-              Email thread: <strong>{selectedEmailContext.subject}</strong>
+              Thread: <strong>{selectedEmailContext.subject}</strong>
               {selectedEmailContext.fromName || selectedEmailContext.from ? ` from ${selectedEmailContext.fromName || selectedEmailContext.from}` : ''}
             </span>
           )}
@@ -905,6 +905,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
       )}
 
       <div className="ai-full-body">
+        {sidebarOpen && (
+          <div className="ai-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+        )}
         <div className={`ai-full-sidebar${sidebarOpen ? ' mob-open' : ''}`}>
           <div className="ai-full-sidebar-hdr">
             <span>{selectedProjectId ? 'Project chats' : 'History'}</span>
