@@ -1156,7 +1156,7 @@ export default function Inbox({ onOpenComposer }) {
     if (!sb || checkedIds.size === 0 || !bulkProjectId) return;
     setBulkLinking(true);
     const ids = [...checkedIds];
-    const selectedEmails = emails.filter(e => checkedIds.has(e.id));
+    const selectedEmails = state.emails.filter(e => checkedIds.has(e.id));
 
     try {
       await sb.from('emails').update({
