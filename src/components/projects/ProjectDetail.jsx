@@ -3510,7 +3510,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           <div>
             <div style={{ ...card({ padding: '16px 18px', marginBottom: 14 }) }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35 }}>
-                {project.ref}{project.ref && titleAddress ? ' | ' : ''}{titleAddress}
+                {titleAddress}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12 }}>
