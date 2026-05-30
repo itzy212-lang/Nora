@@ -990,7 +990,9 @@ export default function Inbox({ onOpenComposer }) {
       .then(({ data }) => setBulkProjects(data || []));
   }, []);
 
-  const loadEmails = useCallback(async () => {
+  const syncingRef = useRef(false);
+
+  const loadEmails = useCallback(async ({ force = false } = {}) => {
     if (!sb) return;
     setLoading(true);
     try {
@@ -1007,7 +1009,29 @@ export default function Inbox({ onOpenComposer }) {
     setLoading(false);
   }, [folder]);
 
-  useEffect(() => { loadEmails(); }, [loadEmails]);
+  // Initial load only
+  useEffect(() => { loadEmails(); }, [folder]);
+
+  // Auto-sync every 2.5 minutes — only if not already syncing
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (syncingRef.current) return; // prevent overlap
+      syncingRef.current = true;
+      try {
+        const result = await sb.functions.invoke('sync_outlook', { method: 'POST' });
+        // Only reload if new emails arrived
+        if (result?.data?.newEmails > 0) {
+          await loadEmails();
+        }
+      } catch (err) {
+        console.warn('[auto-sync] error:', err);
+      } finally {
+        syncingRef.current = false;
+      }
+    }, 2.5 * 60 * 1000); // 2.5 minutes
+
+    return () => clearInterval(interval);
+  }, [loadEmails]);
 
   const loadThread = useCallback(async (email) => {
     if (!sb || !email.thread_id) { setThreadEmails([email]); return; }
@@ -1029,18 +1053,24 @@ export default function Inbox({ onOpenComposer }) {
 
   // Fix 2: Refresh calls Supabase sync_outlook edge function, not /api/sync-emails
   const handleSync = async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     setSyncing(true);
     try {
-      await sb.functions.invoke('sync_outlook', { method: 'POST' });
-      await new Promise(r => setTimeout(r, 2000));
-      // Run auto-matching after sync
+      const result = await sb.functions.invoke('sync_outlook', { method: 'POST' });
+      await new Promise(r => setTimeout(r, 1000));
       await sb.rpc('match_emails_to_projects').catch(() => {});
-      await loadEmails();
+      // Only reload if new emails came in
+      if (!result?.data || result?.data?.newEmails > 0) {
+        await loadEmails();
+      }
     } catch (err) {
       console.warn('Sync error:', err);
       await loadEmails();
+    } finally {
+      setSyncing(false);
+      syncingRef.current = false;
     }
-    setSyncing(false);
   };
 
   const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId, attachments = [] }) => {
