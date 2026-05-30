@@ -6,21 +6,23 @@ export function useEmails() {
   const { state, dispatch } = useApp();
   const [loading, setLoading] = useState(false);
 
-  const loadEmails = useCallback(async () => {
+  const loadEmails = useCallback(async ({ force = false } = {}) => {
     if (!sb) return;
+    // Skip if already loaded this session — rely on sync for updates
+    if (!force && state.emails && state.emails.length > 0) return state.emails;
     setLoading(true);
     try {
       let res = await sb
         .from('emails')
         .select('*, email_attachments(*)')
-        .order('created_at', { ascending: false })
+        .order('received_at', { ascending: false })
         .limit(200);
 
       if (res.error) {
         res = await sb
           .from('emails')
           .select('*')
-          .order('created_at', { ascending: false })
+          .order('received_at', { ascending: false })
           .limit(200);
       }
 
@@ -33,7 +35,7 @@ export function useEmails() {
     } finally {
       setLoading(false);
     }
-  }, [dispatch]);
+  }, [dispatch, state.emails]);
 
   const syncOutlook = useCallback(async () => {
     if (!sb) return;
@@ -42,13 +44,37 @@ export function useEmails() {
         body: { user_id: state.currentUser?.email || state.currentUser?.id },
       });
       if (error) throw error;
-      await loadEmails();
+
+      // If no new emails, don't touch state at all
+      if (data?.newEmails === 0) return data;
+
+      // New emails — fetch only what arrived since our newest known email
+      const latestKnown = state.emails?.[0]?.received_at || state.emails?.[0]?.created_at;
+      if (latestKnown) {
+        const { data: newRows } = await sb
+          .from('emails')
+          .select('*, email_attachments(*)')
+          .gt('received_at', latestKnown)
+          .order('received_at', { ascending: false })
+          .limit(50);
+
+        if (newRows?.length > 0) {
+          dispatch({
+            type: 'SET_EMAILS',
+            payload: [...newRows.map(normalizeEmail), ...(state.emails || [])],
+          });
+        }
+        return data;
+      }
+
+      // No emails in state yet — do a full load
+      await loadEmails({ force: true });
       return data;
     } catch (err) {
       console.error('[useEmails] sync failed:', err);
       throw err;
     }
-  }, [state.currentUser, loadEmails]);
+  }, [state.currentUser, state.emails, loadEmails, dispatch]);
 
   const markRead = useCallback(async (emailId) => {
     dispatch({
