@@ -886,6 +886,47 @@ function SaveAttachmentPopup({ email, onDismiss }) {
 }
 
 // ── Email preview panel ───────────────────────────────────────────────────────
+function AttachmentChip({ att }) {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    if (!att.storage_path) return;
+    sb.storage.from('email-attachments').createSignedUrl(att.storage_path, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl); })
+      .catch(() => {});
+  }, [att.storage_path]);
+
+  const ext = (att.filename || '').split('.').pop().toLowerCase();
+  const icon = ['pdf'].includes(ext) ? '📄' : ['doc','docx'].includes(ext) ? '📝' : ['jpg','jpeg','png','gif','webp'].includes(ext) ? '🖼️' : ['xls','xlsx'].includes(ext) ? '📊' : '📎';
+
+  return (
+    <a
+      href={url || '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '6px 12px', borderRadius: 8,
+        border: '1px solid var(--border)', background: 'var(--bg2)',
+        fontSize: 12, color: 'var(--text2)', textDecoration: 'none',
+        cursor: url ? 'pointer' : 'default', opacity: url ? 1 : 0.5,
+      }}
+    >
+      <span>{icon}</span>
+      <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {att.filename}
+      </span>
+      {att.size_bytes && (
+        <span style={{ color: 'var(--text3)', fontSize: 10 }}>
+          {att.size_bytes > 1024 * 1024
+            ? `${(att.size_bytes / 1024 / 1024).toFixed(1)}MB`
+            : `${Math.round(att.size_bytes / 1024)}KB`}
+        </span>
+      )}
+    </a>
+  );
+}
+
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [replyDropOpen, setReplyDropOpen]   = useState(false);
   const [showSavePopup, setShowSavePopup]   = useState(false);
@@ -951,6 +992,16 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
+      {email.email_attachments?.length > 0 && (
+        <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Attachments</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {email.email_attachments.map(att => (
+              <AttachmentChip key={att.id} att={att} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -999,7 +1050,7 @@ export default function Inbox({ onOpenComposer }) {
     if (!force && state.emails && state.emails.length > 0) return;
     setLoading(true);
     try {
-      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
+      let q = sb.from('emails').select('*, email_attachments(*)').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
       if (folder === 'Unread')  q = q.eq('is_read', false);
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
