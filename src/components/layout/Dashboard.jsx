@@ -88,8 +88,8 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .reduce((s, p) => s + parseFloat(p.fee || 0), 0);
 
   const leadPipeline = leads
-    .filter(l => l.status !== 'lost')
-    .reduce((s, l) => s + parseFloat(l.fee || 0), 0);
+    .filter(l => (l.lead_stage || l.status) !== 'lost')
+    .reduce((s, l) => s + parseFloat(l.estimated_value || l.fee || 0), 0);
 
   const now = Date.now();
 
@@ -116,7 +116,10 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .reduce((s, inv) => s + parseFloat(inv.total || 0), 0);
 
   const activeLeads = [...leads]
-    .filter(l => l.status === 'new' || l.status === 'contacted')
+    .filter(l => {
+      const stage = l.lead_stage || l.status;
+      return stage === 'new' || stage === 'contacted' || stage === 'quoted' || stage === 'follow_up';
+    })
     .sort((a, b) => (a._t || 0) - (b._t || 0))
     .slice(0, 5);
 
@@ -535,10 +538,10 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
                       color: 'var(--text)',
                     }}
                   >
-                    {lead.name}
+                    {lead.contact_name || lead.name}
                   </div>
 
-                  {lead.address && (
+                  {(lead.project_address || lead.address) && (
                     <div
                       style={{
                         fontSize: 11,
@@ -546,7 +549,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
                         marginTop: 1,
                       }}
                     >
-                      {lead.address}
+                      {lead.project_address || lead.address}
                     </div>
                   )}
                 </div>
