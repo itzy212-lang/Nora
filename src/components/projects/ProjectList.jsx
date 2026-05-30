@@ -52,7 +52,7 @@ function compareAddresses(a, b) {
   return ar < br ? -1 : ar > br ? 1 : 0;
 }
 
-
+function getAppointmentAddress(project) {
   const role = (project.role || project.appointment_role || '').toUpperCase();
 
   if (project.appointment_address) return project.appointment_address;
