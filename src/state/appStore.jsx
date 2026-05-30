@@ -36,6 +36,7 @@ const initialState = {
   currentUser: null,
   currentProject: null,
   projects: [],
+  leads: [],
   emails: [],
   theme: savedTheme,
   chatSessions: {},
@@ -119,6 +120,8 @@ function reducer(state, action) {
 
     case 'SET_EMAILS':
       return { ...state, emails: action.payload };
+    case 'SET_LEADS':
+      return { ...state, leads: action.payload };
 
     case 'ADD_EMAIL':
       return { ...state, emails: [action.payload, ...state.emails] };
