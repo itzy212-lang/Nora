@@ -111,6 +111,10 @@ export default function App() {
     if (currentUser) {
       loadProjects();
       loadEmails();
+      // Load leads into global state for dashboard
+      sb.from('leads').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+        if (data) dispatch({ type: 'SET_LEADS', payload: data });
+      });
     }
   }, [currentUser?.id]);
 
