@@ -37,7 +37,22 @@ function getProjectColour(project) {
   return '#a855f7';
 }
 
-function getAppointmentAddress(project) {
+function streetSortKey(address) {
+  const str = (address || '').trim();
+  const match = str.match(/^(\d+)/);
+  const num = match ? parseInt(match[1], 10) : Infinity;
+  const rest = str.replace(/^\d+\s*/, '').toLowerCase();
+  return [num, rest];
+}
+
+function compareAddresses(a, b) {
+  const [an, ar] = streetSortKey(a);
+  const [bn, br] = streetSortKey(b);
+  if (an !== bn) return an - bn;
+  return ar < br ? -1 : ar > br ? 1 : 0;
+}
+
+
   const role = (project.role || project.appointment_role || '').toUpperCase();
 
   if (project.appointment_address) return project.appointment_address;
@@ -220,7 +235,7 @@ export default function ProjectList({ onOpenProject }) {
       || (p.works || '').toLowerCase().includes(q);
 
     return matchesFilter && matchesSearch;
-  });
+  }).sort((a, b) => compareAddresses(getAppointmentAddress(a), getAppointmentAddress(b)));
 
   const handleCreated = (newProject) => {
     loadProjects();
