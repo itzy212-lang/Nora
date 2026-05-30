@@ -132,7 +132,7 @@ function ProjectCard({ project, onClick }) {
             color: 'var(--text3)',
             letterSpacing: '0.3px',
           }}>
-            {project.ref}
+
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
