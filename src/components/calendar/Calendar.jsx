@@ -779,13 +779,15 @@ export default function Calendar({ onOpenProject }) {
             const isToday = date === todayYMD();
             const isSelected = date === selectedDate;
             const dayEvts = allEvents.filter(e => e.date === date);
+            // 6 rows of cells; fit within ~65vh minus headers (~140px)
+            const cellH = Math.max(72, Math.floor((window.innerHeight * 0.72 - 140) / 6));
 
             return (
               <div key={date} onClick={() => handleDayClick(date)} style={{
-                height: 120,
+                height: cellH,
                 background: '#fafafa',
                 border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? '#d9d9d9' : '#ececec'}`,
-                borderRadius: 10, padding: '6px 7px',
+                borderRadius: 10, padding: '5px 6px',
                 cursor: 'pointer', overflow: 'hidden',
                 opacity: faded ? 0.35 : 1,
               }}>
@@ -801,7 +803,7 @@ export default function Calendar({ onOpenProject }) {
                   const cfg = EVENT_TYPES[ev.type] || EVENT_TYPES.todo;
                   return (
                     <div key={i} style={{
-                      fontSize: 10.5, padding: '1px 5px', borderRadius: 4, marginBottom: 2,
+                      fontSize: 9.5, padding: '1px 4px', borderRadius: 4, marginBottom: 2,
                       background: cfg.bg, color: cfg.colour, fontWeight: 500,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
