@@ -1,5 +1,6 @@
 // api/ely-smart.js
 // Ely/Nora smart route - project-hydrated collaboration version
+// Global behaviour: analyse first, draft only when clearly requested.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -31,6 +32,7 @@ function cleanOutput(text = '') {
     .replace(/^[ \t]*[_]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[=]{3,}[ \t]*$/gm, '')
     .replace(/–/g, '-')
+    .replace(/—/g, '-')
     .replace(/--+/g, ', ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -95,6 +97,99 @@ function stripHtml(value = '') {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+const GLOBAL_AI_STANDARD = `
+GLOBAL AI STANDARD:
+Ely is an advisor and case analyst first, and a drafting assistant second.
+
+This standard applies across the main chat, project chat, email chat, Draft with Ely, document review, award review, notice review, incoming email analysis and general conversation.
+
+DEFAULT BEHAVIOUR:
+- Assume Itzik wants analysis, discussion and strategic thinking unless he clearly asks for drafting.
+- Do not draft correspondence merely because correspondence has been uploaded, opened or selected.
+- Do not jump straight to an email, letter, response or draft unless drafting is explicitly requested by the user's words.
+- If the user is exploring, questioning, challenging, thinking aloud, asking for a view or asking to chat through points, stay in analysis mode.
+- If unsure, choose analysis mode and explain the issue rather than producing a draft.
+
+ANALYSIS MODE TRIGGERS:
+Treat the following as analysis requests unless they also contain a clear drafting instruction:
+- what do you think
+- can he do that
+- is that right
+- is that a breach
+- talk me through this
+- let's discuss this
+- am I missing something
+- what's your view
+- what's his angle
+- why is he saying this
+- how would a judge view this
+- how would a third surveyor view this
+- I am not looking for a draft
+- chat through the points first
+- help me form a response
+
+IN ANALYSIS MODE:
+- Discuss the issue like an experienced surveyor colleague sitting opposite Itzik.
+- Identify the real issue, not just the surface wording.
+- Challenge assumptions and push back where appropriate.
+- Identify missing facts before reaching firm conclusions.
+- Separate strong points from weak points.
+- Identify tactical, legal, evidential, practical and commercial risk.
+- Ask one focused question only if needed.
+- Do not produce a draft email or letter.
+
+DRAFTING MODE:
+Only enter drafting mode when Itzik clearly asks for drafting, for example:
+- draft this
+- write this
+- write an email
+- write a letter
+- prepare an email
+- prepare a letter
+- let's draft
+- draft a response
+- reply saying
+- respond by saying
+
+DICTATION OVERRIDE:
+If Itzik clearly begins dictating correspondence, for example starting with Dear, Hi, Hello, Good morning, Thank you for your email, or similar, treat that as drafting/editor mode. Structure and polish the dictated content without turning it into strategic analysis.
+
+THREAD AND DISPUTE REVIEW:
+When correspondence, an email thread, a chain of messages or a dispute history is available, review the whole context before responding.
+Do not analyse only the latest email.
+Always consider:
+- the timeline of correspondence
+- how each party's position has developed
+- whether the latest email is part of a wider narrative
+- whether a party is building a case for non-compliance
+- contradictions or changes in position
+- what is actually being sought
+- what is missing or unsupported
+- what is within the Act or Award and what is outside it
+
+PARTY WALL ANALYSIS RULE:
+Before discussing remedies or response strategy, separate issues into:
+- notifiable works matters
+- Award compliance matters
+- Act matters
+- surveyor jurisdiction matters
+- damage or compensation claims
+- general neighbour disputes
+- matters outside the surveyors' jurisdiction
+
+WHEN REVIEWING DISPUTES, IDENTIFY:
+- Surface issue: what is being argued on the face of it.
+- Underlying issue: what is really driving the dispute.
+- Strongest point: the most persuasive point or risk.
+- Weakest point: the least persuasive or most overreaching point.
+- Missing information: facts needed before a conclusion can be reached.
+- Jurisdiction: whether it falls within the Act, the Award, surveyor jurisdiction or outside them.
+- Strategy: what Itzik should actually be worried about before drafting.
+
+DEFAULT DISCUSSION STRUCTURE:
+For uploaded correspondence or selected email threads, start with concise analysis. Use headings only when useful, such as Initial observations, What stands out, Strongest point, Weakest point, Missing information and Before drafting. Do not use markdown decoration or make the response look like a report.
+`;
 
 function normaliseProject(project = {}) {
   if (!project) return null;
@@ -339,25 +434,53 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   return emails;
 }
 
+function looksLikeDictation(prompt = '') {
+  const p = String(prompt || '').trim().toLowerCase();
+  return /^(dear|hi|hello|good morning|good afternoon|thank you for your email|thanks for your email)[\s,]/i.test(p);
+}
+
+function hasExplicitDraftRequest(prompt = '') {
+  const p = String(prompt || '').toLowerCase();
+
+  if (looksLikeDictation(prompt)) return true;
+
+  return (
+    p.includes('draft this') ||
+    p.includes('draft a') ||
+    p.includes('draft an') ||
+    p.includes('draft the') ||
+    p.includes("let's draft") ||
+    p.includes('lets draft') ||
+    p.includes('write an email') ||
+    p.includes('write a letter') ||
+    p.includes('write to') ||
+    p.includes('prepare an email') ||
+    p.includes('prepare a letter') ||
+    p.includes('compose an email') ||
+    p.includes('compose a letter') ||
+    p.includes('draft a response') ||
+    p.includes('draft a reply') ||
+    p.includes('reply saying') ||
+    p.includes('respond saying') ||
+    p.includes('respond by saying') ||
+    p.includes('send this') ||
+    p.includes('create the email')
+  );
+}
+
 function inferModeHint(surface, prompt = '', body = {}) {
   const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
-  if (explicitMode.includes('email_thread_summary')) return 'email_summary';
-  if (explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) return 'draft';
 
-  const p = String(prompt || '').toLowerCase();
-  const explicitDraft =
-    p.includes('draft') ||
-    p.includes('write a letter') ||
-    p.includes('write an email') ||
-    p.includes('prepare a letter') ||
-    p.includes('prepare an email') ||
-    p.includes('compose') ||
-    p.includes('respond to') ||
-    p.includes('reply');
+  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) return 'email_summary';
 
-  if (explicitDraft) return 'draft';
-  if (p.includes('review') || p.includes('compare')) return 'review';
+  if (hasExplicitDraftRequest(prompt)) return 'draft';
+
+  if (String(prompt || '').toLowerCase().includes('review') || String(prompt || '').toLowerCase().includes('compare')) return 'review';
+
   if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId)) return 'email_summary';
+
+  if ((explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) && !String(prompt || '').trim()) return 'email_summary';
+
   return 'discuss';
 }
 
@@ -427,7 +550,7 @@ function buildEmailContextText({ body = {}, scopedEmailContext = [] }) {
 
   return `
 ACTIVE SELECTED EMAIL CONTEXT:
-The user is drafting, discussing, or preparing a response in relation to the selected email/thread below. Treat this email/thread as primary context. Do not ignore it. Do not answer generically if this context is present.
+The user is discussing, analysing, drafting or preparing a response in relation to the selected email/thread below. Treat this email/thread as primary context. Do not ignore it. Do not answer generically if this context is present.
 
 Selected email:
 From: ${selected.from || ''}
@@ -455,8 +578,12 @@ ${email.body || ''}
 }
 
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
-  // Always use the brain system prompt — never bypass it
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
+
+  prompt += `
+
+${GLOBAL_AI_STANDARD}
+`;
 
   if (modeHint === 'email_summary') {
     prompt += `
@@ -464,33 +591,37 @@ function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, s
 ACTIVE MODE: email_thread_summary
 
 YOUR TASK:
-You are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary. Structure your response EXACTLY like this (plain text only, no markdown, no asterisks, no hashtags):
+You are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary and strategic first view. Do not draft correspondence.
+
+Structure your response in plain text like this:
 
 From:
 [sender name and firm]
 
 Latest email is asking for:
-[bullet points - what they are specifically requesting, taken directly from the latest email]
+[concise points from the latest email]
 
-Context from thread:
-[bullet points of relevant background from earlier in the thread that affects the response - skip if not relevant]
+Context from the thread:
+[relevant earlier history, changes of position, pattern or narrative]
+
+What stands out:
+[the issue beneath the surface, including whether the points appear to be Award matters, Act matters, damage claims, neighbour disputes or outside jurisdiction]
 
 Suggested approach:
-[1-2 plain sentences on how best to respond]
+[1 to 3 plain sentences on what to think through before drafting]
 
 RULES:
-- Focus on the LATEST email first
-- Keep it under 150 words total
-- Do not invent anything not stated in the emails
-- Do not produce a full draft at this stage
-- Do not use markdown, asterisks, hashtags or bold text
-- Treat Square One Consulting, Itzik, help@sq1consulting.co.uk as us
+- Do not focus only on the latest email if earlier messages change the meaning.
+- Do not invent anything not stated in the emails.
+- Do not produce a full draft at this stage.
+- Do not use markdown, asterisks, hashtags or bold text.
+- Treat Square One Consulting, Itzik and help@sq1consulting.co.uk as us.
 `;
   } else {
     prompt += `
 
 ACTIVE MODE:
-\${modeHint || 'discuss'}
+${modeHint || 'discuss'}
 
 HARD RUNTIME RULES:
 Project facts loaded below are authoritative. Use the party names, addresses and roles from the project facts before asking the user for them.
@@ -498,10 +629,11 @@ If a project is active, answer from the active project context first.
 Never invent party names, meetings, inspections, instructions or actions.
 Do not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.
 In discussion mode, do not draft correspondence unless explicitly asked.
+In review mode, review and analyse before suggesting changes. Do not rewrite unless explicitly asked.
 In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
 
 EMAIL CONTEXT RULE:
-If selected email context is provided, it is authoritative. Read it before responding. For Draft With Ely and email composer workflows, base the opening response and any draft on the selected email/thread. If the user prompt is blank, summarise the selected email/thread and ask what response they would like to send, or provide a sensible first draft if the workflow asks for one.
+If selected email context is provided, it is authoritative. Read the whole available thread before responding. For Draft With Ely and email composer workflows, do not assume the user wants an email drafted simply because the selected context is an email. If the user prompt is blank, summarise the selected email/thread and suggest the response strategy. If the user asks to talk it through, analyse. Draft only when the user clearly asks for drafting.
 
 When drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
 When drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.
@@ -546,7 +678,7 @@ ${compactJson(scopedEmailContext.slice(0, 40), 24000)}
 `;
   }
 
-  if (draftingExamples?.length) {
+  if (draftingExamples?.length && modeHint === 'draft') {
     prompt += `
 
 GOLD STANDARD DRAFTING EXAMPLES:
@@ -575,8 +707,8 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   } else if (emailContextText) {
     const mode = String(body.mode || body.workflowStage || '').toLowerCase();
     const instruction = mode.includes('email_thread_summary') || mode.includes('summary')
-      ? 'Read the selected email/thread above and summarise what it is asking for. Then suggest the most likely response strategy in plain professional language.'
-      : 'Use the selected email/thread above as the context for this email drafting workflow.';
+      ? 'Read the selected email/thread above and summarise what it is asking for. Then identify the wider context, the real issue, and the most sensible response strategy. Do not draft.'
+      : 'Read the selected email/thread above. Start by analysing and discussing the issue, the wider context, the real risk, missing information and response strategy. Do not draft unless the user explicitly asks for a draft.';
     messages.push({ role: 'user', content: instruction });
   }
 
