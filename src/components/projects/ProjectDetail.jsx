@@ -588,11 +588,15 @@ function SurveyorBlock({ title, form, set }) {
     }
 
     try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return;
+
       const { data } = await sb
         .from('contacts')
         .select('id, name, firm, email, phone')
         .ilike('name', `%${query}%`)
         .eq('type', 'surveyor')
+        .eq('user_id', user.id)
         .limit(8);
 
       setSuggestions(data || []);
@@ -709,22 +713,48 @@ function SurveyorBlock({ title, form, set }) {
 }
 
 async function maybeSaveSurveyor(surv) {
-  if (!surv?.name?.trim() || !surv?.email?.trim()) return;
+  if (!surv?.name?.trim()) return;
 
   try {
-    const { data } = await sb
-      .from('contacts')
-      .select('id')
-      .ilike('email', surv.email.trim())
-      .limit(1);
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
 
-    if (data?.length > 0) return;
+    // Check by name + firm if no email, otherwise by email
+    let existing;
+    if (surv.email?.trim()) {
+      const { data } = await sb
+        .from('contacts')
+        .select('id, name, firm, email, phone')
+        .ilike('email', surv.email.trim())
+        .eq('user_id', user.id)
+        .limit(1);
+      existing = data;
+    } else {
+      const { data } = await sb
+        .from('contacts')
+        .select('id, name, firm, email, phone')
+        .ilike('name', surv.name.trim())
+        .eq('user_id', user.id)
+        .limit(1);
+      existing = data;
+    }
+
+    if (existing?.length > 0) {
+      // Update with any new details
+      await sb.from('contacts').update({
+        firm: surv.firm?.trim() || existing[0].firm,
+        email: surv.email?.trim() || existing[0].email,
+        phone: surv.phone?.trim() || existing[0].phone,
+      }).eq('id', existing[0].id);
+      return;
+    }
 
     await sb.from('contacts').insert([{
+      user_id: user.id,
       type: 'surveyor',
       name: surv.name.trim(),
       firm: surv.firm?.trim() || null,
-      email: surv.email.trim(),
+      email: surv.email?.trim() || null,
       phone: surv.phone?.trim() || null,
     }]);
   } catch (err) {
