@@ -141,7 +141,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
         if (d >= now && d <= in14) {
           upcoming.push({
-            label: `Consent deadline – ${p.ref} ${ao.label || 'AO'} – ${p.address}`,
+            label: `Consent deadline – ${ao.label || 'AO'} – ${p.address}`,
             date: d,
             projectId: p.id,
             ref: p.ref,
@@ -154,7 +154,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
         if (d >= now && d <= in14) {
           upcoming.push({
-            label: `S10 deadline – ${p.ref} ${ao.label || 'AO'} – ${p.address}`,
+            label: `S10 deadline – ${ao.label || 'AO'} – ${p.address}`,
             date: d,
             projectId: p.id,
             ref: p.ref,
@@ -168,7 +168,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
       if (d >= now && d <= in14) {
         upcoming.push({
-          label: `${r.text} – ${p.ref} – ${p.address}`,
+          label: `${r.text} – ${p.address}`,
           date: d,
           projectId: p.id,
           ref: p.ref,
@@ -208,7 +208,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
       const projSummary = projects
         .filter(p => p.status !== 'complete')
         .slice(0, 10)
-        .map(p => `${p.ref}: ${p.address}, status: ${p.status}`)
+        .map(p => `${p.address}, status: ${p.status}`)
         .join('\n');
 
       const deadlineSummary = upcoming
@@ -690,17 +690,6 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
                   <span style={{ flex: 1 }}>{item.label}</span>
 
-                  {item.ref && (
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        color: 'var(--text3)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {item.ref}
-                    </span>
-                  )}
 
                   {item.projectId && (
                     <span
