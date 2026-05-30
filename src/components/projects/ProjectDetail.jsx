@@ -3235,14 +3235,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [onOpenSOC, project]);
 
   const handleRaiseInvoice = useCallback(() => {
-    const boBillToName = bo || project.bo_1_name || project.bo_name || appointmentName || '';
+    // Invoice is always raised against the Building Owner regardless of surveyor role
+    const boBillToName = project.bo || project.bo_1_name || project.bo_name || '';
     const boBillToAddress =
       project.bo_service_address ||
       project.bo_1_service_address ||
       project.bo_address ||
       project.bo_premise_address ||
       project.address ||
-      boAddress ||
       '';
 
     onRaiseInvoice?.({
@@ -3252,7 +3252,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       role,
       project_id: project.id,
     });
-  }, [onRaiseInvoice, project, appointmentAddress, appointmentName, boAddress, bo, role]);
+  }, [onRaiseInvoice, project, appointmentAddress, boAddress, role]);
 
 
   const handleDeleteProject = useCallback(async () => {
