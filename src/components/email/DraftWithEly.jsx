@@ -99,6 +99,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [summarising, setSummarising] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const messagesEndRef = useRef(null);
@@ -149,7 +150,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   }, [email, initialized]);
 
   const autoSummarise = useCallback(async () => {
-    setLoading(true);
+    setSummarising(true);
 
     try {
       const result = await send('', {
@@ -180,7 +181,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         content: `I couldn't load the email context. ${err.message}`,
       }]);
     } finally {
-      setLoading(false);
+      setSummarising(false);
     }
   }, [email, threadId, projectId, send]);
 
