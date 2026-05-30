@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import VoiceInput from '../shared/VoiceInput';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
+import { useApp } from '../../state/appStore';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -956,7 +957,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 
 // ── Main Inbox ────────────────────────────────────────────────────────────────
 export default function Inbox({ onOpenComposer }) {
-  const [emails, setEmails]              = useState([]);
+  const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
   const [threadEmails, setThreadEmails]  = useState([]);
@@ -994,6 +995,8 @@ export default function Inbox({ onOpenComposer }) {
 
   const loadEmails = useCallback(async ({ force = false } = {}) => {
     if (!sb) return;
+    // Skip reload if already have emails in global state and not forced
+    if (!force && state.emails && state.emails.length > 0) return;
     setLoading(true);
     try {
       let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
@@ -1004,7 +1007,7 @@ export default function Inbox({ onOpenComposer }) {
       if (folder === 'Inbox')   q = q.or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false');
       const { data, error } = await q;
       if (error) throw error;
-      setEmails(data || []);
+      dispatch({ type: 'SET_EMAILS', payload: data || [] });
     } catch (err) { console.error('loadEmails:', err); }
     setLoading(false);
   }, [folder]);
@@ -1047,7 +1050,7 @@ export default function Inbox({ onOpenComposer }) {
     if (isMobile) setMobileShowEmail(true);
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
-      setEmails(prev => prev.map(e => e.id === email.id ? { ...e, is_read: true } : e));
+      dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, is_read: true } });
     }
   };
 
@@ -1117,13 +1120,13 @@ export default function Inbox({ onOpenComposer }) {
 
     if (replyToId) {
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
-      setEmails(prev => prev.map(e => e.id === replyToId ? { ...e, is_replied: true } : e));
+      dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
     }
   };
 
 
   const handleEmailLinked = (email, projectId) => {
-    setEmails(prev => prev.map(e => {
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => {
       const sameEmail = e.id === email.id;
       const sameThread = email.thread_id && e.thread_id === email.thread_id;
       if (!sameEmail && !sameThread) return e;
@@ -1135,7 +1138,7 @@ export default function Inbox({ onOpenComposer }) {
         project_match_confidence: sameEmail ? 100 : 90,
         project_match_source: sameEmail ? 'manual_preview_banner' : 'thread_inherited',
       };
-    }));
+    })});
 
     setSelectedEmail(prev => prev && (prev.id === email.id || (email.thread_id && prev.thread_id === email.thread_id))
       ? {
@@ -1166,7 +1169,7 @@ export default function Inbox({ onOpenComposer }) {
 
       await Promise.all(selectedEmails.map(email => insertProjectMemoryForEmail(email, bulkProjectId, 'manual_bulk_inbox')));
 
-      setEmails(prev => prev.map(e => checkedIds.has(e.id)
+      dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => checkedIds.has(e.id)
         ? {
             ...e,
             project_id: bulkProjectId,
@@ -1175,7 +1178,7 @@ export default function Inbox({ onOpenComposer }) {
             project_match_confidence: 100,
             project_match_source: 'manual_bulk_inbox',
           }
-        : e));
+        : e) });
 
       setSelectedEmail(prev => prev && checkedIds.has(prev.id)
         ? {
@@ -1201,7 +1204,7 @@ export default function Inbox({ onOpenComposer }) {
   const handleDelete = async (id) => {
     if (!sb || !window.confirm('Delete this email?')) return;
     await sb.from('emails').delete().eq('id', id);
-    setEmails(prev => prev.filter(e => e.id !== id));
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => e.id !== id) });
     if (selectedEmail?.id === id) setSelectedEmail(null);
     setCheckedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
   };
@@ -1209,19 +1212,19 @@ export default function Inbox({ onOpenComposer }) {
   const handleMassDelete = async () => {
     if (!sb || checkedIds.size === 0 || !window.confirm(`Delete ${checkedIds.size} emails?`)) return;
     await sb.from('emails').delete().in('id', [...checkedIds]);
-    setEmails(prev => prev.filter(e => !checkedIds.has(e.id)));
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !checkedIds.has(e.id)) });
     if (checkedIds.has(selectedEmail?.id)) setSelectedEmail(null);
     setCheckedIds(new Set());
   };
 
   const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const filtered = emails.filter(e => {
+  const filtered = (state.emails || []).filter(e => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (e.sender_name || '').toLowerCase().includes(q) || (e.sender_email || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q);
   });
 
-  const unreadCount = emails.filter(e => !e.is_read).length;
+  const unreadCount = (state.emails || []).filter(e => !e.is_read).length;
   const allChecked  = filtered.length > 0 && checkedIds.size === filtered.length;
 
   return (
