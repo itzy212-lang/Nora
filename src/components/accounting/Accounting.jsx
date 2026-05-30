@@ -6,6 +6,7 @@ const fmt = (n) => `£${Number(n || 0).toLocaleString('en-GB', { minimumFraction
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
 
 export default function Accounting({ projects = [], settings = {} }) {
+  const isMobile = window.innerWidth < 768;
   const { invoices, loading, createInvoice, updateInvoice, markPaid, deleteInvoice, getStats } = useInvoices();
   const [tab, setTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
@@ -263,77 +264,65 @@ function StatusBadge({ status }) {
 
 function InvoiceTable({ invoices, onEdit, onMarkPaid, onDelete, isPaid }) {
   return (
-    <table style={styles.table}>
-      <thead>
-        <tr>
-          <th style={styles.th}>Invoice</th>
-          <th style={styles.th}>Property / Works Address</th>
-          <th style={styles.th}>Date</th>
-          <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
-          <th style={styles.th}>Status</th>
-          <th style={styles.th}></th>
-        </tr>
-      </thead>
-      <tbody>
-        {invoices.map(inv => (
-          <tr key={inv.id} style={styles.tr}>
-            <td style={styles.td}>
-              <span style={styles.invRef}>Invoice-{inv.invoice_number}</span>
-            </td>
-            <td style={styles.td}>
-              <div style={styles.addr}>{inv.property_address}</div>
-              {inv.bill_to_name && <div style={styles.client}>{inv.bill_to_name}</div>}
-            </td>
-            <td style={styles.td}>{fmtDate(inv.invoice_date)}</td>
-            <td style={{ ...styles.td, textAlign: 'right', fontWeight: 600 }}>{fmt(inv.total)}</td>
-            <td style={styles.td}><StatusBadge status={inv.status} /></td>
-            <td style={styles.td}>
-              <div style={styles.actions}>
-                <button onClick={() => onEdit(inv)} style={styles.actionBtn} title="Edit">✏️</button>
-                {!isPaid && onMarkPaid && (
-                  <button onClick={() => onMarkPaid(inv)} style={styles.actionBtn} title="Mark paid">✅</button>
-                )}
-                <button onClick={() => onDelete(inv.id)} style={styles.actionBtn} title="Delete">🗑️</button>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div>
+      {invoices.map(inv => (
+        <div key={inv.id} style={styles.invoiceCard}>
+          <div style={styles.invoiceCardTop}>
+            <span style={styles.invoiceCardRef}>Invoice-{inv.invoice_number}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{fmt(inv.total)}</span>
+          </div>
+          <div style={styles.invoiceCardAddr}>{inv.property_address}</div>
+          {inv.bill_to_name && <div style={styles.invoiceCardClient}>{inv.bill_to_name}</div>}
+          <div style={styles.invoiceCardBottom}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <StatusBadge status={inv.status} />
+              <span style={styles.invoiceCardDate}>{fmtDate(inv.invoice_date)}</span>
+            </div>
+            <div style={styles.actions}>
+              <button onClick={() => onEdit(inv)} style={styles.actionBtn} title="Edit">✏️</button>
+              {!isPaid && onMarkPaid && (
+                <button onClick={() => onMarkPaid(inv)} style={styles.actionBtn} title="Mark paid">✅</button>
+              )}
+              <button onClick={() => onDelete(inv.id)} style={styles.actionBtn} title="Delete">🗑️</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
 const styles = {
-  container: { padding: '0 24px 24px', maxWidth: 1200 },
-  pageHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 0 16px' },
-  pageTitle: { margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a2e' },
+  container: { padding: '0 16px 24px', maxWidth: 1200 },
+  pageHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0 12px' },
+  pageTitle: { margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a2e' },
   primaryBtn: {
     background: '#3d5a99', color: '#fff', border: 'none', borderRadius: 8,
-    padding: '9px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+    padding: '8px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer',
   },
-  tabs: { display: 'flex', gap: 4, borderBottom: '2px solid #e8e8f0', marginBottom: 24 },
+  tabs: { display: 'flex', gap: 0, borderBottom: '2px solid #e8e8f0', marginBottom: 16, overflowX: 'auto' },
   tab: {
-    background: 'none', border: 'none', padding: '10px 18px', fontSize: 14,
+    background: 'none', border: 'none', padding: '10px 14px', fontSize: 13,
     cursor: 'pointer', color: '#666', fontWeight: 500, borderBottom: '2px solid transparent',
-    marginBottom: -2,
+    marginBottom: -2, whiteSpace: 'nowrap', flexShrink: 0,
   },
   tabActive: { color: '#3d5a99', fontWeight: 700, borderBottomColor: '#3d5a99' },
-  tabContent: { display: 'flex', flexDirection: 'column', gap: 20 },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 },
+  tabContent: { display: 'flex', flexDirection: 'column', gap: 16 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 },
   statCard: {
-    background: '#fff', borderRadius: 12, padding: '20px 24px',
+    background: '#fff', borderRadius: 12, padding: '14px 16px',
     border: '1px solid #e8e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
   },
-  statLabel: { fontSize: 11, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 },
-  statValue: { fontSize: 28, fontWeight: 700 },
-  statSub: { fontSize: 12, color: '#888', marginTop: 4 },
-  panelRow: { display: 'flex', gap: 16 },
+  statLabel: { fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 },
+  statValue: { fontSize: 22, fontWeight: 700 },
+  statSub: { fontSize: 11, color: '#888', marginTop: 3 },
+  panelRow: { display: 'flex', flexDirection: 'column', gap: 12 },
   panel: {
-    flex: 1, background: '#fff', borderRadius: 12, padding: '16px 20px',
+    flex: 1, background: '#fff', borderRadius: 12, padding: '14px 16px',
     border: '1px solid #e8e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
   },
-  panelTitle: { fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 12 },
-  empty: { color: '#aaa', fontSize: 14, margin: 0 },
+  panelTitle: { fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 10 },
+  empty: { color: '#aaa', fontSize: 13, margin: 0 },
   txRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
     padding: '8px 0', borderBottom: '1px solid #f0f0f8',
@@ -345,27 +334,37 @@ const styles = {
   txRef: { fontSize: 13, fontWeight: 600, color: '#1a1a2e' },
   txAddr: { fontSize: 11, color: '#999', marginTop: 2 },
   txAmount: { fontSize: 13, fontWeight: 700, color: '#1a1a2e' },
-  invoiceSection: { background: '#fff', borderRadius: 12, padding: '16px 20px', border: '1px solid #e8e8f0' },
+  invoiceSection: { background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e8e8f0' },
   sectionHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f8',
+    marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f0f0f8',
   },
-  sectionLabel: { fontSize: 14, fontWeight: 700, color: '#e8a020' },
-  sectionTotal: { fontSize: 16, fontWeight: 700, color: '#e8a020' },
-  emptyState: { textAlign: 'center', padding: '60px 20px', color: '#aaa' },
-  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  sectionLabel: { fontSize: 13, fontWeight: 700, color: '#e8a020' },
+  sectionTotal: { fontSize: 15, fontWeight: 700, color: '#e8a020' },
+  emptyState: { textAlign: 'center', padding: '40px 20px', color: '#aaa' },
+  emptyIcon: { fontSize: 36, marginBottom: 10 },
+  // Mobile invoice cards instead of table
+  invoiceCard: {
+    padding: '12px 0', borderBottom: '1px solid #f0f0f8',
+    display: 'flex', flexDirection: 'column', gap: 4,
+  },
+  invoiceCardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  invoiceCardRef: { fontSize: 13, fontWeight: 700, color: '#3d5a99' },
+  invoiceCardAmount: { fontSize: 14, fontWeight: 700, color: '#1a1a2e' },
+  invoiceCardAddr: { fontSize: 12, color: '#1a1a2e', fontWeight: 500 },
+  invoiceCardClient: { fontSize: 11, color: '#999' },
+  invoiceCardBottom: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  invoiceCardDate: { fontSize: 11, color: '#999' },
+  actions: { display: 'flex', gap: 6 },
+  actionBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 4px', borderRadius: 4 },
+  // Keep table styles for desktop fallback
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: {
-    padding: '8px 12px', fontSize: 11, fontWeight: 700, color: '#aaa',
-    textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '2px solid #f0f0f8', textAlign: 'left',
-  },
+  th: { padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '2px solid #f0f0f8', textAlign: 'left' },
   tr: { transition: 'background 0.15s' },
-  td: { padding: '10px 12px', fontSize: 13, borderBottom: '1px solid #f8f8fc', color: '#333', verticalAlign: 'middle' },
+  td: { padding: '10px 10px', fontSize: 13, borderBottom: '1px solid #f8f8fc', color: '#333', verticalAlign: 'middle' },
   invRef: { fontWeight: 700, color: '#3d5a99' },
   addr: { color: '#1a1a2e', fontWeight: 500 },
   client: { fontSize: 11, color: '#999', marginTop: 2 },
-  actions: { display: 'flex', gap: 6 },
-  actionBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 4px', borderRadius: 4 },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
   confirmModal: { background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
   cancelBtn: { padding: '8px 18px', borderRadius: 8, border: '1px solid #dde0ee', background: '#fff', cursor: 'pointer', fontSize: 14 },
