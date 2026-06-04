@@ -294,6 +294,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [dictationPreview, setDictationPreview] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -412,7 +413,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   }, [selectedProjectId, projectSessions, globalSessions]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
   useEffect(() => {
@@ -780,7 +781,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
     // Mobile Chrome speech recognition already re-emits previous phrases internally.
     // Do NOT merge on mobile or the transcript snowballs exponentially.
     if (isMobileVoiceBrowser()) {
-      setInput(cleanVoiceTranscript(transcript));
+      const cleaned = cleanVoiceTranscript(transcript);
+      setInput(cleaned);
+      setDictationPreview(cleaned);
       requestAnimationFrame(resizeTextarea);
       textareaRef.current?.focus();
       return;
@@ -791,12 +794,18 @@ export default function MainChat({ onOpenComposer, onClose }) {
     const next = mergeVoiceWithBase(voiceBaseRef.current, transcript);
 
     setInput(next);
+    setDictationPreview(next);
     requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
   };
 
+  const handleVoicePreview = (phrase) => {
+    if (phrase) setDictationPreview(phrase);
+  };
+
   const handleTextChange = (event) => {
     voiceBaseRef.current = '';
+    setDictationPreview('');
     setInput(event.target.value);
   };
 
@@ -969,8 +978,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
           <div className="ai-full-input">
             <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
-              <VoiceInput onTranscript={handleVoice} disabled={loading} stopSignal={voiceStopSignal} />
+              <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading} stopSignal={voiceStopSignal} />
 
+              {dictationPreview && !input && (
+                <div style={{ fontSize: 12, color: '#9ca3af', padding: '4px 8px', fontStyle: 'italic', lineHeight: 1.4 }}>
+                  {dictationPreview}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 className="ai-textarea"
@@ -1278,3 +1292,4 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
