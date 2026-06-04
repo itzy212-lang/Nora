@@ -320,7 +320,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   }, [sessions, projectId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, loading]);
 
   const resizeTextarea = useCallback(() => {
@@ -659,6 +659,10 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleVoicePreview = (phrase) => {
+    if (phrase) setDictationPreview(phrase);
   };
 
   const handleVoice = (transcript) => {
@@ -1028,7 +1032,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 +
               </button>
 
-              <VoiceInput onTranscript={handleVoice} disabled={loading || uploading} stopSignal={voiceStopSignal} />
+              <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading || uploading} stopSignal={voiceStopSignal} />
 
               <textarea
                 ref={textareaRef}
@@ -1072,3 +1076,4 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
