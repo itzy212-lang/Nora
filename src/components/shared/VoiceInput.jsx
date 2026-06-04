@@ -215,7 +215,8 @@ export default function VoiceInput({
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || `Transcription failed with status ${response.status}`);
+        const detail = payload?.error || payload?.message || JSON.stringify(payload) || '';
+        throw new Error(`Transcription failed (${response.status})${detail ? ': ' + detail : ''}`);
       }
 
       const text = cleanText(payload.text || '');
@@ -239,7 +240,8 @@ export default function VoiceInput({
       }
     } catch (error) {
       console.error('[VoiceInput] mobile transcription failed:', error);
-      alert(error?.message || 'Voice transcription failed. Please try again.');
+      const msg = error?.message || 'Voice transcription failed. Please try again.';
+      alert(`[Transcription error — please screenshot this]\n\n${msg}`);
     } finally {
       setTranscribing(false);
       setRecording(false);
@@ -507,3 +509,4 @@ export default function VoiceInput({
     </button>
   );
 }
+
