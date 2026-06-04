@@ -97,6 +97,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const { state } = useApp();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [dictationPreview, setDictationPreview] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [summarising, setSummarising] = useState(false);
@@ -108,7 +109,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const { send } = useEly({ surface: 'email_composer' });
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
   const resizeTextarea = useCallback(() => {
@@ -192,6 +193,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     stopVoice();
     setInput('');
+    setDictationPreview('');
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -249,13 +251,19 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     const next = base ? `${base} ${transcript}` : transcript;
 
     setInput(next);
+    setDictationPreview(next);
 
     requestAnimationFrame(resizeTextarea);
     textareaRef.current?.focus();
   };
 
+  const handleVoicePreview = (phrase) => {
+    if (phrase) setDictationPreview(phrase);
+  };
+
   const handleTextChange = (e) => {
     voiceBaseRef.current = '';
+    setDictationPreview('');
     setInput(e.target.value);
   };
 
@@ -334,8 +342,14 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
         <div className="draft-ely-input">
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
+            {dictationPreview && !input && (
+              <div style={{ fontSize: 12, color: '#9ca3af', padding: '4px 8px', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {dictationPreview}
+              </div>
+            )}
             <VoiceInput
               onTranscript={handleVoice}
+              onPreview={handleVoicePreview}
               disabled={loading}
               stopSignal={voiceStopSignal}
             />
@@ -373,3 +387,4 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
