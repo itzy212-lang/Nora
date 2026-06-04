@@ -298,9 +298,9 @@ export default function VoiceInput({
       recorder.start();
       setRecording(true);
 
-      onPreview?.('Recording audio…', {
+      onPreview?.('🔴 Recording… speak now, then tap Send', {
         recording: true,
-        currentPhrase: 'Recording audio…',
+        currentPhrase: '🔴 Recording… speak now, then tap Send',
         interim: '',
         final: '',
       });
@@ -468,6 +468,8 @@ export default function VoiceInput({
   const active = recording || transcribing;
 
   return (
+    <>
+    <style>{`@keyframes voicePulse { 0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,0.2)} 50%{box-shadow:0 0 0 7px rgba(239,68,68,0.35)} }`}</style>
     <button
       type="button"
       className={`voice-btn${active ? ' listening recording' : ''}`}
@@ -480,7 +482,7 @@ export default function VoiceInput({
         height: 38,
         borderRadius: '50%',
         border: 'none',
-        background: 'transparent',
+        background: active ? 'rgba(239,68,68,0.12)' : 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -489,6 +491,9 @@ export default function VoiceInput({
         opacity: disabled || transcribing ? 0.45 : 1,
         flexShrink: 0,
         padding: 0,
+        boxShadow: active ? '0 0 0 4px rgba(239,68,68,0.18)' : 'none',
+        transition: 'box-shadow 0.3s, background 0.3s',
+        animation: recording ? 'voicePulse 1.2s ease-in-out infinite' : 'none',
       }}
     >
       <svg
@@ -507,6 +512,8 @@ export default function VoiceInput({
         <path d="M8 22h8" />
       </svg>
     </button>
+    </>
   );
 }
+
 
