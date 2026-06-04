@@ -153,7 +153,11 @@ Only enter drafting mode when Itzik clearly asks for drafting, for example:
 - respond by saying
 
 DICTATION OVERRIDE:
-If Itzik clearly begins dictating correspondence, for example starting with Dear, Hi, Hello, Good morning, Thank you for your email, or similar, treat that as drafting/editor mode. Structure and polish the dictated content without turning it into strategic analysis.
+If Itzik is clearly providing content to be turned into correspondence, switch to drafting/editor mode immediately. This includes:
+- Starting with a greeting: Dear, Hi, Hello, Good morning, Thank you for your email, Further to, Following our, I refer to, etc.
+- Giving a direction: tell them, say that, change it to, update the, amend it, add in, just say, basically say, etc.
+- Providing a spoken brief or raw content that is clearly meant to become an email or letter, even if not starting with a greeting.
+Do not treat these as analysis requests. Structure and polish the content into professional correspondence.
 
 THREAD AND DISPUTE REVIEW:
 When correspondence, an email thread, a chain of messages or a dispute history is available, review the whole context before responding.
@@ -435,8 +439,20 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
 }
 
 function looksLikeDictation(prompt = '') {
-  const p = String(prompt || '').trim().toLowerCase();
-  return /^(dear|hi|hello|good morning|good afternoon|thank you for your email|thanks for your email)[\s,]/i.test(p);
+  const p = String(prompt || '').trim();
+
+  // Classic greeting-led dictation
+  if (/^(dear|hi|hello|good morning|good afternoon|thank you for your email|thanks for your email|further to|following our|i refer to|i write|i am writing|please find|with reference to|just to confirm|just to let you know|as discussed|as agreed|following up|i wanted to|i would like to|please note|please be advised|we write|we refer|we are writing|we confirm|we note)[\s,]/i.test(p)) return true;
+
+  // User giving direction to write or change something
+  if (/^(tell them|let them know|say that|write to|respond to|reply to|send an email|draft something|i need to say|i want to say|i need to tell|can you write|can you draft|just say|basically say|change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)/i.test(p)) return true;
+
+  // Long prompt with no analysis trigger — treat as a drafting brief
+  const hasAnalysisTrigger = /(what do you think|can he do that|is that right|is that a breach|talk me through|let's discuss|am i missing|what's your view|what's his angle|why is he saying|how would a|chat through|help me form|not looking for a draft)/i.test(p);
+  const wordCount = p.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 20 && !hasAnalysisTrigger) return true;
+
+  return false;
 }
 
 function hasExplicitDraftRequest(prompt = '') {
@@ -812,3 +828,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
