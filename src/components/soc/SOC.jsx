@@ -12,6 +12,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [messages, setMessages] = useState([]); // chat bubbles
   const [interimText, setInterimText] = useState(''); // live preview line
   const [isRecording, setIsRecording] = useState(false);
+  const [textInput, setTextInput] = useState('');
   const [processing, setProcessing] = useState(false);
   const [pdfProcessing, setPdfProcessing] = useState(false);
   const [selectedAOIndex, setSelectedAOIndex] = useState('0');
@@ -164,12 +165,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   }, []);
 
   // Send current note as a chat bubble, respond with "Noted."
-  const handleSend = useCallback(() => {
-    const note = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
+  const handleSend = useCallback((overrideText) => {
+    const voiceNote = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
+    const note = overrideText || voiceNote || textInput.trim();
     if (!note) return;
 
     stopRecording();
     setInterimText('');
+    setTextInput('');
     committedRef.current = '';
     accumulatedRef.current = '';
     interimRef.current = '';
@@ -180,7 +183,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       { id: noteId, role: 'user', content: note },
       { id: uid(), role: 'ely', content: 'Noted.' },
     ]);
-  }, [stopRecording]);
+  }, [stopRecording, textInput]);
 
   const handleMicClick = useCallback(() => {
     if (isRecording) {
@@ -364,33 +367,64 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
 
         {/* Input bar */}
-        <div style={s.inputBar}>
-          {/* Mic button */}
-          <button onClick={handleMicClick} style={isRecording ? s.micActive : s.micIdle} title={isRecording ? 'Send note' : 'Start recording'}>
-            {isRecording ? (
-              // Send icon when recording
+        <div style={{ ...s.inputBar, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            {/* Mic button */}
+            <button onClick={handleMicClick} style={isRecording ? s.micActive : s.micIdle} title={isRecording ? 'Stop recording' : 'Start recording'}>
+              {isRecording ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="6" y="6" width="12" height="12" rx="2"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Text input */}
+            <textarea
+              style={{ ...s.input, flex: 1, minHeight: 38, maxHeight: 120, resize: 'vertical', fontSize: 13, padding: '8px 10px', lineHeight: 1.4 }}
+              placeholder={isRecording ? '● Recording… or type/paste here' : 'Type, paste or tap mic to dictate…'}
+              value={textInput}
+              onChange={e => setTextInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            />
+
+            {/* Send button */}
+            <button
+              onClick={() => handleSend()}
+              disabled={!textInput.trim() && !isRecording && !interimText}
+              style={{
+                ...s.micIdle,
+                opacity: (!textInput.trim() && !isRecording && !interimText) ? 0.35 : 1,
+                background: 'var(--accent, #6366f1)',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '0 12px',
+                height: 38,
+                minWidth: 38,
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+              title="Send note"
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
               </svg>
-            ) : (
-              // Mic icon when idle
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            )}
-          </button>
-
-          {/* Status text */}
-          <div style={{ flex: 1, fontSize: 12.5, color: isRecording ? 'var(--red)' : 'var(--text3)', fontStyle: isRecording ? 'normal' : 'italic' }}>
-            {isRecording ? '● Recording — tap to send' : 'Tap mic to record'}
+            </button>
           </div>
 
-          {/* Recording indicator dot */}
-          {isRecording && <div style={s.recDot} />}
+          {/* Live dictation preview */}
+          {(isRecording || interimText) && (
+            <div style={{ fontSize: 12, color: 'var(--red, #ef4444)', fontStyle: 'italic', paddingLeft: 4 }}>
+              {interimText || '● Recording… speak now'}
+            </div>
+          )}
         </div>
 
         <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
@@ -505,3 +539,4 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
