@@ -4,14 +4,6 @@ export const config = {
   },
 };
 
-import { Readable } from 'stream';
-import OpenAI from 'openai';
-import { toFile } from 'openai';
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -34,26 +26,16 @@ function parseMultipart(body, boundary) {
   while (start < body.length) {
     const delimIdx = body.indexOf(delimiter, start);
     if (delimIdx === -1) break;
-
     const afterDelim = delimIdx + delimiter.length;
-
-    // Check for final boundary (--)
     if (body[afterDelim] === 45 && body[afterDelim + 1] === 45) break;
-
-    // Skip CRLF after boundary
     const headerStart = afterDelim + 2;
     const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), headerStart);
     if (headerEnd === -1) break;
-
     const headers = body.slice(headerStart, headerEnd).toString('utf8');
     const contentStart = headerEnd + 4;
-
     const nextDelim = body.indexOf(delimiter, contentStart);
     if (nextDelim === -1) break;
-
-    // Content ends 2 bytes before the next delimiter (CRLF)
     const content = body.slice(contentStart, nextDelim - 2);
-
     parts.push({ headers, content });
     start = nextDelim;
   }
@@ -83,6 +65,11 @@ export default async function handler(req, res) {
   }
 
   try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ success: false, error: 'OPENAI_API_KEY is not set' });
+    }
+
     const contentType = req.headers['content-type'] || '';
     const boundary = parseBoundary(contentType);
 
@@ -97,35 +84,60 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No parts parsed from multipart body', bodyLength: rawBody.length });
     }
 
-    // Find the audio part
     const audioPart = parts.find(p => {
       const cd = getHeaderValue(p.headers, 'content-disposition');
       return cd.includes('name="audio"') || cd.includes('name="file"');
     }) || parts[0];
 
     if (!audioPart || !audioPart.content?.length) {
-      return res.status(400).json({ error: 'No audio content found in upload', parts: parts.length });
+      return res.status(400).json({ error: 'No audio content found', parts: parts.length });
     }
 
     const filename = getFilenameFromHeaders(audioPart.headers);
     const mimeType = getMimeFromHeaders(audioPart.headers);
 
-    console.log('[transcribe] audio part:', { filename, mimeType, size: audioPart.content.length });
+    console.log('[transcribe] audio:', { filename, mimeType, size: audioPart.content.length });
 
-    const audioFile = await toFile(
-      Readable.from(audioPart.content),
-      filename,
-      { type: mimeType }
+    // Build multipart form for OpenAI directly via fetch — no SDK needed
+    const boundary2 = '----OpenAIBoundary' + Date.now();
+    const CRLF = '\r\n';
+
+    const header = Buffer.from(
+      `--${boundary2}${CRLF}` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}` +
+      `Content-Type: ${mimeType}${CRLF}${CRLF}`
+    );
+    const modelPart = Buffer.from(
+      `${CRLF}--${boundary2}${CRLF}` +
+      `Content-Disposition: form-data; name="model"${CRLF}${CRLF}` +
+      `whisper-1${CRLF}` +
+      `--${boundary2}--${CRLF}`
     );
 
-    const transcription = await client.audio.transcriptions.create({
-      file: audioFile,
-      model: 'whisper-1',
+    const formBody = Buffer.concat([header, audioPart.content, modelPart]);
+
+    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary2}`,
+      },
+      body: formBody,
     });
+
+    const whisperData = await whisperRes.json().catch(() => ({}));
+
+    if (!whisperRes.ok) {
+      return res.status(500).json({
+        success: false,
+        error: whisperData?.error?.message || `OpenAI returned ${whisperRes.status}`,
+        whisperStatus: whisperRes.status,
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      text: transcription.text || '',
+      text: whisperData.text || '',
     });
 
   } catch (error) {
