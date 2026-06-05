@@ -3015,6 +3015,28 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       aos: updatedAOs,
       ...(data || {}),
     }));
+
+    // Auto-create OneDrive subfolder for new AOs
+    if (!existingAO) {
+      const aoAddress = form.premise || '';
+      const projectFolderId = project.onedrive_folder_id || data?.onedrive_folder_id;
+      if (aoAddress && projectFolderId) {
+        try {
+          await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'create_ao_folder',
+              project_folder_id: projectFolderId,
+              ao_address: aoAddress,
+            }),
+          });
+        } catch (err) {
+          console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);
+        }
+      }
+    }
   }, [project, role]);
 
   const updateAORecord = useCallback(async (ao, patch) => {
