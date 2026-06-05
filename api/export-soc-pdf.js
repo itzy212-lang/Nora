@@ -1,3 +1,5 @@
+import { uploadToOneDrive, getProjectFolderInfo, saveDocumentRecord } from './onedrive-helper.js';
+
 const API2PDF_ENDPOINT = 'https://v2.api2pdf.com/chrome/pdf/html';
 
 function getApiKey() {
@@ -91,7 +93,7 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { html, filename = 'Schedule of Condition.pdf', ao_address = '' } = req.body || {};
+    const { html, filename = 'Schedule of Condition.pdf', ao_address = '', project_id, ao_id, user_id = 'help@sq1consulting.co.uk' } = req.body || {};
 
     if (!html || !String(html).trim()) {
       return res.status(400).json({ error: 'Missing html' });
@@ -157,6 +159,34 @@ export default async function handler(req, res) {
       .replace(/[\\/:*?"<>|]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+
+    // Upload to OneDrive and save document record (non-blocking)
+    if (project_id) {
+      try {
+        const projectInfo = await getProjectFolderInfo(project_id);
+        const folderId = projectInfo?.onedrive_folder_id;
+        if (folderId) {
+          const uploaded = await uploadToOneDrive({
+            userId: user_id,
+            folderId,
+            fileName: safeFilename,
+            buffer,
+            mimeType: 'application/pdf',
+          });
+          await saveDocumentRecord({
+            projectId: project_id,
+            aoId: ao_id || null,
+            fileName: safeFilename,
+            category: 'soc',
+            mimeType: 'application/pdf',
+            oneDriveItemId: uploaded?.item_id || null,
+            oneDriveUrl: uploaded?.web_url || null,
+          });
+        }
+      } catch (odErr) {
+        console.warn('[export-soc-pdf] OneDrive upload failed:', odErr.message);
+      }
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
