@@ -288,19 +288,16 @@ export default function ProjectList({ onOpenProject }) {
         // 2. Create AO subfolders for each AO in this project
         if (folderId) {
           const aos = Array.isArray(project.aos) ? project.aos : [];
-          for (const ao of aos) {
-            const aoAddress = ao.premise || ao.reg_addr || ao.name;
+          let aosUpdated = false;
+          const updatedAos = [...aos];
+
+          for (let i = 0; i < updatedAos.length; i++) {
+            const ao = updatedAos[i];
+            const aoAddress = ao.premise || ao.address || ao.name;
             if (!aoAddress) continue;
 
-            // Check if this AO already has a folder recorded
-            const { data: aoRow } = await sb
-              .from('adjoining_owners')
-              .select('id, onedrive_folder_id')
-              .eq('project_id', project.id)
-              .ilike('address', `%${(aoAddress || '').slice(0, 20)}%`)
-              .maybeSingle();
-
-            if (aoRow?.onedrive_folder_id) continue;
+            // Skip if already has a folder
+            if (ao.onedrive_folder_id) continue;
 
             try {
               const res = await fetch('/api/onedrive-folder', {
@@ -315,18 +312,22 @@ export default function ProjectList({ onOpenProject }) {
               });
               const data = await res.json();
               if (data.success && data.folder_id) {
-                // Save to adjoining_owners table if row exists
-                if (aoRow?.id) {
-                  await sb.from('adjoining_owners').update({
-                    onedrive_folder_id: data.folder_id,
-                    onedrive_folder_url: data.web_url || null,
-                  }).eq('id', aoRow.id);
-                }
+                updatedAos[i] = {
+                  ...ao,
+                  onedrive_folder_id: data.folder_id,
+                  onedrive_folder_url: data.web_url || null,
+                };
+                aosUpdated = true;
                 aosCreated++;
               } else {
                 failed++;
               }
             } catch { failed++; }
+          }
+
+          // Save updated aos array back to project
+          if (aosUpdated) {
+            await sb.from('projects').update({ aos: updatedAos }).eq('id', project.id);
           }
         }
       }
