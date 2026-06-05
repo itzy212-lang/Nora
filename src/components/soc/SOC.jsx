@@ -252,7 +252,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       const response = await fetch('/api/export-soc-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: previewHtml, filename: `${safeFilename}.pdf`, ao_address: selectedAOAddress }),
+        body: JSON.stringify({ 
+          html: previewHtml, 
+          filename: `${safeFilename}.pdf`, 
+          ao_address: selectedAOAddress,
+          project_id: projectId || null,
+          ao_id: selectedAO?.id || selectedAO?.num || null,
+          user_id: 'help@sq1consulting.co.uk',
+        }),
       });
       if (!response.ok) { const p = await response.json().catch(() => ({})); throw new Error(p.error || 'Could not generate PDF.'); }
       const blob = await response.blob();
