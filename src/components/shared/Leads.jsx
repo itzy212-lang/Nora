@@ -222,8 +222,8 @@ export default function Leads() {
       console.log('[Convert] insert result:', JSON.stringify({ insertData, error }, null, 2));
       if (error) throw new Error(JSON.stringify(error));
 
-      // Mark lead as won
-      await sb.from('leads').update({ status: 'won', lead_stage: 'won' }).eq('id', lead.id);
+      // Delete the lead now it's been converted
+      await sb.from('leads').delete().eq('id', lead.id);
 
       setShowModal(false);
       await load();
