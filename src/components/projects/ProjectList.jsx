@@ -92,6 +92,56 @@ function ProjectCard({ project, onClick }) {
   const displayAddress = getAppointmentAddress(project);
   const appointmentName = getAppointmentName(project);
 
+  const handleSyncOneDrive = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data: projects } = await import('../../supabaseClient').then(m => m.default
+        ? m.default.from('projects').select('id, bo_premise_address, onedrive_folder_id')
+        : Promise.resolve({ data: [] })
+      );
+
+      const sb = (await import('../../supabaseClient')).default;
+      const toSync = (projects || []).filter(p => !p.onedrive_folder_id && p.bo_premise_address);
+
+      let created = 0;
+      let failed = 0;
+
+      for (const project of toSync) {
+        try {
+          const res = await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'create_project_folder',
+              project_address: project.bo_premise_address,
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.folder_id) {
+            await sb.from('projects').update({
+              onedrive_folder_id: data.folder_id,
+              onedrive_folder_url: data.web_url || null,
+            }).eq('id', project.id);
+            created++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      setSyncResult({ total: toSync.length, created, failed });
+      await loadProjects();
+    } catch (err) {
+      setSyncResult({ error: err.message });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div
       onClick={() => onClick(project)}
@@ -212,6 +262,8 @@ export default function ProjectList({ onOpenProject }) {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -301,6 +353,27 @@ export default function ProjectList({ onOpenProject }) {
         </button>
 
         <button
+          className="btn btn-ghost btn-sm"
+          style={{ cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb' }}
+          onClick={handleSyncOneDrive}
+          disabled={syncing}
+          title="Create OneDrive folders for any projects that don't have one yet"
+        >
+          {syncing ? '⏳ Syncing…' : '☁ Sync OneDrive'}
+        </button>
+
+        {syncResult && !syncing && (
+          <span style={{ fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a' }}>
+            {syncResult.error
+              ? `Error: ${syncResult.error}`
+              : syncResult.total === 0
+              ? '✓ All folders already synced'
+              : `✓ ${syncResult.created} folder${syncResult.created !== 1 ? 's' : ''} created${syncResult.failed ? `, ${syncResult.failed} failed` : ''}`
+            }
+          </span>
+        )}
+
+        <button
           className="btn btn-primary btn-sm"
           style={{ cursor: 'pointer' }}
           onClick={() => setShowNewProject(true)}
@@ -334,3 +407,4 @@ export default function ProjectList({ onOpenProject }) {
     </div>
   );
 }
+
