@@ -75,6 +75,33 @@ export function useProjects() {
       .select()
       .single();
     if (error) throw error;
+
+    // Create OneDrive folder if not already created
+    const boAddress = projectData.address || projectData.bo_premise_address || '';
+    const alreadyHasFolder = projectData.onedrive_folder_id || data?.onedrive_folder_id;
+    if (boAddress && !alreadyHasFolder) {
+      try {
+        const folderRes = await fetch('/api/onedrive-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: 'help@sq1consulting.co.uk',
+            action: 'create_project_folder',
+            project_address: boAddress,
+          }),
+        });
+        const folderData = await folderRes.json();
+        if (folderData.success && folderData.folder_id) {
+          await sb.from('projects').update({
+            onedrive_folder_id: folderData.folder_id,
+            onedrive_folder_url: folderData.web_url || null,
+          }).eq('id', data.id);
+        }
+      } catch (folderErr) {
+        console.warn('[saveProject] OneDrive folder creation failed:', folderErr.message);
+      }
+    }
+
     await loadProjects();
     return data;
   }, [loadProjects]);
