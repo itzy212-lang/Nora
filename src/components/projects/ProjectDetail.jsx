@@ -3951,47 +3951,73 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       {tab === 'documents' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-            <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>
-              + Upload
-            </button>
-          </div>
-
           <div style={{ ...card() }}>
             {docs.length === 0 ? (
               <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
-                No documents uploaded yet.
+                No documents yet. Documents will appear here automatically when notices, SOCs, awards and invoices are generated.
               </div>
             ) : (
-              docs.map((d, i) => (
-                <div key={d.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  borderBottom: i < docs.length - 1 ? '1px solid var(--border)' : 'none',
-                }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-                      📄 {d.file_name}
-                    </div>
+              docs.map((d, i) => {
+                const oneDriveUrl = d.metadata?.onedrive_url || null;
+                const oneDriveItemId = d.metadata?.onedrive_item_id || null;
+                const categoryLabel = {
+                  notice: '📋 Notice', soc: '🏠 SOC', award: '⚖️ Award',
+                  invoice: '💷 Invoice', loa: '✉️ LOA', document: '📄 Document',
+                }[d.category || d.section_type] || '📄 Document';
 
-                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                      {fmtDate(d.created_at)}
+                const handleEmail = () => {
+                  if (!oneDriveUrl) { alert('No OneDrive link for this document.'); return; }
+                  onOpenComposer?.({
+                    mode: 'compose',
+                    projectId: project.id,
+                    subject: d.file_name?.replace(/\.pdf$/i, '') || 'Document',
+                    body: `Dear [Recipient],
+
+Please find attached ${d.file_name || 'the document'}.
+
+Kind regards,
+Itzik`,
+                    oneDriveAttachment: { name: d.file_name, url: oneDriveUrl, item_id: oneDriveItemId },
+                  });
+                };
+
+                return (
+                  <div key={d.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderBottom: i < docs.length - 1 ? '1px solid var(--border)' : 'none',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                        {categoryLabel} {d.file_name}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
+                        {fmtDate(d.created_at)}
+                        {oneDriveUrl ? ' · OneDrive' : ' · Supabase'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {oneDriveUrl && (
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          style={{ cursor: 'pointer', borderRadius: 99 }}
+                          onClick={() => window.open(oneDriveUrl, '_blank')}
+                        >
+                          Open
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        style={{ cursor: 'pointer', borderRadius: 99 }}
+                        onClick={handleEmail}
+                        title="Email this document"
+                      >
+                        Email
+                      </button>
                     </div>
                   </div>
-
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-                      Preview
-                    </button>
-
-                    <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>
-                      DOCX
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
