@@ -55,6 +55,7 @@ export default function useDocumentGenerator() {
 
       const enrichedMergeData = { ...(mergeData || {}) };
       if (projectId) enrichedMergeData.project_id = projectId;
+      enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
 
       const response = await fetch('/api/generate-doc', {
         method: 'POST',
@@ -112,6 +113,7 @@ export default function useDocumentGenerator() {
 
       const enrichedMergeData = { ...(mergeData || {}) };
       if (projectId) enrichedMergeData.project_id = projectId;
+      enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
 
       const genResponse = await fetch('/api/generate-doc', {
         method: 'POST',
