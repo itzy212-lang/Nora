@@ -3016,13 +3016,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ...(data || {}),
     }));
 
-    // Auto-create OneDrive subfolder for new AOs
+    // Auto-create OneDrive subfolder for new AOs and save folder ID back
     if (!existingAO) {
       const aoAddress = form.premise || '';
       const projectFolderId = project.onedrive_folder_id || data?.onedrive_folder_id;
       if (aoAddress && projectFolderId) {
         try {
-          await fetch('/api/onedrive-folder', {
+          const folderRes = await fetch('/api/onedrive-folder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3032,6 +3032,19 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               ao_address: aoAddress,
             }),
           });
+          const folderData = await folderRes.json();
+          if (folderData.success && folderData.folder_id) {
+            // Save folder ID into the AO's entry in the aos array
+            const withFolder = updatedAOs.map(a =>
+              a.id === newAO.id ? {
+                ...a,
+                onedrive_folder_id: folderData.folder_id,
+                onedrive_folder_url: folderData.web_url || null,
+              } : a
+            );
+            await updateProjectSafely(project.id, { aos: withFolder });
+            setProject(prev => ({ ...prev, aos: withFolder }));
+          }
         } catch (err) {
           console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);
         }
