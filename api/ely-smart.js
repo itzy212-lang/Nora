@@ -812,7 +812,7 @@ ${JSON.stringify(draftingExamples, null, 2)}
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
+function buildMessages({ body, systemPrompt, scopedEmailContext = [], attachmentContext = null }) {
   const { prompt, chatHistory = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -825,8 +825,43 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
     });
   }
 
+  // Build user message — handle attachments (images go to vision, text gets prepended)
   if (prompt?.trim()) {
-    messages.push({ role: 'user', content: prompt.trim() });
+    if (attachmentContext?.length) {
+      // Separate images from text attachments
+      const imageAtts = attachmentContext.filter(a => a.type === 'image' && a.base64);
+      const textAtts  = attachmentContext.filter(a => a.type === 'text' && a.text);
+
+      // Build text prefix for text attachments
+      let textPrefix = '';
+      if (textAtts.length) {
+        textPrefix = textAtts.map(a =>
+          `[ATTACHMENT: ${a.filename}]
+${a.text}
+[END ATTACHMENT]`
+        ).join('
+
+') + '
+
+';
+      }
+
+      if (imageAtts.length) {
+        // GPT-4o vision — build multipart message
+        const content = [
+          { type: 'text', text: textPrefix + prompt.trim() },
+          ...imageAtts.map(a => ({
+            type: 'image_url',
+            image_url: { url: `data:${a.content_type};base64,${a.base64}` },
+          })),
+        ];
+        messages.push({ role: 'user', content });
+      } else {
+        messages.push({ role: 'user', content: textPrefix + prompt.trim() });
+      }
+    } else {
+      messages.push({ role: 'user', content: prompt.trim() });
+    }
   } else if (emailContextText) {
     const mode = String(body.mode || body.workflowStage || '').toLowerCase();
     const instruction = mode.includes('email_thread_summary') || mode.includes('summary')
@@ -890,7 +925,30 @@ export default async function handler(req, res) {
       draftingExamples,
     });
 
-    const messages = buildMessages({ body, systemPrompt, scopedEmailContext });
+    // Detect if user is asking about an attachment and fetch it
+    let attachmentContext = null;
+    const prompt = body.prompt || '';
+    const isAskingAboutAttachment = /attach|document|file|pdf|spreadsheet|image|photo|picture|scope of works|report|drawing|plan|letter|certificate/i.test(prompt);
+
+    if (isAskingAboutAttachment && projectId) {
+      try {
+        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+        const attRes = await fetch(`${baseUrl}/api/fetch-attachment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId }),
+        });
+        const attData = await attRes.json();
+        if (attData.success && attData.attachments?.length) {
+          attachmentContext = attData.attachments;
+          console.log(`[ely-smart] found ${attData.attachments.length} attachments for project ${projectId}`);
+        }
+      } catch (attErr) {
+        console.warn('[ely-smart] attachment fetch failed:', attErr.message);
+      }
+    }
+
+    const messages = buildMessages({ body, systemPrompt, scopedEmailContext, attachmentContext });
 
     console.log(
       `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} suppliedEmail=${suppliedEmailContext ? 'yes' : 'no'} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
