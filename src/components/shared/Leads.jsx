@@ -217,8 +217,10 @@ export default function Leads() {
         projectData.ao_premise_address = lead.project_address || null;
       }
 
-      const { error } = await sb.from('projects').insert([projectData]);
-      if (error) throw error;
+      console.log('[Convert] projectData:', JSON.stringify(projectData, null, 2));
+      const { data: insertData, error } = await sb.from('projects').insert([projectData]).select();
+      console.log('[Convert] insert result:', JSON.stringify({ insertData, error }, null, 2));
+      if (error) throw new Error(JSON.stringify(error));
 
       // Mark lead as won
       await sb.from('leads').update({ status: 'won', lead_stage: 'won' }).eq('id', lead.id);
