@@ -1,5 +1,6 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import { uploadToOneDrive, getProjectFolderInfo, saveDocumentRecord } from './onedrive-helper.js';
 import { createClient } from '@supabase/supabase-js';
 
 function getServerClient() {
@@ -242,12 +243,53 @@ export default async function handler(req, res) {
 
     const pdfB64 = await convertDocxToPdf(rendered.buffer, fileName);
 
+    // Upload to OneDrive
+    const projectId = merge_data?.project_id || body?.project_id || null;
+    const aoId = merge_data?.ao_id || body?.ao_id || null;
+    const userId = merge_data?.user_id || body?.user_id || 'help@sq1consulting.co.uk';
+    const category = merge_data?.template_type || body?.template_type || 'document';
+    let oneDriveUrl = null;
+    let oneDriveItemId = null;
+
+    if (projectId) {
+      try {
+        const projectInfo = await getProjectFolderInfo(projectId);
+        const folderId = projectInfo?.onedrive_folder_id;
+        if (folderId && pdfB64) {
+          const pdfBuffer = Buffer.from(pdfB64, 'base64');
+          const pdfName = fileName.replace(/\.docx$/i, '.pdf');
+          const uploaded = await uploadToOneDrive({
+            userId,
+            folderId,
+            fileName: pdfName,
+            buffer: pdfBuffer,
+            mimeType: 'application/pdf',
+          });
+          oneDriveUrl = uploaded?.web_url || null;
+          oneDriveItemId = uploaded?.item_id || null;
+          await saveDocumentRecord({
+            projectId,
+            aoId,
+            fileName: pdfName,
+            category,
+            mimeType: 'application/pdf',
+            oneDriveItemId,
+            oneDriveUrl,
+          });
+        }
+      } catch (odErr) {
+        console.warn('[generate-doc] OneDrive upload failed:', odErr.message);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       docx_b64:
         rendered.buffer.toString('base64'),
       pdf_b64: pdfB64,
       storage_path: null,
+      onedrive_url: oneDriveUrl,
+      onedrive_item_id: oneDriveItemId,
       doc_id: null,
     });
   } catch (err) {
