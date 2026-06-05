@@ -377,7 +377,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
   }
 
-  const { invoice, project_id, invoice_id } = req.body || {};
+  const { invoice, project_id, invoice_id, user_id, onedrive_folder_id } = req.body || {};
 
   if (!invoice) {
     return res.status(400).json({ error: 'No invoice provided' });
@@ -431,17 +431,49 @@ export default async function handler(req, res) {
     const buffer = Buffer.from(arrayBuffer);
     const base64 = buffer.toString('base64');
 
-    const { error: uploadError } = await sb.storage
-      .from('documents')
-      .upload(storagePath, buffer, {
-        contentType: 'application/pdf',
-        upsert: true,
-      });
+    let storagePath = null;
+    let oneDriveItemId = null;
+    let oneDriveUrl = null;
 
-    if (uploadError) throw uploadError;
+    // Try OneDrive first — look up folder_id from project if not supplied
+    let folderId = onedrive_folder_id;
+    if (!folderId && projectId) {
+      const { data: proj } = await sb.from('projects').select('onedrive_folder_id').eq('id', projectId).maybeSingle();
+      folderId = proj?.onedrive_folder_id || null;
+    }
+
+    if (folderId && user_id) {
+      try {
+        const uploadRes = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : ''}/api/onedrive-upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id,
+            folder_id: folderId,
+            filename: fileName,
+            content_base64: base64,
+            content_type: 'application/pdf',
+          }),
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success) {
+          oneDriveItemId = uploadData.item_id;
+          oneDriveUrl = uploadData.web_url;
+        }
+      } catch (odErr) {
+        console.warn('[generate-invoice-pdf] OneDrive upload failed:', odErr.message);
+      }
+    }
+
+    // Fall back to Supabase storage if OneDrive didn't work
+    if (!oneDriveItemId) {
+      const { error: uploadError } = await sb.storage
+        .from('documents')
+        .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
+      if (uploadError) console.warn('[generate-invoice-pdf] Storage fallback failed:', uploadError.message);
+    }
 
     let docId = null;
-
     if (projectId) {
       const { data: doc, error: docError } = await sb
         .from('documents')
@@ -451,7 +483,7 @@ export default async function handler(req, res) {
           file_type: 'pdf',
           category: 'invoice',
           section_type: 'invoice',
-          storage_path: storagePath,
+          storage_path: oneDriveItemId ? null : storagePath,
           status: 'generated',
           version: 1,
           created_at: new Date().toISOString(),
@@ -459,6 +491,8 @@ export default async function handler(req, res) {
             invoice_id: invoiceId,
             invoice_number: invoiceNumber,
             total: invoice.total || 0,
+            onedrive_item_id: oneDriveItemId || null,
+            onedrive_url: oneDriveUrl || null,
           },
         }])
         .select('id')
@@ -472,6 +506,8 @@ export default async function handler(req, res) {
       file_name: fileName,
       storage_path: storagePath,
       document_id: docId,
+      onedrive_url: oneDriveUrl,
+      onedrive_item_id: oneDriveItemId,
       base64: `data:application/pdf;base64,${base64}`,
     });
   } catch (err) {
@@ -480,3 +516,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
