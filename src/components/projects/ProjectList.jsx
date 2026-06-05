@@ -92,56 +92,6 @@ function ProjectCard({ project, onClick }) {
   const displayAddress = getAppointmentAddress(project);
   const appointmentName = getAppointmentName(project);
 
-  const handleSyncOneDrive = async () => {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const { data: projects } = await import('../../supabaseClient').then(m => m.default
-        ? m.default.from('projects').select('id, bo_premise_address, onedrive_folder_id')
-        : Promise.resolve({ data: [] })
-      );
-
-      const sb = (await import('../../supabaseClient')).default;
-      const toSync = (projects || []).filter(p => !p.onedrive_folder_id && p.bo_premise_address);
-
-      let created = 0;
-      let failed = 0;
-
-      for (const project of toSync) {
-        try {
-          const res = await fetch('/api/onedrive-folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
-              action: 'create_project_folder',
-              project_address: project.bo_premise_address,
-            }),
-          });
-          const data = await res.json();
-          if (data.success && data.folder_id) {
-            await sb.from('projects').update({
-              onedrive_folder_id: data.folder_id,
-              onedrive_folder_url: data.web_url || null,
-            }).eq('id', project.id);
-            created++;
-          } else {
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
-      }
-
-      setSyncResult({ total: toSync.length, created, failed });
-      await loadProjects();
-    } catch (err) {
-      setSyncResult({ error: err.message });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   return (
     <div
       onClick={() => onClick(project)}
@@ -292,6 +242,54 @@ export default function ProjectList({ onOpenProject }) {
   const handleCreated = (newProject) => {
     loadProjects();
     if (newProject) onOpenProject(newProject);
+  };
+
+  const handleSyncOneDrive = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const sb = (await import('../../supabaseClient')).default;
+      const { data: projects } = await sb
+        .from('projects')
+        .select('id, bo_premise_address, onedrive_folder_id');
+
+      const toSync = (projects || []).filter(p => !p.onedrive_folder_id && p.bo_premise_address);
+      let created = 0;
+      let failed = 0;
+
+      for (const project of toSync) {
+        try {
+          const res = await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'create_project_folder',
+              project_address: project.bo_premise_address,
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.folder_id) {
+            await sb.from('projects').update({
+              onedrive_folder_id: data.folder_id,
+              onedrive_folder_url: data.web_url || null,
+            }).eq('id', project.id);
+            created++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      setSyncResult({ total: toSync.length, created, failed });
+      await loadProjects();
+    } catch (err) {
+      setSyncResult({ error: err.message });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   return (
