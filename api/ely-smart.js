@@ -352,6 +352,13 @@ async function loadProjectBundle(projectId) {
     q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
   );
 
+  // Load SOC reports for this project (all AOs)
+  const socReports = await safeSelect(
+    'soc_reports',
+    'id, ao_id, ao_names, ao_address, bo_address, inspection_date, raw_notes, structured_data, proposed_works, status, created_at',
+    q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
+  );
+
   return {
     project_raw: project || null,
     project: normaliseProject(project || {}),
@@ -359,6 +366,7 @@ async function loadProjectBundle(projectId) {
     notices,
     documents,
     project_memory: projectMemory,
+    soc_reports: socReports,
   };
 }
 
@@ -684,6 +692,105 @@ ${compactJson(projectBundle, 22000)}
 RESOLVED PROJECT:
 ${compactJson(resolvedProject)}
 `;
+  }
+
+  // Inject SOC reports if available
+  const socReports = projectBundle?.soc_reports || [];
+  if (socReports.length > 0) {
+    const aoCount = (projectBundle?.adjoining_owners || []).length || 1;
+
+    let socBlock = `
+
+SCHEDULE OF CONDITION REPORTS (${socReports.length} report${socReports.length > 1 ? 's' : ''}):
+`;
+
+    if (aoCount > 1 || socReports.length > 1) {
+      socBlock += `This project has multiple adjoining owners. There is a separate Schedule of Condition for each AO.
+`;
+      socBlock += `When the user refers to a schedule of conditions, ask which adjoining owner they mean if it is not clear from context.
+`;
+      socBlock += `Match by AO name or address — do not mix up observations from different AOs.
+
+`;
+    }
+
+    socReports.forEach((soc, i) => {
+      const aoLabel = soc.ao_names || soc.ao_address || `AO ${i + 1}`;
+      socBlock += `--- SOC ${i + 1}: ${aoLabel} ---
+`;
+      socBlock += `Adjoining Owner: ${soc.ao_names || 'Unknown'}
+`;
+      socBlock += `AO Property: ${soc.ao_address || 'Unknown'}
+`;
+      socBlock += `Inspection Date: ${soc.inspection_date || 'Unknown'}
+`;
+      socBlock += `Status: ${soc.status || 'draft'}
+`;
+
+      if (soc.raw_notes) {
+        socBlock += `
+Raw Dictated Notes:
+${soc.raw_notes.slice(0, 4000)}
+`;
+      }
+
+      if (soc.structured_data) {
+        const sd = typeof soc.structured_data === 'string' ? JSON.parse(soc.structured_data) : soc.structured_data;
+
+        // Sections / observations
+        if (sd.sections?.length) {
+          socBlock += `
+Condition Observations by Section:
+`;
+          sd.sections.forEach(sec => {
+            socBlock += `  ${sec.title || 'Section'}:
+`;
+            (sec.rows || []).forEach(row => {
+              socBlock += `    - [${row.ref || ''}] ${row.observation || ''}
+`;
+            });
+          });
+        }
+
+        // Award notes
+        if (sd.award_notes?.length) {
+          socBlock += `
+Award Notes (matters for the Party Wall Award):
+`;
+          sd.award_notes.forEach(n => {
+            socBlock += `  [${n.topic || 'note'}] ${n.description || ''}
+`;
+          });
+        }
+
+        // Actions
+        if (sd.actions?.length) {
+          socBlock += `
+Actions Required:
+`;
+          sd.actions.forEach(a => {
+            socBlock += `  [${a.party || ''}] ${a.description || ''}
+`;
+          });
+        }
+
+        // Emails required
+        if (sd.emails_required?.length) {
+          socBlock += `
+Emails Required:
+`;
+          sd.emails_required.forEach(e => {
+            socBlock += `  To: ${e.recipient_type || ''} — ${e.subject || ''}: ${e.reason || ''}
+`;
+          });
+        }
+      }
+
+      socBlock += `
+`;
+    });
+
+    prompt += socBlock;
   }
 
   if (scopedEmailContext?.length) {
