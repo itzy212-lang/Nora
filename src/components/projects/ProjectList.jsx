@@ -251,39 +251,87 @@ export default function ProjectList({ onOpenProject }) {
       const sb = (await import('../../supabaseClient')).default;
       const { data: projects } = await sb
         .from('projects')
-        .select('id, bo_premise_address, onedrive_folder_id');
+        .select('id, bo_premise_address, onedrive_folder_id, aos');
 
-      const toSync = (projects || []).filter(p => !p.onedrive_folder_id && p.bo_premise_address);
-      let created = 0;
+      let projectsCreated = 0;
+      let aosCreated = 0;
       let failed = 0;
 
-      for (const project of toSync) {
-        try {
-          const res = await fetch('/api/onedrive-folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
-              action: 'create_project_folder',
-              project_address: project.bo_premise_address,
-            }),
-          });
-          const data = await res.json();
-          if (data.success && data.folder_id) {
-            await sb.from('projects').update({
-              onedrive_folder_id: data.folder_id,
-              onedrive_folder_url: data.web_url || null,
-            }).eq('id', project.id);
-            created++;
-          } else {
-            failed++;
+      for (const project of (projects || [])) {
+        // 1. Create project folder if missing
+        let folderId = project.onedrive_folder_id;
+        if (!folderId && project.bo_premise_address) {
+          try {
+            const res = await fetch('/api/onedrive-folder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                user_id: 'help@sq1consulting.co.uk',
+                action: 'create_project_folder',
+                project_address: project.bo_premise_address,
+              }),
+            });
+            const data = await res.json();
+            if (data.success && data.folder_id) {
+              folderId = data.folder_id;
+              await sb.from('projects').update({
+                onedrive_folder_id: data.folder_id,
+                onedrive_folder_url: data.web_url || null,
+              }).eq('id', project.id);
+              projectsCreated++;
+            } else {
+              failed++;
+            }
+          } catch { failed++; }
+        }
+
+        // 2. Create AO subfolders for each AO in this project
+        if (folderId) {
+          const aos = Array.isArray(project.aos) ? project.aos : [];
+          for (const ao of aos) {
+            const aoAddress = ao.premise || ao.reg_addr || ao.name;
+            if (!aoAddress) continue;
+
+            // Check if this AO already has a folder recorded
+            const { data: aoRow } = await sb
+              .from('adjoining_owners')
+              .select('id, onedrive_folder_id')
+              .eq('project_id', project.id)
+              .ilike('address', `%${(aoAddress || '').slice(0, 20)}%`)
+              .maybeSingle();
+
+            if (aoRow?.onedrive_folder_id) continue;
+
+            try {
+              const res = await fetch('/api/onedrive-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_id: 'help@sq1consulting.co.uk',
+                  action: 'create_ao_folder',
+                  project_folder_id: folderId,
+                  ao_address: aoAddress,
+                }),
+              });
+              const data = await res.json();
+              if (data.success && data.folder_id) {
+                // Save to adjoining_owners table if row exists
+                if (aoRow?.id) {
+                  await sb.from('adjoining_owners').update({
+                    onedrive_folder_id: data.folder_id,
+                    onedrive_folder_url: data.web_url || null,
+                  }).eq('id', aoRow.id);
+                }
+                aosCreated++;
+              } else {
+                failed++;
+              }
+            } catch { failed++; }
           }
-        } catch {
-          failed++;
         }
       }
 
-      setSyncResult({ total: toSync.length, created, failed });
+      setSyncResult({ projectsCreated, aosCreated, failed });
       await loadProjects();
     } catch (err) {
       setSyncResult({ error: err.message });
@@ -364,9 +412,9 @@ export default function ProjectList({ onOpenProject }) {
           <span style={{ fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a' }}>
             {syncResult.error
               ? `Error: ${syncResult.error}`
-              : syncResult.total === 0
+              : (syncResult.projectsCreated === 0 && syncResult.aosCreated === 0)
               ? '✓ All folders already synced'
-              : `✓ ${syncResult.created} folder${syncResult.created !== 1 ? 's' : ''} created${syncResult.failed ? `, ${syncResult.failed} failed` : ''}`
+              : `✓ ${syncResult.projectsCreated} project${syncResult.projectsCreated !== 1 ? 's' : ''}, ${syncResult.aosCreated} AO folder${syncResult.aosCreated !== 1 ? 's' : ''} created${syncResult.failed ? ` · ${syncResult.failed} failed` : ''}`
             }
           </span>
         )}
@@ -405,4 +453,5 @@ export default function ProjectList({ onOpenProject }) {
     </div>
   );
 }
+
 
