@@ -182,20 +182,21 @@ export default function Leads() {
       const isBO = (lead.role_type || '').toLowerCase().includes('building owner');
       const isAO = (lead.role_type || '').toLowerCase().includes('adjoining');
 
-      // Generate a project ref
-      const year = new Date().getFullYear().toString().slice(-2);
+      // Generate a project id and ref matching existing format
+      const fullYear = new Date().getFullYear();
       const { data: refData } = await sb
-        .from('leads')
-        .select('lead_ref')
-        .ilike('lead_ref', `%-${year}-%`)
+        .from('projects')
+        .select('ref')
+        .ilike('ref', `SQ1-${fullYear}-%`)
         .order('created_at', { ascending: false })
         .limit(1);
-      const lastRef = refData?.[0]?.lead_ref || '';
-      const lastNum = parseInt(lastRef.match(/(\d+)$/)?.[1] || '0', 10);
-      const newRef = `SQ1-${year}-${String(lastNum + 1).padStart(3, '0')}`;
+      const lastRef = refData?.[0]?.ref || '';
+      const lastNum = parseInt(lastRef.split('-').pop() || '0', 10);
+      const newRef = `SQ1-${fullYear}-${String(lastNum + 1).padStart(3, '0')}`;
+      const newId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
       const projectData = {
-        id: newRef,
+        id: newId,
         ref: newRef,
         name: lead.project_address || lead.contact_name,
         bo_premise_address: lead.project_address || null,
@@ -417,4 +418,5 @@ export default function Leads() {
     </div>
   );
 }
+
 
