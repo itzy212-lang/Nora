@@ -39,6 +39,14 @@ RULES:
 1. Extract only what is explicitly stated. Never invent or assume.
 2. RA_ variables: "Yes" if activity applies or uncertain, "No" only if clearly irrelevant.
 3. Null for anything not found.
+4. SITE ADDRESS: Look on the cover page/header of every document. Extract as SITE_ADDRESS_FULL and SITE_POSTCODE.
+5. CLIENT NAME: Look for "Client:", "Instructing Party:", "Prepared for:", "Client Name and Address:" in any document.
+6. CONTRACT ADMIN: Look for architect/project manager in drawings. Often the practice that produced the drawings.
+7. STRUCTURAL ENGINEER: Any engineering firm in structural drawings or reports.
+8. EXISTING STRUCTURES: Describe the building - age, floors, construction type from survey docs.
+9. ASBESTOS: If an asbestos refurbishment survey is present, always set RA_ASBESTOS="Yes". Note the survey in SITE_INVESTIGATION_REPORTS.
+10. LISTED BUILDING: Look for listed building status or conservation area mentions.
+11. LOCAL AUTHORITY: Identify from site postcode or any planning references in documents.
 
 RA LOGIC:
 - RA_BRICK_BLOCK: Yes if brickwork/blockwork/masonry mentioned
