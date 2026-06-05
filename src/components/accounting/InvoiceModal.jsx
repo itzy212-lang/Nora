@@ -170,6 +170,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
           },
           invoice_id: savedInvoice?.id,
           project_id: originalProjectId,
+          user_id: 'help@sq1consulting.co.uk',
         }),
       });
 
