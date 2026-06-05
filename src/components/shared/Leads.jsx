@@ -46,6 +46,8 @@ const s = {
   cancelBtn: { padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg2)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' },
   saveBtn:   { padding: '9px 18px', borderRadius: 10, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   deleteBtn: { padding: '9px 18px', borderRadius: 10, border: 'none', background: 'var(--red, #dc3545)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginRight: 'auto' },
+  convertBtn: { padding: '9px 18px', borderRadius: 10, border: 'none', background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  lostBtn:    { padding: '9px 18px', borderRadius: 10, border: 'none', background: '#6b7280', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   section:   { fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '20px 0 10px', paddingBottom: 6, borderBottom: '1px solid var(--border)' },
 };
 
@@ -169,6 +171,73 @@ export default function Leads() {
     await sb.from('leads').delete().eq('id', editing.id);
     setShowModal(false);
     setLeads(prev => prev.filter(l => l.id !== editing.id));
+  };
+
+  const handleConvert = async () => {
+    if (!editing) return;
+    if (!window.confirm('Convert this lead to a project? The lead will be marked as Won.')) return;
+    try {
+      setSaving(true);
+      const lead = editing;
+      const isBO = (lead.role_type || '').toLowerCase().includes('building owner');
+      const isAO = (lead.role_type || '').toLowerCase().includes('adjoining');
+
+      // Generate a project ref
+      const year = new Date().getFullYear().toString().slice(-2);
+      const { data: refData } = await sb
+        .from('leads')
+        .select('lead_ref')
+        .ilike('lead_ref', `%-${year}-%`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const lastRef = refData?.[0]?.lead_ref || '';
+      const lastNum = parseInt(lastRef.match(/(\d+)$/)?.[1] || '0', 10);
+      const newRef = `SQ1-${year}-${String(lastNum + 1).padStart(3, '0')}`;
+
+      const projectData = {
+        id: newRef,
+        ref: newRef,
+        name: lead.project_address || lead.contact_name,
+        bo_premise_address: lead.project_address || null,
+        role: lead.role_type || null,
+        status: 'active',
+        works: lead.works_summary || null,
+      };
+
+      if (isBO) {
+        projectData.bo_1_name = lead.contact_name || null;
+        projectData.bo_1_email = lead.contact_email || null;
+        projectData.bo_phone = lead.contact_phone || null;
+        projectData.bo = lead.contact_name || null;
+      } else if (isAO) {
+        projectData.ao_client_name = lead.contact_name || null;
+        projectData.ao_email = lead.contact_email || null;
+        projectData.ao_phone = lead.contact_phone || null;
+        projectData.ao_premise_address = lead.project_address || null;
+      }
+
+      const { error } = await sb.from('projects').insert([projectData]);
+      if (error) throw error;
+
+      // Mark lead as won
+      await sb.from('leads').update({ status: 'won', lead_stage: 'won' }).eq('id', lead.id);
+
+      setShowModal(false);
+      await load();
+      alert(`Project ${newRef} created successfully!`);
+    } catch (err) {
+      alert('Failed to convert: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkLost = async () => {
+    if (!editing) return;
+    if (!window.confirm('Mark this lead as lost?')) return;
+    await sb.from('leads').update({ status: 'lost', lead_stage: 'lost' }).eq('id', editing.id);
+    setShowModal(false);
+    await load();
   };
 
   const filtered = leads.filter(l => {
@@ -331,10 +400,16 @@ export default function Leads() {
 
             <div style={s.modalBtns}>
               {editing && <button style={s.deleteBtn} onClick={handleDelete}>Delete</button>}
+              {editing && <button style={s.lostBtn} onClick={handleMarkLost}>Lost</button>}
               <button style={s.cancelBtn} onClick={() => setShowModal(false)}>Cancel</button>
               <button style={s.saveBtn} onClick={handleSave} disabled={saving || !form.contact_name.trim()}>
                 {saving ? 'Saving…' : 'Save'}
               </button>
+              {editing && (
+                <button style={s.convertBtn} onClick={handleConvert} disabled={saving}>
+                  Convert to Project
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -342,3 +417,4 @@ export default function Leads() {
     </div>
   );
 }
+
