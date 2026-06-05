@@ -1,4 +1,5 @@
-import fetch from 'node-fetch';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 // CDM 2015 Construction Phase H&S Plan - Variable Extractor
 // Uses Anthropic Claude to read uploaded project documents
@@ -6,8 +7,6 @@ import fetch from 'node-fetch';
 // Called by cdm-build via API
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const CDM_VARIABLES = [
   'PROJECT_DESCRIPTION', 'PROJECT_DESCRIPTION_FULL', 'PROGRAMME_DURATION',
@@ -93,22 +92,25 @@ async function fetchDocumentText(url) {
     const contentType = response.headers.get('content-type') || ''
     const buffer = await response.arrayBuffer()
     const nodeBuffer = Buffer.from(buffer)
+
     if (contentType.includes('pdf') || url.toLowerCase().includes('.pdf')) {
-      const pdfParse = (await import('pdf-parse')).default
       const data = await pdfParse(nodeBuffer)
       return data.text || null
     }
+
     if (contentType.includes('wordprocessingml') || url.toLowerCase().includes('.docx')) {
-      const mammoth = (await import('mammoth')).default
       const result = await mammoth.extractRawText({ buffer: nodeBuffer })
       return result.value || null
     }
+
     if (url.toLowerCase().includes('.xlsx') || url.toLowerCase().includes('.xls')) {
       return `[Excel file: ${url.split('/').pop()} - schedule of works or similar]`
     }
+
     if (contentType.includes('text')) {
       return nodeBuffer.toString('utf-8')
     }
+
     return null
   } catch (err) {
     console.warn('[cdm-extract] document fetch failed:', url, err.message)
@@ -118,8 +120,18 @@ async function fetchDocumentText(url) {
 
 async function extractWithClaude(documentsText) {
   if (!ANTHROPIC_KEY) throw new Error('ANTHROPIC_API_KEY not set')
-  const variableList = CDM_VARIABLES.join('\n')
-  const userMessage = `Please extract the following variables from the construction project documents provided below.\n\nVARIABLES TO EXTRACT:\n${variableList}\n\nPROJECT DOCUMENTS:\n${documentsText}\n\nReturn ONLY the JSON object with all variables. No other text.`
+  const variableList = CDM_VARIABLES.join('
+')
+  const userMessage = `Please extract the following variables from the construction project documents provided below.
+
+VARIABLES TO EXTRACT:
+${variableList}
+
+PROJECT DOCUMENTS:
+${documentsText}
+
+Return ONLY the JSON object with all variables. No other text.`
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -128,16 +140,18 @@ async function extractWithClaude(documentsText) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-5',
+      model: 'claude-opus-4-6',
       max_tokens: 4000,
       system: CDM_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     }),
   })
+
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
     throw new Error(err.error?.message || `Anthropic error ${response.status}`)
   }
+
   const data = await response.json()
   const rawText = data.content?.[0]?.text || ''
   try {
@@ -190,21 +204,33 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured' })
+
   try {
     const { document_urls = [], project_id, company_profile = {} } = req.body || {}
     if (!document_urls.length) return res.status(400).json({ error: 'No document_urls provided' })
+
     console.log(`[cdm-extract] Processing ${document_urls.length} documents for project ${project_id}`)
+
     const documentTexts = await Promise.all(
       document_urls.map(async (url, index) => {
         const text = await fetchDocumentText(url)
         const filename = url.split('/').pop() || `Document ${index + 1}`
         if (!text) return `[Document ${index + 1}: ${filename} - could not be read]`
-        return `\n--- DOCUMENT ${index + 1}: ${filename} ---\n${text.slice(0, 8000)}\n--- END DOCUMENT ${index + 1} ---\n`
+        return `
+--- DOCUMENT ${index + 1}: ${filename} ---
+${text.slice(0, 8000)}
+--- END DOCUMENT ${index + 1} ---
+`
       })
     )
-    const combinedText = documentTexts.join('\n\n')
+
+    const combinedText = documentTexts.join('
+
+')
     console.log(`[cdm-extract] Total text extracted: ${combinedText.length} characters`)
+
     const extracted = await extractWithClaude(combinedText)
+
     const merged = { ...extracted }
     if (company_profile.company_name) merged['PRINCIPAL_CONTRACTOR_COMPANY'] = company_profile.company_name
     if (company_profile.company_address) merged['PRINCIPAL_CONTRACTOR_ADDRESS'] = company_profile.company_address
@@ -218,9 +244,12 @@ export default async function handler(req, res) {
     if (company_profile.project_manager_email) merged['PROJECT_MANAGER_EMAIL'] = company_profile.project_manager_email
     if (company_profile.site_manager_name) merged['SITE_MANAGER_NAME'] = company_profile.site_manager_name
     if (company_profile.hs_adviser_name) merged['HS_ADVISER_NAME'] = company_profile.hs_adviser_name
+
     const { missing, found, raVariables } = identifyMissingVariables(merged)
     const completionChecklist = buildCompletionChecklist(merged)
+
     console.log(`[cdm-extract] Found: ${found.length} variables, Missing: ${missing.length} variables`)
+
     return res.status(200).json({
       success: true,
       extracted: merged,
