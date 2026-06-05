@@ -1,10 +1,12 @@
-import pdfParse from 'pdf-parse';
-import mammoth from 'mammoth';
+import { createRequire } from 'module';
 
 // CDM 2015 Construction Phase H&S Plan - Variable Extractor
 // Uses Anthropic Claude to read uploaded project documents
 // and extract the 65 variables needed to generate a CDM plan
 // Called by cdm-build via API
+
+// Use createRequire for CJS modules (pdf-parse, mammoth) to avoid ESM/CJS interop issues
+const require = createRequire(import.meta.url);
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -94,11 +96,13 @@ async function fetchDocumentText(url) {
     const nodeBuffer = Buffer.from(buffer)
 
     if (contentType.includes('pdf') || url.toLowerCase().includes('.pdf')) {
+      const pdfParse = require('pdf-parse')
       const data = await pdfParse(nodeBuffer)
       return data.text || null
     }
 
     if (contentType.includes('wordprocessingml') || url.toLowerCase().includes('.docx')) {
+      const mammoth = require('mammoth')
       const result = await mammoth.extractRawText({ buffer: nodeBuffer })
       return result.value || null
     }
@@ -120,17 +124,8 @@ async function fetchDocumentText(url) {
 
 async function extractWithClaude(documentsText) {
   if (!ANTHROPIC_KEY) throw new Error('ANTHROPIC_API_KEY not set')
-  const variableList = CDM_VARIABLES.join('
-')
-  const userMessage = `Please extract the following variables from the construction project documents provided below.
-
-VARIABLES TO EXTRACT:
-${variableList}
-
-PROJECT DOCUMENTS:
-${documentsText}
-
-Return ONLY the JSON object with all variables. No other text.`
+  const variableList = CDM_VARIABLES.join('\n')
+  const userMessage = `Please extract the following variables from the construction project documents provided below.\n\nVARIABLES TO EXTRACT:\n${variableList}\n\nPROJECT DOCUMENTS:\n${documentsText}\n\nReturn ONLY the JSON object with all variables. No other text.`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -216,17 +211,11 @@ export default async function handler(req, res) {
         const text = await fetchDocumentText(url)
         const filename = url.split('/').pop() || `Document ${index + 1}`
         if (!text) return `[Document ${index + 1}: ${filename} - could not be read]`
-        return `
---- DOCUMENT ${index + 1}: ${filename} ---
-${text.slice(0, 8000)}
---- END DOCUMENT ${index + 1} ---
-`
+        return `\n--- DOCUMENT ${index + 1}: ${filename} ---\n${text.slice(0, 8000)}\n--- END DOCUMENT ${index + 1} ---\n`
       })
     )
 
-    const combinedText = documentTexts.join('
-
-')
+    const combinedText = documentTexts.join('\n\n')
     console.log(`[cdm-extract] Total text extracted: ${combinedText.length} characters`)
 
     const extracted = await extractWithClaude(combinedText)
