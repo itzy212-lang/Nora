@@ -39,7 +39,6 @@ export function useEmails() {
 
   const syncOutlook = useCallback(async () => {
     if (!sb) return;
-    if (sessionStorage.getItem("sync_outlook_failed")) return;
     try {
       const { data, error } = await sb.functions.invoke('sync_outlook', {
         body: { user_id: state.currentUser?.email || state.currentUser?.id },
