@@ -244,10 +244,10 @@ export default async function handler(req, res) {
     const pdfB64 = await convertDocxToPdf(rendered.buffer, fileName);
 
     // Upload to OneDrive
-    const projectId = merge_data?.project_id || body?.project_id || null;
-    const aoId = merge_data?.ao_id || body?.ao_id || null;
-    const userId = merge_data?.user_id || body?.user_id || 'help@sq1consulting.co.uk';
-    const category = merge_data?.template_type || body?.template_type || 'document';
+    const projectId = merge_data?.project_id || req.body?.project_id || null;
+    const aoId = merge_data?.ao_id || req.body?.ao_id || null;
+    const userId = merge_data?.user_id || req.body?.user_id || 'help@sq1consulting.co.uk';
+    const category = merge_data?.template_type || req.body?.template_type || 'document';
     let oneDriveUrl = null;
     let oneDriveItemId = null;
 
