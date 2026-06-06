@@ -1050,7 +1050,7 @@ export default function Inbox({ onOpenComposer }) {
     if (!force && state.emails && state.emails.length > 0) return;
     setLoading(true);
     try {
-      let q = sb.from('emails').select('*, email_attachments(*)').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
+      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
       if (folder === 'Unread')  q = q.eq('is_read', false);
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
