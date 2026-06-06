@@ -1110,7 +1110,8 @@ export default function Inbox({ onOpenComposer }) {
     syncingRef.current = true;
     setSyncing(true);
     try {
-      const result = await sb.functions.invoke('sync_outlook', { method: 'POST' });
+      const { data: result, error: syncErr } = await sb.functions.invoke('sync_outlook', { body: {} });
+if (syncErr) throw syncErr;
       await new Promise(r => setTimeout(r, 1000));
       await sb.rpc('match_emails_to_projects').catch(() => {});
       // Only reload if new emails came in
