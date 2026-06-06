@@ -1066,15 +1066,14 @@ export default function Inbox({ onOpenComposer }) {
   // Initial load only
   useEffect(() => { loadEmails(); }, [folder]);
 
-  // Auto-sync every 2.5 minutes — only if not already syncing
+  // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
     const interval = setInterval(async () => {
       if (syncingRef.current) return; // prevent overlap
       syncingRef.current = true;
       try {
-        const result = await sb.functions.invoke('sync_outlook', { method: 'POST' });
-        // Only reload if new emails arrived
-        if (result?.data?.newEmails > 0) {
+        const { data, error } = await sb.functions.invoke('sync_outlook', { body: {} });
+        if (!error && data?.newEmails > 0) {
           await loadEmails();
         }
       } catch (err) {
@@ -1082,7 +1081,7 @@ export default function Inbox({ onOpenComposer }) {
       } finally {
         syncingRef.current = false;
       }
-    }, 2.5 * 60 * 1000); // 2.5 minutes
+    }, 3 * 60 * 1000); // 3 minutes
 
     return () => clearInterval(interval);
   }, [loadEmails]);
