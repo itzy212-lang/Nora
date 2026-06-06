@@ -14,7 +14,7 @@ export function useEmails() {
     try {
       let res = await sb
         .from('emails')
-        .select('*, email_attachments(*)')
+        .select('*')
         .order('received_at', { ascending: false })
         .limit(200);
 
@@ -39,6 +39,7 @@ export function useEmails() {
 
   const syncOutlook = useCallback(async () => {
     if (!sb) return;
+    if (sessionStorage.getItem("sync_outlook_failed")) return;
     try {
       const { data, error } = await sb.functions.invoke('sync_outlook', {
         body: { user_id: state.currentUser?.email || state.currentUser?.id },
@@ -53,7 +54,7 @@ export function useEmails() {
       if (latestKnown) {
         const { data: newRows } = await sb
           .from('emails')
-          .select('*, email_attachments(*)')
+          .select('*')
           .gt('received_at', latestKnown)
           .order('received_at', { ascending: false })
           .limit(50);
