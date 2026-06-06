@@ -440,6 +440,30 @@ export default async function handler(req, res) {
 
     if (uploadError) throw uploadError;
 
+    // Try OneDrive upload (non-blocking — failure does not affect invoice generation)
+    if (projectId) {
+      try {
+        const { data: proj } = await sb.from('projects').select('onedrive_folder_id').eq('id', projectId).maybeSingle();
+        const folderId = proj?.onedrive_folder_id;
+        if (folderId) {
+          const baseUrl = process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://nora-d9wy.vercel.app';
+          await fetch(baseUrl + '/api/onedrive-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              folder_id: folderId,
+              filename: fileName,
+              content_base64: base64,
+              content_type: 'application/pdf',
+            }),
+          });
+        }
+      } catch (odErr) {
+        console.warn('[generate-invoice-pdf] OneDrive upload failed (non-fatal):', odErr.message);
+      }
+    }
+
     let docId = null;
 
     if (projectId) {
