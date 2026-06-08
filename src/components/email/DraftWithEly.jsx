@@ -101,7 +101,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const [voicePhase, setVoicePhase] = useState('idle');
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
-  const [pendingTranscript, setPendingTranscript] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [summarising, setSummarising] = useState(false);
@@ -113,6 +112,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const prevPhraseRef = useRef('');
   const latestTranscriptRef = useRef('');
   const { send } = useEly({ surface: 'email_composer' });
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -136,7 +136,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setPendingTranscript('');
     setLiveTop('');
     setLiveBottom('');
   }, []);
@@ -256,10 +255,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const handleVoice = (transcript, meta) => {
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
-      setPendingTranscript(transcript);
-      setVoicePhase('preview');
-      setLiveTop('');
-      setLiveBottom('');
+      setInput(transcript);
+      setVoicePhase('idle');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -268,9 +265,9 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const handleVoicePreview = (phrase, meta) => {
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
-        setPendingTranscript(latestTranscriptRef.current);
-        setVoicePhase('preview');
-      } else {
+        setInput(latestTranscriptRef.current);
+        setVoicePhase('idle');
+      } else if (voicePhase !== 'idle') {
         setVoicePhase('transcribing');
       }
       setLiveTop('');
@@ -284,31 +281,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         setLiveTop(prevPhraseRef.current);
         setLiveBottom(phrase);
         prevPhraseRef.current = phrase;
-      } else if (phrase) {
-        setLiveBottom(phrase);
       }
     }
-  };
-
-  const handleDictationSend = (text) => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
-    handleSend(text);
-  };
-
-  const handleDictationCancel = () => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (e) => {
@@ -390,14 +364,11 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
-          {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
+          {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing') && (
             <DictationOverlay
               phase={voicePhase}
               topLine={liveTop}
               bottomLine={liveBottom}
-              transcript={pendingTranscript}
-              onSend={handleDictationSend}
-              onCancel={handleDictationCancel}
             />
           )}
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
