@@ -887,35 +887,35 @@ function SaveAttachmentPopup({ email, onDismiss }) {
 
 // ── Email preview panel ───────────────────────────────────────────────────────
 function AttachmentChip({ att }) {
-  const [url, setUrl] = useState(null);
-
-  useEffect(() => {
-    if (!att.storage_path) return;
-    fetch('/api/attachment-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storage_path: att.storage_path }),
-    })
-      .then(r => r.json())
-      .then(d => { if (d.url) setUrl(d.url); })
-      .catch(() => {});
-  }, [att.storage_path]);
-
   const ext = (att.filename || '').split('.').pop().toLowerCase();
   const icon = ['pdf'].includes(ext) ? '📄' : ['doc','docx'].includes(ext) ? '📝' : ['jpg','jpeg','png','gif','webp'].includes(ext) ? '🖼️' : ['xls','xlsx'].includes(ext) ? '📊' : '📎';
   const sizeLabel = att.size_bytes ? (att.size_bytes > 1048576 ? `${(att.size_bytes/1048576).toFixed(1)}MB` : `${Math.round(att.size_bytes/1024)}KB`) : '';
   const shortName = (att.filename || 'File').length > 20 ? (att.filename || 'File').slice(0, 20) + '…' : (att.filename || 'File');
+  const canOpen = !!(att.email_external_id && att.attachment_external_id);
+
+  const handleOpen = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!canOpen) return;
+    const params = new URLSearchParams({
+      email_id: att.email_external_id,
+      att_id: att.attachment_external_id,
+      filename: att.filename || 'attachment',
+      content_type: att.content_type || '',
+    });
+    window.open(`/api/attachment-url?${params}`, '_blank');
+  };
 
   return (
     <div
-      onClick={(e) => { e.stopPropagation(); e.preventDefault(); if (url) window.open(url, '_blank'); }}
+      onClick={handleOpen}
       title={att.filename}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '4px 10px', borderRadius: 6,
         border: '1px solid var(--border)', background: 'var(--bg)',
-        fontSize: 11.5, color: url ? 'var(--text)' : 'var(--text3)',
-        cursor: url ? 'pointer' : 'default',
+        fontSize: 11.5, color: canOpen ? 'var(--text)' : 'var(--text3)',
+        cursor: canOpen ? 'pointer' : 'default',
         whiteSpace: 'nowrap', flexShrink: 0, userSelect: 'none',
         boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
       }}
@@ -923,7 +923,6 @@ function AttachmentChip({ att }) {
       <span style={{ fontSize: 13 }}>{icon}</span>
       <span style={{ fontWeight: 500 }}>{shortName}</span>
       {sizeLabel && <span style={{ fontSize: 10, color: 'var(--text3)' }}>{sizeLabel}</span>}
-      {!url && <span style={{ fontSize: 10, color: 'var(--text3)' }}>…</span>}
     </div>
   );
 }
@@ -934,10 +933,10 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   useEffect(() => {
     if (!email?.id || !sb) { setAttachments([]); return; }
     sb.from('email_attachments')
-      .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
+      .select('id, email_id, email_external_id, attachment_external_id, filename, content_type, size_bytes, is_inline')
       .eq('email_id', email.id)
       .or('is_inline.is.null,is_inline.eq.false')
-      .not('storage_path', 'is', null)
+      .not('attachment_external_id', 'is', null)
       .then(({ data }) => setAttachments(data || []))
       .catch(() => setAttachments([]));
   }, [email?.id]);
