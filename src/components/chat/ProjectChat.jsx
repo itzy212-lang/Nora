@@ -674,7 +674,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
       setInput(transcript);
-      setVoicePhase('idle');
+      setVoicePhase('preview');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -989,11 +989,12 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               </div>
             )}
 
-            {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing') && (
+            {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
               <DictationOverlay
                 phase={voicePhase}
                 topLine={liveTop}
                 bottomLine={liveBottom}
+                transcript={input}
               />
             )}
 
@@ -1063,8 +1064,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
               <button
                 className="ai-send-btn"
-                onClick={() => handleSend()}
-                disabled={loading || uploading || (!input.trim() && !attachments.some(a => a.upload_status === 'uploaded'))}
+                onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()}
+                disabled={loading || uploading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim() && !attachments.some(a => a.upload_status === 'uploaded'))}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/>
