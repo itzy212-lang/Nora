@@ -364,9 +364,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
-
-            />
-          )}
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
             <VoiceInput
               onTranscript={handleVoice}
@@ -407,6 +404,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       <style>{`@keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }`}</style>
     </div>
   );
+}
 
 
 
