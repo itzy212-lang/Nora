@@ -891,8 +891,13 @@ function AttachmentChip({ att }) {
 
   useEffect(() => {
     if (!att.storage_path) return;
-    sb.storage.from('email-attachments').createSignedUrl(att.storage_path, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl); })
+    fetch('/api/attachment-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storage_path: att.storage_path }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.url) setUrl(d.url); })
       .catch(() => {});
   }, [att.storage_path]);
 
@@ -1070,7 +1075,24 @@ export default function Inbox({ onOpenComposer }) {
       const { data, error } = await q;
       if (error) throw error;
 
-      dispatch({ type: 'SET_EMAILS', payload: data || [] });
+      let emails = data || [];
+
+      // Lightweight: mark which emails have attachments (for paperclip indicator)
+      if (emails.length > 0) {
+        try {
+          const emailIds = emails.map(e => e.id).filter(Boolean);
+          const { data: hasAttach } = await sb
+            .from('email_attachments')
+            .select('email_id')
+            .in('email_id', emailIds);
+          if (hasAttach?.length) {
+            const attachedSet = new Set(hasAttach.map(a => a.email_id));
+            emails = emails.map(e => ({ ...e, has_attachments: attachedSet.has(e.id) }));
+          }
+        } catch {}
+      }
+
+      dispatch({ type: 'SET_EMAILS', payload: emails });
     } catch (err) { console.error('loadEmails:', err); }
     setLoading(false);
   }, [folder]);
