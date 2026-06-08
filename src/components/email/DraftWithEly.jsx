@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
+import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 
 /**
@@ -97,7 +98,10 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const { state } = useApp();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [dictationPreview, setDictationPreview] = useState('');
+  const [voicePhase, setVoicePhase] = useState('idle');
+  const [liveTop, setLiveTop] = useState('');
+  const [liveBottom, setLiveBottom] = useState('');
+  const [pendingTranscript, setPendingTranscript] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [summarising, setSummarising] = useState(false);
@@ -106,6 +110,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
+  const prevPhraseRef = useRef('');
+  const latestTranscriptRef = useRef('');
   const { send } = useEly({ surface: 'email_composer' });
 
   useEffect(() => {
@@ -127,6 +133,12 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    prevPhraseRef.current = '';
+    latestTranscriptRef.current = '';
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const applyDraftToComposer = useCallback((draftInput) => {
@@ -186,14 +198,13 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     }
   }, [email, threadId, projectId, send]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const handleSend = useCallback(async (overrideText) => {
+    const text = (typeof overrideText === 'string' ? overrideText : input).trim();
 
     if (!text || loading) return;
 
     stopVoice();
     setInput('');
-    setDictationPreview('');
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -242,28 +253,66 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     }
   };
 
-  const handleVoice = (transcript) => {
-    if (!voiceBaseRef.current) {
-      voiceBaseRef.current = input.trim();
+  const handleVoice = (transcript, meta) => {
+    if (!meta?.recording && transcript) {
+      latestTranscriptRef.current = transcript;
+      setPendingTranscript(transcript);
+      setVoicePhase('preview');
+      setLiveTop('');
+      setLiveBottom('');
+      return;
     }
-
-    const base = voiceBaseRef.current;
-    const next = base ? `${base} ${transcript}` : transcript;
-
-    setInput(next);
-    setDictationPreview(next);
-
-    requestAnimationFrame(resizeTextarea);
-    textareaRef.current?.focus();
+    if (transcript) latestTranscriptRef.current = transcript;
   };
 
-  const handleVoicePreview = (phrase) => {
-    if (phrase) setDictationPreview(phrase);
+  const handleVoicePreview = (phrase, meta) => {
+    if (meta?.recording === false) {
+      if (latestTranscriptRef.current) {
+        setPendingTranscript(latestTranscriptRef.current);
+        setVoicePhase('preview');
+      } else {
+        setVoicePhase('transcribing');
+      }
+      setLiveTop('');
+      setLiveBottom('');
+      prevPhraseRef.current = '';
+      return;
+    }
+    if (meta?.recording === true) {
+      setVoicePhase('recording');
+      if (phrase && !phrase.includes('Recording')) {
+        setLiveTop(prevPhraseRef.current);
+        setLiveBottom(phrase);
+        prevPhraseRef.current = phrase;
+      } else if (phrase) {
+        setLiveBottom(phrase);
+      }
+    }
+  };
+
+  const handleDictationSend = (text) => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
+    handleSend(text);
+  };
+
+  const handleDictationCancel = () => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (e) => {
     voiceBaseRef.current = '';
-    setDictationPreview('');
     setInput(e.target.value);
   };
 
@@ -341,12 +390,17 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
+          {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
+            <DictationOverlay
+              phase={voicePhase}
+              topLine={liveTop}
+              bottomLine={liveBottom}
+              transcript={pendingTranscript}
+              onSend={handleDictationSend}
+              onCancel={handleDictationCancel}
+            />
+          )}
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
-            {dictationPreview && !input && (
-              <div style={{ fontSize: 12, color: '#9ca3af', padding: '4px 8px', fontStyle: 'italic', lineHeight: 1.4 }}>
-                {dictationPreview}
-              </div>
-            )}
             <VoiceInput
               onTranscript={handleVoice}
               onPreview={handleVoicePreview}
@@ -387,4 +441,5 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
