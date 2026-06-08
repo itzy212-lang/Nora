@@ -237,6 +237,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
   const projectId = project?.id || '';
   const projectLabel = project?.ref || project?.name || project?.bo_premise_address || 'Project';
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -250,7 +251,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [voicePhase, setVoicePhase] = useState('idle');
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
-  const [pendingTranscript, setPendingTranscript] = useState('');
   const [lastDraft, setLastDraft] = useState('');
 
   const messagesEndRef = useRef(null);
@@ -348,7 +348,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setPendingTranscript('');
     setLiveTop('');
     setLiveBottom('');
   }, []);
@@ -674,10 +673,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const handleVoice = (transcript, meta) => {
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
-      setPendingTranscript(transcript);
-      setVoicePhase('preview');
-      setLiveTop('');
-      setLiveBottom('');
+      setInput(transcript);
+      setVoicePhase('idle');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -686,9 +683,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const handleVoicePreview = (phrase, meta) => {
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
-        setPendingTranscript(latestTranscriptRef.current);
-        setVoicePhase('preview');
-      } else {
+        setInput(latestTranscriptRef.current);
+        setVoicePhase('idle');
+      } else if (voicePhase !== 'idle') {
         setVoicePhase('transcribing');
       }
       setLiveTop('');
@@ -702,31 +699,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         setLiveTop(prevPhraseRef.current);
         setLiveBottom(phrase);
         prevPhraseRef.current = phrase;
-      } else if (phrase) {
-        setLiveBottom(phrase);
       }
     }
-  };
-
-  const handleDictationSend = (text) => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
-    handleSend(text);
-  };
-
-  const handleDictationCancel = () => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (e) => {
@@ -1015,14 +989,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               </div>
             )}
 
-            {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
+            {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing') && (
               <DictationOverlay
                 phase={voicePhase}
                 topLine={liveTop}
                 bottomLine={liveBottom}
-                transcript={pendingTranscript}
-                onSend={handleDictationSend}
-                onCancel={handleDictationCancel}
               />
             )}
 
