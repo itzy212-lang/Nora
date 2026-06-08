@@ -1050,7 +1050,7 @@ export default function Inbox({ onOpenComposer }) {
     if (!force && state.emails && state.emails.length > 0) return;
     setLoading(true);
     try {
-      let q = sb.from('emails').select('*, email_attachments(id, filename, content_type, size_bytes, storage_path, is_inline)').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
+      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
       if (folder === 'Unread')  q = q.eq('is_read', false);
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
@@ -1058,7 +1058,38 @@ export default function Inbox({ onOpenComposer }) {
       if (folder === 'Inbox')   q = q.or('folder.eq.inbox,folder.is.null').or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false').or('sender_email.is.null,sender_email.neq.help@sq1consulting.co.uk');
       const { data, error } = await q;
       if (error) throw error;
-      dispatch({ type: 'SET_EMAILS', payload: data || [] });
+
+      let emails = data || [];
+
+      // Fetch attachments separately and merge into emails
+      if (emails.length > 0) {
+        try {
+          const emailIds = emails.map(e => e.id).filter(Boolean);
+          const { data: attachData } = await sb
+            .from('email_attachments')
+            .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
+            .in('email_id', emailIds)
+            .or('is_inline.is.null,is_inline.eq.false')
+            .not('storage_path', 'is', null);
+
+          if (attachData && attachData.length > 0) {
+            const attachMap = {};
+            attachData.forEach(a => {
+              if (!attachMap[a.email_id]) attachMap[a.email_id] = [];
+              attachMap[a.email_id].push(a);
+            });
+            emails = emails.map(e => ({
+              ...e,
+              email_attachments: attachMap[e.id] || [],
+              has_attachments: !!(attachMap[e.id]?.length),
+            }));
+          }
+        } catch (attErr) {
+          console.warn('[Inbox] attachment fetch failed:', attErr.message);
+        }
+      }
+
+      dispatch({ type: 'SET_EMAILS', payload: emails });
     } catch (err) { console.error('loadEmails:', err); }
     setLoading(false);
   }, [folder]);
