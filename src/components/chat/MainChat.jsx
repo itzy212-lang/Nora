@@ -3,7 +3,6 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
-import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 import sb from '../../supabaseClient';
 
@@ -203,7 +202,6 @@ function sortSessionsNewestFirst(sessions = []) {
   return [...(sessions || [])].sort((a, b) => sessionTimeValue(b) - sessionTimeValue(a));
 }
 
-
 function isMobileVoiceBrowser() {
   if (typeof navigator === 'undefined') return false;
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
@@ -296,8 +294,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [voicePhase, setVoicePhase] = useState('idle');
-  const [liveTop, setLiveTop] = useState('');
-  const [liveBottom, setLiveBottom] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -511,11 +507,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
   }, []);
 
   const closeToDashboard = useCallback(() => {
@@ -804,22 +797,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
         // Desktop: populate input with accumulated transcript
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
-      } else if (voicePhase !== 'idle') {
-        // Mobile: recording stopped, Whisper still processing
-        setVoicePhase('transcribing');
-      }
-      setLiveTop('');
-      setLiveBottom('');
-      prevPhraseRef.current = '';
+
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
       // Only update live display for real speech text, not mobile status messages
       if (phrase && !phrase.includes('Recording')) {
-        setLiveTop(prevPhraseRef.current);
-        setLiveBottom(phrase);
-        prevPhraseRef.current = phrase;
       }
     }
   };
@@ -997,14 +981,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
           </div>
 
           <div className="ai-full-input">
-            {((!isMobileVoiceBrowser() && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
-              <DictationOverlay
-                phase={voicePhase}
-                topLine={liveTop}
-                bottomLine={liveBottom}
-                transcript={input}
-              />
-            )}
             <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
               <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading} stopSignal={voiceStopSignal} />
               <textarea
@@ -1314,5 +1290,4 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
-
 
