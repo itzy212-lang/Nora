@@ -152,17 +152,16 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
     if (!isAuto) {
       setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
     } else {
-      setMessages([{ id: 0, role: 'system', content: `✨ Reading ${threadEmails.length > 1 ? `thread (${threadEmails.length} emails)` : 'email'} and drafting…` }]);
+      setMessages([{ id: 0, role: 'system', content: `✨ Reading ${(threadEmails || []).length > 1 ? `thread (${(threadEmails || []).length} emails)` : 'email'} and drafting…` }]);
     }
 
-    const fullThread = threadTextOverride || (threadEmails.length > 1
-      ? [...threadEmails]
-          .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
-          .map(e => `--- ${fmtDate(e.received_at)} | From: ${e.sender_name || e.sender_email} ---\n${stripHtml(e.body || e.body_preview || '')}`)
-          .join('\n\n')
-      : stripHtml(email.body || email.body_preview || ''));
-
     try {
+      const fullThread = threadTextOverride || ((threadEmails || []).length > 1
+        ? [...(threadEmails || [])]
+            .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
+            .map(e => `--- ${fmtDate(e.received_at)} | From: ${e.sender_name || e.sender_email} ---\n${stripHtml(e.body || e.body_preview || '')}`)
+            .join('\n\n')
+        : stripHtml((email || {}).body || (email || {}).body_preview || ''));
       const history = messages
         .filter(m => m.role === 'user' || m.role === 'ely')
         .map(m => ({
@@ -220,18 +219,21 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
         workingDraftRef.current = draft;
       }
     } catch (err) {
+      console.error('[DraftWithEly] callEly error:', err);
       setMessages(prev => [...prev, {
         id: Date.now() + 1, role: 'ely',
         explanation: 'Could not connect to Ely. Please try again.', draft: null,
       }]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSend = () => {
     const text = input.trim();
     if (!text || loading) return;
     setInput('');
+    setInterimText('');
     voiceBaseRef.current = '';
     setVoiceStopSignal(s => s + 1);
     callEly(text);
@@ -1464,6 +1466,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
