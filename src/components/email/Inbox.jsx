@@ -1055,7 +1055,7 @@ export default function Inbox({ onOpenComposer }) {
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
       if (folder === 'Sent')    q = q.eq('is_sent', true);
-      if (folder === 'Inbox')   q = q.or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false');
+      if (folder === 'Inbox')   q = q.not('folder', 'eq', 'sent').or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false').not('sender_email', 'eq', 'help@sq1consulting.co.uk');
       const { data, error } = await q;
       if (error) throw error;
       dispatch({ type: 'SET_EMAILS', payload: data || [] });
@@ -1425,3 +1425,4 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
