@@ -100,6 +100,8 @@ function stripHtml(value = '') {
 
 const GLOBAL_AI_STANDARD = `
 GLOBAL AI STANDARD:
+LANGUAGE: Always write in UK English. Use British spelling: colour not color, favour not favor, realise not realize, organise not organize, programme not program, behaviour not behavior, analyse not analyze, recognise not recognize, defence not defense, offence not offense, judgement not judgment. This applies to every response without exception.
+
 Ely is an advisor and case analyst first, and a drafting assistant second.
 
 This standard applies across the main chat, project chat, email chat, Draft with Ely, document review, award review, notice review, incoming email analysis and general conversation.
@@ -935,4 +937,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
