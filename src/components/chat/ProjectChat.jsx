@@ -3,7 +3,6 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
-import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 
 function safeProjectKey(projectId) {
@@ -70,7 +69,6 @@ function getUserId(state = {}) {
     'itzy212@gmail.com'
   );
 }
-
 
 function isDraftRequest(text = '', hasPreviousDraft = false) {
   const s = String(text || '').toLowerCase();
@@ -249,8 +247,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [voicePhase, setVoicePhase] = useState('idle');
-  const [liveTop, setLiveTop] = useState('');
-  const [liveBottom, setLiveBottom] = useState('');
   const [lastDraft, setLastDraft] = useState('');
 
   const messagesEndRef = useRef(null);
@@ -345,11 +341,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
   }, []);
 
   const persistCurrentSessionToHistory = useCallback(() => {
@@ -685,20 +678,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
-      } else if (voicePhase !== 'idle') {
-        setVoicePhase('transcribing');
-      }
-      setLiveTop('');
-      setLiveBottom('');
-      prevPhraseRef.current = '';
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
       if (phrase && !phrase.includes('Recording')) {
-        setLiveTop(prevPhraseRef.current);
-        setLiveBottom(phrase);
-        prevPhraseRef.current = phrase;
       }
     }
   };
@@ -989,15 +973,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               </div>
             )}
 
-            {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
-              <DictationOverlay
-                phase={voicePhase}
-                topLine={liveTop}
-                bottomLine={liveBottom}
-                transcript={input}
-              />
-            )}
-
             <div className="pch-input-row" style={{
               display: 'flex',
               alignItems: 'flex-end',
@@ -1079,5 +1054,4 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
-
 
