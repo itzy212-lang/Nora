@@ -15,9 +15,8 @@ const VIEW_TITLES = {
   settings: 'Settings',
 };
 
-export default function TopBar({ currentView, onMenuToggle, onNavigate }) {
+export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad }) {
   const { state } = useApp();
-  const { currentUser, settings } = state;
 
   return (
     <div className="topbar">
@@ -25,7 +24,7 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate }) {
         <button className="burger" onClick={onMenuToggle}>☰</button>
         <h2>{VIEW_TITLES[currentView] || currentView}</h2>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button
           className="btn btn-sm btn-primary"
           onClick={() => onNavigate('chat')}
@@ -33,20 +32,20 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate }) {
         >
           ✨ Ask Ely
         </button>
-        {currentUser && (
-          <div
-            style={{
-              width: 30, height: 30, borderRadius: '50%', background: 'var(--blue-bg)',
-              border: '1px solid var(--border2)', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--blue)',
-              cursor: 'pointer', flexShrink: 0,
-            }}
-            onClick={() => onNavigate('settings')}
-            title={currentUser.email}
-          >
-            {(currentUser.email || '?')[0].toUpperCase()}
-          </div>
-        )}
+        <button
+          onClick={onOpenNotepad}
+          title="Notes"
+          style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--bg3)',
+            border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, cursor: 'pointer', flexShrink: 0,
+            color: 'var(--text2)',
+          }}
+        >
+          📝
+        </button>
       </div>
     </div>
   );
