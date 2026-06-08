@@ -439,20 +439,19 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
       extraOpts.mode ||
       (extraOpts.mainChatWorkflow === 'draft_clean_bubble_only' ? 'draft' : 'discuss');
 
-    const actualSessionId = await ensureSession({
-      prompt,
-      effectiveProjectId,
-      mode: modeHint,
-      sessionType: extraOpts.sessionType || 'chat',
-    });
-
-    const userMsg = { role: 'user', content: prompt };
-    const currentHistory = [...chatHistory, userMsg];
-    const currentProject = buildCurrentProject(effectiveProjectId);
-    const projectsContext = buildProjectsContext();
-    const recentEmails = buildRecentEmails();
-
     try {
+      const actualSessionId = await ensureSession({
+        prompt,
+        effectiveProjectId,
+        mode: modeHint,
+        sessionType: extraOpts.sessionType || 'chat',
+      });
+
+      const userMsg = { role: 'user', content: prompt };
+      const currentHistory = [...chatHistory, userMsg];
+      const currentProject = buildCurrentProject(effectiveProjectId);
+      const projectsContext = buildProjectsContext();
+      const recentEmails = buildRecentEmails();
       if (actualSessionId) {
         await saveAiMessage({
           sessionId: actualSessionId,
