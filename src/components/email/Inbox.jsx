@@ -930,16 +930,27 @@ function AttachmentChip({ att }) {
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [replyDropOpen, setReplyDropOpen]   = useState(false);
   const [showSavePopup, setShowSavePopup]   = useState(false);
+  const [emailAttachments, setEmailAttachments] = useState([]);
   const dropRef = useRef(null);
+
+  // Fetch attachments when email changes
+  useEffect(() => {
+    if (!email?.id || !sb) { setEmailAttachments([]); return; }
+    sb.from('email_attachments')
+      .select('*')
+      .eq('email_id', email.id)
+      .order('created_at')
+      .then(({ data }) => setEmailAttachments(data || []));
+  }, [email?.id]);
 
   // Show save popup automatically when email has attachments and is unlinked
   useEffect(() => {
-    if (email?.has_attachments && email?.link_status === 'unlinked') {
+    if (emailAttachments.length > 0 && email?.link_status === 'unlinked') {
       setShowSavePopup(true);
     } else {
       setShowSavePopup(false);
     }
-  }, [email?.id]);
+  }, [email?.id, emailAttachments.length]);
 
   useEffect(() => {
     const h = e => { if (dropRef.current && !dropRef.current.contains(e.target)) setReplyDropOpen(false); };
@@ -992,11 +1003,11 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
-      {email.email_attachments?.length > 0 && (
+      {emailAttachments.length > 0 && (
         <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Attachments</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {email.email_attachments.map(att => (
+            {emailAttachments.map(att => (
               <AttachmentChip key={att.id} att={att} />
             ))}
           </div>
