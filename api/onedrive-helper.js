@@ -12,12 +12,21 @@ function getSupabase() {
 export async function getValidMicrosoftToken(userId) {
   if (!userId) return null;
   const sb = getSupabase();
-  const { data: account } = await sb
+  // Single-user system: try exact match first, fall back to any outlook account
+  let { data: account } = await sb
     .from('email_accounts')
     .select('*')
     .eq('provider', 'outlook')
     .eq('user_id', userId)
     .maybeSingle();
+  if (!account) {
+    const { data: fallback } = await sb
+      .from('email_accounts')
+      .select('*')
+      .eq('provider', 'outlook')
+      .maybeSingle();
+    account = fallback;
+  }
 
   if (!account || account.reconnect_required) return null;
 
