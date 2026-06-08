@@ -368,7 +368,7 @@ export default function VoiceInput({
     };
 
     recognition.onend = () => {
-      if (recognition !== recognitionRef.current) { setRecording(false); return; }
+      if (recognition !== recognitionRef.current) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
