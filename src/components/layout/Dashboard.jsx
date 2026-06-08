@@ -88,9 +88,9 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
       const { data } = await sb
         .from('emails')
         .select('id, sender_name, sender_email, subject, received_at, is_read, is_replied, flagged, project_id, body_preview, folder')
-        .or('folder.eq.inbox,folder.is.null')
-        .neq('is_sent', true)
-        .neq('is_draft', true)
+        .not('folder', 'eq', 'sent')
+        .or('is_sent.is.null,is_sent.eq.false')
+        .or('is_draft.is.null,is_draft.eq.false')
         .gte('received_at', since)
         .order('received_at', { ascending: false })
         .limit(60);
