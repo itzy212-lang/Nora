@@ -25,6 +25,7 @@ import InvoiceModal from './components/accounting/InvoiceModal';
 import Contacts from './components/shared/Contacts';
 import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
+import NotepadOverlay from './components/shared/NotepadOverlay';
 
 function StubView({ icon, title, subtitle }) {
   return (
@@ -86,6 +87,7 @@ export default function App() {
   const [composerOpts, setComposerOpts]     = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showNotepad, setShowNotepad]        = useState(false);
   const [socProjectId, setSocProjectId]     = useState(null);
   const [socDefaultAOIndex, setSocDefaultAOIndex] = useState(null);
 
@@ -453,6 +455,7 @@ export default function App() {
           currentView={currentView}
           onMenuToggle={() => setSidebarOpen(v => !v)}
           onNavigate={handleNavigate}
+          onOpenNotepad={() => setShowNotepad(true)}
         />
 
         <div className="content">
@@ -484,8 +487,13 @@ export default function App() {
           onClose={closeInvoiceModal}
         />
       )}
+
+      {showNotepad && (
+        <NotepadOverlay onClose={() => setShowNotepad(false)} />
+      )}
     </div>
   );
 
   return appBody;
 }
+
