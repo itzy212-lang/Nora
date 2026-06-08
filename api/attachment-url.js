@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const token = await getValidMicrosoftToken('itzy212@gmail.com');
+    const token = await getValidMicrosoftToken('help@sq1consulting.co.uk');
     if (!token) return res.status(401).send('Microsoft authentication required. Please reconnect your email in Settings.');
 
     const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(email_id)}/attachments/${encodeURIComponent(att_id)}/$value`;
