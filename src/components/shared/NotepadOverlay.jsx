@@ -150,7 +150,7 @@ export default function NotepadOverlay({ onClose }) {
       {/* Backdrop */}
       <div
         onClick={mode === 'list' ? onClose : backToList}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 290 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }}
       />
 
       {/* Drawer */}
@@ -158,7 +158,7 @@ export default function NotepadOverlay({ onClose }) {
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(420px, 100vw)',
         background: '#f8f9fa',
-        zIndex: 291,
+        zIndex: 9001,
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
