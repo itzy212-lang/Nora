@@ -1,26 +1,42 @@
-import { createClient } from '@supabase/supabase-js';
+// api/attachment-url.js
+// Fetches an email attachment directly from Microsoft Graph and serves it
+import { getValidMicrosoftToken } from './onedrive-helper.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const { email_id, att_id, filename, content_type } = req.query;
 
-  const { storage_path } = req.body || {};
-  if (!storage_path) return res.status(400).json({ error: 'storage_path required' });
+  if (!email_id || !att_id) {
+    return res.status(400).json({ error: 'email_id and att_id required' });
+  }
 
   try {
-    const sb = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    const token = await getValidMicrosoftToken('itzy212@gmail.com');
+    if (!token) return res.status(401).send('Microsoft authentication required. Please reconnect your email in Settings.');
 
-    const { data, error } = await sb.storage
-      .from('email_attachments')
-      .createSignedUrl(storage_path, 3600);
+    const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(email_id)}/attachments/${encodeURIComponent(att_id)}/$value`;
 
-    if (error) throw error;
-    return res.status(200).json({ url: data.signedUrl });
+    const response = await fetch(graphUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error('[attachment-url] Graph error:', response.status, errText);
+      return res.status(response.status).send(`Could not fetch attachment (${response.status})`);
+    }
+
+    const ct = content_type || response.headers.get('content-type') || 'application/octet-stream';
+    const fn = (filename || 'attachment').replace(/[^\w.\-() ]/g, '_');
+
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Content-Disposition', `inline; filename="${fn}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return res.send(buffer);
+
   } catch (err) {
     console.error('[attachment-url]', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).send(`Error: ${err.message}`);
   }
 }
