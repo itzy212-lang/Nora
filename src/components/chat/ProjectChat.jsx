@@ -990,9 +990,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
             )}
 
 
-              />
-            )}
-
             <div className="pch-input-row" style={{
               display: 'flex',
               alignItems: 'flex-end',
@@ -1073,6 +1070,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       </div>
     </div>
   );
+}
 
 
 
