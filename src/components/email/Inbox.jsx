@@ -71,17 +71,21 @@ function EmailBody({ email }) {
 
 // ── Extract draft from Ely response ─────────────────────────────────────────
 function extractDraft(text) {
+  if (!text) return null;
   // Look for content between --- markers
   const betweenDashes = text.match(/---+\s*\n([\s\S]+?)\n\s*---+/);
   if (betweenDashes) return betweenDashes[1].trim();
   // Look for after "Here's a draft:" or "Suggested draft:" etc
   const afterDraft = text.match(/(?:draft|reply)[:\s]+\n+([\s\S]{30,})/i);
   if (afterDraft) return afterDraft[1].trim();
-  // Look for Dear/Hi opening
-  const fromOpening = text.match(/(Dear\s+\w[\s\S]{20,})/);
-  if (fromOpening) return fromOpening[1].trim();
-  const fromHi = text.match(/(Hi\s+\w[\s\S]{20,})/);
-  if (fromHi) return fromHi[1].trim();
+  // Look for common email greetings
+  const greetings = /((?:Dear|Hi|Hello|Good morning|Good afternoon|Thank you for|Further to|Following|I refer|I write|I am writing|With reference|As discussed|As agreed)[\s\S]{30,})/;
+  const fromGreeting = text.match(greetings);
+  if (fromGreeting) return fromGreeting[1].trim();
+  // If text contains a sign-off (Kind regards, Yours, Best) it's likely a draft
+  if (/kind regards|yours sincerely|yours faithfully|many thanks|best regards/i.test(text) && text.length > 80) {
+    return text.trim();
+  }
   return null;
 }
 
@@ -273,15 +277,17 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {(workingDraftRef.current || workingDraft || messages.some(m => m.role === 'ely' && m.draft)) && (
+          {messages.some(m => m.role === 'ely') && (
             <button
               onClick={() => {
                 // Use ref first (most reliable), then state, then latest message draft
                 const body = workingDraftRef.current
                   || workingDraft
                   || [...messages].reverse().find(m => m.role === 'ely' && m.draft)?.draft
+                  || extractDraft([...messages].reverse().find(m => m.role === 'ely')?.explanation || '')
+                  || [...messages].reverse().find(m => m.role === 'ely')?.explanation
                   || '';
-                if (!body) { alert('No draft to send yet — ask Ely to produce a draft first.'); return; }
+                if (!body) { alert('Ask Ely to produce a draft first.'); return; }
                 onSendWithDraft({
                   to: email?.sender_email || '',
                   subject: `Re: ${email?.subject || ''}`,
