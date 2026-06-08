@@ -106,7 +106,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
-  const prevPhraseRef = useRef('');
   const latestTranscriptRef = useRef('');
   const { send } = useEly({ surface: 'email_composer' });
   const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
@@ -130,11 +129,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
   }, []);
 
   const applyDraftToComposer = useCallback((draftInput) => {
@@ -270,9 +266,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     if (meta?.recording === true) {
       setVoicePhase('recording');
       if (phrase && !phrase.includes('Recording')) {
-        setLiveTop(prevPhraseRef.current);
-        setLiveBottom(phrase);
-        prevPhraseRef.current = phrase;
       }
     }
   };
