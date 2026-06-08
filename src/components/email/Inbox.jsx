@@ -928,6 +928,18 @@ function AttachmentChip({ att }) {
 }
 
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
+  const [attachments, setAttachments] = useState([]);
+
+  useEffect(() => {
+    if (!email?.id || !sb) { setAttachments([]); return; }
+    sb.from('email_attachments')
+      .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
+      .eq('email_id', email.id)
+      .or('is_inline.is.null,is_inline.eq.false')
+      .not('storage_path', 'is', null)
+      .then(({ data }) => setAttachments(data || []))
+      .catch(() => setAttachments([]));
+  }, [email?.id]);
   const [replyDropOpen, setReplyDropOpen]   = useState(false);
   const [showSavePopup, setShowSavePopup]   = useState(false);
   const dropRef = useRef(null);
@@ -992,11 +1004,11 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
-      {previewAttachments.length > 0 && (
+      {attachments.length > 0 && (
         <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Attachments</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {previewAttachments.map(att => (
+            {attachments.map(att => (
               <AttachmentChip key={att.id} att={att} />
             ))}
           </div>
@@ -1012,7 +1024,6 @@ export default function Inbox({ onOpenComposer }) {
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
   const [threadEmails, setThreadEmails]  = useState([]);
-  const [previewAttachments, setPreviewAttachments] = useState([]);
   const [folder, setFolder]              = useState('Inbox');
   const [folderOpen, setFolderOpen]      = useState(false);
   const [search, setSearch]              = useState('');
@@ -1067,18 +1078,6 @@ export default function Inbox({ onOpenComposer }) {
 
   // Initial load only
   useEffect(() => { loadEmails({ force: true }); }, [folder]);
-
-  // Fetch attachments for the selected email
-  useEffect(() => {
-    if (!selectedEmail?.id || !sb) { setPreviewAttachments([]); return; }
-    sb.from('email_attachments')
-      .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
-      .eq('email_id', selectedEmail.id)
-      .or('is_inline.is.null,is_inline.eq.false')
-      .not('storage_path', 'is', null)
-      .then(({ data }) => setPreviewAttachments(data || []))
-      .catch(() => setPreviewAttachments([]));
-  }, [selectedEmail?.id]);
 
   // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
@@ -1439,4 +1438,5 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
