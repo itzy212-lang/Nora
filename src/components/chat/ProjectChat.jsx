@@ -341,8 +341,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const persistCurrentSessionToHistory = useCallback(() => {
@@ -678,12 +681,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
+      }
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
-      if (phrase && !phrase.includes('Recording')) {
-      }
     }
   };
 
@@ -1040,7 +1042,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               <button
                 className="ai-send-btn"
                 onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()}
-                disabled={loading || uploading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim() && !attachments.some(a => a.upload_status === 'uploaded'))}
+                disabled={loading || uploading || (voicePhase !== 'recording' && !input.trim() && !attachments.some(a => a.upload_status === 'uploaded'))}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/>
