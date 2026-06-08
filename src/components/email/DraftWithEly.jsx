@@ -3,7 +3,6 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
-import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 
 /**
@@ -99,8 +98,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [voicePhase, setVoicePhase] = useState('idle');
-  const [liveTop, setLiveTop] = useState('');
-  const [liveBottom, setLiveBottom] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [summarising, setSummarising] = useState(false);
@@ -133,11 +130,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
   }, []);
 
   const applyDraftToComposer = useCallback((draftInput) => {
@@ -267,20 +261,11 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
-      } else if (voicePhase !== 'idle') {
-        setVoicePhase('transcribing');
-      }
-      setLiveTop('');
-      setLiveBottom('');
-      prevPhraseRef.current = '';
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
       if (phrase && !phrase.includes('Recording')) {
-        setLiveTop(prevPhraseRef.current);
-        setLiveBottom(phrase);
-        prevPhraseRef.current = phrase;
       }
     }
   };
@@ -364,14 +349,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
-          {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
-            <DictationOverlay
-              phase={voicePhase}
-              topLine={liveTop}
-              bottomLine={liveBottom}
-              transcript={input}
-            />
-          )}
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
             <VoiceInput
               onTranscript={handleVoice}
@@ -413,5 +390,4 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
-
 
