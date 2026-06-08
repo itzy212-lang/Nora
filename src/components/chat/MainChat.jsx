@@ -792,7 +792,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
       // Mobile Whisper final result — put straight into input
       latestTranscriptRef.current = transcript;
       setInput(transcript);
-      setVoicePhase('idle');
+      setVoicePhase('preview');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -997,11 +997,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
           </div>
 
           <div className="ai-full-input">
-            {((!isMobileVoiceBrowser() && voicePhase === 'recording') || voicePhase === 'transcribing') && (
+            {((!isMobileVoiceBrowser() && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
               <DictationOverlay
                 phase={voicePhase}
                 topLine={liveTop}
                 bottomLine={liveBottom}
+                transcript={input}
               />
             )}
             <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
@@ -1023,7 +1024,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                 style={{ minHeight: 38, maxHeight: 140, overflowY: 'hidden', resize: 'none', lineHeight: 1.5 }}
               />
 
-              <button className="main-chat-send-btn" onClick={handleSend} disabled={loading || !input.trim()} type="button" aria-label="Send message" title="Send">
+              <button className="main-chat-send-btn" onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()} disabled={loading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim())} type="button" aria-label="Send message" title="Send">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 2L11 13" />
                   <path d="M22 2L15 22L11 13L2 9L22 2Z" />
