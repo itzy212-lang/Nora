@@ -256,7 +256,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
       setInput(transcript);
-      setVoicePhase('idle');
+      setVoicePhase('preview');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -364,11 +364,12 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
-          {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing') && (
+          {((!isMobile && voicePhase === 'recording') || voicePhase === 'transcribing' || voicePhase === 'preview') && (
             <DictationOverlay
               phase={voicePhase}
               topLine={liveTop}
               bottomLine={liveBottom}
+              transcript={input}
             />
           )}
           <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
@@ -396,7 +397,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
               }}
             />
 
-            <button className="ai-send-btn" onClick={handleSend} disabled={loading || !input.trim()}>
+            <button className="ai-send-btn" onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()} disabled={loading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim())}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
