@@ -507,8 +507,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const closeToDashboard = useCallback(() => {
@@ -797,14 +800,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
         // Desktop: populate input with accumulated transcript
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
-
+      }
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
       // Only update live display for real speech text, not mobile status messages
-      if (phrase && !phrase.includes('Recording')) {
-      }
     }
   };
 
