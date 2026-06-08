@@ -298,7 +298,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [voicePhase, setVoicePhase] = useState('idle');
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
-  const [pendingTranscript, setPendingTranscript] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -515,7 +514,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
     prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setPendingTranscript('');
     setLiveTop('');
     setLiveBottom('');
   }, []);
@@ -791,11 +789,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const handleVoice = (transcript, meta) => {
     if (!meta?.recording && transcript) {
+      // Mobile Whisper final result — put straight into input
       latestTranscriptRef.current = transcript;
-      setPendingTranscript(transcript);
-      setVoicePhase('preview');
-      setLiveTop('');
-      setLiveBottom('');
+      setInput(transcript);
+      setVoicePhase('idle');
       return;
     }
     if (transcript) latestTranscriptRef.current = transcript;
@@ -804,9 +801,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const handleVoicePreview = (phrase, meta) => {
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
-        setPendingTranscript(latestTranscriptRef.current);
-        setVoicePhase('preview');
-      } else {
+        // Desktop: populate input with accumulated transcript
+        setInput(latestTranscriptRef.current);
+        setVoicePhase('idle');
+      } else if (voicePhase !== 'idle') {
+        // Mobile: recording stopped, Whisper still processing
         setVoicePhase('transcribing');
       }
       setLiveTop('');
@@ -816,35 +815,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
+      // Only update live display for real speech text, not mobile status messages
       if (phrase && !phrase.includes('Recording')) {
         setLiveTop(prevPhraseRef.current);
         setLiveBottom(phrase);
         prevPhraseRef.current = phrase;
-      } else if (phrase) {
-        setLiveBottom(phrase);
       }
     }
-  };
-
-  const handleDictationSend = (text) => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
-    handleSend(text);
-  };
-
-  const handleDictationCancel = () => {
-    setVoicePhase('idle');
-    setPendingTranscript('');
-    latestTranscriptRef.current = '';
-    prevPhraseRef.current = '';
-    setLiveTop('');
-    setLiveBottom('');
-    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (event) => {
@@ -1020,19 +997,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
           </div>
 
           <div className="ai-full-input">
+            {((!isMobileVoiceBrowser() && voicePhase === 'recording') || voicePhase === 'transcribing') && (
+              <DictationOverlay
+                phase={voicePhase}
+                topLine={liveTop}
+                bottomLine={liveBottom}
+              />
+            )}
             <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
               <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading} stopSignal={voiceStopSignal} />
-
-              {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
-                <DictationOverlay
-                  phase={voicePhase}
-                  topLine={liveTop}
-                  bottomLine={liveBottom}
-                  transcript={pendingTranscript}
-                  onSend={handleDictationSend}
-                  onCancel={handleDictationCancel}
-                />
-              )}
               <textarea
                 ref={textareaRef}
                 className="ai-textarea"
