@@ -85,11 +85,24 @@ export default function NotepadOverlay({ onClose }) {
   }, []);
 
   const createNote = useCallback(async () => {
-    if (!sb) return;
-    const { data } = await sb.from('notes').insert({ title: '', content: '', color: 'default' }).select().single();
-    if (data) {
-      setNotes(prev => [data, ...prev]);
-      openNote(data);
+    if (!sb) {
+      alert('Supabase not available');
+      return;
+    }
+    try {
+      const { data, error } = await sb
+        .from('notes')
+        .insert({ title: '', content: '', color: 'default' })
+        .select()
+        .single();
+      if (error) throw error;
+      if (data) {
+        setNotes(prev => [data, ...prev]);
+        openNote(data);
+      }
+    } catch (err) {
+      console.error('[Notepad] createNote failed:', err);
+      alert('Could not create note: ' + (err?.message || JSON.stringify(err)));
     }
   }, [openNote]);
 
