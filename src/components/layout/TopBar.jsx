@@ -15,7 +15,7 @@ const VIEW_TITLES = {
   settings: 'Settings',
 };
 
-export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad }) {
+export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad, onOpenQuickRef }) {
   const { state } = useApp();
 
   return (
@@ -31,6 +31,20 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
           style={{ gap: 5 }}
         >
           ✨ Ask Ely
+        </button>
+        <button
+          onClick={onOpenQuickRef}
+          title="Quick reference view"
+          style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--bg3)',
+            border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, cursor: 'pointer', flexShrink: 0,
+            color: 'var(--text2)',
+          }}
+        >
+          🔍
         </button>
         <button
           onClick={onOpenNotepad}
