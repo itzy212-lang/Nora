@@ -488,12 +488,14 @@ export default function App() {
         />
       )}
 
-      {showNotepad && (
-        <NotepadOverlay onClose={() => setShowNotepad(false)} />
-      )}
     </div>
   );
 
-  return appBody;
+  return (
+    <>
+      {appBody}
+      {showNotepad && <NotepadOverlay onClose={() => setShowNotepad(false)} />}
+    </>
+  );
 }
 
