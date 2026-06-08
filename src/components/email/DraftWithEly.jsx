@@ -130,8 +130,11 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const applyDraftToComposer = useCallback((draftInput) => {
@@ -261,11 +264,15 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
         setVoicePhase('idle');
+      }
       return;
     }
     if (meta?.recording === true) {
       setVoicePhase('recording');
       if (phrase && !phrase.includes('Recording')) {
+        setLiveTop(prevPhraseRef.current);
+        setLiveBottom(phrase);
+        prevPhraseRef.current = phrase;
       }
     }
   };
