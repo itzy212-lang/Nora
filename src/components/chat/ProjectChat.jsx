@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
+import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 
 function safeProjectKey(projectId) {
@@ -246,12 +247,17 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [dictationPreview, setDictationPreview] = useState('');
+  const [voicePhase, setVoicePhase] = useState('idle');
+  const [liveTop, setLiveTop] = useState('');
+  const [liveBottom, setLiveBottom] = useState('');
+  const [pendingTranscript, setPendingTranscript] = useState('');
   const [lastDraft, setLastDraft] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
+  const prevPhraseRef = useRef('');
+  const latestTranscriptRef = useRef('');
   const fileInputRef = useRef(null);
 
   const { send, loading, resetSession } = useEly({
@@ -339,7 +345,12 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    setDictationPreview('');
+    prevPhraseRef.current = '';
+    latestTranscriptRef.current = '';
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const persistCurrentSessionToHistory = useCallback(() => {
@@ -586,7 +597,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
     stopVoice();
     setInput('');
-    setDictationPreview('');
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -661,28 +671,66 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     }
   };
 
-  const handleVoicePreview = (phrase) => {
-    if (phrase) setDictationPreview(phrase);
+  const handleVoice = (transcript, meta) => {
+    if (!meta?.recording && transcript) {
+      latestTranscriptRef.current = transcript;
+      setPendingTranscript(transcript);
+      setVoicePhase('preview');
+      setLiveTop('');
+      setLiveBottom('');
+      return;
+    }
+    if (transcript) latestTranscriptRef.current = transcript;
   };
 
-  const handleVoice = (transcript) => {
-    if (!voiceBaseRef.current) {
-      voiceBaseRef.current = input.trim();
+  const handleVoicePreview = (phrase, meta) => {
+    if (meta?.recording === false) {
+      if (latestTranscriptRef.current) {
+        setPendingTranscript(latestTranscriptRef.current);
+        setVoicePhase('preview');
+      } else {
+        setVoicePhase('transcribing');
+      }
+      setLiveTop('');
+      setLiveBottom('');
+      prevPhraseRef.current = '';
+      return;
     }
+    if (meta?.recording === true) {
+      setVoicePhase('recording');
+      if (phrase && !phrase.includes('Recording')) {
+        setLiveTop(prevPhraseRef.current);
+        setLiveBottom(phrase);
+        prevPhraseRef.current = phrase;
+      } else if (phrase) {
+        setLiveBottom(phrase);
+      }
+    }
+  };
 
-    const base = voiceBaseRef.current;
-    const next = base ? `${base} ${transcript}` : transcript;
+  const handleDictationSend = (text) => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
+    handleSend(text);
+  };
 
-    setInput(next);
-    setDictationPreview(next);
-
-    requestAnimationFrame(resizeTextarea);
-    textareaRef.current?.focus();
+  const handleDictationCancel = () => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (e) => {
     voiceBaseRef.current = '';
-    setDictationPreview('');
     setInput(e.target.value);
   };
 
@@ -967,32 +1015,15 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               </div>
             )}
 
-            {dictationPreview && (
-              <div style={{
-                marginBottom: 8,
-                maxHeight: 120,
-                overflowY: 'auto',
-                background: 'var(--bg3)',
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                padding: '9px 11px',
-                fontSize: 12.5,
-                lineHeight: 1.5,
-                color: 'var(--text2)',
-                whiteSpace: 'pre-wrap',
-              }}>
-                <div style={{
-                  fontSize: 10.5,
-                  color: 'var(--text3)',
-                  marginBottom: 4,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.4px',
-                  fontWeight: 600,
-                }}>
-                  Dictation preview
-                </div>
-                {dictationPreview}
-              </div>
+            {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
+              <DictationOverlay
+                phase={voicePhase}
+                topLine={liveTop}
+                bottomLine={liveBottom}
+                transcript={pendingTranscript}
+                onSend={handleDictationSend}
+                onCancel={handleDictationCancel}
+              />
             )}
 
             <div className="pch-input-row" style={{
@@ -1076,4 +1107,5 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
