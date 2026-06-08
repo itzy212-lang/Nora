@@ -1064,7 +1064,7 @@ export default function Inbox({ onOpenComposer }) {
   }, [folder]);
 
   // Initial load only
-  useEffect(() => { loadEmails(); }, [folder]);
+  useEffect(() => { loadEmails({ force: true }); }, [folder]);
 
   // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
