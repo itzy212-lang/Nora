@@ -439,10 +439,13 @@ export default function VoiceInput({
     startDesktopRecording();
   }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
 
+  const stopRecordingRef = useRef(stopRecording);
+  useEffect(() => { stopRecordingRef.current = stopRecording; }, [stopRecording]);
+
   useEffect(() => {
     if (!stopSignal) return;
-    stopRecording();
-  }, [stopSignal, stopRecording]);
+    stopRecordingRef.current();
+  }, [stopSignal]);
 
   useEffect(() => {
     return () => {
@@ -515,6 +518,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
