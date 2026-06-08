@@ -26,6 +26,7 @@ import Contacts from './components/shared/Contacts';
 import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
 import NotepadOverlay from './components/shared/NotepadOverlay';
+import QuickRefOverlay from './components/shared/QuickRefOverlay';
 
 function StubView({ icon, title, subtitle }) {
   return (
@@ -88,6 +89,7 @@ export default function App() {
   const [invoiceProject, setInvoiceProject] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showNotepad, setShowNotepad]        = useState(false);
+  const [showQuickRef, setShowQuickRef]      = useState(false);
   const [socProjectId, setSocProjectId]     = useState(null);
   const [socDefaultAOIndex, setSocDefaultAOIndex] = useState(null);
 
@@ -456,6 +458,7 @@ export default function App() {
           onMenuToggle={() => setSidebarOpen(v => !v)}
           onNavigate={handleNavigate}
           onOpenNotepad={() => setShowNotepad(true)}
+          onOpenQuickRef={() => setShowQuickRef(true)}
         />
 
         <div className="content">
@@ -495,6 +498,7 @@ export default function App() {
     <>
       {appBody}
       {showNotepad && <NotepadOverlay onClose={() => setShowNotepad(false)} />}
+      {showQuickRef && <QuickRefOverlay onClose={() => setShowQuickRef(false)} />}
     </>
   );
 }
