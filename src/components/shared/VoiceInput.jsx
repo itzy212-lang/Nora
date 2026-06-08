@@ -344,7 +344,6 @@ export default function VoiceInput({
     };
 
     recognition.onresult = (event) => {
-      if (recognition !== recognitionRef.current) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
       let latestInterim = '';
@@ -368,7 +367,6 @@ export default function VoiceInput({
     };
 
     recognition.onend = () => {
-      if (recognition !== recognitionRef.current) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -390,7 +388,6 @@ export default function VoiceInput({
     };
 
     recognition.onerror = () => {
-      if (recognition !== recognitionRef.current) { setRecording(false); return; }
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -518,6 +515,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
