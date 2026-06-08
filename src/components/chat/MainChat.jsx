@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
+import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 import sb from '../../supabaseClient';
 
@@ -294,7 +295,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [dictationPreview, setDictationPreview] = useState('');
+  const [voicePhase, setVoicePhase] = useState('idle');
+  const [liveTop, setLiveTop] = useState('');
+  const [liveBottom, setLiveBottom] = useState('');
+  const [pendingTranscript, setPendingTranscript] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -321,6 +325,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
+  const prevPhraseRef = useRef('');
+  const latestTranscriptRef = useRef('');
 
   const {
     send,
@@ -506,6 +512,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
+    prevPhraseRef.current = '';
+    latestTranscriptRef.current = '';
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    setLiveTop('');
+    setLiveBottom('');
   }, []);
 
   const closeToDashboard = useCallback(() => {
@@ -697,8 +709,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setMessages(prev => [...prev, ...newMessages]);
   }, [state.currentProject?.id, selectedEmailContext]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const handleSend = useCallback(async (overrideText) => {
+    const text = (typeof overrideText === 'string' ? overrideText : input).trim();
     if (!text || loading) return;
 
     stopVoice();
@@ -777,35 +789,66 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
   };
 
-  const handleVoice = (transcript) => {
-    // Mobile Chrome speech recognition already re-emits previous phrases internally.
-    // Do NOT merge on mobile or the transcript snowballs exponentially.
-    if (isMobileVoiceBrowser()) {
-      const cleaned = cleanVoiceTranscript(transcript);
-      setInput(cleaned);
-      setDictationPreview(cleaned);
-      requestAnimationFrame(resizeTextarea);
-      textareaRef.current?.focus();
+  const handleVoice = (transcript, meta) => {
+    if (!meta?.recording && transcript) {
+      latestTranscriptRef.current = transcript;
+      setPendingTranscript(transcript);
+      setVoicePhase('preview');
+      setLiveTop('');
+      setLiveBottom('');
       return;
     }
-
-    if (!voiceBaseRef.current) voiceBaseRef.current = input.trim();
-
-    const next = mergeVoiceWithBase(voiceBaseRef.current, transcript);
-
-    setInput(next);
-    setDictationPreview(next);
-    requestAnimationFrame(resizeTextarea);
-    textareaRef.current?.focus();
+    if (transcript) latestTranscriptRef.current = transcript;
   };
 
-  const handleVoicePreview = (phrase) => {
-    if (phrase) setDictationPreview(phrase);
+  const handleVoicePreview = (phrase, meta) => {
+    if (meta?.recording === false) {
+      if (latestTranscriptRef.current) {
+        setPendingTranscript(latestTranscriptRef.current);
+        setVoicePhase('preview');
+      } else {
+        setVoicePhase('transcribing');
+      }
+      setLiveTop('');
+      setLiveBottom('');
+      prevPhraseRef.current = '';
+      return;
+    }
+    if (meta?.recording === true) {
+      setVoicePhase('recording');
+      if (phrase && !phrase.includes('Recording')) {
+        setLiveTop(prevPhraseRef.current);
+        setLiveBottom(phrase);
+        prevPhraseRef.current = phrase;
+      } else if (phrase) {
+        setLiveBottom(phrase);
+      }
+    }
+  };
+
+  const handleDictationSend = (text) => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
+    handleSend(text);
+  };
+
+  const handleDictationCancel = () => {
+    setVoicePhase('idle');
+    setPendingTranscript('');
+    latestTranscriptRef.current = '';
+    prevPhraseRef.current = '';
+    setLiveTop('');
+    setLiveBottom('');
+    voiceBaseRef.current = '';
   };
 
   const handleTextChange = (event) => {
     voiceBaseRef.current = '';
-    setDictationPreview('');
     setInput(event.target.value);
   };
 
@@ -980,10 +1023,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
             <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
               <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading} stopSignal={voiceStopSignal} />
 
-              {dictationPreview && !input && (
-                <div style={{ fontSize: 12, color: '#9ca3af', padding: '4px 8px', fontStyle: 'italic', lineHeight: 1.4 }}>
-                  {dictationPreview}
-                </div>
+              {(voicePhase === 'recording' || voicePhase === 'transcribing' || voicePhase === 'preview') && (
+                <DictationOverlay
+                  phase={voicePhase}
+                  topLine={liveTop}
+                  bottomLine={liveBottom}
+                  transcript={pendingTranscript}
+                  onSend={handleDictationSend}
+                  onCancel={handleDictationCancel}
+                />
               )}
               <textarea
                 ref={textareaRef}
@@ -1292,4 +1340,5 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
