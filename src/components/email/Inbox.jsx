@@ -992,11 +992,11 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
-      {email.email_attachments?.filter(a => !a.is_inline && a.storage_path).length > 0 && (
+      {previewAttachments.length > 0 && (
         <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Attachments</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {email.email_attachments.filter(a => !a.is_inline && a.storage_path).map(att => (
+            {previewAttachments.map(att => (
               <AttachmentChip key={att.id} att={att} />
             ))}
           </div>
@@ -1012,6 +1012,7 @@ export default function Inbox({ onOpenComposer }) {
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
   const [threadEmails, setThreadEmails]  = useState([]);
+  const [previewAttachments, setPreviewAttachments] = useState([]);
   const [folder, setFolder]              = useState('Inbox');
   const [folderOpen, setFolderOpen]      = useState(false);
   const [search, setSearch]              = useState('');
@@ -1059,43 +1060,25 @@ export default function Inbox({ onOpenComposer }) {
       const { data, error } = await q;
       if (error) throw error;
 
-      let emails = data || [];
-
-      // Fetch attachments separately and merge into emails
-      if (emails.length > 0) {
-        try {
-          const emailIds = emails.map(e => e.id).filter(Boolean);
-          const { data: attachData } = await sb
-            .from('email_attachments')
-            .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
-            .in('email_id', emailIds)
-            .or('is_inline.is.null,is_inline.eq.false')
-            .not('storage_path', 'is', null);
-
-          if (attachData && attachData.length > 0) {
-            const attachMap = {};
-            attachData.forEach(a => {
-              if (!attachMap[a.email_id]) attachMap[a.email_id] = [];
-              attachMap[a.email_id].push(a);
-            });
-            emails = emails.map(e => ({
-              ...e,
-              email_attachments: attachMap[e.id] || [],
-              has_attachments: !!(attachMap[e.id]?.length),
-            }));
-          }
-        } catch (attErr) {
-          console.warn('[Inbox] attachment fetch failed:', attErr.message);
-        }
-      }
-
-      dispatch({ type: 'SET_EMAILS', payload: emails });
+      dispatch({ type: 'SET_EMAILS', payload: data || [] });
     } catch (err) { console.error('loadEmails:', err); }
     setLoading(false);
   }, [folder]);
 
   // Initial load only
-  useEffect(() => { loadEmails(); }, [folder]);
+  useEffect(() => { loadEmails({ force: true }); }, [folder]);
+
+  // Fetch attachments for the selected email
+  useEffect(() => {
+    if (!selectedEmail?.id || !sb) { setPreviewAttachments([]); return; }
+    sb.from('email_attachments')
+      .select('id, email_id, filename, content_type, size_bytes, storage_path, is_inline')
+      .eq('email_id', selectedEmail.id)
+      .or('is_inline.is.null,is_inline.eq.false')
+      .not('storage_path', 'is', null)
+      .then(({ data }) => setPreviewAttachments(data || []))
+      .catch(() => setPreviewAttachments([]));
+  }, [selectedEmail?.id]);
 
   // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
