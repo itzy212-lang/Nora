@@ -898,32 +898,28 @@ function AttachmentChip({ att }) {
 
   const ext = (att.filename || '').split('.').pop().toLowerCase();
   const icon = ['pdf'].includes(ext) ? '📄' : ['doc','docx'].includes(ext) ? '📝' : ['jpg','jpeg','png','gif','webp'].includes(ext) ? '🖼️' : ['xls','xlsx'].includes(ext) ? '📊' : '📎';
+  const sizeLabel = att.size_bytes ? (att.size_bytes > 1048576 ? `${(att.size_bytes/1048576).toFixed(1)}MB` : `${Math.round(att.size_bytes/1024)}KB`) : '';
+  const shortName = (att.filename || 'File').length > 20 ? (att.filename || 'File').slice(0, 20) + '…' : (att.filename || 'File');
 
   return (
-    <a
-      href={url || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); if (url) window.open(url, '_blank'); }}
+      title={att.filename}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 12px', borderRadius: 8,
-        border: '1px solid var(--border)', background: 'var(--bg2)',
-        fontSize: 12, color: 'var(--text2)', textDecoration: 'none',
-        cursor: url ? 'pointer' : 'default', opacity: url ? 1 : 0.5,
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 10px', borderRadius: 6,
+        border: '1px solid var(--border)', background: 'var(--bg)',
+        fontSize: 11.5, color: url ? 'var(--text)' : 'var(--text3)',
+        cursor: url ? 'pointer' : 'default',
+        whiteSpace: 'nowrap', flexShrink: 0, userSelect: 'none',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
       }}
     >
-      <span>{icon}</span>
-      <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {att.filename}
-      </span>
-      {att.size_bytes && (
-        <span style={{ color: 'var(--text3)', fontSize: 10 }}>
-          {att.size_bytes > 1024 * 1024
-            ? `${(att.size_bytes / 1024 / 1024).toFixed(1)}MB`
-            : `${Math.round(att.size_bytes / 1024)}KB`}
-        </span>
-      )}
-    </a>
+      <span style={{ fontSize: 13 }}>{icon}</span>
+      <span style={{ fontWeight: 500 }}>{shortName}</span>
+      {sizeLabel && <span style={{ fontSize: 10, color: 'var(--text3)' }}>{sizeLabel}</span>}
+      {!url && <span style={{ fontSize: 10, color: 'var(--text3)' }}>…</span>}
+    </div>
   );
 }
 
@@ -998,22 +994,25 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           </div>
         </div>
       </div>
+      {attachments.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 6, padding: '7px 16px',
+          borderBottom: '1px solid var(--border)',
+          overflowX: 'auto', flexShrink: 0,
+          background: 'var(--bg2)',
+          scrollbarWidth: 'thin',
+        }}>
+          {attachments.map(att => (
+            <AttachmentChip key={att.id} att={att} />
+          ))}
+        </div>
+      )}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: isHtml ? '#fff' : 'transparent' }}>
         {isHtml
           ? <EmailBody email={email} />
           : <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}><EmailBody email={email} /></div>
         }
       </div>
-      {attachments.length > 0 && (
-        <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Attachments</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {attachments.map(att => (
-              <AttachmentChip key={att.id} att={att} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1438,5 +1437,6 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
