@@ -1,4 +1,26 @@
-export default function DictationOverlay({ phase, topLine, bottomLine }) {
+export default function DictationOverlay({ phase, topLine, bottomLine, transcript }) {
+  if (phase === 'preview') {
+    return (
+      <div style={{
+        margin: '0 0 6px 0',
+        padding: '10px 12px',
+        background: 'var(--bg3, #f3f4f6)',
+        border: '1px solid #e5e7eb',
+        borderRadius: 10,
+        width: '100%',
+        boxSizing: 'border-box',
+        wordBreak: 'break-word',
+      }}>
+        <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+          Tap Send to confirm
+        </div>
+        <div style={{ fontSize: 14, color: '#111827', lineHeight: 1.5 }}>
+          {transcript}
+        </div>
+      </div>
+    );
+  }
+
   if (phase === 'transcribing') {
     return (
       <div style={{
@@ -9,7 +31,6 @@ export default function DictationOverlay({ phase, topLine, bottomLine }) {
         borderRadius: 10,
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
         minHeight: 36,
       }}>
         <span style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>Transcribing…</span>
