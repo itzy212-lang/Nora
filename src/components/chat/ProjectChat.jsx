@@ -252,7 +252,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
-  const prevPhraseRef = useRef('');
   const latestTranscriptRef = useRef('');
   const fileInputRef = useRef(null);
 
@@ -341,11 +340,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const stopVoice = useCallback(() => {
     setVoiceStopSignal(v => v + 1);
     voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
     latestTranscriptRef.current = '';
     setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
   }, []);
 
   const persistCurrentSessionToHistory = useCallback(() => {
