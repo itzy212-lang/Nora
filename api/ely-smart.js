@@ -823,19 +823,30 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
 
   // Inject project brain — persistent memory from previous sessions
   if (brainContext?.length) {
-    const brainText = brainContext
-      .map(m => {
-        const label = m.role === 'user' ? 'Surveyor' : 'Ely';
-        const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
-        const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-        return `${label}${date ? ` (${date})` : ''}: ${prefix}${m.content}`;
-      })
-      .join('\n\n');
+    const summaryEntry = brainContext.find(m => m.is_summary);
+    const regularEntries = brainContext.filter(m => !m.is_summary);
 
-    messages.push({
-      role: 'system',
-      content: `The following is the persistent project brain — previous chat history, emails, documents and notes stored for this project. Use this as memory when answering questions about the project status, timeline, or history:\n\n${brainText}`,
-    });
+    let brainText = '';
+
+    if (summaryEntry) {
+      brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${summaryEntry.content}\n\nRECENT ENTRIES:\n`;
+    }
+
+    brainText += regularEntries.map(m => {
+      const label = m.role === 'user' ? 'Surveyor' : 
+        m.content_type === 'email_received' ? 'Received email' :
+        m.content_type === 'email_sent' ? 'Sent email' : 'Ely';
+      const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
+      const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      return `${label}${date ? ` (${date})` : ''}: ${prefix}${m.content}`;
+    }).join('\n\n');
+
+    if (brainText.trim()) {
+      messages.push({
+        role: 'system',
+        content: `PROJECT BRAIN — persistent memory for this project (use this to answer questions about status, timeline, correspondence history):\n\n${brainText}`,
+      });
+    }
   }
 
   if (chatHistory?.length) {
