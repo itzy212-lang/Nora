@@ -124,6 +124,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
         body: htmlBody,
         userId: userEmail,
         attachments: attachments.map(a => ({ name: a.name, type: a.type, data: a.data })),
+        projectId: projectId || null,
       });
 
       const { replyToEmailId } = replyInfoRef.current;
@@ -303,3 +304,4 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
