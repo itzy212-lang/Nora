@@ -253,7 +253,7 @@ function normaliseEmailRecord(email = {}) {
     cc: email.cc || email.cc_email || email.cc_recipients || '',
     subject: firstNonEmpty(email.subject, email.title),
     date: firstNonEmpty(email.received_at, email.sent_at, email.date, email.created_at, email.updated_at),
-    body: stripHtml(body).slice(0, 2000),
+    body: stripHtml(body).slice(0, 1000),
   };
 }
 
@@ -685,7 +685,7 @@ ${projectFacts}
     prompt += `
 
 PROJECT BUNDLE:
-${compactJson(projectBundle, 22000)}
+${compactJson(projectBundle, 14000)}
 `;
   } else if (resolvedProject) {
     prompt += `
@@ -798,7 +798,7 @@ Emails Required:
     prompt += `
 
 SCOPED EMAIL CONTEXT:
-${compactJson(scopedEmailContext.slice(0, 40), 24000)}
+${compactJson(scopedEmailContext.slice(0, 40), 12000)}
 `;
   }
 
@@ -973,6 +973,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
