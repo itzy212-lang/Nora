@@ -430,9 +430,9 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    query = query.eq('project_id', projectId).limit(40);
+    query = query.eq('project_id', projectId).limit(10);
   } else {
-    query = query.in('folder', ['Inbox', 'Sent Items']).limit(100);
+    query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
 
   const { data, error } = await query;
@@ -876,6 +876,160 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   return messages;
 }
 
+// ── Full-text email search ─────────────────────────────────────────────────
+// Called when GPT-4o detects a specific email lookup request
+async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
+  const sb = getSupabase();
+  if (!sb || !projectId) return [];
+
+  try {
+    // Build base query
+    let q = sb
+      .from('emails')
+      .select('id, subject, from_address, from_name, received_at, body_text, folder')
+      .eq('project_id', projectId)
+      .order('received_at', { ascending: false })
+      .limit(limit);
+
+    // Filter by sender if provided
+    if (sender) {
+      q = q.or(`from_address.ilike.%${sender}%,from_name.ilike.%${sender}%`);
+    }
+
+    // Full-text search on subject + body if query provided
+    if (query) {
+      q = q.textSearch('fts', query, { type: 'plain', config: 'english' });
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      // Fallback: ilike search if fts column not available
+      let fallback = sb
+        .from('emails')
+        .select('id, subject, from_address, from_name, received_at, body_text, folder')
+        .eq('project_id', projectId)
+        .order('received_at', { ascending: false })
+        .limit(limit);
+
+      if (sender) fallback = fallback.or(`from_address.ilike.%${sender}%,from_name.ilike.%${sender}%`);
+      if (query) fallback = fallback.or(`subject.ilike.%${query}%,body_text.ilike.%${query}%`);
+
+      const { data: fbData } = await fallback;
+      return (fbData || []).map(normaliseEmailRecord).filter(Boolean);
+    }
+
+    return (data || []).map(normaliseEmailRecord).filter(Boolean);
+  } catch (err) {
+    console.warn('[ely-smart] searchProjectEmails error:', err.message);
+    return [];
+  }
+}
+
+// ── Case review detection ─────────────────────────────────────────────────
+function detectsCaseReview(prompt = '') {
+  const lower = prompt.toLowerCase();
+  return lower.includes('case review') || lower.includes('full review') || lower.includes('full case');
+}
+
+// ── Claude case review ────────────────────────────────────────────────────
+async function runCaseReview({ projectId, topic, projectBundle }) {
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_KEY) throw new Error('Missing ANTHROPIC_API_KEY');
+
+  const sb = getSupabase();
+
+  // Load ALL emails for this project — no limit
+  let allEmails = [];
+  if (sb && projectId) {
+    try {
+      const { data } = await sb
+        .from('emails')
+        .select('subject, from_address, from_name, received_at, body_text, folder')
+        .eq('project_id', projectId)
+        .order('received_at', { ascending: true });
+      allEmails = (data || []).map(e => ({
+        date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
+        direction: (e.folder || '').toLowerCase().includes('sent') ? 'Sent' : 'Received',
+        from: e.from_name || e.from_address || '',
+        subject: e.subject || '',
+        body: (e.body_text || '').slice(0, 3000), // generous per-email cap for Claude
+      }));
+    } catch (err) {
+      console.warn('[ely-smart] case review email load error:', err.message);
+    }
+  }
+
+  // Load all brain entries — no limit
+  let allBrain = [];
+  if (sb && projectId) {
+    try {
+      const { data } = await sb
+        .from('project_brain')
+        .select('role, content, content_type, created_at, file_name')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true });
+      allBrain = (data || []).map(m => ({
+        date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
+        type: m.content_type || m.role || 'note',
+        content: (m.content || '').slice(0, 2000),
+      }));
+    } catch (err) {
+      console.warn('[ely-smart] case review brain load error:', err.message);
+    }
+  }
+
+  const emailsText = allEmails.length
+    ? allEmails.map(e => `[${e.date}] ${e.direction} — From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
+    : 'No emails found.';
+
+  const brainText = allBrain.length
+    ? allBrain.map(m => `[${m.date}] ${m.type}: ${m.content}`).join('\n\n')
+    : 'No notes or chat history found.';
+
+  const projectAddress = projectBundle?.project_raw?.bo_premise_address || projectBundle?.project_raw?.address || '';
+
+  const prompt = `You are assisting a party wall surveyor called Itzik (Square One Consulting) with a case review.
+
+Project: ${projectAddress}
+Topic to investigate: ${topic}
+
+Your task:
+1. Read ALL the correspondence and notes below chronologically
+2. Build a structured timeline of key events relevant to the topic
+3. Identify patterns — delays, contradictions, jurisdictional overreach, billing anomalies, position changes
+4. Extract verbatim quotes from emails that are most relevant — include the date, sender, and exact words
+5. Summarise the strongest arguments Itzik can make based on the evidence
+6. Flag anything that weakens Itzik's position so he is prepared
+
+Be thorough. This is for use in a professional dispute. Accuracy and evidence matter.
+
+--- ALL EMAILS (chronological) ---
+${emailsText}
+
+--- PROJECT NOTES & CHAT HISTORY ---
+${brainText}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-6',
+      max_tokens: 8000,
+      system: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error?.message || 'Claude case review failed');
+
+  return payload.content?.[0]?.text || 'No findings returned.';
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
@@ -889,6 +1043,74 @@ export default async function handler(req, res) {
 
     const userId = inferUserId(body);
     const modeHint = inferModeHint(body.surface, body.prompt, body);
+    const prompt = String(body.prompt || '').trim();
+
+    // ── Case review confirmation ──────────────────────────────────────────
+    // If user has already confirmed a case review (flagged by frontend)
+    if (body.case_review_confirmed && body.case_review_topic && projectId) {
+      const projectBundle = await loadProjectBundle(projectId);
+
+      // Tell GPT-4o to acknowledge the handoff first
+      const handoffMsg = `Got it. I'm passing this to Claude now to go through all correspondence, emails, chat history and notes on this project for: "${body.case_review_topic}". This may take a moment — I'll bring the findings back to you here.`;
+
+      // Run Claude case review
+      let findings;
+      try {
+        findings = await runCaseReview({ projectId, topic: body.case_review_topic, projectBundle });
+      } catch (err) {
+        findings = `Case review encountered an error: ${err.message}`;
+      }
+
+      // Return findings to GPT-4o to present
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 3500,
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: 'You are Ely, a party wall surveyor assistant. Present the case review findings clearly and offer to discuss specific aspects or help draft a response.' },
+            { role: 'user', content: `Here are Claude\'s findings from the full case review on "${body.case_review_topic}":\n\n${findings}\n\nPresent these findings to the surveyor clearly. Offer to help them work with any part of it — drafting arguments, letters, or further analysis.` },
+          ],
+        }),
+      });
+
+      const data = await response.json();
+      const reply = cleanOutput(data.choices?.[0]?.message?.content || findings);
+
+      return res.status(200).json({
+        reply,
+        case_review: true,
+        resolvedProject,
+      });
+    }
+
+    // ── Case review detection — ask clarifying question ───────────────────
+    if (detectsCaseReview(prompt) && projectId) {
+      return res.status(200).json({
+        reply: `Before I proceed — are you looking to review a specific email or document, or do you want a full case file review across all correspondence, emails, notes and chat history on this project?\n\nA full case review will take a moment as I'll need to pass this to Claude to go through everything. If so, what specifically do you want me to focus on?`,
+        case_review_prompt: true,
+        project_id: projectId,
+      });
+    }
+
+    // ── Email search tool ─────────────────────────────────────────────────
+    // If GPT-4o needs to find a specific email, handle it here
+    if (body.email_search && projectId) {
+      const results = await searchProjectEmails({
+        projectId,
+        query: body.email_search.query || '',
+        sender: body.email_search.sender || '',
+        limit: body.email_search.limit || 5,
+      });
+
+      return res.status(200).json({
+        email_search_results: results,
+        count: results.length,
+      });
+    }
+
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
 
@@ -973,6 +1195,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
