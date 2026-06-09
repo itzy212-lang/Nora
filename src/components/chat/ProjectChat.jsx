@@ -5,6 +5,40 @@ import ChatMessage from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
+import { supabase } from '../../supabaseClient';
+
+// ── Project brain helpers ─────────────────────────────────────────────────
+
+async function saveToBrain(projectId, sessionId, role, content, contentType = 'message', fileName = null) {
+  if (!projectId || !content) return;
+  try {
+    await supabase.from('project_brain').insert({
+      project_id: projectId,
+      session_id: sessionId,
+      role,
+      content: String(content).slice(0, 20000),
+      content_type: contentType,
+      file_name: fileName || null,
+    });
+  } catch {
+    // brain save failures must never break chat
+  }
+}
+
+async function loadBrainContext(projectId, limit = 40) {
+  if (!projectId) return [];
+  try {
+    const { data } = await supabase
+      .from('project_brain')
+      .select('role, content, content_type, file_name, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return (data || []).reverse();
+  } catch {
+    return [];
+  }
+}
 
 function safeProjectKey(projectId) {
   return String(projectId || 'no-project').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -613,8 +647,17 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
     setMessages(prev => [...prev, userMsg]);
 
+    // Save user message to project brain
+    saveToBrain(projectId, activeSessionId, 'user', messageText,
+      readyAttachments.length ? 'upload' : 'message',
+      readyAttachments[0]?.file_name || null
+    );
+
     try {
       const wantsDraft = isDraftRequest(messageText, !!lastDraft);
+
+      // Load brain context to pass to Ely
+      const brainContext = await loadBrainContext(projectId, 40);
 
       const result = await send(messageText, {
         projectId,
@@ -623,6 +666,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         uploadContext: readyAttachments,
         projectContext: project,
         projectChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
+        brainContext,
         context: {
           previousDraft: lastDraft || null,
           uploadedFiles: readyAttachments,
@@ -640,6 +684,10 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       });
 
       appendAssistantMessagesFromResult(result, wantsDraft);
+
+      // Save Ely's reply to project brain
+      const replyText = result.reply || result.draft || result.documentText || result.replyText || '';
+      if (replyText) saveToBrain(projectId, activeSessionId, 'ely', replyText);
 
       setAttachments(prev => prev.filter(a => a.upload_status !== 'uploaded'));
     } catch (err) {
@@ -1071,6 +1119,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
 
 
