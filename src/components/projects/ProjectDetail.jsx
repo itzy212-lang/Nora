@@ -2713,7 +2713,7 @@ function splitDraftMessage(content = '') {
   return { intro, draft, outro };
 }
 
-export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC }) {
+export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement }) {
   const [tab, setTab] = useState('details');
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
@@ -3824,10 +3824,39 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             </div>
 
-            
             <div
               style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
-              onClick={() => setNoticeModal({ ao: null, defaultSections: [] })}
+              onClick={() => onOpenDisputeAgreement?.(project)}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--orange, #f97316)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: 'var(--orange-bg, #fff7ed)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  flexShrink: 0,
+                }}>
+                  🤝
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                    Dispute Agreement
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
+                    Dictate · generate Party Agreement · download .docx
+                  </div>
+                </div>
+                <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
+              </div>
+            </div>
+
+            
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
@@ -4027,3 +4056,4 @@ Itzik`,
     </div>
   );
 }
+
