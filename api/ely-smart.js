@@ -822,6 +822,10 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   if (emailContextText) messages.push({ role: 'system', content: emailContextText });
 
   // Inject project brain — persistent memory from previous sessions
+  // Cap at ~4000 chars per entry and ~8000 chars total to stay within token budget
+  const BRAIN_ENTRY_CAP = 4000;
+  const BRAIN_TOTAL_CAP = 8000;
+
   if (brainContext?.length) {
     const summaryEntry = brainContext.find(m => m.is_summary);
     const regularEntries = brainContext.filter(m => !m.is_summary);
@@ -829,22 +833,27 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
     let brainText = '';
 
     if (summaryEntry) {
-      brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${summaryEntry.content}\n\nRECENT ENTRIES:\n`;
+      const summaryTrimmed = String(summaryEntry.content || '').slice(0, BRAIN_ENTRY_CAP);
+      brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${summaryTrimmed}\n\nRECENT ENTRIES:\n`;
     }
 
     brainText += regularEntries.map(m => {
-      const label = m.role === 'user' ? 'Surveyor' : 
+      const label = m.role === 'user' ? 'Surveyor' :
         m.content_type === 'email_received' ? 'Received email' :
         m.content_type === 'email_sent' ? 'Sent email' : 'Ely';
       const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
       const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-      return `${label}${date ? ` (${date})` : ''}: ${prefix}${m.content}`;
+      const content = String(m.content || '').slice(0, BRAIN_ENTRY_CAP);
+      return `${label}${date ? ` (${date})` : ''}: ${prefix}${content}`;
     }).join('\n\n');
 
-    if (brainText.trim()) {
+    // Hard cap total brain text
+    const brainTextFinal = brainText.slice(0, BRAIN_TOTAL_CAP);
+
+    if (brainTextFinal.trim()) {
       messages.push({
         role: 'system',
-        content: `PROJECT BRAIN — persistent memory for this project (use this to answer questions about status, timeline, correspondence history):\n\n${brainText}`,
+        content: `PROJECT BRAIN — persistent memory for this project (use this to answer questions about status, timeline, correspondence history):\n\n${brainTextFinal}`,
       });
     }
   }
@@ -965,6 +974,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
