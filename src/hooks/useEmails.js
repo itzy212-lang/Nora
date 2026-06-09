@@ -2,6 +2,29 @@ import { useState, useCallback } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
 
+// ── Brain helpers ──────────────────────────────────────────────────────────
+
+async function saveEmailToBrain(projectId, role, subject, body, fromTo) {
+  if (!projectId || !sb) return;
+  try {
+    const content = [
+      subject ? `Subject: ${subject}` : '',
+      fromTo ? fromTo : '',
+      body ? body.slice(0, 8000) : '',
+    ].filter(Boolean).join('\n');
+
+    await sb.from('project_brain').insert({
+      project_id: projectId,
+      role,
+      content,
+      content_type: role === 'user' ? 'email_sent' : 'email_received',
+      is_summary: false,
+    });
+  } catch {
+    // never block email operations
+  }
+}
+
 export function useEmails() {
   const { state, dispatch } = useApp();
   const [loading, setLoading] = useState(false);
@@ -63,6 +86,19 @@ export function useEmails() {
             type: 'SET_EMAILS',
             payload: [...newRows.map(normalizeEmail), ...(state.emails || [])],
           });
+
+          // Save new emails that have a project_id to project brain
+          for (const row of newRows) {
+            if (row.project_id) {
+              saveEmailToBrain(
+                row.project_id,
+                'ely', // received = from external party
+                row.subject || '(No subject)',
+                row.body || row.body_preview || '',
+                `From: ${row.sender_name || row.from_email || 'Unknown'}`
+              );
+            }
+          }
         }
         return data;
       }
@@ -111,7 +147,7 @@ export function useEmails() {
     }
   }, [dispatch, state.emails]);
 
-  const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId }) => {
+  const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId, projectId }) => {
     if (!sb) throw new Error('Supabase client is not available.');
 
     const normalisedAttachments = (attachments || []).map((attachment) => {
@@ -141,6 +177,11 @@ export function useEmails() {
     if (error || data?.error) {
       const message = error?.message || data?.error || 'Email send failed';
       throw new Error(message);
+    }
+
+    // Save sent email to project brain
+    if (projectId) {
+      saveEmailToBrain(projectId, 'user', subject, body, `To: ${to}`);
     }
 
     await loadEmails().catch(() => {});
@@ -206,3 +247,4 @@ function isUrgentEmail(e) {
     b.includes('structural damage') || b.includes('urgent')
   );
 }
+
