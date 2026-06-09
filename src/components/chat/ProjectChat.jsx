@@ -20,21 +20,60 @@ async function saveToBrain(projectId, sessionId, role, content, contentType = 'm
       content_type: contentType,
       file_name: fileName || null,
     });
+
+    // Trigger summarisation in background when threshold reached
+    maybeSummarise(projectId);
   } catch {
     // brain save failures must never break chat
   }
 }
 
-async function loadBrainContext(projectId, limit = 40) {
+async function maybeSummarise(projectId) {
+  if (!projectId) return;
+  try {
+    const { count } = await supabase
+      .from('project_brain')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('is_summary', false);
+
+    if ((count || 0) > 40) {
+      // Fire and forget — don't await, don't block chat
+      fetch('/api/summarise-project-brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
+      }).catch(() => {});
+    }
+  } catch {
+    // never block chat
+  }
+}
+
+async function loadBrainContext(projectId, limit = 20) {
   if (!projectId) return [];
   try {
-    const { data } = await supabase
+    // Always get the summary first if it exists
+    const { data: summary } = await supabase
       .from('project_brain')
-      .select('role, content, content_type, file_name, created_at')
+      .select('role, content, content_type, file_name, created_at, is_summary')
       .eq('project_id', projectId)
+      .eq('is_summary', true)
+      .limit(1);
+
+    // Then get most recent non-summary entries
+    const { data: recent } = await supabase
+      .from('project_brain')
+      .select('role, content, content_type, file_name, created_at, is_summary')
+      .eq('project_id', projectId)
+      .eq('is_summary', false)
       .order('created_at', { ascending: false })
       .limit(limit);
-    return (data || []).reverse();
+
+    const summaryEntry = summary?.[0] ? [summary[0]] : [];
+    const recentEntries = (recent || []).reverse();
+
+    return [...summaryEntry, ...recentEntries];
   } catch {
     return [];
   }
