@@ -487,9 +487,15 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
   const deleteSession = useCallback((sessionId, e) => {
     e?.stopPropagation?.();
-
     setSessions(prev => (prev || []).filter(s => s.id !== sessionId));
-  }, []);
+    // Also remove from project brain in Supabase
+    supabase.from('project_brain')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('session_id', sessionId)
+      .then(() => {})
+      .catch(() => {});
+  }, [projectId]);
 
   const handleFilesSelected = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
@@ -927,6 +933,30 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 </div>
               </button>
             ))}
+            {sessions.length > 0 && (
+              <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!window.confirm('Clear all chat history for this project? This also removes saved brain entries.')) return;
+                    setSessions([]);
+                    supabase.from('project_brain')
+                      .delete()
+                      .eq('project_id', projectId)
+                      .then(() => {})
+                      .catch(() => {});
+                    try { localStorage.removeItem(sessionStorageKey(projectId)); } catch {}
+                  }}
+                  style={{
+                    width: '100%', padding: '7px 0', fontSize: 11.5,
+                    color: 'var(--red, #ef4444)', background: 'transparent',
+                    border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer',
+                  }}
+                >
+                  Clear all history
+                </button>
+              </div>
+            )}
           </div>
         )}
 
