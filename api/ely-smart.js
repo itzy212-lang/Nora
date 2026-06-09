@@ -374,9 +374,8 @@ async function loadProjectBundle(projectId) {
 
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
   if (suppliedEmailContext || threadId || emailId) return true;
-  if (projectId) return true;
   const lower = String(prompt || '').toLowerCase();
-  return lower.includes('email') || lower.includes('thread') || lower.includes('inbox') || lower.includes('reply');
+  return lower.includes('email') || lower.includes('thread') || lower.includes('inbox') || lower.includes('reply') || lower.includes('correspondence') || lower.includes('letter') || lower.includes('wrote') || lower.includes('received');
 }
 
 async function buildScopedEmailContext({ prompt, projectId, emailContext = null, threadId = null, emailId = null }) {
