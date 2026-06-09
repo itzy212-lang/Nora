@@ -3856,9 +3856,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             </div>
 
-            
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
+              onClick={() => setNoticeModal({ ao: null, defaultSections: [] })}
+            >              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
                   width: 38,
                   height: 38,
@@ -4056,4 +4057,5 @@ Itzik`,
     </div>
   );
 }
+
 
