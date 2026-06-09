@@ -266,10 +266,10 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
     }
   }, [refinementInput, structuredData, projectId]);
 
-  // ── Download .docx ─────────────────────────────────────────────────────────
+  // ── Download PDF ──────────────────────────────────────────────────────────
 
   const handleDownload = useCallback(async () => {
-    if (!structuredData) return;
+    if (!previewHtml) return;
     setDownloading(true);
     try {
       const response = await fetch('/api/generate-dispute-agreement', {
@@ -277,21 +277,21 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
-          session_id: uid(),
+          export_pdf: true,
+          preview_html: previewHtml,
           structured_data: structuredData,
-          export_docx: true,
         }),
       });
 
       if (!response.ok) {
         const p = await response.json().catch(() => ({}));
-        throw new Error(p.error || 'Could not generate document.');
+        throw new Error(p.error || 'Could not generate PDF.');
       }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const filename = `Party Agreement - ${projectAddress || 'Agreement'}.docx`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const filename = `Party Agreement - ${projectAddress || 'Agreement'}.pdf`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -303,7 +303,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
     } finally {
       setDownloading(false);
     }
-  }, [structuredData, projectId, projectAddress]);
+  }, [previewHtml, structuredData, projectId, projectAddress]);
 
   // ── Setup phase ────────────────────────────────────────────────────────────
 
@@ -483,7 +483,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
             style={{ ...s.primaryBtn, opacity: downloading ? 0.65 : 1 }}
             disabled={downloading}
           >
-            {downloading ? 'Generating…' : '⬇ Download .docx'}
+            {downloading ? 'Generating…' : '⬇ Download PDF'}
           </button>
         </div>
       </div>
