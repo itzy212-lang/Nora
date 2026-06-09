@@ -253,7 +253,7 @@ function normaliseEmailRecord(email = {}) {
     cc: email.cc || email.cc_email || email.cc_recipients || '',
     subject: firstNonEmpty(email.subject, email.title),
     date: firstNonEmpty(email.received_at, email.sent_at, email.date, email.created_at, email.updated_at),
-    body: stripHtml(body).slice(0, 12000),
+    body: stripHtml(body).slice(0, 2000),
   };
 }
 
