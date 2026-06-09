@@ -117,7 +117,7 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 .empty { text-align: center; padding: 36px 20px; color: var(--text3); }
 .empty-icon { font-size: 28px; margin-bottom: 8px; }
 .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
-.topbar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 11px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 40; }
+.topbar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 11px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 400; }
 .topbar-left { display: flex; align-items: center; gap: 10px; }
 .topbar h2 { font-size: 15px; font-weight: 600; }
 .content { padding: 18px 20px; flex: 1; }
@@ -262,3 +262,4 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
   .main-chat-context-selectors .main-chat-email-select { display: none; }
   .main-chat-context-selectors .main-chat-email-refresh-btn { display: none; }
 }
+
