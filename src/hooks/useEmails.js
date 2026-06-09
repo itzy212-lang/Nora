@@ -99,11 +99,15 @@ export function useEmails() {
               );
             }
           }
+          // Trigger auto-linking on new emails
+          sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
         }
         return data;
       }
 
-      // No emails in state yet — do a full load
+      // Auto-link emails to projects after sync
+      sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
+
       await loadEmails({ force: true });
       return data;
     } catch (err) {
