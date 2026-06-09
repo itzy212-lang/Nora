@@ -16,7 +16,7 @@ async function saveToBrain(projectId, sessionId, role, content, contentType = 'm
       project_id: projectId,
       session_id: sessionId,
       role,
-      content: String(content).slice(0, 20000),
+      content: String(content).slice(0, 6000),
       content_type: contentType,
       file_name: fileName || null,
     });
