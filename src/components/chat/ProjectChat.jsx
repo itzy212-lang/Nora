@@ -325,8 +325,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
   const [lastDraft, setLastDraft] = useState('');
-
-  const messagesEndRef = useRef(null);
+  const [caseReviewPending, setCaseReviewPending] = useState(false);
+  const [caseReviewTopic, setCaseReviewTopic] = useState('');
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
   const prevPhraseRef = useRef('');
@@ -704,6 +704,10 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       // Load brain context to pass to Ely
       const brainContext = await loadBrainContext(projectId, 40);
 
+      // If we're awaiting case review confirmation and user says yes / full / confirms
+      const confirmWords = ['yes', 'full', 'full case review', 'case review', 'confirm', 'go ahead', 'proceed', 'do it', 'all of it', 'everything'];
+      const isConfirmingCaseReview = caseReviewPending && confirmWords.some(w => messageText.toLowerCase().includes(w));
+
       const result = await send(messageText, {
         projectId,
         project,
@@ -712,6 +716,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         projectContext: project,
         projectChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
         brainContext,
+        // Pass case review flags if confirming
+        ...(isConfirmingCaseReview ? {
+          case_review_confirmed: true,
+          case_review_topic: caseReviewTopic || messageText,
+        } : {}),
         context: {
           previousDraft: lastDraft || null,
           uploadedFiles: readyAttachments,
@@ -729,6 +738,15 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       });
 
       appendAssistantMessagesFromResult(result, wantsDraft);
+
+      // Handle case review flow
+      if (result.case_review_prompt) {
+        setCaseReviewPending(true);
+        setCaseReviewTopic(messageText);
+      } else if (result.case_review) {
+        setCaseReviewPending(false);
+        setCaseReviewTopic('');
+      }
 
       // Save Ely's reply to project brain
       const replyText = result.reply || result.draft || result.documentText || result.replyText || '';
@@ -1188,6 +1206,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
 
 
