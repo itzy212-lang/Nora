@@ -25,6 +25,7 @@ import InvoiceModal from './components/accounting/InvoiceModal';
 import Contacts from './components/shared/Contacts';
 import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
+import DisputeAgreement from './components/dispute/DisputeAgreement';
 import NotepadOverlay from './components/shared/NotepadOverlay';
 import QuickRefOverlay from './components/shared/QuickRefOverlay';
 
@@ -92,6 +93,7 @@ export default function App() {
   const [showQuickRef, setShowQuickRef]      = useState(false);
   const [socProjectId, setSocProjectId]     = useState(null);
   const [socDefaultAOIndex, setSocDefaultAOIndex] = useState(null);
+  const [disputeProjectId, setDisputeProjectId] = useState(null);
 
   const nextInvoiceNumber = settings?.next_invoice_number
     || (invoices?.length > 0
@@ -275,6 +277,18 @@ export default function App() {
     } catch {}
   }, [clearCurrentProject]);
 
+  const handleOpenDisputeAgreement = useCallback((project = null) => {
+    setDisputeProjectId(project?.id || null);
+    setCurrentView('dispute');
+    setProjectView(null);
+    setPendingProjectId('');
+    clearCurrentProject();
+    try {
+      sessionStorage.setItem('ely_current_view', 'dispute');
+      sessionStorage.removeItem('ely_current_project_id');
+    } catch {}
+  }, [clearCurrentProject]);
+
   const handleCloseMainChat = useCallback(() => {
     const targetView = previousView && previousView !== 'chat'
       ? previousView
@@ -348,6 +362,7 @@ export default function App() {
           onOpenComposer={openComposer}
           onRaiseInvoice={handleRaiseInvoice}
           onOpenSOC={handleOpenSOC}
+          onOpenDisputeAgreement={handleOpenDisputeAgreement}
         />
       );
     }
@@ -389,6 +404,14 @@ export default function App() {
             defaultProjectId={socProjectId}
             defaultAOIndex={socDefaultAOIndex}
             key={`${socProjectId}-${socDefaultAOIndex}`}
+          />
+        );
+      case 'dispute':
+        return (
+          <DisputeAgreement
+            onOpenComposer={openComposer}
+            defaultProjectId={disputeProjectId}
+            key={disputeProjectId}
           />
         );
       case 'leads':
@@ -502,4 +525,5 @@ export default function App() {
     </>
   );
 }
+
 
