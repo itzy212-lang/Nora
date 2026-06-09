@@ -815,11 +815,28 @@ ${JSON.stringify(draftingExamples, null, 2)}
 }
 
 function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
-  const { prompt, chatHistory = [] } = body;
+  const { prompt, chatHistory = [], brainContext = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
   const emailContextText = buildEmailContextText({ body, scopedEmailContext });
   if (emailContextText) messages.push({ role: 'system', content: emailContextText });
+
+  // Inject project brain — persistent memory from previous sessions
+  if (brainContext?.length) {
+    const brainText = brainContext
+      .map(m => {
+        const label = m.role === 'user' ? 'Surveyor' : 'Ely';
+        const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
+        const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        return `${label}${date ? ` (${date})` : ''}: ${prefix}${m.content}`;
+      })
+      .join('\n\n');
+
+    messages.push({
+      role: 'system',
+      content: `The following is the persistent project brain — previous chat history, emails, documents and notes stored for this project. Use this as memory when answering questions about the project status, timeline, or history:\n\n${brainText}`,
+    });
+  }
 
   if (chatHistory?.length) {
     chatHistory.slice(-24).forEach((msg) => {
@@ -937,5 +954,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
