@@ -556,6 +556,22 @@ function buildProjectFactsText(projectBundle) {
   return facts.join('\n');
 }
 
+// Strip signatures, legal disclaimers, and repeated boilerplate from email bodies
+function cleanEmailBody(text = '') {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const cleaned = [];
+  for (const line of lines) {
+    const l = line.trim();
+    // Stop at signature / disclaimer markers
+    if (/^(kind regards|regards|many thanks|thanks|best regards|yours sincerely|yours faithfully)/i.test(l)) break;
+    if (/delva patman|limited liability partnership|registered in england|confidential and may be legally privileged|if you are not the intended recipient/i.test(l)) break;
+    if (/^from:\s+/i.test(l) && cleaned.length > 3) break; // stop at quoted reply chain
+    cleaned.push(line);
+  }
+  return cleaned.join('\n').trim().slice(0, 800);
+}
+
 function buildEmailContextText({ body = {}, scopedEmailContext = [] }) {
   const supplied = buildSuppliedEmailContext(body);
   const emails = [];
@@ -588,7 +604,7 @@ Thread ID: ${selected.thread_id || ''}
 Email ID: ${selected.id || ''}
 
 Selected email body:
-${selected.body || ''}
+${cleanEmailBody(selected.body || '')}
 
 Available thread context (${thread.length} message${thread.length === 1 ? '' : 's'}):
 ${thread.map((email, index) => `
@@ -597,9 +613,9 @@ From: ${email.from || ''}
 Subject: ${email.subject || ''}
 Date: ${email.date || ''}
 Body:
-${email.body || ''}
+${cleanEmailBody(email.body || '')}
 `).join('\n')}
-`.trim();
+`.trim().slice(0, 8000);
 }
 
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
