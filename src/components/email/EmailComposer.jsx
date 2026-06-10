@@ -68,6 +68,42 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const signatureHtml = includeSig && firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
 
+  const handleToInput = (val) => {
+    setTo(val);
+    setDirty(true);
+    const q = val.toLowerCase();
+    const seen = {};
+    const candidates = [];
+
+    // Project contacts first
+    projectContacts.forEach(c => {
+      if (!c.email || seen[c.email]) return;
+      if (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
+        seen[c.email] = true;
+        candidates.push(c);
+      }
+    });
+
+    // Then email history (only when typing)
+    if (q.length >= 2) {
+      emails.slice(0, 200).forEach(e => {
+        const addr = e.from_email || '';
+        const name = e.from || '';
+        if (!addr || seen[addr]) return;
+        if (name.toLowerCase().includes(q) || addr.toLowerCase().includes(q)) {
+          seen[addr] = true;
+          candidates.push({ name, email: addr });
+        }
+      });
+    }
+
+    setToSuggestions(candidates.slice(0, 6));
+  };
+
+  const handleToFocus = () => {
+    if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 6));
+  };
+
   const handleFileAttach = (e) => {
     const files = Array.from(e.target.files || []);
     files.forEach(file => {
@@ -148,38 +184,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
       if (ao.name2 || ao.ao_name_2) add(ao.name2 || ao.ao_name_2, ao.email2 || ao.ao_email_2);
       add(ao.surveyor_name || ao.ao_surveyor_name, ao.surveyor_email || ao.ao_surveyor_email);
     });
-    add(project.surveyor_name, project.surveyor_email);
     return contacts.filter(c => c.email);
   }, [project]);
 
-  const handleToInput = (val) => {
-    setTo(val);
-    setDirty(true);
-    if (val.length < 2) { setToSuggestions(projectContacts.slice(0, 6)); return; }
-    const q = val.toLowerCase();
-    const seen = {};
-    const candidates = [];
-    projectContacts.forEach(c => {
-      if (!c.email || seen[c.email]) return;
-      if (c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
-        seen[c.email] = true; candidates.push(c);
-      }
-    });
-    emails.slice(0, 200).forEach(e => {
-      const addr = e.from_email || '';
-      const name = e.from || '';
-      if (!addr || seen[addr]) return;
-      if (name.toLowerCase().includes(q) || addr.toLowerCase().includes(q)) {
-        seen[addr] = true;
-        candidates.push({ name, email: addr });
-      }
-    });
-    setToSuggestions(candidates.slice(0, 6));
-  };
-
-  const handleToFocus = () => {
-    if (!to && projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 6));
-  };
+  return (
     <div className="email-composer-overlay open">
       <div className="email-composer-header">
         <button className="btn btn-sm btn-ghost" onClick={handleClose}>← Back</button>
