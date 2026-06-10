@@ -1188,23 +1188,25 @@ export default async function handler(req, res) {
     let generalInboxResults = [];
     const isMainChat = body.surface === 'main_chat';
     const asksAboutInbox = isMainChat && !suppliedEmailContext && !body.emailId && !body.threadId && (
-      /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|when (is|are|did|do)|who (is|are|did|confirmed|booked|sent)/i.test(prompt)
+      /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|check my email|search my email|have i.*email|did i.*email|who (is|are|did|confirmed|booked|sent)|any.*appointment|any.*meeting/i.test(prompt)
     );
 
     if (asksAboutInbox) {
       try {
         const sb = getSupabase();
         if (sb) {
-          // Extract key search terms from the prompt
-          const searchTerms = prompt
-            .replace(/have i|can you|could you|please|check my|search my|look.*email|find.*email/gi, '')
-            .trim()
-            .slice(0, 100);
+          // Extract specific day and topic keywords from the prompt
+          const dayMatch = prompt.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|this week|next week)\b/i);
+          const topicMatch = prompt.match(/\b(appointment|meeting|inspection|soc|survey|visit|site|confirmed)\b/i);
+
+          const dayTerm = dayMatch ? dayMatch[0].toLowerCase() : '';
+          const topicTerm = topicMatch ? topicMatch[0].toLowerCase() : 'appointment';
+          const searchTerm = dayTerm || topicTerm;
 
           const { data } = await sb
             .from('emails')
             .select('subject, from_name, from_address, received_at, body_text, folder')
-            .or(`subject.ilike.%${searchTerms}%,body_text.ilike.%${searchTerms}%`)
+            .or(`subject.ilike.%${searchTerm}%,body_text.ilike.%${searchTerm}%`)
             .order('received_at', { ascending: false })
             .limit(8);
 
@@ -1340,6 +1342,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
