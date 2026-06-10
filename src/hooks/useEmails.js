@@ -239,6 +239,10 @@ export function useEmails() {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
   }, [syncOutlook]);
+
+  return {
+    emails: state.emails,
+    loading,
     loadEmails,
     syncOutlook,
     ensureTokenFresh,
