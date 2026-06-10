@@ -1179,8 +1179,21 @@ function AOCard({
               )}
             </div>
 
-            {statusLabel && (
-              statusMeta.action ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* LOA status icons */}
+              {ao.loa_signed_at ? (
+                <span title={`LOA signed ${new Date(ao.loa_signed_at).toLocaleDateString('en-GB')}`}
+                  style={{ fontSize: 16, cursor: ao.loa_signed_pdf_url ? 'pointer' : 'default' }}
+                  onClick={() => ao.loa_signed_pdf_url && window.open(ao.loa_signed_pdf_url, '_blank')}
+                >✅</span>
+              ) : ao.loa_sent_at ? (
+                <span title={`LOA sent ${new Date(ao.loa_sent_at).toLocaleDateString('en-GB')} — awaiting signature`}
+                  style={{ fontSize: 16 }}
+                >📤</span>
+              ) : null}
+
+              {statusLabel && (
+                statusMeta.action ? (
                 <button
                   onClick={() => statusMeta.action === 'serve_s10' ? onServeS10?.(ao) : onServeNotice?.(ao)}
                   style={{
@@ -1203,6 +1216,7 @@ function AOCard({
                 </span>
               )
             )}
+            </div>
           </div>
 
           {address && (
@@ -3650,6 +3664,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       {loaLoading === 'bo' ? 'Sending…' : '📄 Send BO LoA'}
                     </button>
                   )}
+                  {project.bo_loa_signed_at ? (
+                    <span title={`BO LOA signed ${new Date(project.bo_loa_signed_at).toLocaleDateString('en-GB')}`}
+                      style={{ fontSize: 16, display: 'inline-block', marginTop: 6, cursor: project.bo_loa_signed_pdf_url ? 'pointer' : 'default' }}
+                      onClick={() => project.bo_loa_signed_pdf_url && window.open(project.bo_loa_signed_pdf_url, '_blank')}
+                    >✅</span>
+                  ) : project.bo_loa_sent_at ? (
+                    <span title={`BO LOA sent ${new Date(project.bo_loa_sent_at).toLocaleDateString('en-GB')} — awaiting signature`}
+                      style={{ fontSize: 16, display: 'inline-block', marginTop: 6 }}
+                    >📤</span>
+                  ) : null}
                 </div>
 
                 <div>
@@ -4061,6 +4085,7 @@ Itzik`,
     </div>
   );
 }
+
 
 
 
