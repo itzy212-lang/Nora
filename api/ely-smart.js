@@ -961,6 +961,62 @@ function needsProjectContext(prompt = '') {
     lower.includes('address') || lower.includes('owner') || lower.includes('ref');
 }
 
+function isStatutoryQuestion(prompt = '') {
+  const lower = String(prompt || '').toLowerCase();
+  return /section\s*\d|s\.\s*\d|party wall act|party structure notice|counter notice|adjacent excavation|line of junction|section 1[^0-9]|section 2[^0-9]|section 3[^0-9]|section 4[^0-9]|section 5[^0-9]|section 6[^0-9]|section 7[^0-9]|section 8[^0-9]|section 9[^0-9]|section 10|section 11|section 12|section 13|section 14|section 15|section 16|section 20|does.*act|must.*notice|notice.*require|required.*notice|statutory requirement|what.*act say|under the act|pursuant to|underpin|safeguard.*foundation|foundation.*safeguard|dispute.*procedure|resolution.*dispute|expense.*act|right.*entry|service.*notice|notice.*service|definition|what is a party wall|what is a party fence|what is a party structure|agreed surveyor|third surveyor|award.*appeal|appeal.*award/i.test(lower);
+}
+
+async function lookupKnowledgeBase(prompt = '') {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  try {
+    // Detect which sections are relevant from the prompt
+    const lower = prompt.toLowerCase();
+    const sectionMatches = [];
+
+    // Direct section references
+    const sectionNums = [...lower.matchAll(/section\s*(\d+)/g)].map(m => `s${m[1]}`);
+    sectionMatches.push(...sectionNums);
+
+    // Topic-based matches
+    if (/adjacent excavation|excavat|3 metre|6 metre|underpin|safeguard.*found|foundation.*safeguard/.test(lower)) sectionMatches.push('s6');
+    if (/party structure notice|s\.?\s*3\b|section 3/.test(lower)) sectionMatches.push('s3');
+    if (/counter notice|s\.?\s*4\b|section 4/.test(lower)) sectionMatches.push('s4');
+    if (/dispute|resolution|agreed surveyor|third surveyor|award|ex parte/.test(lower)) sectionMatches.push('s10');
+    if (/line of junction|new.*wall.*boundary|s\.?\s*1\b/.test(lower)) sectionMatches.push('s1');
+    if (/rights.*owner|repair.*party wall|s\.?\s*2\b/.test(lower)) sectionMatches.push('s2');
+    if (/compensation|inconvenience|loss.*damage|special foundation/.test(lower)) sectionMatches.push('s7');
+    if (/expens|cost.*act|who.*pay/.test(lower)) sectionMatches.push('s11');
+    if (/right.*entry|access.*surveyor|enter.*premises/.test(lower)) sectionMatches.push('s8');
+    if (/easement|light|right.*light/.test(lower)) sectionMatches.push('s9');
+    if (/service.*notice|how.*serve|email.*notice|electronic/.test(lower)) sectionMatches.push('s15');
+    if (/definition|what is a party wall|party fence wall|party structure|building owner|adjoining owner|special foundation/.test(lower)) sectionMatches.push('s20');
+
+    // Deduplicate
+    const refs = [...new Set(sectionMatches)];
+    if (!refs.length) {
+      // Fall back to full-text search
+      const { data } = await sb
+        .from('knowledge_base')
+        .select('section_ref, title, statutory_text, practice_notes')
+        .or(`statutory_text.ilike.%${prompt.slice(0, 50)}%,title.ilike.%${prompt.slice(0, 50)}%`)
+        .limit(3);
+      return data?.length ? data : null;
+    }
+
+    const { data } = await sb
+      .from('knowledge_base')
+      .select('section_ref, title, statutory_text, practice_notes')
+      .in('section_ref', refs.slice(0, 4));
+
+    return data?.length ? data : null;
+  } catch (err) {
+    console.warn('[ely-smart] knowledge base lookup failed:', err.message);
+    return null;
+  }
+}
+
 // ── Claude case review ────────────────────────────────────────────────────
 async function runCaseReview({ projectId, topic, projectBundle }) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
@@ -1267,6 +1323,25 @@ export default async function handler(req, res) {
 
     const messages = buildMessages({ body, systemPrompt, scopedEmailContext });
 
+    // ── Knowledge base lookup for statutory questions ─────────────────────
+    if (isStatutoryQuestion(prompt)) {
+      try {
+        const kbResults = await lookupKnowledgeBase(prompt);
+        if (kbResults?.length) {
+          const kbText = kbResults.map(r =>
+            `${r.title}\n\nSTATUTORY TEXT:\n${r.statutory_text}${r.practice_notes ? `\n\nPRACTICE NOTES:\n${r.practice_notes}` : ''}`
+          ).join('\n\n---\n\n');
+
+          messages.splice(1, 0, {
+            role: 'system',
+            content: `AUTHORITATIVE STATUTORY REFERENCE — Party Wall etc. Act 1996:\n\nThe following is the exact statutory text from legislation.gov.uk. Answer the user''s question from this text. Do not rely on general knowledge where the Act text is provided here.\n\n${kbText}`,
+          });
+        }
+      } catch (err) {
+        console.warn('[ely-smart] knowledge base injection failed:', err.message);
+      }
+    }
+
     // Inject general inbox search results if we ran one
     if (generalInboxResults.length > 0) {
       const inboxText = generalInboxResults.map(e =>
@@ -1341,6 +1416,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
