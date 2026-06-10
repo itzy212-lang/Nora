@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../state/appStore';
 import { useEmails } from '../../hooks/useEmails';
 import DraftWithEly from './DraftWithEly';
@@ -174,7 +174,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const project = projects.find(p => p.id === projectId);
 
   // Build project contact suggestions from BO, AOs and surveyors
-  const projectContacts = React.useMemo(() => {
+  const projectContacts = useMemo(() => {
     if (!project) return [];
     const contacts = [];
     const seen = new Set();
