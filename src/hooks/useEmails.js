@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
 
@@ -222,9 +222,23 @@ export function useEmails() {
     return data || { ok: true };
   }, [loadEmails, state.currentUser]);
 
-  return {
-    emails: state.emails,
-    loading,
+  // ── Auto-sync every 5 minutes ────────────────────────────────────────────
+  const syncIntervalRef = useRef(null);
+
+  useEffect(() => {
+    // Start auto-sync after initial load
+    syncIntervalRef.current = setInterval(async () => {
+      try {
+        await syncOutlook();
+      } catch {
+        // Silent — never interrupt the user
+      }
+    }, 5 * 60 * 1000); // every 5 minutes
+
+    return () => {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
+  }, [syncOutlook]);
     loadEmails,
     syncOutlook,
     ensureTokenFresh,
