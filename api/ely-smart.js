@@ -931,6 +931,15 @@ function detectsCaseReview(prompt = '') {
   return lower.includes('case review') || lower.includes('full review') || lower.includes('full case');
 }
 
+function needsProjectContext(prompt = '') {
+  const lower = String(prompt || '').toLowerCase();
+  return lower.includes('notice') || lower.includes('award') || lower.includes('adjoining owner') ||
+    lower.includes('building owner') || lower.includes('surveyor') || lower.includes('party wall') ||
+    lower.includes('project') || lower.includes('fee') || lower.includes('schedule') ||
+    lower.includes('soc') || lower.includes('who is') || lower.includes('what is the') ||
+    lower.includes('address') || lower.includes('owner') || lower.includes('ref');
+}
+
 // ── Claude case review ────────────────────────────────────────────────────
 async function runCaseReview({ projectId, topic, projectBundle }) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
@@ -1114,16 +1123,24 @@ export default async function handler(req, res) {
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
 
+    // ── On-demand loading — fetch only what this request actually needs ──
+    // Never load everything on every call. Fetch each piece only if relevant.
+
+    const hasSuppliedEmail = !!suppliedEmailContext || !!body.threadId || !!body.emailId;
+    const needsEmails = hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId);
+    const needsProject = needsProjectContext(prompt);
+    const needsBrain = !!projectId; // always load brain summary if in a project — but keep it short
+
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
-      loadProjectBundle(projectId),
-      buildScopedEmailContext({
+      needsProject ? loadProjectBundle(projectId) : Promise.resolve(null),
+      needsEmails ? buildScopedEmailContext({
         prompt: body.prompt,
         projectId,
         emailContext: suppliedEmailContext,
         threadId: body.threadId || body.emailContext?.threadId || body.emailContext?.thread_id,
         emailId: body.emailId || body.emailContext?.emailId || body.emailContext?.id,
-      }),
-      loadBrain({ userId, projectId, surface: body.surface, modeHint }),
+      }) : Promise.resolve(suppliedEmailContext ? [suppliedEmailContext] : []),
+      needsBrain ? loadBrain({ userId, projectId, surface: body.surface, modeHint }) : Promise.resolve(null),
     ]);
 
     let draftingExamples = [];
