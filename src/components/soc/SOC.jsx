@@ -298,14 +298,53 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     finally { setPdfProcessing(false); }
   }, [previewHtml, projectAddress, selectedAOAddress]);
 
-  const sendSOCByEmail = useCallback(() => {
-    onOpenComposer?.({
-      mode: 'compose', to: '',
-      subject: `Schedule of Condition - ${selectedAOAddress || projectAddress || ''}`,
-      body: `Dear [Recipient]\n\nPlease find attached the Schedule of Condition prepared in connection with the proposed works at ${projectAddress || '[Building Owner property]'}.\n\nThis schedule records the existing condition of the adjoining property at ${selectedAOAddress || '[Adjoining Owner property]'} prior to commencement of the notified works.\n\nPlease do not hesitate to contact me should you require any further information.\n\nYours sincerely\nItzik`,
-      projectId,
-    });
-  }, [onOpenComposer, projectAddress, projectId, selectedAOAddress]);
+  const sendSOCByEmail = useCallback(async () => {
+    if (!previewHtml) return;
+    setPdfProcessing(true);
+    try {
+      const filenameBase = selectedAOAddress || projectAddress || 'Schedule of Condition';
+      const safeFilename = `Schedule of Condition - ${filenameBase}`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+      const response = await fetch('/api/export-soc-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: previewHtml,
+          filename: `${safeFilename}.pdf`,
+          ao_address: selectedAOAddress,
+          project_id: projectId || null,
+          ao_id: selectedAO?.id || selectedAO?.num || null,
+          user_id: 'help@sq1consulting.co.uk',
+        }),
+      });
+
+      if (!response.ok) {
+        const p = await response.json().catch(() => ({}));
+        throw new Error(p.error || 'Could not generate PDF.');
+      }
+
+      const blob = await response.blob();
+      const reader = new FileReader();
+      const base64 = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      onOpenComposer?.({
+        mode: 'compose',
+        to: '',
+        subject: `Schedule of Condition - ${selectedAOAddress || projectAddress || ''}`,
+        body: `Dear [Recipient]\n\nPlease find attached the Schedule of Condition prepared in connection with the proposed works at ${projectAddress || '[Building Owner property]'}.\n\nThis schedule records the existing condition of the adjoining property at ${selectedAOAddress || '[Adjoining Owner property]'} prior to commencement of the notified works.\n\nPlease do not hesitate to contact me should you require any further information.\n\nYours sincerely\nItzik`,
+        projectId,
+        attachments: [{ name: `${safeFilename}.pdf`, type: 'application/pdf', data: base64 }],
+      });
+    } catch (err) {
+      alert('Error preparing SOC email: ' + (err.message || err));
+    } finally {
+      setPdfProcessing(false);
+    }
+  }, [onOpenComposer, previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
 
   const contacts = getProjectContacts();
 
@@ -475,7 +514,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             if (!window.confirm("Are you sure you want to go back? Your generated SOC will be lost.")) return;
             setPhase('recording');
           }} style={s.secondaryBtn}>Back</button>
-          <button onClick={sendSOCByEmail} style={s.secondaryBtn}>Send SOC by Email</button>
+          <button onClick={sendSOCByEmail} disabled={pdfProcessing} style={{ ...s.secondaryBtn, opacity: pdfProcessing ? 0.65 : 1 }}>{pdfProcessing ? 'Preparing…' : 'Send SOC by Email'}</button>
           <button onClick={printPreview} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }} disabled={pdfProcessing}>
             {pdfProcessing ? 'Generating PDF…' : 'Download PDF'}
           </button>
@@ -575,5 +614,6 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
 
