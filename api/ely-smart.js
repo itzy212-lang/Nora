@@ -1068,7 +1068,7 @@ async function callClaude(messages = []) {
   }));
 
   // Prepend the handoff message as a system note
-  const systemWithHandoff = `This is too large for me — I'll pass it to the Boss to handle.\n\n${systemMsg}`;
+  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1089,7 +1089,7 @@ async function callClaude(messages = []) {
   if (!response.ok) throw new Error(payload?.error?.message || 'Claude fallback failed');
 
   const raw = payload.content?.[0]?.text || '';
-  return cleanOutput(`*This is too large for me — I've passed it to the Boss to handle.*\n\n${raw}`);
+  return cleanOutput(`*This is a bit too large for me — let me get our admin team on that for you right away.* 📋\n\n${raw}`);
 }
 
 export default async function handler(req, res) {
@@ -1113,7 +1113,7 @@ export default async function handler(req, res) {
       const projectBundle = await loadProjectBundle(projectId);
 
       // Tell GPT-4o to acknowledge the handoff first
-      const handoffMsg = `Got it. I'm passing this to Claude now to go through all correspondence, emails, chat history and notes on this project for: "${body.case_review_topic}". This may take a moment — I'll bring the findings back to you here.`;
+      const handoffMsg = `Perfect — leave it with me. I'm passing this to our research department now. They're very thorough and will go through everything on this project. Back with you shortly. 🔍`;
 
       // Run Claude case review
       let findings;
@@ -1151,7 +1151,7 @@ export default async function handler(req, res) {
     // ── Case review detection — ask clarifying question ───────────────────
     if (detectsCaseReview(prompt) && projectId) {
       return res.status(200).json({
-        reply: `Before I proceed — are you looking to review a specific email or document, or do you want a full case file review across all correspondence, emails, notes and chat history on this project?\n\nA full case review will take a moment as I'll need to pass this to Claude to go through everything. If so, what specifically do you want me to focus on?`,
+        reply: `Ooh, a case review — now we're talking. 🕵️\n\nBefore I get the research department involved: are you looking to review a specific email or document, or do you want a full case file review across all correspondence, emails, notes and chat history on this project?\n\nIf it's the full works, tell me what you want me to focus on and I'll get them on it straight away.`,
         case_review_prompt: true,
         project_id: projectId,
       });
