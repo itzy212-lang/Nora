@@ -93,6 +93,32 @@ export default async function handler(req, res) {
 
     if (!sendRes.ok) return res.status(sendRes.status).json({ error: 'Firma request created but failed to send', signing_request_id: signingRequestId, details: sendData });
 
+    // ── Save to Supabase ────────────────────────────────────────────────────
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const isBO = appointment_type === 'bo_loa' || appointment_type === 'bo_agreed_surveyor_loa';
+      const now = new Date().toISOString();
+
+      if (isBO) {
+        await sb.from('projects').update({
+          bo_loa_sent_at: now,
+          bo_loa_signing_request_id: signingRequestId,
+        }).eq('id', project_id);
+      } else {
+        // AO — find the AO by matching recipient email
+        const recipientEmail = recipients[0]?.email;
+        if (recipientEmail) {
+          await sb.from('adjoining_owners').update({
+            loa_sent_at: now,
+            loa_signing_request_id: signingRequestId,
+          }).eq('project_id', project_id).ilike('email', recipientEmail);
+        }
+      }
+    } catch (dbErr) {
+      console.warn('[send-loa] Supabase save failed (non-fatal):', dbErr.message);
+    }
+
     return res.status(200).json({ success: true, signing_request_id: signingRequestId });
 
   } catch (err) {
@@ -135,3 +161,4 @@ function getCustomMessage(type) {
 async function safeJson(response) {
   try { return await response.json(); } catch { return {}; }
 }
+
