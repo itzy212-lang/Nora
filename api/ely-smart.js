@@ -1055,6 +1055,43 @@ ${brainText}`;
   return payload.content?.[0]?.text || 'No findings returned.';
 }
 
+// ── Claude fallback for oversized requests ────────────────────────────────
+async function callClaude(messages = []) {
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_KEY) throw new Error('Missing ANTHROPIC_API_KEY');
+
+  // Convert OpenAI message format to Anthropic format
+  const systemMsg = messages.find(m => m.role === 'system')?.content || 'You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.';
+  const userMessages = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+  }));
+
+  // Prepend the handoff message as a system note
+  const systemWithHandoff = `This is too large for me — I'll pass it to the Boss to handle.\n\n${systemMsg}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-6',
+      max_tokens: 3500,
+      system: systemWithHandoff,
+      messages: userMessages.length ? userMessages : [{ role: 'user', content: 'Please help.' }],
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error?.message || 'Claude fallback failed');
+
+  const raw = payload.content?.[0]?.text || '';
+  return cleanOutput(`*This is too large for me — I've passed it to the Boss to handle.*\n\n${raw}`);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
@@ -1207,7 +1244,21 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `OpenAI error ${response.status}`);
+      const errMsg = err.error?.message || `OpenAI error ${response.status}`;
+
+      // TPM limit hit — pass to Claude instead
+      if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
+        console.log('[ely-smart] TPM limit hit — falling back to Claude');
+        const claudeReply = await callClaude(messages);
+        return res.status(200).json({
+          reply: claudeReply,
+          resolvedProject,
+          model: 'claude',
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      }
+
+      throw new Error(errMsg);
     }
 
     const data = await response.json();
