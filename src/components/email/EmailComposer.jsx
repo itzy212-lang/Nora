@@ -71,11 +71,27 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const handleToInput = (val) => {
     setTo(val);
     setDirty(true);
-    if (val.length < 2) { setToSuggestions([]); return; }
+
+    // Show project contacts immediately even with no input
+    if (val.length < 2) {
+      setToSuggestions(projectContacts.slice(0, 6));
+      return;
+    }
+
     const q = val.toLowerCase();
     const seen = {};
     const candidates = [];
 
+    // Project contacts first
+    projectContacts.forEach(c => {
+      if (!c.email || seen[c.email]) return;
+      if (c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
+        seen[c.email] = true;
+        candidates.push(c);
+      }
+    });
+
+    // Then email history
     emails.slice(0, 200).forEach(e => {
       const addr = e.from_email || '';
       const name = e.from || '';
@@ -87,6 +103,12 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     });
 
     setToSuggestions(candidates.slice(0, 6));
+  };
+
+  const handleToFocus = () => {
+    if (!to && projectContacts.length > 0) {
+      setToSuggestions(projectContacts.slice(0, 6));
+    }
   };
 
   const handleFileAttach = (e) => {
@@ -151,7 +173,39 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const project = projects.find(p => p.id === projectId);
 
-  return (
+  // Build project contact suggestions from BO, AOs and surveyors
+  const projectContacts = React.useMemo(() => {
+    if (!project) return [];
+    const contacts = [];
+    const seen = new Set();
+
+    const add = (name, email) => {
+      if (!email || seen.has(email.toLowerCase())) return;
+      seen.add(email.toLowerCase());
+      contacts.push({ name: name || email, email });
+    };
+
+    // Building owners
+    const boName = [project.bo_1_name, project.bo_2_name, project.bo_name, project.bo_company].filter(Boolean).join(' & ');
+    add(boName, project.bo_email || project.bo_1_email);
+    if (project.bo_2_email) add(project.bo_2_name || boName, project.bo_2_email);
+
+    // Adjoining owners
+    const aos = Array.isArray(project.aos) ? project.aos : [];
+    aos.forEach(ao => {
+      add(ao.name || ao.ao_name_1, ao.email || ao.ao_email);
+      if (ao.name2 || ao.ao_name_2) add(ao.name2 || ao.ao_name_2, ao.email2 || ao.ao_email_2);
+      // AO's surveyor
+      add(ao.surveyor_name || ao.ao_surveyor_name, ao.surveyor_email || ao.ao_surveyor_email);
+    });
+
+    // BO surveyor (us — probably not needed but included for completeness)
+    add(project.surveyor_name, project.surveyor_email);
+
+    return contacts.filter(c => c.email);
+  }, [project]);
+
+  const handleToInput = (val) => {
     <div className="email-composer-overlay open">
       <div className="email-composer-header">
         <button className="btn btn-sm btn-ghost" onClick={handleClose}>← Back</button>
@@ -169,6 +223,8 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
               <input
                 value={to}
                 onChange={e => handleToInput(e.target.value)}
+                onFocus={handleToFocus}
+                onBlur={() => setTimeout(() => setToSuggestions([]), 200)}
                 placeholder="Name or email address"
                 autoComplete="off"
               />
@@ -304,4 +360,5 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
 
