@@ -2237,6 +2237,9 @@ function ProjectChat({ project, onOpenComposer }) {
     intro: split.intro,
   });
 
+  const inferredSubject = split.intro?.match(/subject[:\s]+(.+)/i)?.[1]?.trim()
+    || (project?.ref ? `Re: ${project.ref}` : '');
+
   return (
     <div
       key={msg.id}
@@ -2322,12 +2325,13 @@ function ProjectChat({ project, onOpenComposer }) {
                   onOpenComposer({
                     mode: 'compose',
                     body: split.draft,
+                    subject: split.subject || inferredSubject || '',
                     to: inferredRecipient,
                     projectId: project?.id || projectId,
                   });
                 } else {
                   window.dispatchEvent(new CustomEvent('ely-compose-draft', {
-                    detail: { body: split.draft, to: inferredRecipient }
+                    detail: { body: split.draft, to: inferredRecipient, subject: split.subject || inferredSubject || '' }
                   }));
                 }
                 flashDraftAction('Draft sent to email composer');
@@ -4057,5 +4061,6 @@ Itzik`,
     </div>
   );
 }
+
 
 
