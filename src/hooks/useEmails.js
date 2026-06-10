@@ -29,8 +29,38 @@ export function useEmails() {
   const { state, dispatch } = useApp();
   const [loading, setLoading] = useState(false);
 
+  // ── Proactive token refresh ──────────────────────────────────────────────
+  // Silently refresh the Microsoft token if it's expired or expiring within
+  // 15 minutes, without waiting for an explicit sync request
+  const ensureTokenFresh = useCallback(async () => {
+    if (!sb) return;
+    try {
+      const { data: accounts } = await sb
+        .from('email_accounts')
+        .select('id, token_expires_at, reconnect_required')
+        .eq('provider', 'outlook')
+        .limit(1);
+
+      const account = accounts?.[0];
+      if (!account || account.reconnect_required) return;
+
+      const expires = account.token_expires_at ? new Date(account.token_expires_at) : null;
+      const refreshThreshold = new Date(Date.now() + 15 * 60 * 1000); // 15 min buffer
+
+      if (!expires || expires < refreshThreshold) {
+        // Token expired or expiring soon — trigger a sync to refresh it
+        console.log('[useEmails] Token expired/expiring — triggering silent refresh');
+        await sb.functions.invoke('sync_outlook', { body: {} }).catch(() => {});
+      }
+    } catch {
+      // Never block — this is best-effort
+    }
+  }, []);
+
   const loadEmails = useCallback(async ({ force = false } = {}) => {
     if (!sb) return;
+    // Proactively refresh token if needed before loading
+    await ensureTokenFresh();
     // Skip if already loaded this session — rely on sync for updates
     if (!force && state.emails && state.emails.length > 0) return state.emails;
     setLoading(true);
@@ -197,6 +227,7 @@ export function useEmails() {
     loading,
     loadEmails,
     syncOutlook,
+    ensureTokenFresh,
     markRead,
     markReplied,
     deleteEmail,
@@ -251,4 +282,5 @@ function isUrgentEmail(e) {
     b.includes('structural damage') || b.includes('urgent')
   );
 }
+
 
