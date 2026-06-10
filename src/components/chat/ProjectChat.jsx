@@ -680,23 +680,39 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       textareaRef.current.style.height = 'auto';
     }
 
-    const messageText = msg || 'Please review the uploaded file(s).';
+    const messageText = msg || '';
+    const isUploadOnly = !messageText && readyAttachments.length > 0;
 
     const userMsg = {
       id: uid(),
       role: 'user',
-      content: messageText,
+      content: messageText || `📎 ${readyAttachments.map(a => a.file_name).join(', ')}`,
       createdAt: new Date().toISOString(),
       attachments: readyAttachments,
     };
 
     setMessages(prev => [...prev, userMsg]);
 
-    // Save user message to project brain
-    saveToBrain(projectId, activeSessionId, 'user', messageText,
+    // Save to brain
+    saveToBrain(projectId, activeSessionId, 'user', messageText || userMsg.content,
       readyAttachments.length ? 'upload' : 'message',
       readyAttachments[0]?.file_name || null
     );
+
+    // If upload only with no message — acknowledge and wait. Don't call Ely.
+    if (isUploadOnly) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'ely',
+        content: `Got ${readyAttachments.length === 1 ? 'it' : `them (${readyAttachments.length} files)`}. What would you like me to do with ${readyAttachments.length === 1 ? 'this' : 'these'}?`,
+        createdAt: new Date().toISOString(),
+      }]);
+      setAttachments(prev => prev.filter(a => a.upload_status !== 'uploaded'));
+      return;
+    }
+
+    // No message, no attachments — nothing to do
+    if (!messageText) return;
 
     try {
       const wantsDraft = isDraftRequest(messageText, !!lastDraft);
