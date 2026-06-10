@@ -1182,6 +1182,44 @@ export default async function handler(req, res) {
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
 
+    // ── General inbox search for main chat ────────────────────────────────
+    // When user asks about appointments, meetings, or specific people in main
+    // chat with no email selected — search inbox automatically, no linking needed
+    let generalInboxResults = [];
+    const isMainChat = body.surface === 'main_chat';
+    const asksAboutInbox = isMainChat && !suppliedEmailContext && !body.emailId && !body.threadId && (
+      /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|when (is|are|did|do)|who (is|are|did|confirmed|booked|sent)/i.test(prompt)
+    );
+
+    if (asksAboutInbox) {
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          // Extract key search terms from the prompt
+          const searchTerms = prompt
+            .replace(/have i|can you|could you|please|check my|search my|look.*email|find.*email/gi, '')
+            .trim()
+            .slice(0, 100);
+
+          const { data } = await sb
+            .from('emails')
+            .select('subject, from_name, from_address, received_at, body_text, folder')
+            .or(`subject.ilike.%${searchTerms}%,body_text.ilike.%${searchTerms}%`)
+            .order('received_at', { ascending: false })
+            .limit(8);
+
+          generalInboxResults = (data || []).map(e => ({
+            from: e.from_name || e.from_address || '',
+            subject: e.subject || '',
+            date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '',
+            body: cleanEmailBody(e.body_text || '').slice(0, 400),
+          }));
+        }
+      } catch (err) {
+        console.warn('[ely-smart] general inbox search failed:', err.message);
+      }
+    }
+
     // ── On-demand loading — fetch only what this request actually needs ──
     // Never load everything on every call. Fetch each piece only if relevant.
 
@@ -1227,6 +1265,23 @@ export default async function handler(req, res) {
     });
 
     const messages = buildMessages({ body, systemPrompt, scopedEmailContext });
+
+    // Inject general inbox search results if we ran one
+    if (generalInboxResults.length > 0) {
+      const inboxText = generalInboxResults.map(e =>
+        `From: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`
+      ).join('\n\n---\n\n');
+      messages.splice(1, 0, {
+        role: 'system',
+        content: `INBOX SEARCH RESULTS — emails matching the user's query:\n\n${inboxText}\n\nUse these to answer the user's question accurately. Do not guess or invent anything not shown above.`,
+      });
+    } else if (asksAboutInbox) {
+      // No results found — tell Ely so she doesn't hallucinate
+      messages.splice(1, 0, {
+        role: 'system',
+        content: `INBOX SEARCH: A search of the inbox was performed for this query but no matching emails were found. Tell the user honestly that you searched but couldn't find anything matching their query.`,
+      });
+    }
 
     console.log(
       `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} suppliedEmail=${suppliedEmailContext ? 'yes' : 'no'} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
