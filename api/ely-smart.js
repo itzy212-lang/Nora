@@ -841,6 +841,22 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   const emailContextText = buildEmailContextText({ body, scopedEmailContext });
   if (emailContextText) messages.push({ role: 'system', content: emailContextText });
 
+  // ── Inject uploaded document text ────────────────────────────────────────
+  const uploadedFiles = body.context?.uploadedExtractedText || body.uploadContext || [];
+  if (uploadedFiles?.length) {
+    const docBlocks = uploadedFiles
+      .filter(f => f.extracted_text && String(f.extracted_text).trim().length > 20)
+      .map(f => `UPLOADED DOCUMENT: ${f.file_name || 'file'}\n\n${String(f.extracted_text).slice(0, 6000)}`)
+      .join('\n\n---\n\n');
+
+    if (docBlocks) {
+      messages.push({
+        role: 'system',
+        content: `The following document(s) have been uploaded by the user. Read them carefully and use them to answer any questions. If the document appears to be a Party Wall notice, automatically check it against the relevant statutory requirements (Section 1, 3, or 6) and report any deficiencies.\n\n${docBlocks}`,
+      });
+    }
+  }
+
   // Inject project brain — persistent memory from previous sessions
   // Cap at ~4000 chars per entry and ~8000 chars total to stay within token budget
   const BRAIN_ENTRY_CAP = 4000;
@@ -1416,6 +1432,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
