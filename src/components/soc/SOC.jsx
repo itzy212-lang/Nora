@@ -54,6 +54,32 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setPreviewHtml(''); setStructuredData(null); setReportId(null); setPartyDrafts([]);
   }, [selectedAOIndex]);
 
+  // ── Guard against accidental navigation when SOC is generated ─────────────
+  useEffect(() => {
+    if (phase !== 'review' || !previewHtml) return;
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    const handlePopState = () => {
+      const confirmed = window.confirm("You have a generated Schedule of Condition that hasn't been downloaded yet. Are you sure you want to leave? Your SOC will be lost.");
+      if (!confirmed) {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [phase, previewHtml]);
+
   function projectOptionLabel(p) { return p?.address || p?.premise_address || p?.bo_premise_address || p?.ref || 'Project'; }
   function aoOptionLabel(ao, index) { return ao?.premise || ao?.reg_addr || ao?.address || ao?.ao_premise_address || `AO${index + 1}`; }
   function aoName(ao) { return [ao?.name || ao?.ao_name_1, ao?.name2 || ao?.ao_name_2].filter(Boolean).join(' & '); }
@@ -445,7 +471,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       <div style={s.header}>
         <h1 style={s.title}>Schedule of Condition - Review</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>Back</button>
+          <button onClick={() => {
+            if (!window.confirm("Are you sure you want to go back? Your generated SOC will be lost.")) return;
+            setPhase('recording');
+          }} style={s.secondaryBtn}>Back</button>
           <button onClick={sendSOCByEmail} style={s.secondaryBtn}>Send SOC by Email</button>
           <button onClick={printPreview} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }} disabled={pdfProcessing}>
             {pdfProcessing ? 'Generating PDF…' : 'Download PDF'}
@@ -546,4 +575,5 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
