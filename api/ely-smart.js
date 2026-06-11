@@ -935,6 +935,8 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
 8. SUBJECT LINE: If a subject line is needed, put it on a separate line BEFORE the draft with the format "Subject: [text]" — never inside the draft itself.`,
     });
   }
+
+  if (chatHistory?.length) {
     chatHistory.slice(-24).forEach((msg) => {
       if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
     });
