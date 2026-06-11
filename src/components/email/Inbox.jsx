@@ -330,6 +330,52 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
               {email?.received_at && ` · ${fmtDate(email.received_at)}`}
             </div>
           </div>
+
+          {/* ── Appointment detection prompt ───────────────────────────── */}
+          {appointmentPrompt && (
+            <div style={{
+              margin: '10px 14px 0',
+              padding: '10px 14px',
+              background: appointmentPrompt.has_clash ? 'var(--red-bg, #fef2f2)' : 'var(--blue-bg, #eff6ff)',
+              border: `1px solid ${appointmentPrompt.has_clash ? 'var(--red, #ef4444)' : 'var(--blue, #3b82f6)'}`,
+              borderRadius: 8,
+              fontSize: 12.5,
+              lineHeight: 1.5,
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                {appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}
+              </div>
+              <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
+              {appointmentPrompt.clash_detail && (
+                <div style={{ color: 'var(--red, #ef4444)', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>
+              )}
+              {!appointmentPrompt.has_clash && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <button
+                    onClick={async () => {
+                      setAppointmentPrompt(null);
+                      // Open reply composer with confirmation draft + trigger booking
+                      onReply?.({
+                        email,
+                        prefillBody: appointmentPrompt.confirm_reply,
+                        prefillSubject: `Re: ${email?.subject || ''}`,
+                        pendingBooking: appointmentPrompt.pending_booking,
+                      });
+                    }}
+                    style={{ padding: '6px 12px', background: 'var(--blue, #3b82f6)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    ✅ Reply confirming & book in
+                  </button>
+                  <button
+                    onClick={() => setAppointmentPrompt(null)}
+                    style={{ padding: '6px 12px', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ flex: 1, overflow: 'hidden', background: isHtml ? '#fff' : 'transparent' }}>
             {isHtml
               ? <iframe srcDoc={emailHtml} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none' }} title="email-content" />
@@ -1135,14 +1181,40 @@ export default function Inbox({ onOpenComposer }) {
     } catch { setThreadEmails([email]); }
   }, []);
 
+  const [appointmentPrompt, setAppointmentPrompt] = useState(null); // { proposal, date, time, address, clashes }
+
   const handleSelect = async (email) => {
     setSelectedEmail(email);
+    setAppointmentPrompt(null); // clear any previous prompt
     loadThread(email);
     if (isMobile) setMobileShowEmail(true);
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, is_read: true } });
     }
+
+    // ── Silent appointment detection ──────────────────────────────────────
+    // Run in background — check if email contains a proposed date/time
+    setTimeout(async () => {
+      try {
+        const res = await fetch('/api/detect-appointment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email_id: email.id,
+            subject: email.subject || '',
+            body: email.body || email.body_text || '',
+            from: email.from || email.sender_name || email.from_email || '',
+            thread_id: email.thread_id || null,
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.appointment_detected) {
+          setAppointmentPrompt(data);
+        }
+      } catch { /* silent — never interrupt the user */ }
+    }, 800); // slight delay so email renders first
   };
 
   // Fix 2: Refresh calls Supabase sync_outlook edge function, not /api/sync-emails
@@ -1466,6 +1538,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
