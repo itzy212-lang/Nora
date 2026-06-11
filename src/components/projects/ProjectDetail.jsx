@@ -2530,7 +2530,7 @@ function ProjectChat({ project, onOpenComposer }) {
             </div>
           )}
 
-          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', width: '100%', padding: '8px 12px 8px 0' }}>
+          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', width: '100%', padding: '8px 0 0' }}>
             <input ref={fileInputRef} type="file" multiple
               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
               onChange={handleFilesSelected} style={{ display: 'none' }} />
@@ -2619,13 +2619,14 @@ function ProjectChat({ project, onOpenComposer }) {
                     if (meta.recording === true) {
                       setVoicePhase('recording');
                       const p = meta.currentPhrase || meta.interim || preview || '';
-                      // Filter out the built-in "Recording... speak now" message
                       if (p && !p.includes('speak now') && !p.includes('Recording')) {
                         setDictationPreview(p);
+                        setInput(p); // show in preview
                       }
                     } else if (meta.recording === false) {
                       setVoicePhase('transcribing');
                       setDictationPreview('');
+                      setInput(''); // clear until Whisper returns
                     }
                   }}
                 />
