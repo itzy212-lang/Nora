@@ -52,6 +52,7 @@ export async function callEly({
   }
 
   const data = await res.json();
+  console.log('[Ely] model used:', data.model || 'unknown');
   return {
     reply: data.reply || data.replyText || '',
     draft: data.draft || data.documentText || null,
@@ -62,5 +63,7 @@ export async function callEly({
     mode: data.mode || mode || null,
     workflowStage: data.workflowStage || workflowStage || null,
     instructionSet: data.instructionSet || null,
+    model: data.model || null,
   };
 }
+
