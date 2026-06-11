@@ -1472,9 +1472,12 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const fullReply = cleanOutput(data.choices?.[0]?.message?.content || '');
+    const modelUsed = data.model || 'gpt-5.4-mini';
+    console.log('[ely-smart] responded with model:', modelUsed);
 
     return res.status(200).json({
       reply: fullReply,
+      model: modelUsed,
       resolvedProject,
       scopedEmailCount: scopedEmailContext?.length || 0,
       selectedEmailContextLoaded: !!suppliedEmailContext,
