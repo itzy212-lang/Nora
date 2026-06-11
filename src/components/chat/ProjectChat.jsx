@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage from './ChatMessage';
+import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
@@ -1220,37 +1221,23 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 +
               </button>
 
-              <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading || uploading} stopSignal={voiceStopSignal} />
-
-              <textarea
-                ref={textareaRef}
-                className="pch-textarea"
-                value={input}
-                onChange={handleTextChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about this project..."
-                rows={1}
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  fontSize: 13.5,
-                  color: 'var(--text)',
-                  fontFamily: 'var(--font)',
-                  outline: 'none',
-                  resize: 'none',
-                  maxHeight: 240,
-                  minHeight: 58,
-                  overflowY: 'hidden',
-                  lineHeight: 1.55,
-                  padding: '7px 6px',
-                }}
-              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <UnifiedVoice
+                  onTranscript={(text) => {
+                    setInput(prev => (prev ? prev + ' ' : '') + text);
+                    if (!loading) handleSend(text);
+                  }}
+                  onInterim={(text) => setInput(text)}
+                  placeholder={loading ? 'Ely is thinking...' : 'Ask about this project...'}
+                  disabled={loading || uploading}
+                />
+              </div>
 
               <button
                 className="ai-send-btn"
-                onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()}
-                disabled={loading || uploading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim() && !attachments.some(a => a.upload_status === 'uploaded'))}
+                onClick={() => handleSend()}
+                disabled={loading || uploading || !input.trim()}
+                style={{ flexShrink: 0 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/>
@@ -1264,6 +1251,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
 
 
