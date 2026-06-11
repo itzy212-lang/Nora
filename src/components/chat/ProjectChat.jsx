@@ -358,6 +358,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [caseReviewTopic, setCaseReviewTopic] = useState('');
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
+  const voiceTriggerRef = useRef(null);
   const prevPhraseRef = useRef('');
   const latestTranscriptRef = useRef('');
   const fileInputRef = useRef(null);
@@ -1189,61 +1190,138 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               alignItems: 'flex-end',
               gap: 8,
               background: 'var(--bg3)',
-              border: '1px solid var(--border)',
+              border: `1.5px solid ${voicePhase === 'recording' ? 'var(--blue, #3b82f6)' : 'var(--border)'}`,
               borderRadius: 14,
               padding: '8px 10px',
+              transition: 'border-color 0.2s',
+              boxShadow: voicePhase === 'recording' ? '0 0 0 3px rgba(59,130,246,0.12)' : 'none',
             }}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
+              <input ref={fileInputRef} type="file" multiple
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.heic,.webp,image/*,application/pdf"
-                onChange={handleFilesSelected}
-                style={{ display: 'none' }}
-              />
+                onChange={handleFilesSelected} style={{ display: 'none' }} />
 
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => fileInputRef.current?.click()}
+              {/* + file button */}
+              <button type="button" onClick={() => fileInputRef.current?.click()}
                 disabled={loading || uploading}
-                title="Upload file to this project chat"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: '50%',
-                  padding: 0,
-                  fontSize: 20,
-                  lineHeight: 1,
-                  flexShrink: 0,
-                }}
-              >
-                +
-              </button>
+                style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 18, lineHeight: 1, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >+</button>
 
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <UnifiedVoice
-                  onTranscript={(text) => {
-                    setInput(prev => (prev ? prev + ' ' : '') + text);
-                    if (!loading) handleSend(text);
-                  }}
-                  onInterim={(text) => setInput(text)}
-                  placeholder={loading ? 'Ely is thinking...' : 'Ask about this project...'}
-                  disabled={loading || uploading}
-                />
+              {/* Text area + live preview */}
+              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                {voicePhase === 'recording' ? (
+                  /* Recording state — waveform + live preview */
+                  <div style={{ minHeight: 42, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 2, padding: '4px 0' }}>
+                    {/* Waveform bars */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 18, marginBottom: 4 }}>
+                      {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9].map((h,i) => (
+                        <div key={i} style={{
+                          width: 3, borderRadius: 2,
+                          background: 'var(--blue, #3b82f6)',
+                          height: `${5 + h * 13}px`,
+                          animation: `waveBar 0.7s ease-in-out ${i * 0.05}s infinite alternate`,
+                        }} />
+                      ))}
+                      <style>{`@keyframes waveBar { from{transform:scaleY(0.3)} to{transform:scaleY(1)} }`}</style>
+                    </div>
+                    {/* Live preview — 3 lines, newest bottom */}
+                    {input && input.trim().split(/\s+/).length > 0 && (() => {
+                      const words = input.trim().split(' ');
+                      const lines = [];
+                      let cur = '';
+                      for (const w of words) {
+                        if ((cur + ' ' + w).trim().length > 40) { if (cur) lines.push(cur.trim()); cur = w; }
+                        else cur = cur ? cur + ' ' + w : w;
+                      }
+                      if (cur) lines.push(cur.trim());
+                      return lines.slice(-3).map((line, i, arr) => {
+                        const age = arr.length - 1 - i;
+                        return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4, color: age === 0 ? 'var(--text)' : `rgba(120,120,120,${age === 1 ? 0.5 : 0.25})`, fontWeight: age === 0 ? 500 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</div>;
+                      });
+                    })()}
+                    {!input && <div style={{ fontSize: 13.5, color: 'var(--text3)' }}>Listening...</div>}
+                  </div>
+                ) : voicePhase === 'transcribing' ? (
+                  <div style={{ minHeight: 42, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3)', fontSize: 13.5 }}>
+                    <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                    Transcribing...
+                    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                  </div>
+                ) : (
+                  <textarea
+                    ref={textareaRef}
+                    className="pch-textarea"
+                    value={input}
+                    onChange={handleTextChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={loading ? 'Ely is thinking...' : `Ask about ${projectRef || 'this project'}...`}
+                    rows={1}
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none',
+                      fontSize: 13.5, color: 'var(--text)', fontFamily: 'var(--font)',
+                      outline: 'none', resize: 'none', maxHeight: 160, minHeight: 42,
+                      overflowY: 'auto', lineHeight: 1.55, padding: '6px 0',
+                    }}
+                  />
+                )}
               </div>
 
+              {/* Single mic/send button */}
               <button
-                className="ai-send-btn"
-                onClick={() => handleSend()}
-                disabled={loading || uploading || !input.trim()}
-                style={{ flexShrink: 0 }}
+                onClick={() => {
+                  if (voicePhase === 'recording') {
+                    stopVoice();
+                  } else if (voicePhase === 'idle' && !input.trim()) {
+                    // Start voice
+                    setVoiceStopSignal(0);
+                    // trigger VoiceInput via ref — handled below
+                    voiceTriggerRef.current?.();
+                  } else {
+                    handleSend();
+                  }
+                }}
+                disabled={loading || uploading || voicePhase === 'transcribing'}
+                style={{
+                  width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0,
+                  background: voicePhase === 'recording' ? 'var(--blue, #3b82f6)' : input.trim() ? 'var(--blue, #3b82f6)' : 'var(--bg2)',
+                  color: voicePhase === 'recording' || input.trim() ? '#fff' : 'var(--text3)',
+                  cursor: loading || uploading || voicePhase === 'transcribing' ? 'not-allowed' : 'pointer',
+                  opacity: loading || voicePhase === 'transcribing' ? 0.5 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: voicePhase === 'recording' ? '0 0 0 4px rgba(59,130,246,0.2)' : 'none',
+                }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
+                {voicePhase === 'recording' ? (
+                  /* Stop/send icon */
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                ) : input.trim() ? (
+                  /* Send arrow */
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                ) : (
+                  /* Mic icon */
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                )}
               </button>
+
+              {/* Hidden VoiceInput for mic functionality */}
+              <div style={{ display: 'none' }}>
+                <VoiceInput
+                  onTranscript={handleVoice}
+                  onPreview={handleVoicePreview}
+                  disabled={loading || uploading}
+                  stopSignal={voiceStopSignal}
+                  triggerRef={voiceTriggerRef}
+                />
+              </div>
             </div>
           </div>
         </div>
