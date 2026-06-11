@@ -287,6 +287,17 @@ function splitAssistantResponse(raw = '') {
     /\n\s*(I've included the[\s\S]*)$/i,
     /\n\s*(Let me know if this tone[\s\S]*)$/i,
     /\n\s*(Let me know if this suits[\s\S]*)$/i,
+    /\n\s*(Let me know if (you'd like|you would like|this works|there's anything)[\s\S]*)$/i,
+    /\n\s*(Please let me know if (you'd like|you would like|there are any|any)[\s\S]*)$/i,
+    /\n\s*(Happy to (amend|adjust|revise|tweak|change)[\s\S]*)$/i,
+    /\n\s*(I can (amend|adjust|revise|tweak|change|also)[\s\S]*)$/i,
+    /\n\s*(Feel free to (adjust|amend|change|let me know)[\s\S]*)$/i,
+    /\n\s*(This (keeps|version|draft|should|aims)[\s\S]*)$/i,
+    /\n\s*(That should[\s\S]*)$/i,
+    /\n\s*(If you (want|need|would like|prefer)[\s\S]*)$/i,
+    /\n\s*(Shall I[\s\S]*)$/i,
+    /\n\s*(Would you like[\s\S]*)$/i,
+    /\n\s*(Do you want[\s\S]*)$/i,
   ];
 
   for (const rx of afterPatterns) {
@@ -303,6 +314,18 @@ function splitAssistantResponse(raw = '') {
     draft: normaliseProjectDraftText(draftAndAfter),
     after,
   };
+}
+
+function extractSubjectFromDraft(draftText = '') {
+  // If draft starts with Subject: line, pull it out
+  const match = draftText.match(/^Subject:\s*(.+)\n+/i);
+  if (match) {
+    return {
+      subject: match[1].trim(),
+      draft: draftText.replace(/^Subject:\s*.+\n+/i, '').trim(),
+    };
+  }
+  return { subject: '', draft: draftText };
 }
 
 export default function ProjectChat({ project, onOpenComposer, onClose }) {
@@ -611,7 +634,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     }
 
     const raw = result.draft || result.documentText || result.reply || result.replyText || '';
-    const { brief, draft, after } = splitAssistantResponse(raw);
+    const { brief, draft: rawDraft, after } = splitAssistantResponse(raw);
+    const { subject, draft } = extractSubjectFromDraft(rawDraft);
     const newMessages = [];
 
     if (brief) {
@@ -620,6 +644,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         role: 'ely',
         content: brief,
         messageType: 'brief',
+        suggestedActions: [],
+        projectId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (subject) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: `Subject: ${subject}`,
+        messageType: 'subject',
         suggestedActions: [],
         projectId,
         createdAt: new Date().toISOString(),
@@ -1222,6 +1258,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
 
 
