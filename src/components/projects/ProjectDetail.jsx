@@ -2460,6 +2460,28 @@ function ProjectChat({ project, onOpenComposer }) {
         </div>
 
         <div style={{ flexShrink: 0 }}>
+          {/* Waveform — shown above input bar when recording */}
+          {voicePhase === 'recording' && (
+            <div style={{ padding: '6px 12px 2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 20, marginBottom: 4 }}>
+                {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8].map((h,i) => (
+                  <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#3b82f6)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
+                ))}
+                <style>{`@keyframes waveBar{from{transform:scaleY(0.25)}to{transform:scaleY(1)}}`}</style>
+              </div>
+              {(() => {
+                const text = dictationPreview || input || '';
+                if (!text) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>Listening...</div>;
+                const words = text.split(' '); const lines = []; let cur = '';
+                for (const w of words) { if ((cur+' '+w).trim().length > 40) { if(cur) lines.push(cur.trim()); cur=w; } else cur = cur ? cur+' '+w : w; }
+                if (cur) lines.push(cur.trim());
+                return lines.slice(-3).map((line, i, arr) => {
+                  const age = arr.length-1-i;
+                  return <div key={i} style={{ fontSize: 13, lineHeight: 1.4, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.5:0.25})`, fontWeight: age===0?500:400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</div>;
+                });
+              })()}
+            </div>
+          )}
           {attachedFiles.length > 0 && (
             <div style={{
               display: 'flex',
@@ -2545,33 +2567,6 @@ function ProjectChat({ project, onOpenComposer }) {
               style={{ display: 'none' }}
             />
 
-            {/* Waveform + live preview — shown when recording */}
-            {voicePhase === 'recording' && (
-              <div style={{ width: '100%', padding: '4px 0 6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 20, marginBottom: 5 }}>
-                  {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8].map((h,i) => (
-                    <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#3b82f6)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
-                  ))}
-                  <style>{`@keyframes waveBar{from{transform:scaleY(0.25)}to{transform:scaleY(1)}}`}</style>
-                </div>
-                {(() => {
-                  const text = dictationPreview || input || '';
-                  if (!text) return <div style={{ fontSize: 13.5, color: 'var(--text3)' }}>Listening...</div>;
-                  const words = text.split(' ');
-                  const lines = []; let cur = '';
-                  for (const w of words) {
-                    if ((cur+' '+w).trim().length > 38) { if(cur) lines.push(cur.trim()); cur=w; }
-                    else cur = cur ? cur+' '+w : w;
-                  }
-                  if (cur) lines.push(cur.trim());
-                  return lines.slice(-3).map((line, i, arr) => {
-                    const age = arr.length-1-i;
-                    return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.45, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.5:0.25})`, fontWeight: age===0?500:400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</div>;
-                  });
-                })()}
-              </div>
-            )}
-
             {voicePhase === 'transcribing' && (
               <div style={{ width: '100%', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3)', fontSize: 13.5 }}>
                 <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
@@ -2579,14 +2574,6 @@ function ProjectChat({ project, onOpenComposer }) {
                 <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
               </div>
             )}
-
-            {/* + file button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading || uploading}
-              style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 18, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >+</button>
 
             {/* Textarea */}
             <textarea
