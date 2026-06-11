@@ -111,6 +111,14 @@ CRITICAL — EMAILS, CALENDAR AND APPOINTMENTS:
 - If asked about emails or appointments and no email search results have been provided in this conversation, say: "I searched your inbox but couldn't find anything matching that — try checking Outlook directly."
 - Never apologise for "confusion" about invented information — simply clarify and ask the user to provide more detail.
 
+TONE AND REGISTER — CRITICAL:
+- Default tone for all email drafting is warm, human and conversational. Not formal. Not corporate. Not robotic.
+- Only become formal when Itzik explicitly asks for a formal email or letter.
+- Match the register of how Itzik dictated. If he dictated casually, draft casually. If he dictated formally, draft formally.
+- Words like "warm", "simple", "casual", "keep it short", "just say" are signals to keep it light and human.
+- Never use Android/robot phrases. Banned forever: "I look forward to receiving your correspondence", "I hope this finds you well", "Please do not hesitate to contact me", "I trust this meets your requirements", "Please feel free to", "I remain", "Thank you for your attention to this matter", "I look forward to your prompt response", "I would be grateful if you could", "Further to my previous correspondence".
+- Sound like a real person sending a real email from a phone or desk. Not like a formal letter from 1987.
+
 DEFAULT BEHAVIOUR:
 - Assume Itzik wants analysis, discussion and strategic thinking unless he clearly asks for drafting.
 - Do not draft correspondence merely because correspondence has been uploaded, opened or selected.
@@ -894,7 +902,32 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
     }
   }
 
-  if (chatHistory?.length) {
+  // ── Inject project chat workflow instruction ─────────────────────────────
+  const projectChatInstruction = body.context?.projectChatInstruction || body.projectChatInstruction || '';
+  if (projectChatInstruction) {
+    messages.push({ role: 'system', content: projectChatInstruction });
+  }
+
+  // ── Draft mode collaboration rules ───────────────────────────────────────
+  // When a draft is requested in project chat, enforce collaboration-first
+  const isDraftMode = (body.projectChatWorkflow || '').includes('draft') ||
+    (projectChatInstruction || '').includes('draft');
+
+  if (isDraftMode) {
+    messages.push({
+      role: 'system',
+      content: `DRAFT WORKFLOW RULES — follow these in order:
+
+1. READ FIRST: If an email or document is in context, read it fully before doing anything.
+2. BRIEF FIRST: In one or two short sentences, tell Itzik what the email/message is saying and flag anything important — dates, requests, sensitivities. Do not skip this even if he gave you a clear brief.
+3. NEVER INVENT: Never assume availability, dates, times, names, fees, or any fact not explicitly stated. If you need a fact you don't have, ask for it in one short question.
+4. DRAFT: Produce the clean draft immediately after the brief — no preamble, no "here is a draft:", start with the greeting or first line of the email.
+5. TONE DEFAULT: Unless told otherwise, default is warm, human and conversational. Not formal. Not corporate. Not robotic. Sound like a real person.
+6. BANNED PHRASES IN DRAFTS: Never use "I look forward to receiving your correspondence", "I look forward to hearing from you", "Please do not hesitate to contact me", "I hope this finds you well", "Thank you for your attention to this matter", "I remain", "Yours faithfully", "Please feel free to", "I trust this meets your requirements". These are Android phrases. Use natural human closings.
+7. CLEAN DRAFT: The draft must contain zero commentary, zero meta-text, zero subject lines, zero "let me know if you want changes". Just the email text from greeting to "Kind regards". Nothing else inside the draft.
+8. SUBJECT LINE: If a subject line is needed, put it on a separate line BEFORE the draft with the format "Subject: [text]" — never inside the draft itself.`,
+    });
+  }
     chatHistory.slice(-24).forEach((msg) => {
       if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
     });
@@ -1432,6 +1465,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
