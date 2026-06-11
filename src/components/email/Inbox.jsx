@@ -527,13 +527,13 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const signatureHtml = firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
 
   const handleSend = async () => {
-    if (!to.trim() || !body.trim()) return;
+    const htmlBody = bodyEditorRef.current?.innerHTML || body;
+    if (!to.trim() || !htmlBody.trim()) return;
     setSending(true);
     try {
-      const bodyHtml = String(body || '').replace(/\n/g, '<br>');
       const outgoingBody = includeSignature && signatureHtml
-        ? `${bodyHtml}<br><br>${signatureHtml}`
-        : body;
+        ? `${htmlBody}<br><br>${signatureHtml}`
+        : htmlBody;
 
       await onSend({ to, cc, subject, body: outgoingBody, replyToId: email?.id, includeSignature, createTask, attachments });
       setSending(false);
@@ -541,7 +541,6 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     } catch (err) {
       setSending(false);
       alert(err.message || 'Could not send email. Please try again.');
-      // Do NOT close — let the user retry
     }
   };
 
@@ -565,19 +564,87 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 
   const removeAttachment = (idx) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
-  const inp = { width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
+  const [showFormatBar, setShowFormatBar] = useState(false);
+  const bodyEditorRef = useRef(null);
+
+  useEffect(() => {
+    if (bodyEditorRef.current && prefillBody) {
+      bodyEditorRef.current.innerHTML = prefillBody;
+      setBody(prefillBody);
+    }
+  }, [prefillBody]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 1300, margin: '10px 16px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20, display: 'flex', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{mode === 'replyAll' ? '↩↩ Reply All' : '↩ Reply'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{mode === 'replyAll' ? '↩↩ Reply All' : '↩ Reply'}</div>
+              {/* Format button */}
+              <button
+                onClick={() => setShowFormatBar(f => !f)}
+                title="Text formatting"
+                style={{
+                  width: 26, height: 26, borderRadius: '50%',
+                  background: showFormatBar ? 'var(--blue)' : 'var(--bg3)',
+                  color: showFormatBar ? '#fff' : 'var(--text2)',
+                  border: '1px solid var(--border)',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >A</button>
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {!showEly && <button onClick={() => setShowEly(true)} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>}
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer' }}>✕</button>
             </div>
           </div>
+
+          {/* Formatting toolbar — shown when A is tapped */}
+          {showFormatBar && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 16px',
+              borderBottom: '1px solid var(--border)', background: 'var(--bg3)',
+            }}>
+              {[['bold','B','700'],['italic','I','400'],['underline','U','400']].map(([cmd,label,fw]) => (
+                <button key={cmd} type="button"
+                  onMouseDown={e => { e.preventDefault(); document.execCommand(cmd); bodyEditorRef.current?.focus(); }}
+                  style={{ padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontWeight: fw, fontStyle: cmd==='italic'?'italic':'normal', textDecoration: cmd==='underline'?'underline':'none', fontSize: 13, minWidth: 28 }}
+                >{label}</button>
+              ))}
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>A</span>
+                <input type="color" defaultValue="#1d4ed8"
+                  onInput={e => { document.execCommand('foreColor', false, e.target.value); bodyEditorRef.current?.focus(); }}
+                  style={{ width: 24, height: 22, padding: 0, border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer' }}
+                  title="Text colour"
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>H</span>
+                <input type="color" defaultValue="#fef08a"
+                  onInput={e => { document.execCommand('hiliteColor', false, e.target.value); bodyEditorRef.current?.focus(); }}
+                  style={{ width: 24, height: 22, padding: 0, border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer' }}
+                  title="Highlight"
+                />
+              </div>
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+              <select defaultValue="3"
+                onChange={e => { document.execCommand('fontSize', false, e.target.value); bodyEditorRef.current?.focus(); }}
+                style={{ padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', fontSize: 12, cursor: 'pointer' }}
+              >
+                <option value="1">Small</option>
+                <option value="3">Normal</option>
+                <option value="4">Large</option>
+                <option value="5">Larger</option>
+              </select>
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+              <button type="button" onMouseDown={e => { e.preventDefault(); document.execCommand('removeFormat'); bodyEditorRef.current?.focus(); }}
+                style={{ padding: '3px 7px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>✕ fmt</button>
+            </div>
+          )}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 4 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Replying to</div>
@@ -595,9 +662,21 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
             ))}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
               <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right', paddingTop: 8 }}>Body</div>
-              <textarea value={body} onChange={e => setBody(e.target.value)}
-                placeholder="Type your reply here, or use ✨ Draft with Ely…"
-                style={{ ...inp, flex: 1, minHeight: 320, resize: 'vertical', lineHeight: 1.7 }} />
+              <div
+                ref={bodyEditorRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={e => setBody(e.currentTarget.innerHTML)}
+                data-placeholder="Type your reply here, or use ✨ Draft with Ely…"
+                style={{
+                  flex: 1, minHeight: 320, padding: '8px 12px',
+                  fontSize: 13, background: '#fff',
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  color: '#000', outline: 'none',
+                  lineHeight: 1.7, overflowY: 'auto',
+                  fontFamily: 'inherit',
+                }}
+              />
             </div>
             {firmSettings && includeSignature && signatureHtml && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
