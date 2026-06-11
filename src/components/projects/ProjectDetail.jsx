@@ -1704,6 +1704,7 @@ function ProjectChat({ project, onOpenComposer }) {
   const [uploading, setUploading] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [dictationPreview, setDictationPreview] = useState('');
+  const [voicePhase, setVoicePhase] = useState('idle'); // idle | recording | transcribing
   const [draftActionStatus, setDraftActionStatus] = useState('');
 
   const endRef = useRef(null);
@@ -2544,6 +2545,111 @@ function ProjectChat({ project, onOpenComposer }) {
               style={{ display: 'none' }}
             />
 
+            {/* Waveform + live preview — shown when recording */}
+            {voicePhase === 'recording' && (
+              <div style={{ width: '100%', padding: '4px 0 6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 20, marginBottom: 5 }}>
+                  {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8].map((h,i) => (
+                    <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#3b82f6)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
+                  ))}
+                  <style>{`@keyframes waveBar{from{transform:scaleY(0.25)}to{transform:scaleY(1)}}`}</style>
+                </div>
+                {(() => {
+                  const text = dictationPreview || input || '';
+                  if (!text) return <div style={{ fontSize: 13.5, color: 'var(--text3)' }}>Listening...</div>;
+                  const words = text.split(' ');
+                  const lines = []; let cur = '';
+                  for (const w of words) {
+                    if ((cur+' '+w).trim().length > 38) { if(cur) lines.push(cur.trim()); cur=w; }
+                    else cur = cur ? cur+' '+w : w;
+                  }
+                  if (cur) lines.push(cur.trim());
+                  return lines.slice(-3).map((line, i, arr) => {
+                    const age = arr.length-1-i;
+                    return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.45, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.5:0.25})`, fontWeight: age===0?500:400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</div>;
+                  });
+                })()}
+              </div>
+            )}
+
+            {voicePhase === 'transcribing' && (
+              <div style={{ width: '100%', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3)', fontSize: 13.5 }}>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+                Transcribing...
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              </div>
+            )}
+
+            {/* + file button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || uploading}
+              style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 18, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >+</button>
+
+            {/* Textarea */}
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={`Ask about ${projectRef}...`}
+              rows={1}
+              style={{
+                flex: 1, minWidth: 0,
+                padding: '10px 12px', lineHeight: '20px', fontSize: 13,
+                resize: 'none', background: 'var(--bg2)',
+                border: '1px solid var(--border)', borderRadius: 12,
+                color: 'var(--text)', outline: 'none',
+                minHeight: 44, maxHeight: 120,
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {/* VoiceInput mic */}
+            <VoiceInput
+              disabled={loading || uploading}
+              stopSignal={voiceStopSignal}
+              onTranscript={(transcript) => {
+                setVoicePhase('idle');
+                setDictationPreview('');
+                setInput(transcript);
+              }}
+              onPreview={(preview, meta = {}) => {
+                if (meta.recording === true) {
+                  setVoicePhase('recording');
+                  const currentPhrase = meta.currentPhrase || meta.interim || preview || '';
+                  if (currentPhrase) setDictationPreview(currentPhrase);
+                } else if (meta.recording === false) {
+                  setVoicePhase('transcribing');
+                  setDictationPreview('');
+                }
+              }}
+            />
+
+            {/* Send button — always visible */}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm project-chat-send-btn"
+              onClick={handleSend}
+              disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
+              style={{
+                cursor: loading || uploading ? 'not-allowed' : 'pointer',
+                alignSelf: 'flex-end',
+                width: 40, height: 40,
+                borderRadius: '50%',
+                flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <span style={{ display: 'block', lineHeight: 1, transform: 'translateX(1px)' }}>➤</span>
+            </button>
+
             <button
               type="button"
               className="ely-draft-action-btn"
@@ -2568,75 +2674,6 @@ function ProjectChat({ project, onOpenComposer }) {
               +
             </button>
 
-            <VoiceInput
-              disabled={loading || uploading}
-              stopSignal={voiceStopSignal}
-              onTranscript={handleVoiceTranscript}
-              onPreview={(preview, meta = {}) => {
-                const currentPhrase = meta.currentPhrase || meta.interim || preview || '';
-                if (currentPhrase) {
-                  setDictationPreview(currentPhrase);
-                  window.clearTimeout(dictationPreviewTimerRef.current);
-                  dictationPreviewTimerRef.current = window.setTimeout(() => {
-                    setDictationPreview('');
-                  }, 1200);
-                }
-              }}
-            />
-
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={`Ask about ${projectRef}...`}
-              rows={1}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                padding: '10px 12px',
-                lineHeight: '20px',
-                fontSize: 13,
-                resize: 'none',
-                background: 'var(--bg2)',
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                color: 'var(--text)',
-                outline: 'none',
-                minHeight: 44,
-                maxHeight: 44,
-                boxSizing: 'border-box',
-              }}
-            />
-
-            <button
-              type="button"
-              className="btn btn-primary btn-sm project-chat-send-btn"
-              onClick={handleSend}
-              disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
-              style={{
-                cursor: loading || uploading ? 'not-allowed' : 'pointer',
-                alignSelf: 'flex-end',
-                minWidth: isMobile ? 44 : 68,
-                height: 40,
-                borderRadius: isMobile ? '50%' : 10,
-                padding: isMobile ? 0 : undefined,
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                lineHeight: 1,
-                overflow: 'visible',
-              }}
-            >
-              <span style={{ display: 'block', lineHeight: 1, transform: isMobile ? 'translateX(1px)' : 'none' }}>
-                {uploading ? (isMobile ? '...' : 'Uploading...') : isMobile ? '➤' : 'Send'}
-              </span>
-            </button>
           </div>
         </div>
       </div>
@@ -4085,6 +4122,7 @@ Itzik`,
     </div>
   );
 }
+
 
 
 
