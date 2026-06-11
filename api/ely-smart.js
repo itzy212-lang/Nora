@@ -1010,6 +1010,61 @@ function detectsCaseReview(prompt = '') {
   return lower.includes('case review') || lower.includes('full review') || lower.includes('full case');
 }
 
+function parseBookingIntent(prompt = '') {
+  const lower = prompt.toLowerCase();
+  const isBooking = /\b(book|schedule|set|add|create|put in|diary|remind|reminder|block out)\b/i.test(lower) &&
+    /\b(in|a|an|me|reminder|appointment|inspection|soc|survey|visit|call|meeting|deadline)\b/i.test(lower);
+  if (!isBooking) return null;
+
+  // Extract task type
+  let taskType = 'appointment';
+  if (/schedule of condition|soc|inspection/i.test(lower)) taskType = 'soc';
+  else if (/remind|reminder|call/i.test(lower)) taskType = 'reminder';
+  else if (/deadline|due/i.test(lower)) taskType = 'deadline';
+  else if (/site visit|visit/i.test(lower)) taskType = 'site_visit';
+  else if (/meeting/i.test(lower)) taskType = 'meeting';
+
+  // Extract date
+  const dateMatch = prompt.match(/\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{4})?|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\b/i);
+  const dayMatch = prompt.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+
+  // Extract time
+  const timeMatch = prompt.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)|(?:\d{1,2})(?::\d{2})?\s*(?:o'?clock))\b/i);
+
+  // Extract project/address
+  const projectMatch = prompt.match(/project\s+(?:is\s+)?([^,\.]+)|at\s+([^,\.]+(?:road|street|avenue|lane|close|way|drive|place|court|gardens?)[^,\.]*)/i);
+
+  return {
+    taskType,
+    rawDate: dateMatch?.[0] || dayMatch?.[0] || '',
+    rawTime: timeMatch?.[0] || '',
+    rawProject: projectMatch?.[1] || projectMatch?.[2] || '',
+    rawPrompt: prompt,
+  };
+}
+
+async function createCalendarEntry({ taskType, title, dueDate, startTime, projectId, projectAddress, aoAddress, description, userId }) {
+  const sb = getSupabase();
+  if (!sb) throw new Error('No Supabase connection');
+
+  const { data, error } = await sb.from('tasks').insert([{
+    task_type: taskType,
+    title,
+    due_date: dueDate,
+    start_time: startTime || null,
+    project_id: projectId || null,
+    project_address_snapshot: projectAddress || null,
+    ao_address_snapshot: aoAddress || null,
+    description: description || null,
+    status: 'pending',
+    user_id: userId || null,
+    created_at: new Date().toISOString(),
+  }]).select('*').single();
+
+  if (error) throw error;
+  return data;
+}
+
 function needsProjectContext(prompt = '') {
   const lower = String(prompt || '').toLowerCase();
   return lower.includes('notice') || lower.includes('award') || lower.includes('adjoining owner') ||
@@ -1294,6 +1349,106 @@ export default async function handler(req, res) {
 
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
+
+    // ── Calendar booking flow ─────────────────────────────────────────────
+    // If user is confirming a pending booking, create the entry
+    if (body.pending_booking_confirm && body.pending_booking) {
+      try {
+        const booking = body.pending_booking;
+        await createCalendarEntry({
+          taskType: booking.taskType,
+          title: booking.title,
+          dueDate: booking.dueDate,
+          startTime: booking.startTime,
+          projectId: booking.projectId,
+          projectAddress: booking.projectAddress,
+          aoAddress: booking.aoAddress,
+          description: booking.description,
+          userId,
+        });
+        return res.status(200).json({
+          reply: `✅ Done — booked in:\n\n**${booking.title}**\n📅 ${booking.displayDate}${booking.startTime ? ' at ' + booking.startTime : ''}${booking.projectAddress ? '\n📍 ' + booking.projectAddress : ''}`,
+          booking_created: true,
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      } catch (err) {
+        console.error('[ely-smart] booking creation failed:', err.message);
+        return res.status(200).json({
+          reply: `Sorry, I couldn't save that to the calendar — ${err.message}. Please try adding it manually.`,
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      }
+    }
+
+    // ── Detect new booking intent ─────────────────────────────────────────
+    const bookingIntent = isMainChat ? parseBookingIntent(prompt) : null;
+    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
+      // Build a confirmation prompt for GPT to flesh out the details
+      const taskTypeLabels = {
+        soc: 'Schedule of Condition',
+        reminder: 'Reminder',
+        deadline: 'Deadline',
+        site_visit: 'Site Visit',
+        meeting: 'Meeting',
+        appointment: 'Appointment',
+      };
+
+      const systemMsg = `You are Ely, a party wall surveying assistant. The user wants to book something in the calendar.
+
+Extract the following from their message and confirm back clearly:
+1. Task type (Schedule of Condition / Reminder / Deadline / Site Visit / Meeting / Appointment)
+2. Date and time
+3. Project/address if mentioned
+4. Any other relevant details
+
+If the task type is unclear, list the options and ask which one.
+If the date is unclear, ask for clarification.
+
+Format your response EXACTLY like this:
+Here's what I'll book in:
+
+📋 **[Task Type]**
+📅 **[Date and time]**
+📍 **[Address/project if known]**
+📝 **[Any other details]**
+
+Shall I confirm? (Say yes or no)
+
+IMPORTANT: Include at the very end of your response, on its own line, this JSON block wrapped in |||:
+|||{"taskType":"[type]","title":"[title]","dueDate":"[YYYY-MM-DD or null]","startTime":"[HH:MM or null]","projectAddress":"[address or null]","displayDate":"[human readable date]"}|||`;
+
+      const bookingMessages = [
+        { role: 'system', content: systemMsg },
+        { role: 'user', content: prompt },
+      ];
+
+      const bookingResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({ model: 'gpt-4o', max_completion_tokens: 600, temperature: 0.2, messages: bookingMessages }),
+      });
+
+      const bookingData = await bookingResponse.json();
+      const bookingReply = bookingData.choices?.[0]?.message?.content || '';
+
+      // Extract the JSON blob
+      const jsonMatch = bookingReply.match(/\|\|\|(.*?)\|\|\|/s);
+      let pendingBooking = null;
+      let cleanReply = bookingReply.replace(/\|\|\|.*?\|\|\|/s, '').trim();
+
+      if (jsonMatch) {
+        try {
+          pendingBooking = JSON.parse(jsonMatch[1]);
+        } catch { /* ignore parse error */ }
+      }
+
+      return res.status(200).json({
+        reply: cleanReply,
+        pending_booking: pendingBooking,
+        awaiting_booking_confirm: true,
+        sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
+    }
 
     // ── General inbox search for main chat ────────────────────────────────
     // When user asks about appointments, meetings, or specific people in main
