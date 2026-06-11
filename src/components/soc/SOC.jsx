@@ -190,11 +190,92 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setIsRecording(false);
   }, []);
 
-  // Send current note as a chat bubble, respond with "Noted."
-  const handleSend = useCallback((overrideText) => {
+  const [socPhoto, setSocPhoto] = useState(null); // { base64, mimeType, name }
+  const photoInputRef = useRef(null);
+
+  // Detect if message is a question or help request — needs a real response
+  const isQuestion = useCallback((text = '') => {
+    const lower = text.toLowerCase().trim();
+    return lower.endsWith('?') ||
+      /^(what|how|why|when|where|who|is|are|can|could|should|would|does|do|help|describe|explain|tell me|not sure|i don't know|i'm not sure|unclear|confused|struggling|what do you think|what would you|how would you|can you|could you)/i.test(lower) ||
+      lower.includes('help') || lower.includes('describe') || lower.includes('not sure') ||
+      lower.includes('struggling') || lower.includes('unclear') || lower.includes('how do i');
+  }, []);
+
+  // Call Ely for a real response (questions, photo descriptions)
+  const askEly = useCallback(async (note, photoData = null) => {
+    try {
+      const messages = [];
+
+      if (photoData) {
+        // Vision call — describe the photo in surveyor language
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:${photoData.mimeType};base64,${photoData.base64}`, detail: 'high' },
+            },
+            {
+              type: 'text',
+              text: note
+                ? `${note}\n\nDescribe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Keep it concise and factual.`
+                : 'Describe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Keep it concise and factual.',
+            },
+          ],
+        });
+      } else {
+        messages.push({
+          role: 'user',
+          content: `You are assisting a party wall surveyor conducting a Schedule of Condition inspection. Answer this question concisely and practically:\n\n${note}`,
+        });
+      }
+
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY || ''}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-5.4-mini',
+          max_tokens: 300,
+          temperature: 0.3,
+          messages,
+        }),
+      });
+
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content?.trim() || 'Sorry, I couldn\'t process that.';
+    } catch (err) {
+      console.warn('[SOC] askEly error:', err.message);
+      return 'Sorry, something went wrong. Please try again.';
+    }
+  }, []);
+
+  // Handle photo selection
+  const handlePhotoChange = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target.result.split(',')[1];
+      setSocPhoto({ base64, mimeType: file.type, name: file.name });
+      setMessages(prev => [...prev, {
+        id: uid(), role: 'user',
+        content: `📷 Photo attached: ${file.name}`,
+        isPhoto: true,
+      }]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }, []);
+
+  // Send current note as a chat bubble
+  const handleSend = useCallback(async (overrideText) => {
     const voiceNote = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
     const note = overrideText || voiceNote || textInput.trim();
-    if (!note) return;
+    if (!note && !socPhoto) return;
 
     stopRecording();
     setInterimText('');
@@ -203,13 +284,27 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     accumulatedRef.current = '';
     interimRef.current = '';
 
-    const noteId = uid();
+    const photo = socPhoto;
+    setSocPhoto(null);
+
+    const userContent = note || (photo ? `Describe this photo` : '');
+
     setMessages(prev => [
       ...prev,
-      { id: noteId, role: 'user', content: note },
-      { id: uid(), role: 'ely', content: 'Noted.' },
+      { id: uid(), role: 'user', content: userContent },
+      { id: uid(), role: 'ely', content: '…', pending: true },
     ]);
-  }, [stopRecording, textInput]);
+
+    // Decide response type
+    const needsEly = photo || isQuestion(userContent);
+
+    if (needsEly) {
+      const reply = await askEly(note, photo || null);
+      setMessages(prev => prev.map(m => m.pending ? { ...m, content: reply, pending: false } : m));
+    } else {
+      setMessages(prev => prev.map(m => m.pending ? { ...m, content: 'Noted.', pending: false } : m));
+    }
+  }, [stopRecording, textInput, socPhoto, isQuestion, askEly]);
 
   const handleMicClick = useCallback(() => {
     if (isRecording) {
@@ -441,6 +536,26 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         {/* Input bar */}
         <div style={{ ...s.inputBar, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            {/* Photo upload button */}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={handlePhotoChange}
+            />
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              style={{ ...s.micIdle, fontSize: 18, position: 'relative' }}
+              title="Upload photo for description"
+            >
+              📷
+              {socPhoto && (
+                <span style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 10, background: 'var(--green, #22c55e)', borderRadius: '50%' }} />
+              )}
+            </button>
+
             {/* Mic button */}
             <button onClick={handleMicClick} style={isRecording ? s.micActive : s.micIdle} title={isRecording ? 'Stop recording' : 'Start recording'}>
               {isRecording ? (
@@ -469,10 +584,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             {/* Send button */}
             <button
               onClick={() => handleSend()}
-              disabled={!textInput.trim() && !isRecording && !interimText}
+              disabled={!textInput.trim() && !isRecording && !interimText && !socPhoto}
               style={{
                 ...s.micIdle,
-                opacity: (!textInput.trim() && !isRecording && !interimText) ? 0.35 : 1,
+                opacity: (!textInput.trim() && !isRecording && !interimText && !socPhoto) ? 0.35 : 1,
                 background: 'var(--accent, #6366f1)',
                 color: '#fff',
                 borderRadius: 8,
@@ -614,6 +729,7 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
 
 
