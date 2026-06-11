@@ -160,6 +160,11 @@ function isDraftRequest(text = '', hasPreviousDraft = false) {
     'wording',
     'whatsapp',
     'text message',
+    'inline',
+    'point by point',
+    'line by line',
+    'paste.*points',
+    'respond.*each',
   ];
 
   const editWords = [
@@ -1060,6 +1065,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   onOpenInComposer={(draft) => onOpenComposer?.({
                     mode: 'compose',
                     body: draft,
+                    bodyIsHtml: draft.trim().startsWith('<'),
                     projectId,
                   })}
                 />
@@ -1258,6 +1264,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     </div>
   );
 }
+
 
 
 
