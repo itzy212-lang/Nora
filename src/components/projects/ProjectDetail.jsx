@@ -2460,28 +2460,6 @@ function ProjectChat({ project, onOpenComposer }) {
         </div>
 
         <div style={{ flexShrink: 0 }}>
-          {/* Waveform — shown above input bar when recording */}
-          {voicePhase === 'recording' && (
-            <div style={{ padding: '6px 12px 2px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 20, marginBottom: 4 }}>
-                {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8].map((h,i) => (
-                  <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#3b82f6)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
-                ))}
-                <style>{`@keyframes waveBar{from{transform:scaleY(0.25)}to{transform:scaleY(1)}}`}</style>
-              </div>
-              {(() => {
-                const text = dictationPreview || input || '';
-                if (!text) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>Listening...</div>;
-                const words = text.split(' '); const lines = []; let cur = '';
-                for (const w of words) { if ((cur+' '+w).trim().length > 40) { if(cur) lines.push(cur.trim()); cur=w; } else cur = cur ? cur+' '+w : w; }
-                if (cur) lines.push(cur.trim());
-                return lines.slice(-3).map((line, i, arr) => {
-                  const age = arr.length-1-i;
-                  return <div key={i} style={{ fontSize: 13, lineHeight: 1.4, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.5:0.25})`, fontWeight: age===0?500:400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</div>;
-                });
-              })()}
-            </div>
-          )}
           {attachedFiles.length > 0 && (
             <div style={{
               display: 'flex',
@@ -2529,114 +2507,124 @@ function ProjectChat({ project, onOpenComposer }) {
               ))}
             </div>
           )}
-          {dictationPreview && (
+          {dictationPreview && voicePhase !== 'recording' && (
             <div style={{
-              marginBottom: 6,
-              height: 24,
-              lineHeight: '24px',
-              padding: '0 10px',
-              borderRadius: 10,
-              background: 'var(--bg3)',
-              color: 'var(--text2)',
-              fontSize: 12.5,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              marginBottom: 6, height: 24, lineHeight: '24px',
+              padding: '0 10px', borderRadius: 10,
+              background: 'var(--bg3)', color: 'var(--text2)',
+              fontSize: 12.5, whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis',
               border: '1px solid var(--border)',
             }}>
               {dictationPreview}
             </div>
           )}
 
-<div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: isMobile ? 6 : 8,
-            paddingTop: 8,
+          <div style={{
             borderTop: '1px solid var(--border)',
             background: 'var(--bg)',
             width: '100%',
-            maxWidth: '100%',
+            padding: '8px 0 4px',
           }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
+            <input ref={fileInputRef} type="file" multiple
               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
-              onChange={handleFilesSelected}
-              style={{ display: 'none' }}
-            />
+              onChange={handleFilesSelected} style={{ display: 'none' }} />
 
-            {voicePhase === 'transcribing' && (
-              <div style={{ width: '100%', padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3)', fontSize: 13.5 }}>
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-                Transcribing...
-                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            {/* Waveform + live preview — only when recording */}
+            {voicePhase === 'recording' && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 22, marginBottom: 4 }}>
+                  {[0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9].map((h,i) => (
+                    <div key={i} style={{ width: 3, borderRadius: 2, background: '#3b82f6', height: `${3+h*18}px`, animation: `pcWave 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
+                  ))}
+                  <style>{`@keyframes pcWave{from{transform:scaleY(0.2)}to{transform:scaleY(1)}}`}</style>
+                </div>
+                {(() => {
+                  const text = dictationPreview || input || '';
+                  if (!text) return <div style={{ fontSize: 13.5, color: 'var(--text3)' }}>Listening...</div>;
+                  const words = text.split(' '); const lines = []; let cur = '';
+                  for (const w of words) {
+                    if ((cur+' '+w).trim().length > 36) { if(cur) lines.push(cur.trim()); cur=w; }
+                    else cur = cur ? cur+' '+w : w;
+                  }
+                  if (cur) lines.push(cur.trim());
+                  return lines.slice(-3).map((line, i, arr) => {
+                    const age = arr.length-1-i;
+                    return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.45, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.45:0.2})`, fontWeight: age===0?500:400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{line}</div>;
+                  });
+                })()}
               </div>
             )}
 
-            {/* Textarea */}
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={`Ask about ${projectRef}...`}
-              rows={1}
-              style={{
-                flex: 1, minWidth: 0,
-                padding: '10px 12px', lineHeight: '20px', fontSize: 13,
-                resize: 'none', background: 'var(--bg2)',
-                border: '1px solid var(--border)', borderRadius: 12,
-                color: 'var(--text)', outline: 'none',
-                minHeight: 44, maxHeight: 120,
-                boxSizing: 'border-box',
-              }}
-            />
+            {/* Input row: [+] [textarea] [mic/send] */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
 
-            {/* VoiceInput mic */}
-            <VoiceInput
-              disabled={loading || uploading}
-              stopSignal={voiceStopSignal}
-              onTranscript={(transcript) => {
-                setVoicePhase('idle');
-                setDictationPreview('');
-                setInput(transcript);
-              }}
-              onPreview={(preview, meta = {}) => {
-                if (meta.recording === true) {
-                  setVoicePhase('recording');
-                  const currentPhrase = meta.currentPhrase || meta.interim || preview || '';
-                  if (currentPhrase) setDictationPreview(currentPhrase);
-                } else if (meta.recording === false) {
-                  setVoicePhase('transcribing');
-                  setDictationPreview('');
-                }
-              }}
-            />
+              {/* + file upload */}
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                disabled={loading || uploading}
+                style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 20, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >+</button>
 
-            {/* Send button — always visible */}
-            <button
-              type="button"
-              className="btn btn-primary btn-sm project-chat-send-btn"
-              onClick={handleSend}
-              disabled={loading || uploading || (!input.trim() && attachedFiles.length === 0)}
-              style={{
-                cursor: loading || uploading ? 'not-allowed' : 'pointer',
-                alignSelf: 'flex-end',
-                width: 40, height: 40,
-                borderRadius: '50%',
-                flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <span style={{ display: 'block', lineHeight: 1, transform: 'translateX(1px)' }}>➤</span>
-            </button>
+              {/* Textarea */}
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                placeholder={voicePhase === 'transcribing' ? 'Transcribing...' : `Ask about ${projectRef}...`}
+                rows={1}
+                style={{
+                  flex: 1, minWidth: 0, padding: '10px 12px', lineHeight: '20px',
+                  fontSize: 13, resize: 'none', background: 'var(--bg2)',
+                  border: `1.5px solid ${voicePhase === 'recording' ? '#3b82f6' : 'var(--border)'}`,
+                  borderRadius: 12, color: 'var(--text)', outline: 'none',
+                  minHeight: 44, maxHeight: 120, boxSizing: 'border-box',
+                  transition: 'border-color 0.2s',
+                }}
+              />
 
+              {/* Single mic/send button */}
+              <div style={{ flexShrink: 0, position: 'relative' }}>
+                <VoiceInput
+                  disabled={loading || uploading}
+                  stopSignal={voiceStopSignal}
+                  onTranscript={(transcript) => {
+                    setVoicePhase('idle');
+                    setDictationPreview('');
+                    setInput(transcript);
+                  }}
+                  onPreview={(preview, meta = {}) => {
+                    if (meta.recording === true) {
+                      setVoicePhase('recording');
+                      const p = meta.currentPhrase || meta.interim || preview || '';
+                      if (p) setDictationPreview(p);
+                    } else if (meta.recording === false) {
+                      setVoicePhase('transcribing');
+                      setDictationPreview('');
+                    }
+                  }}
+                />
+                {/* Show send arrow on top of mic when there's text */}
+                {(input.trim() && voicePhase === 'idle') && (
+                  <button
+                    onClick={handleSend}
+                    disabled={loading || uploading}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      width: '100%', height: '100%',
+                      borderRadius: '50%', border: 'none',
+                      background: '#3b82f6', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', zIndex: 2,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+            </div>
           </div>
         </div>
       </div>
