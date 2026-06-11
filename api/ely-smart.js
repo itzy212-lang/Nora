@@ -634,10 +634,17 @@ ${cleanEmailBody(email.body || '')}
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
 
-  prompt += `
+  // Append output rules if present
+  if (brain?.instruction_set?.output_rules) {
+    prompt += `\n\n${brain.instruction_set.output_rules}`;
+  }
 
-${GLOBAL_AI_STANDARD}
-`;
+  // Append behaviour rules if present
+  if (brain?.instruction_set?.behaviour_rules) {
+    prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
+  }
+
+  prompt += `\n\n${GLOBAL_AI_STANDARD}\n`;
 
   if (modeHint === 'email_summary') {
     prompt += `
