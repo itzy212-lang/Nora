@@ -730,6 +730,33 @@ export default function MainChat({ onOpenComposer, onClose }) {
     try {
       const wantsDraft = isDraftRequest(text, !!lastDraft);
 
+      // ── Voice booking confirmation ───────────────────────────────────────
+      const isConfirm = /^(yes|yeah|yep|confirm|book it|go ahead|do it|correct|that's right|confirmed|sure|ok|okay)\b/i.test(text.trim());
+      const isCancel = /^(no|nope|cancel|don't|stop|actually no)\b/i.test(text.trim());
+
+      if (pendingBooking && isConfirm) {
+        setPendingBooking(null);
+        setMessages(prev => [...prev, { id: uid(), role: 'user', content: text, createdAt: new Date().toISOString() }]);
+        setInput('');
+        const result = await send('Yes, confirm booking', {
+          pending_booking_confirm: true,
+          pending_booking: pendingBooking,
+        });
+        appendAssistantMessagesFromResult(result, false);
+        return;
+      }
+
+      if (pendingBooking && isCancel) {
+        setPendingBooking(null);
+        setMessages(prev => [
+          ...prev,
+          { id: uid(), role: 'user', content: text, createdAt: new Date().toISOString() },
+          { id: uid(), role: 'ely', content: 'No problem — booking cancelled. Let me know if you want to change any details.', createdAt: new Date().toISOString() },
+        ]);
+        setInput('');
+        return;
+      }
+
       const result = await send(text, {
         projectId: selectedProjectId || null,
         emailContext: selectedEmailContext,
