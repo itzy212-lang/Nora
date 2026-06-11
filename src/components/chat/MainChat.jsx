@@ -295,6 +295,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [pendingBooking, setPendingBooking] = useState(null);
   const [voicePhase, setVoicePhase] = useState('idle');
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
@@ -755,6 +756,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
       appendAssistantMessagesFromResult(result, wantsDraft);
 
+      // ── Booking confirmation flow ────────────────────────────────────────
+      if (result.awaiting_booking_confirm && result.pending_booking) {
+        setPendingBooking(result.pending_booking);
+      } else if (result.booking_created) {
+        setPendingBooking(null);
+      }
+
       if (selectedProjectId) {
         refreshProjectSessions(selectedProjectId);
       } else {
@@ -1024,6 +1032,34 @@ export default function MainChat({ onOpenComposer, onClose }) {
                 </svg>
               </button>
             </div>
+
+            {/* Booking confirmation buttons */}
+            {pendingBooking && (
+              <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
+                <button
+                  onClick={async () => {
+                    setPendingBooking(null);
+                    const result = await send('Yes, confirm booking', {
+                      pending_booking_confirm: true,
+                      pending_booking: pendingBooking,
+                    });
+                    appendAssistantMessagesFromResult(result, false);
+                  }}
+                  style={{ flex: 1, padding: '10px 16px', background: 'var(--green, #22c55e)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✅ Yes, book it in
+                </button>
+                <button
+                  onClick={() => {
+                    setPendingBooking(null);
+                    setMessages(prev => [...prev, { id: uid(), role: 'ely', content: 'No problem — booking cancelled. Let me know if you want to change any details.', createdAt: new Date().toISOString() }]);
+                  }}
+                  style={{ flex: 1, padding: '10px 16px', background: 'var(--bg2)', color: 'var(--text1)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+            )}
 
             <div style={{ fontSize: 10, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>
               {selectedEmailContext
@@ -1307,6 +1343,7 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
 
 
