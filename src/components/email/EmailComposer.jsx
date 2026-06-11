@@ -320,7 +320,8 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
             {/* ── Editable body ────────────────────────────────────────── */}
             <div
-              contentEditable
+              className="email-body-editor"
+            contentEditable
               suppressContentEditableWarning
               ref={bodyEditorRef}
               onInput={e => { setBody(e.currentTarget.innerHTML); setDirty(true); }}
@@ -431,6 +432,9 @@ const style = document.createElement('style');
 style.textContent = `
 .email-composer-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: none; flex-direction: column; }
 .email-composer-overlay.open { display: flex; }
+.email-body-editor p { margin: 0 0 10px 0; }
+.email-body-editor p:last-child { margin-bottom: 0; }
+.email-body-editor br + br { display: block; margin-top: 8px; }
 `;
 if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
