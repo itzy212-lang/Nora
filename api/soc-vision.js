@@ -26,13 +26,29 @@ export default async function handler(req, res) {
       {
         type: 'text',
         text: note
-          ? `${note}\n\nDescribe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Be concise and factual. Do not use markdown or bullet points unless listing multiple distinct defects.`
-          : `Describe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Be concise and factual. Do not use markdown or bullet points unless listing multiple distinct defects.`,
+          ? `${note}\n\nDescribe what you can see in this photo in professional SOC bullet points as a party wall surveyor would record it.`
+          : `Describe what you can see in this photo in professional SOC bullet points as a party wall surveyor would record it. Cover construction, materials, and all visible defects.`,
       },
     ];
 
     const systemPrompt = `You are assisting a party wall surveyor conducting a Schedule of Condition inspection. 
-    
+
+When describing a photo, produce professional SOC-standard bullet points exactly as a chartered surveyor would write them. 
+
+For each photo:
+- Start with the overall element (e.g. "boundary wall", "rear elevation", "ceiling")
+- Describe construction and materials first (e.g. brick type, render type, finish)
+- Then describe condition defects in precise technical language:
+  - Cracks: describe direction (vertical/horizontal/diagonal/stepped), width (hairline/fine/medium), location, and extent
+  - Spalling: describe location and extent of face material loss
+  - Mortar: open joints, deterioration, pointing condition
+  - Render: cracking pattern, blown/hollow areas, delamination
+  - Coping/capping: displacement, cracking, mortar condition
+  - Staining: type (water/moss/algae/rust), location, extent
+  - Movement: evidence of settlement, differential movement, rotation
+- End with: "Existing condition recorded as photographed."
+
+Use bullet points. Be specific and factual. No vague language. Write as if this will be read by another surveyor or a court.`;    
 Your role is to describe what you see in photos in professional surveyor language that can be used directly in a formal Schedule of Condition document.
 
 Use precise language:
@@ -73,6 +89,7 @@ ${context ? `\nContext: ${context}` : ''}`;
     return res.status(500).json({ error: err.message || 'Vision call failed' });
   }
 }
+
 
 
 
