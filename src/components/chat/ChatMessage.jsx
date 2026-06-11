@@ -137,9 +137,15 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     const { subject, body } = splitSubjectFromDraft(actionText);
     if (!body) return;
 
+    // Convert plain text line breaks to HTML for the rich text editor
+    const htmlBody = body
+      .split(/\n\n+/)
+      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+
     onOpenInComposer?.({
       mode: 'compose',
-      body,
+      body: htmlBody,
       subject: msg.subject || subject || '',
       to: msg.to || msg.recipient?.email || '',
       projectId: msg.projectId || msg.project_id || '',
@@ -253,3 +259,4 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     </div>
   );
 }
+
