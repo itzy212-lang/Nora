@@ -1335,7 +1335,86 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── On-demand loading — fetch only what this request actually needs ──
+    // ── Calendar search ──────────────────────────────────────────────────
+    // When asking about appointments/dates, check the tasks/calendar table too
+    let calendarResults = [];
+    if (asksAboutInbox) {
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          const dayMatch = prompt.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|this week|next week)\b/i);
+          const dayTerm = dayMatch ? dayMatch[0].toLowerCase() : '';
+
+          // Calculate date range based on day mentioned
+          const now = new Date();
+          let dateFrom = null;
+          let dateTo = null;
+
+          if (dayTerm === 'today') {
+            dateFrom = now.toISOString().slice(0, 10);
+            dateTo = dateFrom;
+          } else if (dayTerm === 'tomorrow') {
+            const tom = new Date(now);
+            tom.setDate(tom.getDate() + 1);
+            dateFrom = tom.toISOString().slice(0, 10);
+            dateTo = dateFrom;
+          } else if (dayTerm === 'this week') {
+            dateFrom = now.toISOString().slice(0, 10);
+            const end = new Date(now);
+            end.setDate(end.getDate() + 7);
+            dateTo = end.toISOString().slice(0, 10);
+          } else if (dayTerm === 'next week') {
+            const start = new Date(now);
+            start.setDate(start.getDate() + 7);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 7);
+            dateFrom = start.toISOString().slice(0, 10);
+            dateTo = end.toISOString().slice(0, 10);
+          } else if (dayTerm) {
+            // Find the next occurrence of the named day
+            const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+            const targetDay = days.indexOf(dayTerm);
+            if (targetDay >= 0) {
+              const date = new Date(now);
+              const currentDay = date.getDay();
+              let daysUntil = targetDay - currentDay;
+              if (daysUntil <= 0) daysUntil += 7;
+              date.setDate(date.getDate() + daysUntil);
+              dateFrom = date.toISOString().slice(0, 10);
+              dateTo = dateFrom;
+            }
+          } else {
+            // No specific day — search next 14 days
+            dateFrom = now.toISOString().slice(0, 10);
+            const end = new Date(now);
+            end.setDate(end.getDate() + 14);
+            dateTo = end.toISOString().slice(0, 10);
+          }
+
+          let query = sb
+            .from('tasks')
+            .select('title, description, due_date, start_time, project_address_snapshot, ao_address_snapshot, task_type, status')
+            .neq('status', 'completed')
+            .order('due_date', { ascending: true })
+            .limit(10);
+
+          if (dateFrom) query = query.gte('due_date', dateFrom);
+          if (dateTo) query = query.lte('due_date', dateTo);
+
+          const { data } = await query;
+          calendarResults = (data || []).map(t => ({
+            title: t.title || t.task_type || 'Appointment',
+            date: t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '',
+            time: t.start_time || '',
+            address: t.project_address_snapshot || t.ao_address_snapshot || '',
+            description: t.description || '',
+            status: t.status || '',
+          }));
+        }
+      } catch (err) {
+        console.warn('[ely-smart] calendar search failed:', err.message);
+      }
+    }
     // Never load everything on every call. Fetch each piece only if relevant.
 
     const hasSuppliedEmail = !!suppliedEmailContext || !!body.threadId || !!body.emailId;
@@ -1401,19 +1480,35 @@ export default async function handler(req, res) {
     }
 
     // Inject general inbox search results if we ran one
-    if (generalInboxResults.length > 0) {
-      const inboxText = generalInboxResults.map(e =>
-        `From: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`
-      ).join('\n\n---\n\n');
-      messages.splice(1, 0, {
-        role: 'system',
-        content: `INBOX SEARCH RESULTS — emails matching the user's query:\n\n${inboxText}\n\nUse these to answer the user's question accurately. Do not guess or invent anything not shown above.`,
-      });
+    if (generalInboxResults.length > 0 || calendarResults.length > 0) {
+      let contextBlock = '';
+
+      if (calendarResults.length > 0) {
+        contextBlock += `DIARY/CALENDAR — appointments found:\n\n${calendarResults.map(e =>
+          `${e.date}${e.time ? ' at ' + e.time : ''}: ${e.title}${e.address ? ' — ' + e.address : ''}${e.description ? '\n' + e.description : ''}`
+        ).join('\n\n')}\n\n`;
+      } else if (asksAboutInbox) {
+        contextBlock += `DIARY/CALENDAR — no appointments found in the requested period.\n\n`;
+      }
+
+      if (generalInboxResults.length > 0) {
+        contextBlock += `INBOX SEARCH — emails matching the query:\n\n${generalInboxResults.map(e =>
+          `From: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`
+        ).join('\n\n---\n\n')}`;
+      } else if (asksAboutInbox) {
+        contextBlock += `INBOX SEARCH — no matching emails found.`;
+      }
+
+      if (contextBlock.trim()) {
+        messages.splice(1, 0, {
+          role: 'system',
+          content: `Use the following diary and email information to answer the user's question accurately. Cross-reference both. If an appointment appears in emails but not the diary, say so explicitly.\n\n${contextBlock}`,
+        });
+      }
     } else if (asksAboutInbox) {
-      // No results found — tell Ely so she doesn't hallucinate
       messages.splice(1, 0, {
         role: 'system',
-        content: `INBOX SEARCH: A search of the inbox was performed for this query but no matching emails were found. Tell the user honestly that you searched but couldn't find anything matching their query.`,
+        content: `INBOX AND DIARY SEARCH: Both were searched but nothing matching was found. Tell the user honestly that you checked both the diary and emails and couldn't find anything matching their query.`,
       });
     }
 
