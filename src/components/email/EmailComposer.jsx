@@ -100,6 +100,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setToSuggestions(candidates.slice(0, 6));
   };
 
+  const handleToFocus = () => {
+    if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 6));
+  };
+
   const bodyEditorRef = useRef(null);
 
   // Sync body content to editor when set programmatically (e.g. from Draft with Ely)
@@ -128,7 +132,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const handleSend = useCallback(async () => {
     if (!to.trim()) { alert('Add a recipient first.'); return; }
-    if (!body.trim()) { alert('Write a message first.'); return; }
+
+    // Get content from the contentEditable editor
+    const editorContent = bodyEditorRef.current?.innerHTML || body || '';
+    if (!editorContent.trim() || editorContent === '<br>') { alert('Write a message first.'); return; }
 
     const userEmail = currentUser?.email || '';
     if (!userEmail) { alert('No logged-in user found. Please log in first.'); return; }
@@ -137,7 +144,11 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setStatus('Sending via Outlook...');
 
     try {
-      const htmlBody = escapeHtml(body).replace(/\n/g, '<br>') + signatureHtml;
+      // Body is already HTML from contentEditable — just append signature
+      const htmlBody = signatureHtml
+        ? `${editorContent}<br><br>${signatureHtml}`
+        : editorContent;
+
       await sendEmail({
         to: to.trim(),
         subject: subject.trim() || '(No subject)',
@@ -159,7 +170,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     } finally {
       setSending(false);
     }
-  }, [to, subject, body, signatureHtml, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
+  }, [to, subject, body, bodyEditorRef, signatureHtml, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
 
   const handleClose = () => {
     if (dirty) {
@@ -425,6 +436,7 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
 
 
 
