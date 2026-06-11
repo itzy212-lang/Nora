@@ -1749,6 +1749,22 @@ function ProjectChat({ project, onOpenComposer }) {
     if (isMobile) setShowHistory(false);
   }, [startNewSession, isMobile]);
 
+  const deleteSession = useCallback(async (targetSessionId) => {
+    if (!targetSessionId || !sb) return;
+    try {
+      await sb.from('ai_messages').delete().eq('session_id', targetSessionId);
+      await sb.from('ai_session_uploads').delete().eq('session_id', targetSessionId);
+      await sb.from('ai_sessions').delete().eq('id', targetSessionId);
+      refreshProjectSessions?.(projectId);
+      // If we just deleted the active session, start fresh
+      if (String(targetSessionId) === String(sessionId)) {
+        resetChat();
+      }
+    } catch (err) {
+      console.error('[deleteSession] failed:', err.message);
+    }
+  }, [sb, sessionId, projectId, refreshProjectSessions, resetChat]);
+
   const selectSession = useCallback(async (targetSessionId) => {
     if (!targetSessionId) return;
 
@@ -2027,43 +2043,33 @@ function ProjectChat({ project, onOpenComposer }) {
           const date = session.last_message_at || session.updated_at || session.created_at;
 
           return (
-            <button
-              key={session.id}
-              type="button"
-              onClick={() => selectSession(session.id)}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                border: 'none',
-                borderBottom: '1px solid var(--border)',
-                background: active ? 'var(--blue-bg)' : 'transparent',
-                color: active ? 'var(--blue)' : 'var(--text)',
-                cursor: 'pointer',
-                padding: '10px 12px',
-                lineHeight: '20px',
-              }}
-            >
-              <div style={{
-                fontSize: 12.5,
-                fontWeight: active ? 800 : 650,
-                lineHeight: 1.35,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}>
-                {title}
-              </div>
-              {date && (
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
-                  {new Date(date).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+            <div key={session.id} style={{ position: 'relative', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'stretch' }}>
+              <button
+                type="button"
+                onClick={() => selectSession(session.id)}
+                style={{
+                  flex: 1, textAlign: 'left', border: 'none',
+                  background: active ? 'var(--blue-bg)' : 'transparent',
+                  color: active ? 'var(--blue)' : 'var(--text)',
+                  cursor: 'pointer', padding: '10px 12px', lineHeight: '20px',
+                }}
+              >
+                <div style={{ fontSize: 12.5, fontWeight: active ? 800 : 650, lineHeight: 1.35, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {title}
                 </div>
-              )}
-            </button>
+                {date && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
+                    {new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat session? This cannot be undone.')) deleteSession(session.id); }}
+                title="Delete session"
+                style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '0 10px', fontSize: 14, flexShrink: 0, opacity: 0.5 }}
+              >🗑</button>
+            </div>
           );
         })}
       </div>
