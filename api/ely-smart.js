@@ -444,7 +444,7 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    query = query.eq('project_id', projectId).limit(10);
+    query = query.eq('project_id', projectId).order('received_at', { ascending: true }).limit(40);
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
