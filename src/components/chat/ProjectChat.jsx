@@ -1279,25 +1279,13 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 )}
               </div>
             </div>
-              <input ref={fileInputRef} type="file" multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.heic,.webp,image/*,application/pdf"
-                onChange={handleFilesSelected} style={{ display: 'none' }} />
-
-              {/* + file button */}
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                disabled={loading || uploading}
-                style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 18, lineHeight: 1, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >+</button>
-
-              {/* Text area + live preview */}
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                {voicePhase === 'recording' ? (
           </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 
 
