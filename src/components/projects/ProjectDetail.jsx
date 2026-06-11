@@ -2125,7 +2125,7 @@ function ProjectChat({ project, onOpenComposer }) {
       gridTemplateColumns: !isMobile && showHistory ? '230px minmax(0, 1fr)' : 'minmax(0, 1fr)',
       gap: isMobile ? 0 : 14,
       height: isMobile ? 'calc(100dvh - 190px)' : '60vh',
-      minHeight: isMobile ? 520 : 430,
+      minHeight: isMobile ? 0 : 430,
       width: '100%',
       maxWidth: '100%',
       overflow: 'hidden',
@@ -2520,7 +2520,7 @@ function ProjectChat({ project, onOpenComposer }) {
             </div>
           )}
 
-          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', width: '100%', padding: '8px 0 4px' }}>
+          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', width: '100%', padding: '8px 12px 8px 0' }}>
             <input ref={fileInputRef} type="file" multiple
               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
               onChange={handleFilesSelected} style={{ display: 'none' }} />
@@ -2602,7 +2602,10 @@ function ProjectChat({ project, onOpenComposer }) {
                     if (meta.recording === true) {
                       setVoicePhase('recording');
                       const p = meta.currentPhrase || meta.interim || preview || '';
-                      if (p) setDictationPreview(p);
+                      // Filter out the built-in "Recording... speak now" message
+                      if (p && !p.includes('speak now') && !p.includes('Recording')) {
+                        setDictationPreview(p);
+                      }
                     } else if (meta.recording === false) {
                       setVoicePhase('transcribing');
                       setDictationPreview('');
