@@ -100,9 +100,14 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setToSuggestions(candidates.slice(0, 6));
   };
 
-  const handleToFocus = () => {
-    if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 6));
-  };
+  const bodyEditorRef = useRef(null);
+
+  // Sync body content to editor when set programmatically (e.g. from Draft with Ely)
+  useEffect(() => {
+    if (bodyEditorRef.current && bodyEditorRef.current.innerHTML !== body) {
+      bodyEditorRef.current.innerHTML = body || '';
+    }
+  }, [body]);
 
   const handleFileAttach = (e) => {
     const files = Array.from(e.target.files || []);
@@ -235,12 +240,90 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
           <div className="form-row">
             <label className="form-label">Draft</label>
-            <textarea
-              value={body}
-              onChange={e => { setBody(e.target.value); setDirty(true); }}
-              style={{ maxHeight: 'none', minHeight: 300, resize: 'vertical' }}
-              placeholder="Write your email..."
+
+            {/* ── Rich text toolbar ───────────────────────────────────── */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 8px',
+              border: '1px solid var(--border)', borderBottom: 'none',
+              borderRadius: '8px 8px 0 0', background: 'var(--bg2)',
+            }}>
+              {/* Bold / Italic / Underline */}
+              {[['bold','B','700'],['italic','I','400'],['underline','U','400']].map(([cmd, label, fw]) => (
+                <button key={cmd} type="button"
+                  onMouseDown={e => { e.preventDefault(); document.execCommand(cmd); }}
+                  style={{ padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontWeight: fw, fontStyle: cmd === 'italic' ? 'italic' : 'normal', textDecoration: cmd === 'underline' ? 'underline' : 'none', fontSize: 13, minWidth: 28 }}
+                  title={cmd.charAt(0).toUpperCase() + cmd.slice(1)}
+                >{label}</button>
+              ))}
+
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+
+              {/* Text colour */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>A</span>
+                <input type="color" defaultValue="#0000ff"
+                  onInput={e => { document.execCommand('foreColor', false, e.target.value); }}
+                  style={{ width: 24, height: 22, padding: 0, border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', background: 'none' }}
+                  title="Text colour"
+                />
+              </div>
+
+              {/* Highlight colour */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>H</span>
+                <input type="color" defaultValue="#ffff00"
+                  onInput={e => { document.execCommand('hiliteColor', false, e.target.value); }}
+                  style={{ width: 24, height: 22, padding: 0, border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', background: 'none' }}
+                  title="Highlight colour"
+                />
+              </div>
+
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+
+              {/* Font size */}
+              <select defaultValue="3"
+                onChange={e => { document.execCommand('fontSize', false, e.target.value); }}
+                style={{ padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', fontSize: 12, cursor: 'pointer' }}
+                title="Font size"
+              >
+                <option value="1">Small</option>
+                <option value="3">Normal</option>
+                <option value="4">Large</option>
+                <option value="5">Larger</option>
+              </select>
+
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+
+              {/* Bullet list / Numbered list */}
+              <button type="button" onMouseDown={e => { e.preventDefault(); document.execCommand('insertUnorderedList'); }}
+                style={{ padding: '3px 7px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontSize: 13 }} title="Bullet list">• ≡</button>
+              <button type="button" onMouseDown={e => { e.preventDefault(); document.execCommand('insertOrderedList'); }}
+                style={{ padding: '3px 7px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontSize: 13 }} title="Numbered list">1≡</button>
+
+              <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
+
+              {/* Clear formatting */}
+              <button type="button" onMouseDown={e => { e.preventDefault(); document.execCommand('removeFormat'); }}
+                style={{ padding: '3px 7px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }} title="Clear formatting">✕ fmt</button>
+            </div>
+
+            {/* ── Editable body ────────────────────────────────────────── */}
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              ref={bodyEditorRef}
+              onInput={e => { setBody(e.currentTarget.innerHTML); setDirty(true); }}
+              dangerouslySetInnerHTML={{ __html: body }}
               spellCheck
+              style={{
+                minHeight: 300, padding: '12px 14px',
+                border: '1px solid var(--border)', borderTop: 'none',
+                borderRadius: '0 0 8px 8px', background: '#fff',
+                fontSize: 13.5, lineHeight: 1.7, color: '#000',
+                outline: 'none', overflowY: 'auto',
+                fontFamily: 'inherit',
+              }}
+              placeholder="Write your email..."
             />
           </div>
 
@@ -342,5 +425,6 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
 
 
