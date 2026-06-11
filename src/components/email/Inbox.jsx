@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import VoiceInput from '../shared/VoiceInput';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
@@ -61,9 +61,61 @@ function fmtShort(d) {
 // ── Email body renderer ───────────────────────────────────────────────────────
 function EmailBody({ email }) {
   const body = email.body || '';
+  const [resolvedHtml, setResolvedHtml] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!body || !isHtmlEmail(body)) { setResolvedHtml(null); return; }
+
+    // Check if body has cid: references
+    if (!body.includes('cid:')) { setResolvedHtml(body); return; }
+
+    // Fetch inline attachments and resolve cid: references
+    (async () => {
+      try {
+        const { data: inlineAttachments } = await sb
+          .from('email_attachments')
+          .select('content_id, provider_download_url, content_type, storage_path')
+          .eq('email_id', email.id)
+          .eq('is_inline', true);
+
+        if (!inlineAttachments?.length) { setResolvedHtml(body); return; }
+
+        let html = body;
+        await Promise.all(inlineAttachments.map(async (att) => {
+          if (!att.content_id) return;
+          const cid = att.content_id.replace(/[<>]/g, '');
+          if (!html.includes(cid)) return;
+
+          try {
+            // Try provider_download_url first, then storage
+            const url = att.provider_download_url || (att.storage_path
+              ? sb.storage.from('email_attachments').getPublicUrl(att.storage_path).data?.publicUrl
+              : null);
+            if (!url) return;
+
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const blob = await res.blob();
+            const reader = new FileReader();
+            const dataUrl = await new Promise(resolve => {
+              reader.onload = () => resolve(reader.result);
+              reader.readAsDataURL(blob);
+            });
+            html = html.replace(new RegExp(`cid:${cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'), dataUrl);
+          } catch { /* skip this image */ }
+        }));
+
+        setResolvedHtml(html);
+      } catch { setResolvedHtml(body); }
+    })();
+  }, [email.id, body]);
+
   if (!body) return <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.8 }}>{email.body_preview || 'No content.'}</div>;
+
+  const htmlToRender = resolvedHtml !== null ? resolvedHtml : body;
+
   if (isHtmlEmail(body)) {
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${body}</body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${htmlToRender}</body></html>`;
     return <iframe srcDoc={html} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none', flex: 1 }} title="email-body" />;
   }
   return <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{body}</div>;
