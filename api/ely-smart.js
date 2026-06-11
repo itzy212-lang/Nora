@@ -1162,7 +1162,7 @@ ${brainText}`;
     },
     body: JSON.stringify({
       model: 'claude-opus-4-6',
-      max_tokens: 8000,
+      max_completion_tokens: 8000,
       system: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.',
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -1198,7 +1198,7 @@ async function callClaude(messages = []) {
     },
     body: JSON.stringify({
       model: 'claude-opus-4-6',
-      max_tokens: 3500,
+      max_completion_tokens: 3500,
       system: systemWithHandoff,
       messages: userMessages.length ? userMessages : [{ role: 'user', content: 'Please help.' }],
     }),
@@ -1247,8 +1247,8 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
         body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 3500,
+          model: 'gpt-5.4-mini',
+          max_completion_tokens: 3500,
           temperature: 0.3,
           messages: [
             { role: 'system', content: 'You are Ely, a party wall surveyor assistant. Present the case review findings clearly and offer to discuss specific aspects or help draft a response.' },
@@ -1430,8 +1430,8 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: 3500,
+        model: 'gpt-5.4-mini',
+        max_completion_tokens: 3500,
         temperature,
         messages,
       }),
@@ -1459,12 +1459,12 @@ export default async function handler(req, res) {
         const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
-          body: JSON.stringify({ model: 'gpt-4o', max_tokens: 3500, temperature, messages }),
+          body: JSON.stringify({ model: 'gpt-4o', max_completion_tokens: 3500, temperature, messages }),
         });
         if (!fallbackResponse.ok) throw new Error(errMsg);
         const fallbackData = await fallbackResponse.json();
         const fallbackReply = cleanOutput(fallbackData.choices?.[0]?.message?.content || '');
-        return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-4o', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+        return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-5.4-mini', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
       }
 
       throw new Error(errMsg);
