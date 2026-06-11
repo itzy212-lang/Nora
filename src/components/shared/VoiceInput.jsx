@@ -268,8 +268,8 @@ export default function VoiceInput({
       const mimeType = getSupportedAudioMimeType();
 
       const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+        ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 16000 })
+        : new MediaRecorder(stream, { audioBitsPerSecond: 16000 });
 
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
@@ -518,6 +518,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
