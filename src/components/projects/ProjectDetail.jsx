@@ -2228,6 +2228,7 @@ function ProjectChat({ project, onOpenComposer }) {
           overscrollBehavior: 'contain',
           display: 'flex',
           flexDirection: 'column',
+          paddingBottom: isMobile ? 120 : 0,
           gap: 10,
           padding: isMobile ? '0 0 10px' : '0 0 12px',
         }}>
@@ -2459,7 +2460,16 @@ function ProjectChat({ project, onOpenComposer }) {
           <div ref={endRef} />
         </div>
 
-        <div style={{ flexShrink: 0 }}>
+        <div style={isMobile ? {
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          background: 'var(--bg)',
+          padding: '0 12px env(safe-area-inset-bottom, 8px)',
+          boxShadow: '0 -1px 0 var(--border)',
+        } : { flexShrink: 0 }}>
           {attachedFiles.length > 0 && (
             <div style={{
               display: 'flex',
@@ -2581,8 +2591,15 @@ function ProjectChat({ project, onOpenComposer }) {
                       width: '100%', background: 'transparent', border: 'none',
                       fontSize: 13, color: 'var(--text)', outline: 'none',
                       resize: 'none', lineHeight: '20px',
-                      minHeight: 24, maxHeight: 120,
+                      minHeight: 24, maxHeight: 200,
                       padding: 0, boxSizing: 'border-box',
+                      overflowY: 'auto',
+                    }}
+                    ref={el => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+                      }
                     }}
                   />
                 )}
