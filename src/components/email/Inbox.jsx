@@ -382,52 +382,6 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
               {email?.received_at && ` · ${fmtDate(email.received_at)}`}
             </div>
           </div>
-
-          {/* ── Appointment detection prompt ───────────────────────────── */}
-          {appointmentPrompt && (
-            <div style={{
-              margin: '10px 14px 0',
-              padding: '10px 14px',
-              background: appointmentPrompt.has_clash ? 'var(--red-bg, #fef2f2)' : 'var(--blue-bg, #eff6ff)',
-              border: `1px solid ${appointmentPrompt.has_clash ? 'var(--red, #ef4444)' : 'var(--blue, #3b82f6)'}`,
-              borderRadius: 8,
-              fontSize: 12.5,
-              lineHeight: 1.5,
-            }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                {appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}
-              </div>
-              <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
-              {appointmentPrompt.clash_detail && (
-                <div style={{ color: 'var(--red, #ef4444)', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>
-              )}
-              {!appointmentPrompt.has_clash && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <button
-                    onClick={async () => {
-                      setAppointmentPrompt(null);
-                      // Open reply composer with confirmation draft + trigger booking
-                      onReply?.({
-                        email,
-                        prefillBody: appointmentPrompt.confirm_reply,
-                        prefillSubject: `Re: ${email?.subject || ''}`,
-                        pendingBooking: appointmentPrompt.pending_booking,
-                      });
-                    }}
-                    style={{ padding: '6px 12px', background: 'var(--blue, #3b82f6)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    ✅ Reply confirming & book in
-                  </button>
-                  <button
-                    onClick={() => setAppointmentPrompt(null)}
-                    style={{ padding: '6px 12px', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           <div style={{ flex: 1, overflow: 'hidden', background: isHtml ? '#fff' : 'transparent' }}>
             {isHtml
               ? <iframe srcDoc={emailHtml} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none' }} title="email-content" />
@@ -1665,6 +1619,26 @@ if (syncErr) throw syncErr;
             </div>
           )}
           <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+          {/* Appointment detection prompt */}
+          {appointmentPrompt && (
+            <div style={{ position: 'absolute', bottom: 80, left: 16, right: 16, padding: '10px 14px', background: appointmentPrompt.has_clash ? '#fef2f2' : '#eff6ff', border: `1px solid ${appointmentPrompt.has_clash ? '#ef4444' : '#3b82f6'}`, borderRadius: 8, fontSize: 12.5, zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}</div>
+              <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
+              {appointmentPrompt.clash_detail && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                {!appointmentPrompt.has_clash && (
+                  <button onClick={() => { setAppointmentPrompt(null); setReplyOverlay({ mode: 'reply', prefillBody: appointmentPrompt.confirm_reply }); }}
+                    style={{ padding: '6px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    ✅ Reply confirming & book in
+                  </button>
+                )}
+                <button onClick={() => setAppointmentPrompt(null)}
+                  style={{ padding: '6px 12px', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
