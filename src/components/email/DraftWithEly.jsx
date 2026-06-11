@@ -2,6 +2,24 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
+
+// Split Ely response into brief + draft + after
+function splitAssistantResponseLocal(raw = '') {
+  const text = String(raw || '').trim();
+  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z0-9]/i, /\bHi\s+[A-Z0-9]/i, /\bHello\s+[A-Z0-9]/i];
+  const positions = markers
+    .map(rx => { const m = text.match(rx); return m ? m.index : -1; })
+    .filter(i => i >= 0);
+  if (!positions.length) return { brief: text, draft: '', after: '' };
+  const idx = Math.min(...positions);
+  const brief = text.slice(0, idx).trim();
+  let draft = text.slice(idx).trim();
+  let after = '';
+  const afterRx = /\n\s*(Let me know|Please let me know|Happy to|Feel free|Shall I|Would you like|Do you want)[\s\S]*$/i;
+  const afterMatch = draft.match(afterRx);
+  if (afterMatch) { after = afterMatch[0].trim(); draft = draft.replace(afterRx, '').trim(); }
+  return { brief, draft, after };
+}
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
@@ -231,13 +249,22 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
       if (result.sessionId) setSessionId(result.sessionId);
 
-      setMessages(prev => [...prev, {
-        id: uid(),
-        role: 'ely',
-        content: result.reply,
-        draft: result.draft,
+      const raw = result.reply || result.draft || '';
+      const { brief, draft: splitDraft, after } = splitAssistantResponseLocal(raw);
+
+      const newMsgs = [];
+      if (brief) newMsgs.push({ id: uid(), role: 'ely', content: brief, messageType: 'brief' });
+      if (splitDraft) newMsgs.push({
+        id: uid(), role: 'ely',
+        content: splitDraft,
+        draft: splitDraft,
         draftType: result.draftType || 'email',
-      }]);
+        messageType: 'draft',
+      });
+      if (after) newMsgs.push({ id: uid(), role: 'ely', content: after, messageType: 'brief' });
+      if (!newMsgs.length) newMsgs.push({ id: uid(), role: 'ely', content: raw, messageType: 'brief' });
+
+      setMessages(prev => [...prev, ...newMsgs]);
     } catch (err) {
       setMessages(prev => [...prev, { id: uid(), role: 'ely', content: `Error: ${err.message}` }]);
     } finally {
@@ -405,6 +432,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
 
 
