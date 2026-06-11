@@ -1370,6 +1370,7 @@ export default async function handler(req, res) {
 
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
+    const isMainChat = body.surface === 'main_chat';
 
     // ── Calendar booking flow ─────────────────────────────────────────────
     // If user is confirming a pending booking, create the entry
@@ -1402,8 +1403,7 @@ export default async function handler(req, res) {
     }
 
     // ── Detect new booking intent ─────────────────────────────────────────
-    const bookingIntent = isMainChat ? parseBookingIntent(prompt) : null;
-    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
+    const bookingIntent = isMainChat ? parseBookingIntent(prompt) : null;    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
       // Build a confirmation prompt for GPT to flesh out the details
       const taskTypeLabels = {
         soc: 'Schedule of Condition',
@@ -1475,7 +1475,6 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // When user asks about appointments, meetings, or specific people in main
     // chat with no email selected — search inbox automatically, no linking needed
     let generalInboxResults = [];
-    const isMainChat = body.surface === 'main_chat';
     const asksAboutInbox = isMainChat && !suppliedEmailContext && !body.emailId && !body.threadId && (
       /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|check my email|search my email|have i.*email|did i.*email|who (is|are|did|confirmed|booked|sent)|any.*appointment|any.*meeting/i.test(prompt)
     );
@@ -1762,6 +1761,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
