@@ -205,53 +205,40 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // Call Ely for a real response (questions, photo descriptions)
   const askEly = useCallback(async (note, photoData = null) => {
     try {
-      const messages = [];
-
       if (photoData) {
-        // Vision call — describe the photo in surveyor language
-        messages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: { url: `data:${photoData.mimeType};base64,${photoData.base64}`, detail: 'high' },
-            },
-            {
-              type: 'text',
-              text: note
-                ? `${note}\n\nDescribe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Keep it concise and factual.`
-                : 'Describe what you can see in this photo using professional party wall surveyor language suitable for a Schedule of Condition. Be specific about cracks, staining, damage, defects, finishes, and materials. Keep it concise and factual.',
-            },
-          ],
+        // Vision call via secure server endpoint
+        const res = await fetch('/api/soc-vision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_base64: photoData.base64,
+            mime_type: photoData.mimeType,
+            note: note || '',
+            context: selectedAOAddress ? `Inspection at ${selectedAOAddress}` : '',
+          }),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Vision call failed');
+        return data.description || 'Could not describe the photo.';
       } else {
-        messages.push({
-          role: 'user',
-          content: `You are assisting a party wall surveyor conducting a Schedule of Condition inspection. Answer this question concisely and practically:\n\n${note}`,
+        // Text question — call ely-smart
+        const res = await fetch('/api/ely-smart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `You are assisting a party wall surveyor during a Schedule of Condition inspection. Answer this question concisely and practically in one or two sentences:\n\n${note}`,
+            surface: 'soc_chat',
+            projectId: projectId || undefined,
+          }),
         });
+        const data = await res.json();
+        return data.reply || 'Sorry, I couldn\'t process that.';
       }
-
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY || ''}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-5.4-mini',
-          max_tokens: 300,
-          temperature: 0.3,
-          messages,
-        }),
-      });
-
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content?.trim() || 'Sorry, I couldn\'t process that.';
     } catch (err) {
       console.warn('[SOC] askEly error:', err.message);
       return 'Sorry, something went wrong. Please try again.';
     }
-  }, []);
+  }, [selectedAOAddress, projectId]);
 
   // Handle photo selection
   const handlePhotoChange = useCallback(async (e) => {
