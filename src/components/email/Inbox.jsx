@@ -566,6 +566,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 
   const [showFormatBar, setShowFormatBar] = useState(false);
   const bodyEditorRef = useRef(null);
+  const inp = { width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
 
   useEffect(() => {
     if (bodyEditorRef.current && prefillBody) {
@@ -1617,6 +1618,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
