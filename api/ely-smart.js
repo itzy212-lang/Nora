@@ -1245,7 +1245,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
         body: JSON.stringify({
-          model: 'gpt-5.4-mini',
+          model: 'gpt-4o',
           max_tokens: 3500,
           temperature: 0.3,
           messages: [
@@ -1428,7 +1428,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.4-mini',
+        model: 'gpt-4o',
         max_tokens: 3500,
         temperature,
         messages,
@@ -1486,6 +1486,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
