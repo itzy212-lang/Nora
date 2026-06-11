@@ -1808,84 +1808,36 @@ function ProjectChat({ project, onOpenComposer }) {
     const uploaded = [];
 
     for (const file of files) {
-      const now = new Date().toISOString();
-      const safeName = safeFilePart(file.name || 'upload');
-      const storagePath = `${projectId}/${Date.now()}-${safeName}`;
-
-      let storageBucket = null;
-      let storageError = null;
-
       try {
-        const { error } = await sb.storage
-          .from('chat-uploads')
-          .upload(storagePath, file, {
-            upsert: false,
-            contentType: file.type || 'application/octet-stream',
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', projectId);
+        if (sessionId) formData.append('session_id', sessionId);
+
+        const res = await fetch('/api/project-chat-upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data) {
+          uploaded.push({
+            id: data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            file_name: file.name,
+            name: file.name,
+            mime_type: file.type || 'application/octet-stream',
+            size_bytes: file.size || 0,
+            storage_path: data.storage_path || null,
+            storage_bucket: data.storage_bucket || null,
+            upload_status: data.extraction_status || 'stored',
+            extracted_text: data.extracted_text || '',
+            extraction_status: data.extraction_status || '',
           });
-
-        if (error) throw error;
-        storageBucket = 'chat-uploads';
+        }
       } catch (err) {
-        storageError = err?.message || 'Storage upload failed';
-        console.warn('[ProjectChat] Storage upload failed:', storageError);
+        console.warn('[ProjectChat] Upload failed:', err.message);
       }
-
-      const uploadMeta = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file_name: file.name,
-        name: file.name,
-        mime_type: file.type || 'application/octet-stream',
-        size_bytes: file.size || 0,
-        project_id: projectId,
-        session_id: sessionId || null,
-        storage_bucket: storageBucket,
-        storage_path: storageBucket ? storagePath : null,
-        upload_status: storageBucket ? 'stored' : 'metadata_only',
-        storage_error: storageError,
-        created_at: now,
-      };
-
-      uploaded.push(uploadMeta);
-
-      await insertRecordSafely('chat_uploads', {
-        project_id: projectId,
-        session_id: sessionId || null,
-        file_name: file.name,
-        original_name: file.name,
-        name: file.name,
-        mime_type: file.type || 'application/octet-stream',
-        file_type: file.type || 'application/octet-stream',
-        size_bytes: file.size || 0,
-        storage_bucket: storageBucket,
-        storage_path: storageBucket ? storagePath : null,
-        upload_status: storageBucket ? 'stored' : 'metadata_only',
-        created_at: now,
-        metadata: {
-          source: 'project_chat',
-          storage_error: storageError,
-        },
-      });
-
-      await insertRecordSafely('project_memory', {
-        project_id: projectId,
-        source_type: 'chat_upload',
-        source_id: uploadMeta.id,
-        title: `Uploaded file: ${file.name}`,
-        summary: `File uploaded in project chat: ${file.name}. Type: ${file.type || 'unknown'}. Size: ${file.size || 0} bytes.`,
-        content: '',
-        entities: [],
-        unresolved_items: [],
-        importance_score: 0.45,
-        metadata: {
-          file_name: file.name,
-          mime_type: file.type || 'application/octet-stream',
-          size_bytes: file.size || 0,
-          storage_bucket: storageBucket,
-          storage_path: storageBucket ? storagePath : null,
-          storage_error: storageError,
-          source: 'project_chat',
-        },
-      });
     }
 
     setAttachedFiles(prev => [...prev, ...uploaded]);
@@ -1933,11 +1885,14 @@ function ProjectChat({ project, onOpenComposer }) {
     const attachmentContext = attachedFiles.map(file => ({
       id: file.id,
       fileName: file.file_name,
+      file_name: file.file_name,
       mimeType: file.mime_type,
+      mime_type: file.mime_type,
       sizeBytes: file.size_bytes,
       storageBucket: file.storage_bucket,
       storagePath: file.storage_path,
       uploadStatus: file.upload_status,
+      extracted_text: file.extracted_text || '',
     }));
 
     const displayText = text || 'Please review the attached project file.';
@@ -1964,13 +1919,10 @@ function ProjectChat({ project, onOpenComposer }) {
       const result = await send(promptForEly, {
         projectId,
         uploadIds: attachmentContext.map(f => f.id),
-        documentContext: {
-          uploads: attachmentContext,
-          note: 'These are uploaded file metadata records. Full file parsing/extraction will be handled by the document ingestion layer.',
-        },
         context: {
           activeProjectId: projectId,
           projectUploadContext: attachmentContext,
+          uploadedExtractedText: attachmentContext.filter(f => f.extracted_text),
         },
       });
 
