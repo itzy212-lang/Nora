@@ -916,9 +916,11 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   }
 
   // ── Draft mode collaboration rules ───────────────────────────────────────
-  // When a draft is requested in project chat, enforce collaboration-first
+  // When a draft is requested in project chat or main chat, enforce collaboration-first
   const isDraftMode = (body.projectChatWorkflow || '').includes('draft') ||
-    (projectChatInstruction || '').includes('draft');
+    (body.mainChatWorkflow || '').includes('draft') ||
+    (projectChatInstruction || '').includes('draft') ||
+    (body.mainChatInstruction || '').includes('draft');
 
   // ── Inline response mode ──────────────────────────────────────────────
   // Triggered when user wants to respond point-by-point inline in blue
