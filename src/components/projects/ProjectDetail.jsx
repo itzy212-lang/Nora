@@ -2520,69 +2520,75 @@ function ProjectChat({ project, onOpenComposer }) {
             </div>
           )}
 
-          <div style={{
-            borderTop: '1px solid var(--border)',
-            background: 'var(--bg)',
-            width: '100%',
-            padding: '8px 0 4px',
-          }}>
+          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', width: '100%', padding: '8px 0 4px' }}>
             <input ref={fileInputRef} type="file" multiple
               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
               onChange={handleFilesSelected} style={{ display: 'none' }} />
 
-            {/* Waveform + live preview — only when recording */}
-            {voicePhase === 'recording' && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 22, marginBottom: 4 }}>
-                  {[0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9].map((h,i) => (
-                    <div key={i} style={{ width: 3, borderRadius: 2, background: '#3b82f6', height: `${3+h*18}px`, animation: `pcWave 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
-                  ))}
-                  <style>{`@keyframes pcWave{from{transform:scaleY(0.2)}to{transform:scaleY(1)}}`}</style>
-                </div>
-                {(() => {
-                  const text = dictationPreview || input || '';
-                  if (!text) return <div style={{ fontSize: 13.5, color: 'var(--text3)' }}>Listening...</div>;
-                  const words = text.split(' '); const lines = []; let cur = '';
-                  for (const w of words) {
-                    if ((cur+' '+w).trim().length > 36) { if(cur) lines.push(cur.trim()); cur=w; }
-                    else cur = cur ? cur+' '+w : w;
-                  }
-                  if (cur) lines.push(cur.trim());
-                  return lines.slice(-3).map((line, i, arr) => {
+            {/* 3-line live preview — above input row, only when recording */}
+            {voicePhase === 'recording' && (() => {
+              const text = dictationPreview || input || '';
+              if (!text) return null;
+              const words = text.split(' '); const lines = []; let cur = '';
+              for (const w of words) {
+                if ((cur+' '+w).trim().length > 36) { if(cur) lines.push(cur.trim()); cur=w; }
+                else cur = cur ? cur+' '+w : w;
+              }
+              if (cur) lines.push(cur.trim());
+              return (
+                <div style={{ marginBottom: 6, padding: '0 4px' }}>
+                  {lines.slice(-3).map((line, i, arr) => {
                     const age = arr.length-1-i;
-                    return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.45, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.45:0.2})`, fontWeight: age===0?500:400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{line}</div>;
-                  });
-                })()}
-              </div>
-            )}
+                    return <div key={i} style={{ fontSize: 13.5, lineHeight: 1.5, color: age===0?'var(--text)':`rgba(100,100,100,${age===1?0.45:0.2})`, fontWeight: age===0?500:400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{line}</div>;
+                  })}
+                </div>
+              );
+            })()}
 
-            {/* Input row: [+] [textarea] [mic/send] */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            {/* Input row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 
-              {/* + file upload */}
+              {/* + */}
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 disabled={loading || uploading}
                 style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text3)', fontSize: 20, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >+</button>
 
-              {/* Textarea */}
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder={voicePhase === 'transcribing' ? 'Transcribing...' : `Ask about ${projectRef}...`}
-                rows={1}
-                style={{
-                  flex: 1, minWidth: 0, padding: '10px 12px', lineHeight: '20px',
-                  fontSize: 13, resize: 'none', background: 'var(--bg2)',
-                  border: `1.5px solid ${voicePhase === 'recording' ? '#3b82f6' : 'var(--border)'}`,
-                  borderRadius: 12, color: 'var(--text)', outline: 'none',
-                  minHeight: 44, maxHeight: 120, boxSizing: 'border-box',
-                  transition: 'border-color 0.2s',
-                }}
-              />
+              {/* Input box — shows waveform inside when recording, textarea otherwise */}
+              <div style={{
+                flex: 1, minWidth: 0, position: 'relative',
+                border: `1.5px solid ${voicePhase === 'recording' ? '#3b82f6' : 'var(--border)'}`,
+                borderRadius: 12, background: 'var(--bg2)',
+                minHeight: 44, display: 'flex', alignItems: 'center',
+                padding: '0 12px', transition: 'border-color 0.2s',
+              }}>
+                {voicePhase === 'recording' ? (
+                  /* Waveform bars inside the box */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 22, width: '100%' }}>
+                    {[0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1].map((h,i) => (
+                      <div key={i} style={{ width: 3, borderRadius: 2, background: '#3b82f6', height: `${3+h*18}px`, animation: `pcWave 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
+                    ))}
+                    <style>{`@keyframes pcWave{from{transform:scaleY(0.2)}to{transform:scaleY(1)}}`}</style>
+                  </div>
+                ) : (
+                  <textarea
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                    placeholder={voicePhase === 'transcribing' ? 'Transcribing...' : `Ask about ${projectRef}...`}
+                    rows={1}
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none',
+                      fontSize: 13, color: 'var(--text)', outline: 'none',
+                      resize: 'none', lineHeight: '20px',
+                      minHeight: 24, maxHeight: 120,
+                      padding: 0, boxSizing: 'border-box',
+                    }}
+                  />
+                )}
+              </div>
 
-              {/* Single mic/send button */}
+              {/* Mic / Send */}
               <div style={{ flexShrink: 0, position: 'relative' }}>
                 <VoiceInput
                   disabled={loading || uploading}
@@ -2603,19 +2609,9 @@ function ProjectChat({ project, onOpenComposer }) {
                     }
                   }}
                 />
-                {/* Show send arrow on top of mic when there's text */}
-                {(input.trim() && voicePhase === 'idle') && (
-                  <button
-                    onClick={handleSend}
-                    disabled={loading || uploading}
-                    style={{
-                      position: 'absolute', inset: 0,
-                      width: '100%', height: '100%',
-                      borderRadius: '50%', border: 'none',
-                      background: '#3b82f6', color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: 'pointer', zIndex: 2,
-                    }}
+                {input.trim() && voicePhase === 'idle' && (
+                  <button onClick={handleSend} disabled={loading || uploading}
+                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: 'none', background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2 }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
