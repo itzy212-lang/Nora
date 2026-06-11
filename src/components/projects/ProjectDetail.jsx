@@ -2650,30 +2650,6 @@ function ProjectChat({ project, onOpenComposer }) {
               <span style={{ display: 'block', lineHeight: 1, transform: 'translateX(1px)' }}>➤</span>
             </button>
 
-            <button
-              type="button"
-              className="ely-draft-action-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading || uploading}
-              title="Upload file"
-              aria-label="Upload file"
-              style={{
-                width: isMobile ? 40 : 38,
-                height: isMobile ? 40 : 38,
-                borderRadius: '50%',
-                border: '1px solid var(--border)',
-                background: 'var(--bg2)',
-                color: 'var(--text3)',
-                cursor: loading || uploading ? 'not-allowed' : 'pointer',
-                opacity: loading || uploading ? 0.5 : 1,
-                fontSize: 22,
-                lineHeight: 1,
-                flexShrink: 0,
-              }}
-            >
-              +
-            </button>
-
           </div>
         </div>
       </div>
