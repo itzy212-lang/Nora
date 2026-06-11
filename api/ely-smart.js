@@ -920,6 +920,27 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   const isDraftMode = (body.projectChatWorkflow || '').includes('draft') ||
     (projectChatInstruction || '').includes('draft');
 
+  // ── Inline response mode ──────────────────────────────────────────────
+  // Triggered when user wants to respond point-by-point inline in blue
+  const isInlineResponseMode = /respond.*inline|inline.*respond|paste.*points|point.*by.*point|respond.*each|each.*point|reply.*inline|inline.*reply|respond.*line.*by.*line|line.*by.*line/i.test(prompt);
+
+  if (isInlineResponseMode) {
+    messages.push({
+      role: 'system',
+      content: `INLINE RESPONSE MODE — the user wants to respond to the other party's email points inline.
+
+INSTRUCTIONS:
+1. Extract all numbered or bulleted points from the email in context. If there are no clear points, extract each distinct sentence or paragraph as a separate item.
+2. List them clearly and ask the user to give their response to each point — either one at a time or all at once (e.g. "Point 1 — yes confirmed. Point 2 — Stephen Cornish nominated.")
+3. Once the user provides their responses, produce the formatted HTML email body with:
+   - Each of the other party's original points in their original black text
+   - Immediately after each point (no line break), the user's response in blue: <span style="color:#1d4ed8;font-weight:500"> [response]</span>
+4. The output must be valid HTML that can be pasted directly into the email composer.
+5. Do not add any commentary inside the HTML — just the formatted content.
+6. Wrap the whole thing in a clean div with font-family: inherit; font-size: 13.5px; line-height: 1.7;`,
+    });
+  }
+
   if (isDraftMode) {
     messages.push({
       role: 'system',
@@ -1741,6 +1762,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
