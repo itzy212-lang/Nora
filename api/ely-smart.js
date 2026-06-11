@@ -444,7 +444,7 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    query = query.eq('project_id', projectId).order('received_at', { ascending: true }).limit(40);
+    query = query.eq('project_id', projectId).order('received_at', { ascending: true });
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
@@ -834,8 +834,8 @@ Emails Required:
   if (scopedEmailContext?.length) {
     prompt += `
 
-SCOPED EMAIL CONTEXT:
-${compactJson(scopedEmailContext.slice(0, 40), 12000)}
+SCOPED EMAIL CONTEXT — ALL PROJECT EMAILS (${scopedEmailContext.length} total, chronological):
+${compactJson(scopedEmailContext, 20000)}
 `;
   }
 
