@@ -52,7 +52,7 @@ ${context ? `\nContext: ${context}` : ''}`;
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.4-mini',  // better vision than gpt-4o, released March 2026
+        model: 'gpt-4o-mini',  // better vision than gpt-4o, released March 2026
         max_tokens: 400,
         temperature: 0.2,
         messages: [
@@ -73,3 +73,4 @@ ${context ? `\nContext: ${context}` : ''}`;
     return res.status(500).json({ error: err.message || 'Vision call failed' });
   }
 }
+
