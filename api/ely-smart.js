@@ -1245,7 +1245,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-5.4-mini',
           max_tokens: 3500,
           temperature: 0.3,
           messages: [
@@ -1428,7 +1428,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5.4-mini',
         max_tokens: 3500,
         temperature,
         messages,
@@ -1449,6 +1449,20 @@ export default async function handler(req, res) {
           model: 'claude',
           sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         });
+      }
+
+      // Model not available — fall back to gpt-4o
+      if (errMsg.toLowerCase().includes('model') && (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('does not exist') || errMsg.toLowerCase().includes('invalid'))) {
+        console.log('[ely-smart] Model not available, falling back to gpt-4o');
+        const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+          body: JSON.stringify({ model: 'gpt-4o', max_tokens: 3500, temperature, messages }),
+        });
+        if (!fallbackResponse.ok) throw new Error(errMsg);
+        const fallbackData = await fallbackResponse.json();
+        const fallbackReply = cleanOutput(fallbackData.choices?.[0]?.message?.content || '');
+        return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-4o', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
       }
 
       throw new Error(errMsg);
