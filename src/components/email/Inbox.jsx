@@ -1790,6 +1790,7 @@ if (syncErr) throw syncErr;
               console.error('[booking] failed:', err.message);
             }
             setBookingOverlay(null);
+            window.dispatchEvent(new Event('nora:task-added'));
             alert('✅ Added to diary — check your calendar.');
           }}
           onClose={() => setBookingOverlay(null)}
