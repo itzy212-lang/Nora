@@ -1739,7 +1739,7 @@ if (syncErr) throw syncErr;
                 <button onClick={() => {
                   setAppointmentPrompt(null);
                   setBookingOverlay({
-                    title: appointmentPrompt.summary || '',
+                    title: selectedEmail?.subject || appointmentPrompt.summary || '',
                     date: appointmentPrompt.iso_date || '',
                     time: appointmentPrompt.time || '',
                     project_id: selectedEmail?.project_id || '',
