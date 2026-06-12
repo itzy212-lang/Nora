@@ -507,7 +507,7 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
 }
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
-import { toHtml, cleanSignOff, stripHtml } from '../../utils/draftUtils';
+import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
@@ -1660,6 +1660,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
