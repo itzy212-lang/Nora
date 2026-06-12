@@ -422,7 +422,7 @@ ${message}
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-4o',
       temperature: 0.15,
       messages: [
         {
@@ -687,4 +687,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
 
