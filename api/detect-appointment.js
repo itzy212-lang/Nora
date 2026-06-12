@@ -41,6 +41,7 @@ Return ONLY a JSON object in this format:
   "person": "name of the person proposing/confirming",
   "address": "property address if mentioned",
   "type": "soc/meeting/inspection/call/other",
+  "title": "a short diary-friendly title e.g. Schedule of Condition - 52 Sherrards Way or Inspection - 8 Village Close or Meeting with Andrew",
   "confirm_reply": "a short natural confirmation reply e.g. Thanks Andrew, confirmed for Monday 16 June at 1pm — see you then."
 }
 
@@ -148,6 +149,7 @@ Set is_confirmed:true if both parties have agreed. Set is_proposal:true if only 
       summary,
       date_text: detection.date_text,
       iso_date: detection.iso_date,
+      title: detection.title || null,
       time: detection.time,
       person: detection.person,
       address: detection.address,
@@ -167,3 +169,4 @@ Set is_confirmed:true if both parties have agreed. Set is_proposal:true if only 
     return res.status(200).json({ appointment_detected: false });
   }
 }
+
