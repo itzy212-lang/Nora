@@ -62,12 +62,11 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
             <select style={inp} value={form.project_id} onChange={e => {
               const proj = projects.find(p => p.id === e.target.value);
               const addr = proj?.bo_premise_address || '';
-              const isSOC = form.task_type === 'soc' || f => f.title.startsWith('SOC');
               setForm(f => ({ 
                 ...f, 
                 project_id: e.target.value, 
                 project_address: addr,
-                title: addr ? (f.title.startsWith('SOC') || f.task_type === 'soc' ? 'SOC — ' + addr : f.title) : f.title
+                title: addr ? 'SOC — ' + addr : f.title
               }));
             }}>
               <option value="">No project linked</option>
