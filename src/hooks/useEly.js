@@ -488,7 +488,14 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           ...(extraOpts.context || {}),
         },
 
-        chatHistory: currentHistory.slice(-16),
+        chatHistory: currentHistory.slice(-16).map(msg => {
+          // Strip full draft content from history — only keep brief/instruction turns
+          // This prevents previous drafts contaminating sign-offs and content
+          if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
+            return { ...msg, content: '[previous draft — not shown]' };
+          }
+          return msg;
+        }),
         projectsContext,
         currentProject,
         recentEmails,
@@ -607,3 +614,4 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     chatHistory,
   };
 }
+
