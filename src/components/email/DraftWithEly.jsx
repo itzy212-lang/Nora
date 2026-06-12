@@ -168,7 +168,12 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     if (!cleanBody) return;
 
-    onUseDraft?.(cleanBody);
+    const htmlBody = cleanBody
+      .split(/\n\n+/)
+      .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+
+    onUseDraft?.(htmlBody);
     stopVoice();
     onClose?.();
   }, [onUseDraft, onClose, stopVoice]);
@@ -432,6 +437,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
 
 
