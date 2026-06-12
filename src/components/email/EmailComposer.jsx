@@ -5,6 +5,7 @@ import DraftWithEly from './DraftWithEly';
 import { uid, escapeHtml } from '../../utils/formatters';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import sb from '../../supabaseClient';
+import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 
 export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const { state } = useApp();
@@ -52,7 +53,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     if (!opts) return;
     setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
     setSubject(opts.subject || (opts.originalEmail ? `RE: ${opts.originalEmail.subject || ''}` : ''));
-    setBody(opts.body || (opts.originalEmail && opts.prefillGreeting !== false ? `Hi ${opts.originalEmail.from || ''},\n\n` : ''));
+    setBody(toHtml(opts.body) || (opts.originalEmail && opts.prefillGreeting !== false ? `<p>Hi ${opts.originalEmail.from || ''},</p><p></p>` : ''));
     setProjectId(opts.projectId || '');
     setCreateFollowUp(!!opts.followUp);
     setDirty(false);
@@ -417,7 +418,9 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           threadId={replyInfoRef.current.threadId}
           projectId={projectId}
           onUseDraft={(draft) => {
-            setBody(draft);
+            const html = toHtml(cleanSignOff(draft));
+            setBody(html);
+            if (bodyEditorRef.current) bodyEditorRef.current.innerHTML = html;
             setDirty(true);
             setShowDraftWithEly(false);
           }}
@@ -440,6 +443,7 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
 
 
 
