@@ -552,6 +552,10 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 
   const handleElyDraft = (draft, close = false) => {
     setBody(draft);
+    // Set innerHTML directly so contentEditable renders HTML formatting
+    if (bodyEditorRef.current) {
+      bodyEditorRef.current.innerHTML = draft;
+    }
     if (close) setShowEly(false);
   };
 
