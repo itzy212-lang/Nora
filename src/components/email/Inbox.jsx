@@ -507,13 +507,19 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
 }
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
+function toHtml(text) {
+  if (!text) return '';
+  if (text.trim().startsWith('<')) return text; // already HTML
+  return text.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+}
+
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
   const [cc, setCc]           = useState(mode === 'replyAll'
     ? (Array.isArray(email?.to_emails) ? email.to_emails.map(r => r.email || r).filter(e => e !== email?.sender_email).join(', ') : email?.to_email || '')
     : '');
   const [subject, setSubject] = useState(prefillSubject || `Re: ${email?.subject || ''}`);
-  const [body, setBody]       = useState(prefillBody || '');
+  const [body, setBody]       = useState(toHtml(prefillBody) || '');
   const [showEly, setShowEly] = useState(false);
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true);
@@ -530,7 +536,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   useEffect(() => {
     if (prefillTo) setTo(prefillTo);
     if (prefillSubject) setSubject(prefillSubject);
-    if (typeof prefillBody === 'string' && prefillBody.trim()) setBody(prefillBody);
+    if (typeof prefillBody === 'string' && prefillBody.trim()) setBody(toHtml(prefillBody));
   }, [prefillBody, prefillTo, prefillSubject]);
 
   const signatureHtml = firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
@@ -586,8 +592,9 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 
   useEffect(() => {
     if (bodyEditorRef.current && prefillBody) {
-      bodyEditorRef.current.innerHTML = prefillBody;
-      setBody(prefillBody);
+      const html = toHtml(prefillBody);
+      bodyEditorRef.current.innerHTML = html;
+      setBody(html);
     }
   }, [prefillBody]);
 
@@ -1657,6 +1664,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
