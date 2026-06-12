@@ -2542,7 +2542,18 @@ function ProjectChat({ project, onOpenComposer }) {
                   <textarea
                     value={input}
                     onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (voicePhase === 'recording') {
+                          // Stop recording, don't send yet
+                          setVoiceStopSignal(v => v + 1);
+                        } else if (input.trim()) {
+                          handleSend();
+                        }
+                        // If empty and not recording, do nothing — no clearing
+                      }
+                    }}
                     placeholder={voicePhase === 'transcribing' ? 'Transcribing...' : `Ask about ${projectRef}...`}
                     rows={1}
                     style={{
