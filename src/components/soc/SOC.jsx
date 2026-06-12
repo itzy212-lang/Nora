@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
+import ChatInputBar from '../shared/ChatInputBar';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -522,82 +523,26 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
         {/* Input bar */}
         <div style={{ ...s.inputBar, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            {/* Photo upload button */}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: 'none' }}
-              onChange={handlePhotoChange}
-            />
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              style={{ ...s.micIdle, fontSize: 18, position: 'relative' }}
-              title="Upload photo for description"
-            >
-              📷
-              {socPhoto && (
-                <span style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 10, background: 'var(--green, #22c55e)', borderRadius: '50%' }} />
-              )}
-            </button>
-
-            {/* Mic button */}
-            <button onClick={handleMicClick} style={isRecording ? s.micActive : s.micIdle} title={isRecording ? 'Stop recording' : 'Start recording'}>
-              {isRecording ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="6" width="12" height="12" rx="2"/>
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="23"/>
-                  <line x1="8" y1="23" x2="16" y2="23"/>
-                </svg>
-              )}
-            </button>
-
-            {/* Text input */}
-            <textarea
-              style={{ ...s.input, flex: 1, minHeight: 38, maxHeight: 120, resize: 'vertical', fontSize: 13, padding: '8px 10px', lineHeight: 1.4 }}
-              placeholder={isRecording ? '● Recording… or type/paste here' : 'Type, paste or tap mic to dictate…'}
-              value={textInput}
-              onChange={e => setTextInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            />
-
-            {/* Send button */}
-            <button
-              onClick={() => handleSend()}
-              disabled={!textInput.trim() && !isRecording && !interimText && !socPhoto}
-              style={{
-                ...s.micIdle,
-                opacity: (!textInput.trim() && !isRecording && !interimText && !socPhoto) ? 0.35 : 1,
-                background: 'var(--accent, #6366f1)',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '0 12px',
-                height: 38,
-                minWidth: 38,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-              title="Send note"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
-
-          {/* Live dictation preview */}
-          {(isRecording || interimText) && (
-            <div style={{ fontSize: 12, color: 'var(--red, #ef4444)', fontStyle: 'italic', paddingLeft: 4 }}>
-              {interimText || '● Recording… speak now'}
-            </div>
+          {/* Hidden photo input */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={handlePhotoChange}
+          />
+          <ChatInputBar
+            value={textInput}
+            onChange={setTextInput}
+            onSend={() => handleSend()}
+            onTranscript={(transcript) => { setTextInput(transcript); }}
+            placeholder="Type, paste or tap mic to dictate…"
+            showAttach={true}
+            onAttach={() => photoInputRef.current?.click()}
+            disabled={false}
+            loading={false}
+          />
           )}
         </div>
 
@@ -716,6 +661,7 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
 
 
