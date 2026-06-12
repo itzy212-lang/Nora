@@ -1374,6 +1374,8 @@ export default async function handler(req, res) {
     console.log('[ely-smart] DEBUG body.mode=', body.mode, 'body.workflowStage=', body.workflowStage, 'modeHint=', modeHint);
     const suppliedEmailContext = buildSuppliedEmailContext(body);
     const isMainChat = body.surface === 'main_chat';
+    const isProjectChat = body.surface === 'project_chat';
+    const canBook = isMainChat || isProjectChat;
 
     // ── Calendar booking flow ─────────────────────────────────────────────
     // If user is confirming a pending booking, create the entry
@@ -1406,7 +1408,7 @@ export default async function handler(req, res) {
     }
 
     // ── Detect new booking intent ─────────────────────────────────────────
-    const bookingIntent = isMainChat ? parseBookingIntent(prompt) : null;    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
+    const bookingIntent = canBook ? parseBookingIntent(prompt) : null;    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
       // Build a confirmation prompt for GPT to flesh out the details
       const taskTypeLabels = {
         soc: 'Schedule of Condition',
