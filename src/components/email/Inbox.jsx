@@ -4,7 +4,85 @@ import VoiceInput from '../shared/VoiceInput';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 
-function useWindowWidth() {
+function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
+  const [form, setForm] = React.useState({
+    title: booking.title || '',
+    date: booking.date || '',
+    time: booking.time || '',
+    task_type: booking.task_type || 'appointment',
+    project_id: booking.project_id || '',
+    project_address: booking.project_address || '',
+    description: booking.description || '',
+  });
+
+  const inp = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'var(--bg)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>📅 Add to diary</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TITLE</div>
+            <input style={inp} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>DATE</div>
+              <input type="date" style={inp} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TIME</div>
+              <input type="time" style={inp} value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TYPE</div>
+            <select style={inp} value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}>
+              <option value="appointment">Appointment</option>
+              <option value="soc">Schedule of Condition</option>
+              <option value="site_visit">Site Visit</option>
+              <option value="meeting">Meeting</option>
+              <option value="reminder">Reminder</option>
+              <option value="deadline">Deadline</option>
+            </select>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>PROJECT</div>
+            <select style={inp} value={form.project_id} onChange={e => {
+              const proj = projects.find(p => p.id === e.target.value);
+              setForm(f => ({ ...f, project_id: e.target.value, project_address: proj?.bo_premise_address || f.project_address }));
+            }}>
+              <option value="">No project linked</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.bo_premise_address || p.ref || p.id}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>NOTES</div>
+            <input style={inp} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text3)' }}>
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(form)} disabled={!form.title || !form.date}
+            style={{ padding: '8px 20px', background: form.title && form.date ? '#10b981' : 'var(--border)', color: form.title && form.date ? '#fff' : 'var(--text3)', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: form.title && form.date ? 'pointer' : 'not-allowed' }}>
+            ✅ Book it in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   useEffect(() => {
     const h = () => setWidth(window.innerWidth);
@@ -1280,7 +1358,8 @@ export default function Inbox({ onOpenComposer }) {
     } catch { setThreadEmails([email]); }
   }, []);
 
-  const [appointmentPrompt, setAppointmentPrompt] = useState(null); // { proposal, date, time, address, clashes }
+  const [appointmentPrompt, setAppointmentPrompt] = useState(null);
+  const [bookingOverlay, setBookingOverlay] = useState(null); // pre-filled booking form
 
   const handleSelect = async (email) => {
     setSelectedEmail(email);
@@ -1648,26 +1727,17 @@ if (syncErr) throw syncErr;
                     ✅ Reply confirming & book in
                   </button>
                 )}
-                <button onClick={async () => {
-                  try {
-                    await fetch('/api/ely-smart', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        prompt: `Book this in the diary: ${appointmentPrompt.summary}`,
-                        surface: 'inbox_draft',
-                        pending_booking_confirm: true,
-                        pending_booking: {
-                          taskType: 'appointment',
-                          title: appointmentPrompt.summary,
-                          dueDate: appointmentPrompt.proposed_date || '',
-                          startTime: appointmentPrompt.proposed_time || '',
-                          displayDate: appointmentPrompt.summary,
-                        },
-                      }),
-                    });
-                    setAppointmentPrompt(null);
-                  } catch { setAppointmentPrompt(null); }
+                <button onClick={() => {
+                  setAppointmentPrompt(null);
+                  setBookingOverlay({
+                    title: appointmentPrompt.summary || '',
+                    date: appointmentPrompt.proposed_date || '',
+                    time: appointmentPrompt.proposed_time || '',
+                    project_id: selectedEmail?.project_id || '',
+                    project_address: appointmentPrompt.project_address || '',
+                    task_type: 'appointment',
+                    description: `From email: ${selectedEmail?.subject || ''}`,
+                  });
                 }}
                   style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   📅 Add to diary only
@@ -1682,8 +1752,37 @@ if (syncErr) throw syncErr;
         </div>
       )}
     </div>
+
+      {/* ── Booking confirmation overlay ───────────────────────────────── */}
+      {bookingOverlay && (
+        <BookingOverlay
+          booking={bookingOverlay}
+          projects={projects}
+          onConfirm={async (confirmed) => {
+            try {
+              await sb.from('tasks').insert([{
+                task_type: confirmed.task_type || 'appointment',
+                title: confirmed.title,
+                due_date: confirmed.date || null,
+                time: confirmed.time || null,
+                start_time: confirmed.time || null,
+                project_id: confirmed.project_id || null,
+                project_address_snapshot: confirmed.project_address || null,
+                description: confirmed.description || null,
+                status: 'pending',
+                created_at: new Date().toISOString(),
+              }]);
+            } catch (err) {
+              console.error('[booking] failed:', err.message);
+            }
+            setBookingOverlay(null);
+          }}
+          onClose={() => setBookingOverlay(null)}
+        />
+      )}
   );
 }
+
 
 
 
