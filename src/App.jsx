@@ -216,6 +216,16 @@ export default function App() {
   }, [setCurrentProject]);
 
   const openComposer = useCallback((opts) => {
+    if (opts?.body && typeof opts.body === 'string' && !opts.body.trim().startsWith('<')) {
+      // Convert plain text to HTML paragraphs — centralised fix for all composer paths
+      opts = {
+        ...opts,
+        body: opts.body
+          .split(/\n\n+/)
+          .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+          .join(''),
+      };
+    }
     setComposerOpts(opts || { mode: 'compose' });
   }, []);
 
@@ -525,5 +535,6 @@ export default function App() {
     </>
   );
 }
+
 
 
