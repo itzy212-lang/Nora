@@ -488,14 +488,24 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           ...(extraOpts.context || {}),
         },
 
-        chatHistory: currentHistory.slice(-16).map(msg => {
-          // Strip full draft content from history — only keep brief/instruction turns
-          // This prevents previous drafts contaminating sign-offs and content
-          if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
-            return { ...msg, content: '[previous draft — not shown]' };
-          }
-          return msg;
-        }),
+        chatHistory: (() => {
+          const history = currentHistory.slice(-16);
+          // Find the index of the last assistant message with a substantial draft
+          let lastDraftIdx = -1;
+          history.forEach((msg, i) => {
+            if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
+              lastDraftIdx = i;
+            }
+          });
+          return history.map((msg, i) => {
+            // Keep the most recent draft in full so Ely knows exactly what's on screen
+            if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
+              if (i === lastDraftIdx) return msg; // keep latest draft intact
+              return { ...msg, content: '[earlier draft — superseded]' }; // strip older ones
+            }
+            return msg;
+          });
+        })(),
         projectsContext,
         currentProject,
         recentEmails,
@@ -614,4 +624,5 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     chatHistory,
   };
 }
+
 
