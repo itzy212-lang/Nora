@@ -61,7 +61,14 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>PROJECT</div>
             <select style={inp} value={form.project_id} onChange={e => {
               const proj = projects.find(p => p.id === e.target.value);
-              setForm(f => ({ ...f, project_id: e.target.value, project_address: proj?.bo_premise_address || f.project_address }));
+              const addr = proj?.bo_premise_address || '';
+              const isSOC = form.task_type === 'soc' || f => f.title.startsWith('SOC');
+              setForm(f => ({ 
+                ...f, 
+                project_id: e.target.value, 
+                project_address: addr,
+                title: addr ? (f.title.startsWith('SOC') || f.task_type === 'soc' ? 'SOC — ' + addr : f.title) : f.title
+              }));
             }}>
               <option value="">No project linked</option>
               {projects.map(p => (
@@ -1739,7 +1746,7 @@ if (syncErr) throw syncErr;
                 <button onClick={() => {
                   setAppointmentPrompt(null);
                   setBookingOverlay({
-                    title: appointmentPrompt.title || appointmentPrompt.summary || selectedEmail?.subject || '',
+                    title: (appointmentPrompt.type === 'soc' ? 'SOC' : appointmentPrompt.title || 'Appointment') + (appointmentPrompt.address ? ' — ' + appointmentPrompt.address : ''),
                     date: appointmentPrompt.iso_date || '',
                     time: appointmentPrompt.time || '',
                     project_id: selectedEmail?.project_id || '',
@@ -1784,6 +1791,7 @@ if (syncErr) throw syncErr;
               console.error('[booking] failed:', err.message);
             }
             setBookingOverlay(null);
+            alert('✅ Added to diary — check your calendar.');
           }}
           onClose={() => setBookingOverlay(null)}
         />
