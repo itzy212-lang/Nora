@@ -121,7 +121,12 @@ function buildPartyDrafts(emailsRequired = [], projectMeta = {}) {
   // Group by recipient_type — merge all Building Owner items into one email
   const grouped = {};
   valid.forEach(email => {
-    const party = email.recipient_type || email.party || 'Relevant Party';
+    let party = email.recipient_type || email.party || 'Relevant Party';
+    // Normalise to prevent case-sensitive duplicates
+    if (/building\s*owner/i.test(party)) party = 'Building Owner';
+    else if (/adjoining\s*owner/i.test(party)) party = 'Adjoining Owner';
+    else if (/structural\s*engineer/i.test(party)) party = 'Structural Engineer';
+    else if (/architect/i.test(party)) party = 'Architect';
     if (!grouped[party]) grouped[party] = [];
     grouped[party].push(email);
   });
