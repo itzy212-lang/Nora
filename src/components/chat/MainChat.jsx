@@ -818,7 +818,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleSend();
+      if (input?.trim()) handleSend();
+      // If empty, do nothing — no clearing
     }
   };
 
@@ -1370,6 +1371,7 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
 
 
