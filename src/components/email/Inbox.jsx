@@ -1302,7 +1302,7 @@ export default function Inbox({ onOpenComposer }) {
           body: JSON.stringify({
             email_id: email.id,
             subject: email.subject || '',
-            body: email.body || email.body_text || '',
+            body: stripHtml(email.body || email.body_text || '').slice(0, 3000),
             from: email.from || email.sender_name || email.from_email || '',
             thread_id: email.thread_id || null,
           }),
@@ -1641,13 +1641,37 @@ if (syncErr) throw syncErr;
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}</div>
               <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
               {appointmentPrompt.clash_detail && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                 {!appointmentPrompt.has_clash && (
                   <button onClick={() => { setAppointmentPrompt(null); setReplyOverlay({ mode: 'reply', prefillBody: appointmentPrompt.confirm_reply }); }}
                     style={{ padding: '6px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     ✅ Reply confirming & book in
                   </button>
                 )}
+                <button onClick={async () => {
+                  try {
+                    await fetch('/api/ely-smart', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        prompt: `Book this in the diary: ${appointmentPrompt.summary}`,
+                        surface: 'inbox_draft',
+                        pending_booking_confirm: true,
+                        pending_booking: {
+                          taskType: 'appointment',
+                          title: appointmentPrompt.summary,
+                          dueDate: appointmentPrompt.proposed_date || '',
+                          startTime: appointmentPrompt.proposed_time || '',
+                          displayDate: appointmentPrompt.summary,
+                        },
+                      }),
+                    });
+                    setAppointmentPrompt(null);
+                  } catch { setAppointmentPrompt(null); }
+                }}
+                  style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  📅 Add to diary only
+                </button>
                 <button onClick={() => setAppointmentPrompt(null)}
                   style={{ padding: '6px 12px', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
                   Dismiss
@@ -1660,6 +1684,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
