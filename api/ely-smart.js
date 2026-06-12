@@ -950,33 +950,6 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
-  // ── Email composer surface — always draft mode ───────────────────────────
-  // This surface is ONLY used for replying to emails. Never analyse. Always draft.
-  const isEmailComposerSurface = surface === 'email_composer' || surface === 'inbox_draft';
-  if (isEmailComposerSurface) {
-    messages.push({
-      role: 'system',
-      content: `EMAIL REPLY SURFACE — MANDATORY RULES:
-
-You are operating inside an email reply tool. The user is dictating notes to reply to an email. Your ONLY job is to produce a polished professional email reply.
-
-NEVER:
-- Transcribe the user's words verbatim
-- Analyse or discuss the email
-- Ask questions unless a critical fact is missing
-- Add formal language unless asked
-
-ALWAYS:
-- Take the user's raw dictated notes and convert them into a naturally flowing, professional email
-- Fix grammar, awkward phrasing, speech patterns, and filler words
-- Keep the tone warm and conversational by default
-- Sound like a real human professional, not AI
-- End with "Kind regards," only — no name
-
-The user's notes are a rough brief. Your job is to interpret the intent and produce the finished email.`,
-    });
-  }
-
   // ── Draft mode collaboration rules ───────────────────────────────────────
   // When a draft is requested in project chat or main chat, enforce collaboration-first
   const isDraftMode = (body.projectChatWorkflow || '').includes('draft') ||
