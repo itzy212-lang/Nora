@@ -1740,8 +1740,8 @@ if (syncErr) throw syncErr;
                   setAppointmentPrompt(null);
                   setBookingOverlay({
                     title: appointmentPrompt.summary || '',
-                    date: appointmentPrompt.proposed_date || '',
-                    time: appointmentPrompt.proposed_time || '',
+                    date: appointmentPrompt.iso_date || '',
+                    time: appointmentPrompt.time || '',
                     project_id: selectedEmail?.project_id || '',
                     project_address: appointmentPrompt.project_address || '',
                     task_type: 'appointment',
