@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
+import { toHtml, cleanSignOff, stripHtml } from '../../utils/draftUtils';
 
 // Split Ely response into brief + draft + after
 function splitAssistantResponseLocal(raw = '') {
@@ -257,10 +258,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const raw = result.reply || result.draft || '';
       const { brief, draft: splitDraft, after } = splitAssistantResponseLocal(raw);
 
-      // Clean the draft — strip wrong sign-offs and name
-      const cleanDraft = (splitDraft || '')
-        .replace(/\n(Cheers|Best|Regards|Warm regards|Kind regards,?\s*\n?\s*\w+)\s*$/i, '\n\nKind regards,')
-        .replace(/\n(Kind regards,)\s*\n\s*\w+\s*$/i, '\n\nKind regards,')
+      // Clean the draft — strip wrong sign-offs and name using shared draftUtils
+      const cleanDraft = cleanSignOff(splitDraft || '');
         .trim();
 
       const newMsgs = [];
