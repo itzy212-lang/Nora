@@ -608,6 +608,13 @@ export default function Calendar({ onOpenProject }) {
     loadTasks();
   }, [loadTasks]);
 
+  // Refresh when a task is added from another component (e.g. inbox booking)
+  useEffect(() => {
+    const handler = () => loadTasks();
+    window.addEventListener('nora:task-added', handler);
+    return () => window.removeEventListener('nora:task-added', handler);
+  }, [loadTasks]);
+
   const allEvents = [...projectEvents, ...taskEvents];
 
   const openAddTask = (dateStr) => {
@@ -890,3 +897,4 @@ export default function Calendar({ onOpenProject }) {
     </div>
   );
 }
+
