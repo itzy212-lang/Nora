@@ -432,7 +432,10 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
                           <button onClick={() => {
                             workingDraftRef.current = msg.draft;
                             setWorkingDraft(msg.draft);
-                            onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: msg.draft });
+                            const htmlDraft = msg.draft && !msg.draft.trim().startsWith('<')
+                              ? msg.draft.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+                              : msg.draft || '';
+                            onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: htmlDraft });
                           }}
                             style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: 'none', background: 'var(--blue)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
                             ↩ Send this
@@ -1506,7 +1509,10 @@ if (syncErr) throw syncErr;
           threadEmails={threadEmails}
           onSendWithDraft={({ to, subject, body }) => {
             setDraftWithEly(false);
-            setReplyOverlay({ mode: 'reply', prefillBody: body, prefillTo: to, prefillSubject: subject });
+            const htmlBody = body && !body.trim().startsWith('<')
+              ? body.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+              : body || '';
+            setReplyOverlay({ mode: 'reply', prefillBody: htmlBody, prefillTo: to, prefillSubject: subject });
           }}
           onClose={() => setDraftWithEly(false)}
         />
@@ -1651,6 +1657,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
