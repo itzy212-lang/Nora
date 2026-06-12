@@ -1041,7 +1041,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
               onSend={(text) => handleSend(text)}
               onTranscript={(transcript) => {
                 setInput(transcript);
-                setTimeout(() => handleSend(transcript), 50);
               }}
               placeholder={
                 selectedEmailContext
@@ -1365,6 +1364,7 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
 
 
