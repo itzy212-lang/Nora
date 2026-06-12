@@ -1570,6 +1570,7 @@ if (syncErr) throw syncErr;
   const allChecked  = filtered.length > 0 && checkedIds.size === filtered.length;
 
   return (
+    <>
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', background: 'var(--bg)' }}>
       {replyOverlay && selectedEmail && (
         <ReplyOverlay
@@ -1780,8 +1781,10 @@ if (syncErr) throw syncErr;
           onClose={() => setBookingOverlay(null)}
         />
       )}
+    </>
   );
 }
+
 
 
 
