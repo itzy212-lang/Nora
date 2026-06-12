@@ -106,9 +106,12 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   };
 
   const bodyEditorRef = useRef(null);
+  const isUserTypingRef = useRef(false);
 
-  // Sync body content to editor when set programmatically (e.g. from Draft with Ely)
+  // Sync body content to editor ONLY when set programmatically (e.g. from Draft with Ely)
+  // Never interrupts user while typing
   useEffect(() => {
+    if (isUserTypingRef.current) return;
     if (bodyEditorRef.current && bodyEditorRef.current.innerHTML !== body) {
       bodyEditorRef.current.innerHTML = body || '';
     }
@@ -325,8 +328,12 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
             contentEditable
               suppressContentEditableWarning
               ref={bodyEditorRef}
-              onInput={e => { setBody(e.currentTarget.innerHTML); setDirty(true); }}
-              dangerouslySetInnerHTML={{ __html: body }}
+              onInput={e => { 
+                isUserTypingRef.current = true;
+                setBody(e.currentTarget.innerHTML); 
+                setDirty(true);
+                setTimeout(() => { isUserTypingRef.current = false; }, 100);
+              }}
               spellCheck
               style={{
                 minHeight: 300, padding: '12px 14px',
@@ -443,6 +450,7 @@ if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
   document.head.appendChild(style);
 }
+
 
 
 
