@@ -1360,7 +1360,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
         body: JSON.stringify({
-          model: 'gpt-5.4-mini',
+          model: 'gpt-4o',
           max_completion_tokens: 3500,
           temperature: 0.3,
           messages: [
@@ -1737,7 +1737,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.4-mini',
+        model: 'gpt-4o',
         max_completion_tokens: 3500,
         temperature,
         messages,
@@ -1771,7 +1771,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         if (!fallbackResponse.ok) throw new Error(errMsg);
         const fallbackData = await fallbackResponse.json();
         const fallbackReply = cleanOutput(fallbackData.choices?.[0]?.message?.content || '');
-        return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-5.4-mini', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+        return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-4o', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
       }
 
       throw new Error(errMsg);
@@ -1798,6 +1798,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
