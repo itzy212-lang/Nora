@@ -3,41 +3,10 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
 
-function stripHtml(html = '') {
-  return String(html || '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 // Split Ely response into brief + draft + after
 function splitAssistantResponseLocal(raw = '') {
   const text = String(raw || '').trim();
-  const markers = [
-    /\bSubject\s*:/i,
-    /\bDear\s+[A-Z0-9]/i,
-    /\bHi\s+[A-Z0-9]/i,
-    /\bHello\s+[A-Z0-9]/i,
-    /\bGood morning\b/i,
-    /\bGood afternoon\b/i,
-    /\bFurther to\b/i,
-    /\bFollowing our\b/i,
-    /\bI refer to\b/i,
-    /\bThank you for\b/i,
-    /\bMany thanks for\b/i,
-    /\bI hope (this|you)\b/i,
-    /\bI am writing\b/i,
-    /\bI write\b/i,
-  ];
+  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z0-9]/i, /\bHi\s+[A-Z0-9]/i, /\bHello\s+[A-Z0-9]/i];
   const positions = markers
     .map(rx => { const m = text.match(rx); return m ? m.index : -1; })
     .filter(i => i >= 0);
@@ -199,13 +168,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     if (!cleanBody) return;
 
-    // Convert plain text paragraphs to HTML so composer preserves formatting
-    const htmlBody = cleanBody
-      .split(/\n\n+/)
-      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
-      .join('');
-
-    onUseDraft?.(htmlBody);
+    onUseDraft?.(cleanBody);
     stopVoice();
     onClose?.();
   }, [onUseDraft, onClose, stopVoice]);
@@ -227,11 +190,9 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         threadId: threadId || email?.thread_id,
         projectId,
         emailContext: {
-          from: email?.sender_name || email?.from || email?.from_email || '',
-          sender_email: email?.sender_email || email?.from_email || '',
+          from: email?.from || email?.from_email || '',
           subject: email?.subject || '',
-          body: (email?.body_text || '').slice(0, 6000) || stripHtml(email?.body || '').slice(0, 6000) || (email?.preview || '').slice(0, 2000),
-          received_at: email?.received_at || '',
+          body: (email?.body || email?.preview || '').slice(0, 6000),
         },
       });
 
@@ -280,11 +241,9 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         threadId: threadId || email?.thread_id,
         projectId,
         emailContext: {
-          from: email?.sender_name || email?.from || email?.from_email || '',
-          sender_email: email?.sender_email || email?.from_email || '',
+          from: email?.from || email?.from_email || '',
           subject: email?.subject || '',
-          body: (email?.body_text || '').slice(0, 6000) || stripHtml(email?.body || '').slice(0, 6000) || (email?.preview || '').slice(0, 2000),
-          received_at: email?.received_at || '',
+          body: (email?.body || email?.preview || '').slice(0, 6000),
         },
       });
 
@@ -473,6 +432,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
 
 
