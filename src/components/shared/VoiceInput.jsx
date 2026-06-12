@@ -85,14 +85,15 @@ function isMobileBrowser() {
 }
 
 function getSupportedAudioMimeType() {
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/mpeg',
-  ];
-
   if (typeof MediaRecorder === 'undefined') return '';
+
+  // iOS Safari only supports mp4/aac — check for that first on mobile
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  const candidates = isIOS
+    ? ['audio/mp4', 'audio/mp4;codecs=mp4a.40.2', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm']
+    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg'];
 
   return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
 }
@@ -264,12 +265,21 @@ export default function VoiceInput({
       shouldKeepRecordingRef.current = true;
       mediaChunksRef.current = [];
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request low-bitrate mono audio — faster to upload, faster to transcribe
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        } 
+      });
       const mimeType = getSupportedAudioMimeType();
 
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 16000 })
-        : new MediaRecorder(stream, { audioBitsPerSecond: 16000 });
+      const recorderOptions = { audioBitsPerSecond: 16000 };
+      if (mimeType) recorderOptions.mimeType = mimeType;
+
+      const recorder = new MediaRecorder(stream, recorderOptions);
 
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
@@ -518,6 +528,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
