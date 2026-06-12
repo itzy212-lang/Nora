@@ -36,6 +36,7 @@ export default function ChatInputBar({
   const textareaRef = useRef(null);
   const [voicePhase, setVoicePhase] = useState('idle');
   const [livePreview, setLivePreview] = useState('');
+  const [internalStop, setInternalStop] = useState(0);
 
   const resize = useCallback(() => {
     const el = textareaRef.current;
@@ -54,7 +55,8 @@ export default function ChatInputBar({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (voicePhase === 'recording') {
-        setVoicePhase('transcribing');
+        // Actually stop the recorder via stop signal
+        setInternalStop(s => s + 1);
         return;
       }
       if (value.trim() && !disabled && !loading) {
@@ -62,6 +64,13 @@ export default function ChatInputBar({
       }
     }
   }, [value, voicePhase, disabled, loading, onSend]);
+
+  // Safety net — if stuck in transcribing for more than 8s, reset to idle
+  useEffect(() => {
+    if (voicePhase !== 'transcribing') return;
+    const t = setTimeout(() => setVoicePhase('idle'), 8000);
+    return () => clearTimeout(t);
+  }, [voicePhase]);
 
   const handleVoicePreview = useCallback((preview, meta = {}) => {
     if (meta.recording === true) {
@@ -206,7 +215,7 @@ export default function ChatInputBar({
         <div style={{ position: 'relative', flexShrink: 0, marginBottom: 4 }}>
           <VoiceInput
             disabled={disabled || loading}
-            stopSignal={stopSignal}
+            stopSignal={stopSignal + internalStop}
             onTranscript={handleTranscript}
             onPreview={handleVoicePreview}
           />
@@ -238,3 +247,4 @@ export default function ChatInputBar({
     </div>
   );
 }
+
