@@ -436,9 +436,20 @@ Award notes:
 Introduction:
 - Leave introduction blank. The system inserts the fixed introduction separately.
 
-General notes:
-- Only use general_notes for genuinely general inspection notes.
-- Do not use general_notes as a dumping ground for legal or award matters.
+Discussion / Site Notes:
+- The discussion[] array is IMPORTANT. Always populate it.
+- Use it for matters arising from the inspection that are relevant to the Party Wall Award, access, methodology, or further action — even if they will also appear in emails_required[] or award_notes[].
+- These are notes for the surveyor and the parties — they should appear in the final SOC document.
+- Examples of what goes in discussion[]:
+  - matters that need to be resolved before the award is finalised
+  - access or methodology points raised during inspection
+  - observations about the condition that may be relevant to the award
+  - questions or confirmations needed from the building owner, adjoining owner or their engineers
+  - any point the surveyor would want to flag as a note to themselves or the parties
+- Write each discussion item as a short professional note, one to three sentences.
+- Do not leave discussion[] empty if there are any outstanding matters from the inspection.
+
+
 
 Project context:
 Adjoining Owner property: ${projectMeta.ao_address || ''}
