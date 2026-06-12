@@ -36,7 +36,7 @@ Return ONLY a JSON object in this format:
   "is_confirmed": true/false,
   "is_proposal": true/false,
   "date_text": "the date/time as mentioned e.g. Monday 16 June at 1pm",
-  "iso_date": "YYYY-MM-DD or null",
+  "iso_date": "YYYY-MM-DD or null — always use 2026 as the year unless a different year is explicitly stated in the email","
   "time": "HH:MM or null",
   "person": "name of the person proposing/confirming",
   "address": "property address if mentioned",
