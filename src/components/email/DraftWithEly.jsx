@@ -22,6 +22,7 @@ function splitAssistantResponseLocal(raw = '') {
   return { brief, draft, after };
 }
 import VoiceInput from '../shared/VoiceInput';
+import ChatInputBar from '../shared/ChatInputBar';
 import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
 
@@ -258,21 +259,23 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const raw = result.reply || result.draft || '';
       const { brief, draft: splitDraft, after } = splitAssistantResponseLocal(raw);
 
-      // Clean the draft — strip wrong sign-offs and name using shared draftUtils
-      const cleanDraft = cleanSignOff(splitDraft || '');
-        .trim();
+      // Clean sign-off using shared draftUtils
+      const cleanDraft = cleanSignOff((splitDraft || raw).trim());
 
       const newMsgs = [];
-      if (brief) newMsgs.push({ id: uid(), role: 'ely', content: brief, messageType: 'brief' });
-      if (cleanDraft) newMsgs.push({
-        id: uid(), role: 'ely',
-        content: cleanDraft,
-        draft: cleanDraft,
-        draftType: result.draftType || 'email',
-        messageType: 'draft',
-      });
-      if (after) newMsgs.push({ id: uid(), role: 'ely', content: after, messageType: 'brief' });
-      if (!newMsgs.length) newMsgs.push({ id: uid(), role: 'ely', content: raw, messageType: 'brief' });
+      // Only show the draft bubble — no brief commentary before or after
+      if (cleanDraft) {
+        newMsgs.push({
+          id: uid(), role: 'ely',
+          content: cleanDraft,
+          draft: cleanDraft,
+          draftType: result.draftType || 'email',
+          messageType: 'draft',
+        });
+      } else {
+        // Fallback — if no draft detected, show as plain text
+        newMsgs.push({ id: uid(), role: 'ely', content: raw, messageType: 'brief' });
+      }
 
       setMessages(prev => [...prev, ...newMsgs]);
     } catch (err) {
@@ -401,39 +404,19 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         </div>
 
         <div className="draft-ely-input">
-          <div className="draft-ely-input-row" style={{ alignItems: 'flex-end' }}>
-            <VoiceInput
-              onTranscript={handleVoice}
-              onPreview={handleVoicePreview}
-              disabled={loading}
-              stopSignal={voiceStopSignal}
-            />
-
-            <textarea
-              ref={textareaRef}
-              className="draft-ely-textarea"
-              value={input}
-              onChange={handleTextChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Tell Ely what to say... e.g. 'confirm fee includes VAT, keep it brief'"
-              rows={2}
-              style={{
-                maxHeight: 140,
-                minHeight: 44,
-                overflowY: 'hidden',
-                resize: 'none',
-                lineHeight: 1.5,
-              }}
-            />
-
-            <button className="ai-send-btn" onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()} disabled={loading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim())}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
-
+          <ChatInputBar
+            value={input}
+            onChange={setInput}
+            onSend={(text) => handleSend(text)}
+            onTranscript={(transcript) => {
+              setInput(transcript);
+              setTimeout(() => handleSend(transcript), 50);
+            }}
+            placeholder="Dictate your notes… e.g. 'confirm fee includes VAT, keep it brief'"
+            disabled={loading}
+            loading={loading}
+            stopSignal={voiceStopSignal}
+          />
           <div style={{ fontSize: 9.5, color: 'var(--text3)', textAlign: 'center', marginTop: 6 }}>AI can make mistakes.</div>
         </div>
       </div>
