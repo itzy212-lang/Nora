@@ -202,6 +202,10 @@ export default function VoiceInput({
 
     setTranscribing(true);
 
+    // Log file size to help diagnose slow transcription on mobile
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+    console.log(`[transcribe] sending audio: ${sizeMB}MB, type: ${blob.type}`);
+
     try {
       const formData = new FormData();
       const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
