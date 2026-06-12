@@ -551,10 +551,13 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   };
 
   const handleElyDraft = (draft, close = false) => {
-    setBody(draft);
-    // Set innerHTML directly so contentEditable renders HTML formatting
+    // Convert plain text line breaks to HTML paragraphs
+    const html = draft && !draft.trim().startsWith('<')
+      ? draft.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+      : draft || '';
+    setBody(html);
     if (bodyEditorRef.current) {
-      bodyEditorRef.current.innerHTML = draft;
+      bodyEditorRef.current.innerHTML = html;
     }
     if (close) setShowEly(false);
   };
@@ -1648,6 +1651,7 @@ if (syncErr) throw syncErr;
     </div>
   );
 }
+
 
 
 
