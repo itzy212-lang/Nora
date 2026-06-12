@@ -5,7 +5,7 @@ import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 
 function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
-  const [form, setForm] = React.useState({
+  const [form, setForm] = useState({
     title: booking.title || '',
     date: booking.date || '',
     time: booking.time || '',
@@ -1786,6 +1786,7 @@ if (syncErr) throw syncErr;
     </>
   );
 }
+
 
 
 
