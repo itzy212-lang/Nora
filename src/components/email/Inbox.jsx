@@ -4,7 +4,7 @@ import VoiceInput from '../shared/VoiceInput';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 
-function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
+function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
     title: booking.title || '',
     date: booking.date || '',
@@ -14,6 +14,12 @@ function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
     project_address: booking.project_address || '',
     description: booking.description || '',
   });
+
+  const [projects, setProjects] = useState([]);
+  useEffect(() => {
+    sb.from('projects').select('id,ref,bo_premise_address').order('created_at', { ascending: false })
+      .then(({ data }) => setProjects(data || []));
+  }, []);
 
   const inp = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
 
@@ -1760,7 +1766,6 @@ if (syncErr) throw syncErr;
       {bookingOverlay && (
         <BookingOverlay
           booking={bookingOverlay}
-          projects={projects}
           onConfirm={async (confirmed) => {
             try {
               await sb.from('tasks').insert([{
