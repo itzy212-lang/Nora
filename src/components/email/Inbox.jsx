@@ -1746,7 +1746,17 @@ if (syncErr) throw syncErr;
                   setAppointmentPrompt(null);
                   setBookingOverlay({
                     title: (appointmentPrompt.type === 'soc' ? 'SOC' : appointmentPrompt.title || 'Appointment') + (appointmentPrompt.address ? ' — ' + appointmentPrompt.address : ''),
-                    date: appointmentPrompt.iso_date || '',
+                    date: (() => {
+                    const d = appointmentPrompt.iso_date || '';
+                    if (!d) return '';
+                    // Correct wrong year — if year is in the past, use current year
+                    const currentYear = new Date().getFullYear();
+                    const parts = d.split('-');
+                    if (parts.length === 3 && parseInt(parts[0]) < currentYear) {
+                      parts[0] = String(currentYear);
+                    }
+                    return parts.join('-');
+                  })(),
                     time: appointmentPrompt.time || '',
                     project_id: selectedEmail?.project_id || '',
                     project_address: appointmentPrompt.project_address || '',
