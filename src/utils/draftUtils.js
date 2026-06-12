@@ -23,17 +23,17 @@ export function toHtml(text) {
 
 /**
  * Strip wrong sign-offs and names from a draft.
- * Always ends with "Kind regards," and nothing after it.
+ * Always ends with "Kind Regards," and nothing after it.
  */
 export function cleanSignOff(draft) {
   if (!draft) return '';
   return draft
     // Remove name after Kind regards
-    .replace(/(Kind regards,?\s*)\n\s*\w+\s*$/i, 'Kind regards,')
+    .replace(/(Kind Regards,?\s*)\n\s*\w+\s*$/i, 'Kind Regards,')
     // Replace wrong sign-offs with Kind regards
-    .replace(/\n(Cheers|Best|Best wishes|Regards|Warm regards|Many thanks|Thanks),?\s*\n?\s*\w*\s*$/i, '\n\nKind regards,')
+    .replace(/\n(Cheers|Best|Best wishes|Regards|Warm regards|Many thanks|Thanks),?\s*\n?\s*\w*\s*$/i, '\n\nKind Regards,')
     // Remove standalone name at very end
-    .replace(/\n(Kind regards,)\s*\n\s*[A-Z][a-z]+\s*$/m, '\nKind regards,')
+    .replace(/\n(Kind Regards,)\s*\n\s*[A-Z][a-z]+\s*$/m, '\nKind Regards,')
     .trimEnd();
 }
 
@@ -67,3 +67,4 @@ export function stripHtml(html) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
