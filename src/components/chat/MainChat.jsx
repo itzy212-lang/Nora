@@ -4,6 +4,7 @@ import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
+import ChatInputBar from '../shared/ChatInputBar';
 import { uid } from '../../utils/formatters';
 import sb from '../../supabaseClient';
 
@@ -1034,32 +1035,25 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
           <div className="ai-full-input">
 
-            <div className="ai-input-row main-chat-input-row" style={{ alignItems: 'flex-end' }}>
-              <VoiceInput onTranscript={handleVoice} onPreview={handleVoicePreview} disabled={loading} stopSignal={voiceStopSignal} />
-              <textarea
-                ref={textareaRef}
-                className="ai-textarea"
-                value={input}
-                onChange={handleTextChange}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  selectedEmailContext
-                    ? 'Ask Ely about the selected email thread, or draft a reply...'
-                    : selectedProjectId
-                      ? 'Ask Ely about this linked project...'
-                      : 'Ask Ely anything about party wall, your projects, or drafting...'
-                }
-                rows={1}
-                style={{ minHeight: 38, maxHeight: 140, overflowY: 'hidden', resize: 'none', lineHeight: 1.5 }}
-              />
-
-              <button className="main-chat-send-btn" onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()} disabled={loading || voicePhase === 'transcribing' || (voicePhase !== 'recording' && !input.trim())} type="button" aria-label="Send message" title="Send">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2L11 13" />
-                  <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                </svg>
-              </button>
-            </div>
+            <ChatInputBar
+              value={input}
+              onChange={setInput}
+              onSend={(text) => handleSend(text)}
+              onTranscript={(transcript) => {
+                setInput(transcript);
+                setTimeout(() => handleSend(transcript), 50);
+              }}
+              placeholder={
+                selectedEmailContext
+                  ? 'Ask Ely about the selected email thread, or draft a reply...'
+                  : selectedProjectId
+                    ? 'Ask Ely about this linked project...'
+                    : 'Ask Ely anything about party wall, your projects, or drafting...'
+              }
+              disabled={loading}
+              loading={loading}
+              stopSignal={voiceStopSignal}
+            />
 
             {/* Booking confirmation buttons */}
             {pendingBooking && (
@@ -1371,6 +1365,7 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
 
 
