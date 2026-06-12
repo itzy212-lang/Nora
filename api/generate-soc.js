@@ -115,23 +115,54 @@ function normaliseSections(sections = []) {
 function buildPartyDrafts(emailsRequired = [], projectMeta = {}) {
   if (!Array.isArray(emailsRequired)) return [];
 
-  return emailsRequired
-    .filter((email) => email && (email.recipient_type || email.subject || email.body || email.reason))
-    .map((email, index) => {
-      const party = email.recipient_type || email.party || 'Relevant Party';
-      const subject = email.subject || `Schedule of Condition follow-up - ${projectMeta.ao_address || projectMeta.bo_address || ''}`;
-      const reason = email.reason ? `\n\nReason identified from SOC notes: ${email.reason}` : '';
-      const body = email.body || `Dear ${party},\n\nFollowing the Schedule of Condition inspection, I wanted to raise the following point for your attention.\n\n${email.reason || ''}\n\nKind regards\nItzik`;
+  const valid = emailsRequired.filter(e => e && (e.recipient_type || e.subject || e.body || e.reason));
+  if (!valid.length) return [];
 
-      return {
-        id: `soc-email-${index + 1}`,
-        party,
-        recipient_type: party,
-        subject,
-        body: `${body}${reason}`.trim(),
-        reason: email.reason || '',
-      };
-    });
+  // Group by recipient_type — merge all Building Owner items into one email
+  const grouped = {};
+  valid.forEach(email => {
+    const party = email.recipient_type || email.party || 'Relevant Party';
+    if (!grouped[party]) grouped[party] = [];
+    grouped[party].push(email);
+  });
+
+  return Object.entries(grouped).map(([party, emails], index) => {
+    const isBO = /building owner/i.test(party);
+    const isAO = /adjoining owner/i.test(party);
+
+    if (emails.length === 1) {
+      const email = emails[0];
+      const subject = email.subject || `Schedule of Condition — ${projectMeta.bo_address || ''}`;
+      const body = email.body || [
+        `Dear ${isBO ? (projectMeta.bo_1_name || 'Sir/Madam') : isAO ? (projectMeta.ao_1_name || 'Sir/Madam') : party},`,
+        '',
+        `I write further to the Schedule of Condition inspection carried out at the above property.`,
+        '',
+        email.reason || '',
+        '',
+        'Kind regards',
+      ].filter(Boolean).join('\n');
+
+      return { id: `soc-email-${index + 1}`, party, recipient_type: party, subject, body, reason: email.reason || '' };
+    }
+
+    // Multiple items — merge into one email with numbered points
+    const subject = emails[0].subject || `Schedule of Condition — outstanding matters — ${projectMeta.bo_address || ''}`;
+    const points = emails.map((e, i) => `${i + 1}. ${e.reason || e.subject || ''}`).filter(Boolean).join('\n');
+    const body = [
+      `Dear ${isBO ? (projectMeta.bo_1_name || 'Sir/Madam') : isAO ? (projectMeta.ao_1_name || 'Sir/Madam') : party},`,
+      '',
+      `I write further to the Schedule of Condition inspection carried out at the above property. There are a number of matters arising from the inspection which I would ask you to address:`,
+      '',
+      points,
+      '',
+      'Please let me know if you have any questions.',
+      '',
+      'Kind regards',
+    ].join('\n');
+
+    return { id: `soc-email-${index + 1}`, party, recipient_type: party, subject, body, reason: points };
+  });
 }
 
 function fixedIntroduction(projectMeta = {}) {
