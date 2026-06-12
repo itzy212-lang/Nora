@@ -264,6 +264,9 @@ export default function VoiceInput({
       return;
     }
 
+    // Warm up the transcribe function immediately — prevents cold start delay
+    fetch('/api/transcribe', { method: 'POST' }).catch(() => {});
+
     try {
       manualStopRef.current = false;
       shouldKeepRecordingRef.current = true;
