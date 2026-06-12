@@ -507,11 +507,7 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
 }
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
-function toHtml(text) {
-  if (!text) return '';
-  if (text.trim().startsWith('<')) return text; // already HTML
-  return text.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-}
+import { toHtml, cleanSignOff, stripHtml } from '../../utils/draftUtils';
 
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
