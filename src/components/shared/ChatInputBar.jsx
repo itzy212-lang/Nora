@@ -1,27 +1,25 @@
 /**
- * ChatInputBar — shared input bar used by ALL chat surfaces in Nora.
+ * ChatInputBar — THE shared input bar for all Nora chats.
  *
- * Layout:  [+ attach?]  [textarea / waveform]  [mic → send]
+ * Layout (matches Claude chat):
+ *   [+ attach?]  [textarea with waveform when recording]  [mic / send]
  *
- * Props:
- *   value          {string}   controlled input value
- *   onChange       {fn}       called with new string value
- *   onSend         {fn}       called when user sends (text passed as arg)
- *   onTranscript   {fn}       called with final Whisper transcript
- *   placeholder    {string}
- *   disabled       {boolean}
- *   loading        {boolean}  shows "thinking…" state
- *   showAttach     {boolean}  show + file button (default false)
- *   onAttach       {fn}       called when + tapped
- *   attachInputRef {ref}      ref for hidden file input
- *   voicePhase     {string}   'idle' | 'recording' | 'transcribing'  (controlled externally via onVoicePhase)
- *   onVoicePhase   {fn}       called when voice phase changes
- *   livePreview    {string}   live dictation preview text
- *   onLivePreview  {fn}       called with new preview text
+ * Behaviour:
+ *   - Textarea expands up to 200px, then scrolls
+ *   - When recording: waveform bars shown inside box, mic turns red
+ *   - When transcribing: "Transcribing..." shown inside box
+ *   - Enter sends (if text present), Shift+Enter = new line
+ *   - While recording, Enter stops recording
+ *   - Send button replaces mic when text is present and idle
+ *   - Live preview lines shown above input while recording
+ *   - Mobile: input bar lifts with keyboard automatically
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import VoiceInput from './VoiceInput';
+
+const MAX_HEIGHT = 200;
+const WAVEFORM_HEIGHTS = [0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1];
 
 export default function ChatInputBar({
   value = '',
@@ -33,69 +31,77 @@ export default function ChatInputBar({
   loading = false,
   showAttach = false,
   onAttach,
-  attachInputRef,
-  voicePhase = 'idle',
-  onVoicePhase,
-  livePreview = '',
-  onLivePreview,
-  voiceStopSignal = 0,
+  stopSignal = 0,
 }) {
   const textareaRef = useRef(null);
+  const [voicePhase, setVoicePhase] = useState('idle');
+  const [livePreview, setLivePreview] = useState('');
 
-  // Auto-expand textarea
+  const resize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, MAX_HEIGHT) + 'px';
+  }, []);
+
+  useEffect(() => { resize(); }, [value, resize]);
+
   const handleChange = useCallback((e) => {
     onChange?.(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [onChange]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (value.trim()) onSend?.(value);
+      if (voicePhase === 'recording') {
+        setVoicePhase('transcribing');
+        return;
+      }
+      if (value.trim() && !disabled && !loading) {
+        onSend?.(value);
+      }
     }
-  }, [value, onSend]);
+  }, [value, voicePhase, disabled, loading, onSend]);
 
   const handleVoicePreview = useCallback((preview, meta = {}) => {
     if (meta.recording === true) {
-      onVoicePhase?.('recording');
+      setVoicePhase('recording');
       const p = meta.currentPhrase || meta.interim || preview || '';
-      if (p && !p.includes('speak now') && !p.includes('Recording')) {
-        onLivePreview?.(p);
+      if (p && !p.toLowerCase().includes('speak now') && !p.toLowerCase().includes('recording')) {
+        setLivePreview(p);
+        onChange?.(p);
       }
     } else if (meta.recording === false) {
-      onVoicePhase?.('transcribing');
-      onLivePreview?.('');
+      setVoicePhase('transcribing');
+      setLivePreview('');
     }
-  }, [onVoicePhase, onLivePreview]);
+  }, [onChange]);
 
   const handleTranscript = useCallback((transcript) => {
-    onVoicePhase?.('idle');
-    onLivePreview?.('');
-    onTranscript?.(transcript);
-    // Also set in textarea
+    setVoicePhase('idle');
+    setLivePreview('');
     onChange?.(transcript);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
-      }
-    }, 50);
-  }, [onVoicePhase, onLivePreview, onTranscript, onChange]);
+    onTranscript?.(transcript);
+    setTimeout(resize, 50);
+  }, [onChange, onTranscript, resize]);
+
+  const handleSend = useCallback(() => {
+    if (value.trim() && !disabled && !loading) {
+      onSend?.(value);
+    }
+  }, [value, disabled, loading, onSend]);
 
   const isRecording = voicePhase === 'recording';
   const isTranscribing = voicePhase === 'transcribing';
+  const hasText = value.trim().length > 0;
 
-  // Build preview lines from livePreview text
   const previewLines = (() => {
-    const text = livePreview || value || '';
-    if (!text || !isRecording) return [];
-    const words = text.split(' ');
+    if (!isRecording || !livePreview) return [];
+    const words = livePreview.split(' ');
     const lines = [];
     let cur = '';
     for (const w of words) {
-      if ((cur + ' ' + w).trim().length > 38) {
+      if ((cur + ' ' + w).trim().length > 40) {
         if (cur) lines.push(cur.trim());
         cur = w;
       } else {
@@ -103,21 +109,20 @@ export default function ChatInputBar({
       }
     }
     if (cur) lines.push(cur.trim());
-    return lines.slice(-3);
+    return lines.slice(-2);
   })();
 
   return (
     <div style={{ width: '100%' }}>
 
-      {/* Live preview lines — above input row when recording */}
       {isRecording && previewLines.length > 0 && (
-        <div style={{ padding: '4px 4px 6px', marginBottom: 2 }}>
+        <div style={{ padding: '0 4px 6px' }}>
           {previewLines.map((line, i, arr) => {
             const age = arr.length - 1 - i;
             return (
               <div key={i} style={{
-                fontSize: 13.5, lineHeight: 1.45,
-                color: age === 0 ? 'var(--text)' : `rgba(100,100,100,${age === 1 ? 0.45 : 0.2})`,
+                fontSize: 13, lineHeight: 1.4,
+                color: age === 0 ? 'var(--text)' : 'rgba(120,120,120,0.4)',
                 fontWeight: age === 0 ? 500 : 400,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{line}</div>
@@ -126,10 +131,8 @@ export default function ChatInputBar({
         </div>
       )}
 
-      {/* Input row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
 
-        {/* + attach button */}
         {showAttach && (
           <button
             type="button"
@@ -137,33 +140,39 @@ export default function ChatInputBar({
             disabled={disabled}
             style={{
               width: 36, height: 36, borderRadius: '50%',
-              border: '1px solid var(--border)', background: 'var(--bg)',
-              color: 'var(--text3)', fontSize: 20, flexShrink: 0,
-              cursor: disabled ? 'not-allowed' : 'pointer',
+              border: '1.5px solid var(--border)',
+              background: 'var(--bg)',
+              color: 'var(--text3)',
+              fontSize: 20, lineHeight: 1,
+              flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 4,
             }}
           >+</button>
         )}
 
-        {/* Input box — waveform when recording, textarea otherwise */}
         <div style={{
-          flex: 1, minWidth: 0, position: 'relative',
+          flex: 1, minWidth: 0,
           border: `1.5px solid ${isRecording ? '#3b82f6' : 'var(--border)'}`,
-          borderRadius: 12, background: 'var(--bg2)',
-          display: 'flex', alignItems: 'center', padding: '0 12px',
-          minHeight: 44, transition: 'border-color 0.2s',
+          borderRadius: 14,
+          background: 'var(--bg2, #f8f8f8)',
+          display: 'flex', alignItems: 'center',
+          padding: '0 14px',
+          minHeight: 44,
+          transition: 'border-color 0.15s',
+          boxSizing: 'border-box',
         }}>
           {isRecording ? (
-            /* Waveform bars */
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 22, width: '100%' }}>
-              {[0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1].map((h, i) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 24, width: '100%' }}>
+              {WAVEFORM_HEIGHTS.map((h, i) => (
                 <div key={i} style={{
-                  width: 3, borderRadius: 2, background: '#3b82f6',
+                  width: 3, borderRadius: 2,
+                  background: '#3b82f6',
                   height: `${3 + h * 18}px`,
-                  animation: `chatBarWave 0.7s ease-in-out ${i * 0.05}s infinite alternate`,
+                  animation: `nora-wave 0.65s ease-in-out ${(i * 0.04).toFixed(2)}s infinite alternate`,
                 }} />
               ))}
-              <style>{`@keyframes chatBarWave{from{transform:scaleY(0.2)}to{transform:scaleY(1)}}`}</style>
+              <style>{`@keyframes nora-wave{from{transform:scaleY(0.15)}to{transform:scaleY(1)}}`}</style>
             </div>
           ) : (
             <textarea
@@ -175,39 +184,49 @@ export default function ChatInputBar({
               rows={1}
               disabled={disabled || isTranscribing}
               style={{
-                width: '100%', background: 'transparent', border: 'none',
-                fontSize: 13.5, color: 'var(--text)', outline: 'none',
-                resize: 'none', lineHeight: '20px',
-                minHeight: 24, maxHeight: 200,
-                padding: '10px 0', boxSizing: 'border-box',
-                overflowY: 'auto', fontFamily: 'inherit',
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                fontSize: 14,
+                lineHeight: '20px',
+                color: 'var(--text)',
+                fontFamily: 'inherit',
+                minHeight: 24,
+                maxHeight: MAX_HEIGHT,
+                padding: '12px 0',
+                boxSizing: 'border-box',
+                overflowY: 'auto',
               }}
             />
           )}
         </div>
 
-        {/* Mic / Send button */}
-        <div style={{ flexShrink: 0, position: 'relative' }}>
+        <div style={{ position: 'relative', flexShrink: 0, marginBottom: 4 }}>
           <VoiceInput
             disabled={disabled || loading}
-            stopSignal={voiceStopSignal}
+            stopSignal={stopSignal}
             onTranscript={handleTranscript}
             onPreview={handleVoicePreview}
           />
-          {/* Send arrow overlays mic when text is present and idle */}
-          {value.trim() && voicePhase === 'idle' && (
+          {hasText && !isRecording && !isTranscribing && (
             <button
-              onClick={() => onSend?.(value)}
+              type="button"
+              onClick={handleSend}
               disabled={disabled || loading}
               style={{
                 position: 'absolute', inset: 0,
-                borderRadius: '50%', border: 'none',
-                background: '#3b82f6', color: '#fff',
+                borderRadius: '50%',
+                border: 'none',
+                background: '#3b82f6',
+                color: '#fff',
+                cursor: disabled || loading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', zIndex: 2,
+                zIndex: 2,
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
               </svg>
