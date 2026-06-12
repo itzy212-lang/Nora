@@ -381,6 +381,8 @@ Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
 - Use high-end surveyor wording.
 - Every observation must be written in formal third-person language.
+- Each observation must read as a single flowing professional paragraph — not a series of short clipped sentences. Combine related information into well-constructed sentences that read naturally as formal surveyor prose.
+- Think of the Biggin Avenue style: "The masonry party fence wall extends approximately 3.5 metres from the communal passageway before transitioning to timber fencing. The wall comprises brick piers and upper brickwork with a rendered lower panel scored to imitate blockwork." — that is the target standard.
 - Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues".
 - Replace casual wording with professional phrasing such as:
   - "appeared to exhibit upward displacement"
@@ -469,7 +471,7 @@ ${message}
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-5.4-mini',
+      model: 'gpt-4o',
       temperature: 0.15,
       messages: [
         {
