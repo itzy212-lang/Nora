@@ -83,6 +83,8 @@ function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
     </div>
   );
 }
+
+function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   useEffect(() => {
     const h = () => setWidth(window.innerWidth);
@@ -1784,6 +1786,7 @@ if (syncErr) throw syncErr;
     </>
   );
 }
+
 
 
 
