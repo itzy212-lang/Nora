@@ -181,7 +181,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   useEffect(() => {
     if (!email || initialized) return;
     setInitialized(true);
-    autoSummarise();
+    // Auto-summarise disabled — go straight to waiting for input
   }, [email, initialized]);
 
   const autoSummarise = useCallback(async () => {
@@ -257,12 +257,18 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const raw = result.reply || result.draft || '';
       const { brief, draft: splitDraft, after } = splitAssistantResponseLocal(raw);
 
+      // Clean the draft — strip wrong sign-offs and name
+      const cleanDraft = (splitDraft || '')
+        .replace(/\n(Cheers|Best|Regards|Warm regards|Kind regards,?\s*\n?\s*\w+)\s*$/i, '\n\nKind regards,')
+        .replace(/\n(Kind regards,)\s*\n\s*\w+\s*$/i, '\n\nKind regards,')
+        .trim();
+
       const newMsgs = [];
       if (brief) newMsgs.push({ id: uid(), role: 'ely', content: brief, messageType: 'brief' });
-      if (splitDraft) newMsgs.push({
+      if (cleanDraft) newMsgs.push({
         id: uid(), role: 'ely',
-        content: splitDraft,
-        draft: splitDraft,
+        content: cleanDraft,
+        draft: cleanDraft,
         draftType: result.draftType || 'email',
         messageType: 'draft',
       });
@@ -437,6 +443,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
 
 
