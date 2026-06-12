@@ -199,7 +199,13 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     if (!cleanBody) return;
 
-    onUseDraft?.(cleanBody);
+    // Convert plain text paragraphs to HTML so composer preserves formatting
+    const htmlBody = cleanBody
+      .split(/\n\n+/)
+      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+
+    onUseDraft?.(htmlBody);
     stopVoice();
     onClose?.();
   }, [onUseDraft, onClose, stopVoice]);
