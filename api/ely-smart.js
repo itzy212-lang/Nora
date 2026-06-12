@@ -457,15 +457,7 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   }
 
   const emails = (data || []).map(normaliseEmailRecord).filter(Boolean);
-  if (suppliedEmail) {
-    const marked = { ...suppliedEmail, _isCurrent: true };
-    if (!emails.some(row => String(row.id) === String(suppliedEmail.id))) {
-      emails.unshift(marked);
-    } else {
-      const idx = emails.findIndex(row => String(row.id) === String(suppliedEmail.id));
-      emails[idx] = { ...emails[idx], _isCurrent: true };
-    }
-  }
+  if (suppliedEmail && !emails.some(row => String(row.id) === String(suppliedEmail.id))) emails.unshift(suppliedEmail);
   return emails;
 }
 
@@ -840,37 +832,11 @@ Emails Required:
   }
 
   if (scopedEmailContext?.length) {
-    // Find the supplied/current email and label it prominently
-    const supplied = scopedEmailContext.find(e => e._isSupplied || e._isCurrent);
-    const rest = scopedEmailContext.filter(e => !e._isSupplied && !e._isCurrent);
-
-    if (supplied) {
-      prompt += `
-
-== THE EMAIL YOU ARE CURRENTLY REPLYING TO ==
-From: ${supplied.sender_name || supplied.from || ''}
-Date: ${supplied.received_at || ''}
-Subject: ${supplied.subject || ''}
-
-${supplied.body || supplied.body_text || supplied.preview || ''}
-
-== END CURRENT EMAIL ==
-`;
-    }
-
-    if (rest.length) {
-      prompt += `
-
-FULL PROJECT EMAIL HISTORY (${rest.length} emails, chronological):
-${compactJson(rest, 18000)}
-`;
-    } else {
-      prompt += `
+    prompt += `
 
 SCOPED EMAIL CONTEXT — ALL PROJECT EMAILS (${scopedEmailContext.length} total, chronological):
 ${compactJson(scopedEmailContext, 20000)}
 `;
-    }
   }
 
   if (draftingExamples?.length && modeHint === 'draft') {
@@ -1798,8 +1764,6 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
-
-
 
 
 
