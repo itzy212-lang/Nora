@@ -600,6 +600,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // ── Review phase ───────────────────────────────────────────────────────────
   return (
+    <>
     <div style={s.page}>
       <div style={s.header}>
         <h1 style={s.title}>Schedule of Condition - Review</h1>
@@ -698,6 +699,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
           onClose={() => setOneDriveOverlay(null)}
         />
       )}
+    </>
   );
 }
 
@@ -734,6 +736,7 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
 
 
