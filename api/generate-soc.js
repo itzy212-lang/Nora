@@ -402,6 +402,8 @@ Core rules for Schedule of Condition observations:
   - "no sticking or binding was noted during operation"
   - "the element was substantially obscured by vegetation and could not be fully inspected"
 - Where a defect affects operation, state that clearly as an existing operational defect.
+- TESTED ELEMENTS: For any door, window, gate or opening element that was tested during inspection and found to be operational, always close with the standard formula: "No sticking, binding or jamming was noted during operation." For windows specifically: "The window was operated during the inspection and opened and closed freely. No sticking, binding or jamming was noted."
+- OVERALL CONDITION CLOSERS: After noting specific defects within an element or room, always close with "No further defects were noted to [element/area]." or "No other visible defects were noted at the time of inspection." This mirrors the standard surveyor convention of confirming the limits of what was found.
 - Preserve measurements exactly as dictated.
 - Do not diagnose cause unless explicitly dictated.
 - Do not state liability or causation.
