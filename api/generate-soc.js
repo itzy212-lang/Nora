@@ -379,20 +379,14 @@ Required structure:
 
 Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
-- You are producing this document as a senior party wall surveyor with 20+ years of experience. The language must reflect that expertise — precise, authoritative, and technically correct. A reader should not be able to tell this was AI-generated.
-- CRITICAL — CONFLICT RESOLUTION AND CORRECTION SIGNALS: The raw notes are dictated in the field and will often contain self-corrections. You MUST recognise and act on the following correction signals:
-  - "strike that" / "scratch that" / "ignore that" — delete the immediately preceding observation entirely
-  - "correction" / "actually" / "go back" / "amend that" / "I meant" — the following note overrides or amends the preceding one
-  - Any note that directly contradicts an earlier note about the same element (e.g. "no cracks to the floor" followed by "there was a crack in a tile") — reconcile into ONE accurate observation
-  - The final document must NEVER present both an original note and its correction. Produce only the reconciled, accurate version.
-  - Where only a single isolated defect exists within an otherwise sound element, the observation should acknowledge the overall condition and then note the specific defect — e.g. "The tiled floor finish was generally in satisfactory condition. One tile located immediately in front of the refrigerator exhibited a hairline crack originating at the left-hand corner, extending towards the centre of the tile before fading. No other visible defects were noted to the floor finish."
+- Use high-end surveyor wording — precise, authoritative, and technically correct. Sound like a senior party wall surveyor with 20 years of experience.
 - Every observation must be written in formal third-person language.
-- Each observation must read as a single flowing professional paragraph — not a series of short clipped sentences. Combine related information into well-constructed sentences that read naturally as formal surveyor prose.
-- GROUPING: Related observations about the same element within a section should be grouped together into one coherent ref entry, not split into multiple separate ref entries. For example, all floor observations in a room go into one ref entry, all ceiling observations into one entry, etc. Only create a new ref entry when moving to a genuinely different element or area.
-- For sections with multiple specific defects (e.g. two cracked floor tiles), the structure should be: (1) overall condition statement, (2) each specific defect noted individually, (3) closing statement "No further defects were noted to [element]."
-- Contractor instructions, protection measures, and recommended actions (e.g. chimney breast removal procedures, CCTV inspection requirements, lead flashing redressing) must be placed in their own named section — NOT mixed into the physical condition observations. These go into discussion[] or award_notes[] and render as a separate section in the document.
+- Each observation must read as a single flowing professional paragraph. Combine related information into well-constructed sentences that read naturally as formal surveyor prose.
+- CORRECTION SIGNALS: The notes are dictated in the field. Recognise "strike that", "scratch that", "correction", "actually", "go back", "ignore that" as signals to amend or delete the preceding observation. Where two notes about the same element contradict each other, reconcile into one accurate observation — never include both.
+- For tested elements (doors, windows, gates) that operated without fault, always close with: "No sticking, binding or jamming was noted during operation."
+- For sections where specific defects exist within an otherwise sound element: state overall condition first, note each specific defect, then close with "No further defects were noted to [element]."
+- Contractor instructions, protection measures, and CCTV requirements must go into discussion[] — not into the physical condition rows.
 - Think of the Biggin Avenue style: "The masonry party fence wall extends approximately 3.5 metres from the communal passageway before transitioning to timber fencing. The wall comprises brick piers and upper brickwork with a rendered lower panel scored to imitate blockwork." — that is the target standard.
-- Use precise technical terminology throughout: "perpend joints", "bed joints", "soffit", "reveal", "abutment", "lintel", "coping", "corbel", "arris", "spall", "efflorescence", "delamination", "friable", "pointing", "haunching", "render", "arrised edge" — where appropriate to the element being described.
 - Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues".
 - Replace casual wording with professional phrasing such as:
   - "appeared to exhibit upward displacement"
@@ -402,50 +396,9 @@ Core rules for Schedule of Condition observations:
   - "no sticking or binding was noted during operation"
   - "the element was substantially obscured by vegetation and could not be fully inspected"
 - Where a defect affects operation, state that clearly as an existing operational defect.
-- TESTED ELEMENTS: For any door, window, gate or opening element that was tested during inspection and found to be operational, always close with the standard formula: "No sticking, binding or jamming was noted during operation." For windows specifically: "The window was operated during the inspection and opened and closed freely. No sticking, binding or jamming was noted."
-- OVERALL CONDITION CLOSERS: After noting specific defects within an element or room, always close with "No further defects were noted to [element/area]." or "No other visible defects were noted at the time of inspection." This mirrors the standard surveyor convention of confirming the limits of what was found.
 - Preserve measurements exactly as dictated.
 - Do not diagnose cause unless explicitly dictated.
 - Do not state liability or causation.
-
-
-APPROVED SURVEYOR TERMINOLOGY — use these terms where appropriate:
-
-Masonry/Brickwork: arris, arrises, bed joint, perpend joint, perp joint, brick pier, brickwork reveal, brickwork abutment, spalled brickwork, delaminated brickwork, friable brickwork, bulging brickwork, out-of-plumb brickwork, debonded render, blown render, localised repair, historic repair, eroded mortar joints, recessed mortar joints, fractured brick, displaced brick.
-
-Structural: chimney breast, lintel, load-bearing wall, timber floor joists, purlin, roof truss, bearing point, bearing wall.
-
-Openings/Joinery: window head, window cill, window reveal, door reveal, threshold, sill, lintel bearing, masonry arch.
-
-Floors: screed finish, laminate floor finish, floor settlement, differential movement, localised undulation, shrinkage cracking, settlement-related cracking.
-
-Ceilings: ceiling deflection, undulating ceiling finish, sagging ceiling, former chimney breast outline visible, fractured plaster finish, water staining, historic staining.
-
-Plaster/Decorations: fractured plaster finish, debonded plaster, blown plaster, blistering paintwork, localised making good, surface blemishing.
-
-Roofs: displaced roof tile, fractured roof tile, ridge tile, hip tile, verge detail, lead flashing, fascia board, soffit board, parapet wall, coping detail, roof abutment.
-
-External: hardstanding, boundary fencing, paved patio, localised settlement, garden retaining wall, crazy paving, raised planting bed.
-
-Defects: hairline crack, settlement crack, thermal movement crack, differential movement, historic movement, progressive movement, open mortar joint, mortar loss, debonding, delamination, spalling, fracturing, distortion, deflection, bowing, bulging, out of plumb, water ingress, moisture staining, friable, decayed, frost-damaged.
-
-Position/Location: abutment, junction, interface, party wall line, line of junction, head, cill, reveal, soffit, fascia, ridge, verge, flank wall, return wall, party fence wall, coping stone, string course, pier, buttress, parapet, masonry return.
-
-Approved professional phrases:
-- "No visible defects were noted at the time of inspection."
-- "The brickwork exhibits general weathering consistent with its age."
-- "Localised spalling to the brick faces was observed."
-- "Evidence of mortar loss was noted to the bed and perpend joints."
-- "The pointing appears weathered and defective."
-- "The brickwork remains plumb with no visible distortion."
-- "A hairline crack was noted extending from the window head."
-- "A stepped crack was noted within the masonry wall."
-- "The defect appears historic in nature."
-- "No evidence of progressive movement was observed."
-- "The render finish exhibits localised cracking and debonding."
-- "The paving exhibits localised settlement."
-- "The defect is considered cosmetic in nature."
-- "General wear and tear was noted throughout."
 
 Heading and grouping rules:
 - Preserve dictated room or area headings exactly where the user has clearly dictated a heading.
@@ -528,7 +481,7 @@ ${message}
         {
           role: 'system',
           content:
-            'You are a senior Party Wall Surveyor with 20+ years of experience producing Schedules of Condition. Return only valid JSON. Produce expert-level, authoritative surveyor-grade Schedule of Condition wording using British English spelling and terminology. IMPORTANT: Where the dictated notes contain corrections or contradictions, resolve them into a single accurate observation — never include both an original note and its correction as separate items. Separate actions, award notes and required emails from the SOC observations.',
+            'You are a senior Party Wall Surveyor with 20+ years of experience. Return only valid JSON. Produce authoritative, expert-level Schedule of Condition wording in British English. Recognise and reconcile corrections in the dictated notes. Separate actions, contractor notes, and required emails from the physical condition observations.',
         },
         { role: 'user', content: prompt },
       ],
