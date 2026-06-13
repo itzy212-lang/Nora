@@ -402,143 +402,76 @@ Required structure:
 
 WORKED EXAMPLES — STYLE AND FORMAT REFERENCE ONLY
 
-These examples show how raw dictated site notes are transformed into professional Schedule of Condition observations. Do NOT copy, repeat or reference any observations, addresses, defects or details from these examples. Apply only the writing style, structure and transformation standard to the new notes provided.
+These examples show how raw dictated notes are transformed into professional Schedule of Condition observations. Do NOT copy any content from these examples. Apply only the writing style, structure and transformation standard to the new notes provided.
 
 ---
-EXAMPLE 1 — RAW DICTATED NOTES:
+EXAMPLE 1 — RAW vs FINISHED (excerpt):
 
-So on the face of the chimney breast at the front elevation, chimney breast sits over the ridge, actually, but on the front side of the chimney, there's noticeable perished brickwork.
-The timber framing around the front bonnet of the roof on the adjoining owner's side is in fairly poor condition, evidence of kind of decay and rot and paint flaking.
-The mitre joint between the framework that sits between the properties of the two, the adjoining owner and the building owner, there's an open joint on the mitre running all the way through.
-Some cracking in the cement fillet at the front of the tiles on the bonnet where it butts the valley between the two properties.
-Continuing the schedule at the rear elevation of the property, immediately out off the rear elevation is a laid patio.
-The adjoining owner has a flank wall constructed of brick. It sits, according to the adjoining owner, it sits inside the boundary by about 15 centimetres on their side, so it's a wall constructed that is solely belonging to the adjoining owner.
-Chimney breast face brick of the chimney on the rear elevation and partial side is evidence of perished brickwork. All chimney pots are intact.
-The bottom half of the brickwork on the rear elevation have been painted. The top half is rendered with evidence of, in various locations, of cracking in the render and paint flaking and perished render in certain places.
-Actually, in the out of the bottom left-hand corner of the window, of the left window, there is a severe crack extending out of the bottom left-hand corner, kind of diagonally downwards, extending approximately 900mm before fading away. And then that has various cracks stemming away from that. And then it kind of then staggers into a more slight cracking that runs down the right-hand side of the vent, running vertically to the top of the first brick.
-And roughly in line with the underneath of the top opener, closest to the building owner, there is a horizontal crack in the paintwork extending from the window to the joint between the adjoining owners and the party and the building owner. And then approximately 300 millimeters to 400 millimeters below, there is a secondary horizontal crack again extending out from the window towards the party wall.
-And then at the top left-hand corner of the rear window on the ground floor level, there is a crack extending out from the top left-hand corner and kind of branches away from the party wall and then spreads into multiple different cracks.
-The French doors out to the garden from the dining room open and close, no issues. It's a bit stiff when unlocking and initially opening, but it does seem to open and close no issues. Handle is slightly stiff, sticks slightly when lifted. The secondary opener on the French door does stick slightly when closing, needs to be forced. Evidence of kind of shave UPVC from where it's been rubbing against the frame.
-The side of the boxing for the beam separating the dining room to the lounge, there is a hairline crack in the party wall abutment of the boxing from the underneath, approximately 150 millimetres, 200 millimetres before fading away.
-In the front bedroom, first floor, party wall is clad with a floor-to-ceiling fitted wardrobe. Party wall not visible or lined at the back, so there's no access to the party wall.
-Multiple hairline cracks in the original coving on the wall abutting the front bedroom. Refer to photos.
-Loft, partial visibility of the party wall. Areas inspected are pretty standard to lofts built of that period. Appears to be lime in force there. Pointing that has kind of perished in places. A couple of sections with what appears to be no pointing around the brickwork.
+RAW: "There's noticeable perished brickwork on the front face of the chimney. The timber framing around the bonnet is in fairly poor condition, evidence of decay and rot and paint flaking. Open joint on the mitre running all the way through."
 
-EXAMPLE 1 — FINISHED SCHEDULE OF CONDITION:
+FINISHED: "Noticeable perished brickwork was observed to the front face of the chimney stack. The timber framing surrounding the front bonnet roof is in poor condition, exhibiting evidence of decay, rot, paint deterioration and flaking finishes. An open mitre joint is present within the timber framework, extending continuously along the joint."
 
-EXTERNAL - FRONT ELEVATION AND ROOF
-The chimney breast is positioned over the ridge line. Noticeable perished brickwork was observed to the front face of the chimney stack.
-The timber framing surrounding the front bonnet roof on the adjoining owner's side is in poor condition, exhibiting evidence of decay, rot, paint deterioration and flaking finishes.
-An open mitre joint is present within the timber framework located at the junction between the adjoining owner's property and the building owner's property. The opening extends continuously along the joint.
-Cracking is present within the cement fillet located to the front edge of the bonnet roof where it abuts the valley between the two properties.
+RAW: "Actually, out of the bottom left corner of the left window there is a severe crack extending diagonally downwards approximately 900mm before fading away and then that has various cracks stemming away. And then it staggers into slight cracking running vertically to the top of the first brick."
 
-EXTERNAL - REAR ELEVATION
-Immediately adjoining the rear elevation is a laid patio area. The patio is generally in good condition with no visible defects noted. Moss growth is present between paving joints.
-A brick flank wall is situated along the boundary area. The adjoining owner advises that the wall is positioned approximately 150mm inside their boundary and is solely owned by them.
-The rear and partial flank faces of the chimney stack exhibit evidence of perished brickwork. All chimney pots were observed to be intact.
-The lower section of the rear elevation brickwork has been painted. The upper section comprises rendered finishes. The render exhibits cracking, localised deterioration, paint flaking and areas of perished render.
-A significant crack extends diagonally downward from the bottom left-hand corner of the left-hand rear window for approximately 900mm before dissipating. Various subsidiary cracks branch from this defect. The crack transitions into lighter cracking adjacent to the right-hand side of the air vent and extends vertically towards the first brick course.
-A horizontal crack is present approximately in line with the underside of the upper opening section of the window nearest the building owner's property. The crack extends from the window area towards the party wall. A secondary horizontal crack is present approximately 300mm to 400mm below the primary crack and similarly extends from the window area towards the party wall.
-A further crack extends from the top left-hand corner of the rear window opening and branches away from the party wall, developing into multiple smaller fractures.
+FINISHED: "A significant crack extends diagonally downward from the bottom left-hand corner of the left-hand rear window for approximately 900mm before dissipating. Various subsidiary cracks branch from this defect. The crack transitions into lighter cracking adjacent to the right-hand side of the air vent and extends vertically towards the first brick course."
 
-INTERNAL - DINING ROOM
-The French doors leading to the garden were tested and open and close satisfactorily. The locking mechanism and opening action are slightly stiff. The handle also exhibits slight stiffness when operated. The secondary opening leaf sticks when closing and requires additional force. Evidence of UPVC abrasion is visible where the sash has been rubbing against the frame.
-A hairline crack is present at the underside of the beam boxing where it abuts the party wall. The crack extends approximately 150mm to 200mm before fading.
+RAW: "The French doors open and close no issues. A bit stiff when unlocking but it does open and close fine. Handle slightly stiff. Secondary opener sticks when closing, needs to be forced. Evidence of UPVC shaving from rubbing against the frame."
 
-FIRST FLOOR FRONT BEDROOM
-The party wall is concealed behind a floor-to-ceiling fitted wardrobe installation. The fitted wardrobe is lined internally and no access was available to inspect the party wall.
+FINISHED: "The French doors leading to the garden were tested and open and close satisfactorily. The locking mechanism and opening action are slightly stiff. The handle exhibits slight stiffness when operated. The secondary opening leaf sticks when closing and requires additional force. Evidence of UPVC abrasion is visible where the sash has been rubbing against the frame."
 
-FIRST FLOOR REAR BEDROOM
-Multiple hairline cracks are present within the original decorative coving. These defects are illustrated within the accompanying photographs.
+RAW: "Party wall not visible due to floor to ceiling fitted wardrobe. Lined internally. No access."
 
-LOFT
-The party wall is partially visible within the loft space. The loft is typical of a property of this age and construction. Lime mortar construction is visible. Pointing is perished in places and isolated areas appear to contain little or no visible mortar between brickwork joints. Subject to the age and construction of the property, the loft is generally in reasonable condition.
+FINISHED: "The party wall is concealed behind a floor-to-ceiling fitted wardrobe installation. The fitted wardrobe is lined internally and no access was available to inspect the party wall."
 
 ---
-EXAMPLE 2 — RAW DICTATED NOTES:
+EXAMPLE 2 — RAW vs FINISHED including site notes (excerpt):
 
-Party fence wall between the Building Owner and Adjoining Owner. Under the Act they're going to demolish and rebuild the party fence wall as a party wall. There will be a small section of party fence wall that would remain off the back of the extension. Only approximately 400mm would be left. Most sensible option would be to demolish the full party fence wall because there would only be about 400mm left over once the demolition is done. Safer for everybody if the full wall is demolished and rebuilt. Party wall to be rebuilt in the same position. Face brick to remain on the Adjoining Owner's side where the face brick of the existing party fence wall currently sits.
-Building Owner currently has a downpipe on the first floor rear elevation wall. Downpipe runs down onto the shared flat roof of both extensions. Pipe then runs across the flat roof and discharges into guttering on the rear elevation of the extension. Both extensions appear to have been built at the same time. One continuous shared flat roof. Existing roof recently replaced and benefits from a 25-year guarantee. To maintain the guarantee, original roofing contractor to undertake weathering works where the new flank wall ties into the existing roof membrane. Require drawings showing finished height of new extension versus existing extension and guttering arrangements. Need to understand how shared guttering arrangement will work once extension completed. Potential solution is raised parapet continuing up to first floor level to separate the two roofs, fascia and guttering arrangements.
-Demolition and rebuilding of party fence wall will require access. Need confirmation from Building Owner regarding duration of access required. Temporary timber hoarding required. Hoarding likely to run diagonally from corner of window nearest party fence wall. Approximately 900mm to 1m working area required. Temporary protection recommended to French doors and adjacent glazing during demolition. Protection can be removed once demolition works are complete. Floor protection required while hoarding remains in place.
-Patio laid with paving slabs. Jointing compound missing between slabs. Open joints throughout. Various slabs settled and moved in multiple locations. Patio generally weathered and worn. No cracks noted in paving slabs.
-Narrow strip between patio edge and party fence wall. Shrubbery planted along boundary. Various chimney pots being used as planters. Items will require temporary relocation during demolition and rebuilding works. Any damaged horticulture to be replaced on a like-for-like basis and equivalent maturity where reasonably practicable.
-Grapevine present immediately adjacent to the party fence wall. Roots appear to run directly alongside the wall line. Originally considered temporary support against hoarding. On reflection, likely that the vine will not survive if left in situ. Preferred option is for the vine to be carefully excavated and temporarily relocated elsewhere within the garden. Vine to be replanted in its original position upon completion of the works. Particular care required due to sentimental value.
-UPVC French doors with full-height glazed windows either side. Externally no visible defects noted to frames. Right-hand French door leaf tested. Opens and closes. Very slight sticking noted at lower left-hand corner against frame. Door closes fully. Locking handle operates correctly. Left-hand French door leaf tested. Very slight catching at lower right-hand corner against frame. Door remains fully operational. Inspection undertaken during temperatures exceeding approximately 35 degrees. Possible thermal expansion of UPVC frame contributing to slight sticking.
-Open joint noted between coving and ceiling. Joint located in vicinity of party wall and existing rear wall. Hairline crack noted within mitred coving junction at party wall/rear elevation corner. Crack continues around corner. Extends onto party wall and rear elevation wall. Approximately 400mm long before fading. Very slight hairline crack noted slightly left of centre on existing rear elevation wall. Crack extends vertically in staggered fashion. Branches towards arch. Fades away.
+RAW: "Most sensible option would be to demolish the full party fence wall because there would only be about 400mm left over once the demolition is done. Safer for everybody. Party wall to be rebuilt in same position. Face brick to remain on the Adjoining Owner's side."
 
-EXAMPLE 2 — FINISHED SCHEDULE OF CONDITION:
+FINISHED CONDITION: "The rear boundary is formed by an existing masonry party fence wall. The wall appears generally plumb and stable with no significant distortion observed at the time of inspection."
 
-EXTERNAL REAR
-The rear boundary between the Building Owner's and Adjoining Owner's properties is formed by an existing masonry party fence wall. The wall appears generally plumb and stable with no significant distortion observed at the time of inspection.
-Immediately adjacent to the party fence wall is a planted border containing various shrubs and planting together with several clay chimney pots utilised as planters. A mature grapevine is present adjacent to and trained against the party fence wall.
-The rear garden is predominantly laid with concrete paving slabs. The pointing between the paving slabs is absent in numerous locations resulting in open joints throughout. Localised settlement and displacement of paving slabs was noted in various locations. General weathering consistent with age and external exposure was observed. No cracking was noted within the paving slabs at the time of inspection.
+FINISHED SITE NOTE: "Consider demolition and reconstruction of the entire wall length rather than leaving an isolated section of approximately 400mm beyond the proposed extension. Reconstructed wall to remain in the same position with the face brick finish retained on the Adjoining Owner's side."
 
-REAR EXTENSION
-The rear elevation incorporates a set of white UPVC French doors with full-height glazed side panels. No visible defects were noted to the glazing units, UPVC frames or surrounding masonry.
-Operational testing of the French doors confirmed satisfactory operation. Minor rubbing was noted to the lower left-hand corner of the right-hand opening leaf and to the lower right-hand corner of the left-hand opening leaf. The locking mechanisms operated correctly and the doors were capable of being fully secured. The inspection was undertaken during exceptionally warm weather conditions in excess of approximately 35°C and thermal expansion of the UPVC frame may have contributed to the minor operational resistance observed.
-An open joint was noted between the coving and ceiling finish extending from the wall adjoining the kitchen towards the party wall and continuing towards the rear elevation wall.
-A hairline crack was noted within the mitred junction of the coving at the junction between the party wall and rear elevation wall. The crack extends around the corner and continues onto the adjoining wall surfaces for approximately 400mm before dissipating.
-A slight hairline crack was noted within the existing rear elevation wall positioned slightly left of centre between the party wall and the arch opening. The crack extends generally vertically before branching towards the arch opening and fading from view.
+RAW: "Existing roof recently replaced, benefits from 25-year guarantee. To maintain the guarantee, original roofing contractor to undertake weathering works where the new flank wall ties into the existing roof membrane."
 
-SITE NOTES
-1. Existing party fence wall proposed to be demolished and reconstructed as a party wall.
-2. Consider demolition and reconstruction of the entire wall length rather than leaving an isolated section of approximately 400mm beyond the proposed extension.
-3. Reconstructed wall to remain in the same position as the existing wall with the face brick finish retained on the Adjoining Owner's side.
-4. Building Owner to confirm the anticipated duration and extent of access required within the Adjoining Owner's property.
-5. Temporary timber hoarding required during demolition and reconstruction works.
-6. Temporary protection required to the French doors and adjacent glazing during demolition works.
-7. Floor protection required beneath all access routes and hoarding locations.
-8. Existing planting, planters and horticulture adjacent to the wall line may require temporary relocation during the works.
-9. Existing grapevine should be considered for temporary excavation and relocation prior to demolition and excavation works, followed by reinstatement upon completion.
-10. Any damaged horticulture to be replaced on a like-for-like basis and with equivalent maturity where reasonably practicable.
-11. Building Owner to provide details of the proposed finished levels, guttering arrangements and relationship between the new extension and the existing shared roof construction.
-12. Existing shared rubber membrane roof is understood to benefit from a 25-year warranty.
-13. Consideration should be given to a parapet detail separating the existing shared roof arrangement.
-14. Clarification required regarding proposed weathering details and protection of the existing roofing warranty.
-15. Consideration should be given to utilising the original roofing contractor for all tie-in and weathering works associated with the proposed extension.
+FINISHED SITE NOTE: "Existing shared rubber membrane roof is understood to benefit from a 25-year warranty. Consideration should be given to utilising the original roofing contractor for all tie-in and weathering works associated with the proposed extension."
+
+RAW: "Grapevine present immediately adjacent to party fence wall. On reflection, likely that the vine will not survive if left in situ. Preferred option is carefully excavate and temporarily relocate. Replant on completion. Particular care due to sentimental value."
+
+FINISHED SITE NOTE: "Existing grapevine should be considered for temporary excavation and relocation prior to demolition works, followed by reinstatement upon completion. Particular care should be taken due to the sentimental value of the planting."
+
+RAW: "Inspection undertaken during temperatures exceeding 35 degrees. Possible thermal expansion of UPVC contributing to slight sticking."
+
+FINISHED: "The inspection was undertaken during exceptionally warm weather conditions in excess of approximately 35°C and thermal expansion of the UPVC frame may have contributed to the minor operational resistance observed."
+
 ---
-
 APPROVED SURVEYOR TERMINOLOGY — use these terms where appropriate:
 
-Masonry/Brickwork: arris, arrises, bed joint, perpend joint, perp joint, brick pier, brickwork reveal, brickwork abutment, spalled brickwork, delaminated brickwork, friable brickwork, bulging brickwork, out-of-plumb brickwork, debonded render, blown render, localised repair, historic repair, eroded mortar joints, recessed mortar joints, fractured brick, displaced brick, loose brick, perished brickwork, weathered brickwork, frost-damaged brickwork.
+Masonry: arris, bed joint, perpend joint, brick pier, brickwork reveal, brickwork abutment, spalled brickwork, delaminated brickwork, friable brickwork, debonded render, blown render, eroded mortar joints, fractured brick, perished brickwork, frost-damaged brickwork.
 
-Structural: chimney breast, lintel, door header, window header, load-bearing wall, timber floor joists, purlin, roof truss, bearing point, bearing wall, rolled steel beam, RSJ.
+Structural: chimney breast, lintel, window header, door header, load-bearing wall, timber floor joists, purlin, bearing point.
 
-Openings/Joinery: window head, window cill, window reveal, door reveal, threshold, sill, lintel bearing, masonry arch, fanlight, door surround, window surround.
+Openings: window head, window cill, window reveal, door reveal, threshold, sill, masonry arch, fanlight.
 
-Floors: screed finish, laminate floor finish, floor settlement, differential movement, localised undulation, shrinkage cracking, settlement-related cracking, trip hazard.
+Floors: screed finish, floor settlement, differential movement, localised undulation, shrinkage cracking, settlement-related cracking.
 
-Ceilings: ceiling deflection, undulating ceiling finish, sagging ceiling, former chimney breast outline visible, fractured plaster finish, water staining, historic staining, decorative cracking.
+Ceilings: ceiling deflection, fractured plaster finish, water staining, historic staining, decorative cracking, former chimney breast outline.
 
-Plaster/Decorations: fractured plaster finish, debonded plaster, blown plaster, blistering paintwork, localised making good, surface blemishing, patch repair, uneven decorative finish.
+Roofs: ridge tile, hip tile, lead flashing, fascia board, soffit board, parapet wall, coping detail, roof abutment.
 
-Roofs: displaced roof tile, fractured roof tile, ridge tile, hip tile, verge detail, lead flashing, fascia board, soffit board, parapet wall, coping detail, roof abutment, rainwater gutter, rainwater downpipe, roofing membrane.
+Defects: hairline crack, settlement crack, thermal movement crack, historic movement, open mortar joint, mortar loss, debonding, delamination, spalling, fracturing, distortion, deflection, bowing, bulging, water ingress, moisture staining.
 
-External: hardstanding, boundary fencing, paved patio, localised settlement, garden retaining wall, crazy paving, raised planting bed, concrete hardstanding, timber decking, soft landscaping.
+Position: abutment, junction, party wall line, head, cill, reveal, soffit, flank wall, return wall, party fence wall, coping stone, string course, parapet, masonry return, corner junction.
 
-Defects: hairline crack, settlement crack, thermal movement crack, differential movement, historic movement, progressive movement, open mortar joint, mortar loss, debonding, delamination, spalling, fracturing, distortion, deflection, bowing, bulging, out of plumb, water ingress, moisture staining, friable, decayed, frost-damaged.
-
-Position/Location: abutment, junction, interface, party wall line, line of junction, head, cill, reveal, soffit, fascia, ridge, verge, flank wall, return wall, party fence wall, coping stone, string course, pier, buttress, parapet, masonry return, corner junction, external elevation, internal elevation.
-
-Approved professional phrases:
+Approved phrases:
 - "No visible defects were noted at the time of inspection."
 - "The brickwork exhibits general weathering consistent with its age."
-- "The brick faces exhibit signs of age-related weathering."
-- "The brick arrises are worn and rounded."
-- "Localised spalling to the brick faces was observed."
 - "Evidence of mortar loss was noted to the bed and perpend joints."
-- "The pointing appears weathered and defective."
-- "The brickwork remains plumb with no visible distortion."
-- "A hairline crack was noted extending from the window head."
-- "A stepped crack was noted within the masonry wall."
 - "The defect appears historic in nature."
 - "No evidence of progressive movement was observed."
-- "The render finish exhibits localised cracking and debonding."
-- "The paving exhibits localised settlement."
 - "The defect is considered cosmetic in nature."
 - "General wear and tear was noted throughout."
 - "No sticking, binding or jamming was noted during operation."
-- "The element was substantially obscured and could not be fully inspected."
 
 Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
