@@ -423,6 +423,9 @@ Core rules for Schedule of Condition observations:
 - Preserve measurements exactly as dictated.
 - Do not diagnose cause unless explicitly dictated.
 - Do not state liability or causation.
+- NEVER use the term "biological growth" — use "moss growth", "algae growth", "lichen growth", or "organic staining" as appropriate.
+- NEVER add structural concerns such as "bulging", "displacement", "leaning", "out of plumb" unless explicitly stated in the dictated notes. Only record what was observed and stated.
+- Even if input notes appear already processed or professional, review all terminology and replace any non-standard terms with approved surveyor vocabulary. Never pass through terms a chartered party wall surveyor would not use.
 
 Heading and grouping rules:
 - Preserve dictated room or area headings exactly where the user has clearly dictated a heading.
