@@ -265,14 +265,6 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
       const rowClass = index % 2 === 0 ? '' : ' class="alt-row"';
       const label = item.item || String(index + 1);
       const title = item.title ? `<strong>${esc(item.title)}:</strong> ` : '';
-      const body = item.body || item.description || (typeof item === 'string' ? item : '');
-
-      html +=
-        `<tr${rowClass}>` +
-        `<td class="cell-ref">${esc(label)}</td>` +
-        `<td class="cell-obs" colspan="2">${title}${esc(body)}</td>` +
-        '</tr>';
-    });
 
       html +=
         `<tr${rowClass}>` +
@@ -292,21 +284,6 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
 
     generalNotes.forEach((note) => {
       html += `<li>${esc(note)}</li>`;
-    });
-
-    html += '</ol></div>';
-    nextSectionNumber += 1;
-  }
-
-  const awardNotes = (data.award_notes || []).filter(n => n && (n.description || n.topic));
-  if (awardNotes.length > 0) {
-    html +=
-      `<div class="soc-section-heading">${nextSectionNumber}. Site Notes</div>` +
-      '<div class="soc-intro-box"><ol class="soc-notes-list">';
-
-    awardNotes.forEach((note) => {
-      const text = note.description || note.topic || '';
-      html += `<li>${esc(text)}</li>`;
     });
 
     html += '</ol></div>';
@@ -402,76 +379,27 @@ Required structure:
 
 WORKED EXAMPLES — STYLE AND FORMAT REFERENCE ONLY
 
-These examples show how raw dictated notes are transformed into professional Schedule of Condition observations. Do NOT copy any content from these examples. Apply only the writing style, structure and transformation standard to the new notes provided.
+Do NOT copy any content from these examples. Use only the writing style and transformation standard.
 
----
-EXAMPLE 1 — RAW vs FINISHED (excerpt):
+RAW: "noticeable perished brickwork on front face of chimney. Timber framing around bonnet poor condition, decay and rot and paint flaking. Open joint on the mitre running all the way through."
+FINISHED: "Noticeable perished brickwork was observed to the front face of the chimney stack. The timber framing surrounding the front bonnet roof is in poor condition, exhibiting evidence of decay, rot and paint deterioration. An open mitre joint is present within the timber framework, extending continuously along the joint."
 
-RAW: "There's noticeable perished brickwork on the front face of the chimney. The timber framing around the bonnet is in fairly poor condition, evidence of decay and rot and paint flaking. Open joint on the mitre running all the way through."
+RAW: "severe crack bottom left corner of left window extending diagonally downwards 900mm before fading, various cracks stemming away, staggers into slight cracking running vertically to top of first brick"
+FINISHED: "A significant crack extends diagonally downward from the bottom left-hand corner of the left-hand rear window for approximately 900mm before dissipating. Various subsidiary cracks branch from this defect. The crack transitions into lighter cracking adjacent to the right-hand side of the air vent, extending vertically towards the first brick course."
 
-FINISHED: "Noticeable perished brickwork was observed to the front face of the chimney stack. The timber framing surrounding the front bonnet roof is in poor condition, exhibiting evidence of decay, rot, paint deterioration and flaking finishes. An open mitre joint is present within the timber framework, extending continuously along the joint."
+RAW: "French doors open and close no issues, bit stiff unlocking, handle slightly stiff, secondary opener sticks when closing needs forcing, evidence of UPVC shaving from rubbing"
+FINISHED: "The French doors were tested and open and close satisfactorily. The locking mechanism and opening action are slightly stiff. The secondary opening leaf sticks when closing and requires additional force. Evidence of UPVC abrasion is visible where the sash has been rubbing against the frame."
 
-RAW: "Actually, out of the bottom left corner of the left window there is a severe crack extending diagonally downwards approximately 900mm before fading away and then that has various cracks stemming away. And then it staggers into slight cracking running vertically to the top of the first brick."
+RAW: "most sensible option demolish full party fence wall, only 400mm left, safer for everybody, rebuild in same position, face brick remain on adjoining owner side"
+FINISHED CONDITION: "The rear boundary is formed by an existing masonry party fence wall, appearing generally plumb and stable."
+FINISHED SITE NOTE: "Consider demolition and reconstruction of the entire wall length rather than leaving an isolated section of approximately 400mm. Reconstructed wall to remain in the same position with the face brick finish retained on the Adjoining Owner's side."
 
-FINISHED: "A significant crack extends diagonally downward from the bottom left-hand corner of the left-hand rear window for approximately 900mm before dissipating. Various subsidiary cracks branch from this defect. The crack transitions into lighter cracking adjacent to the right-hand side of the air vent and extends vertically towards the first brick course."
+RAW: "grapevine present adjacent party fence wall, on reflection likely vine will not survive if left in situ, preferred option carefully excavate and temporarily relocate, replant on completion, particular care sentimental value"
+FINISHED SITE NOTE: "The existing grapevine should be considered for temporary excavation and relocation prior to demolition works, followed by reinstatement upon completion. Particular care should be taken during removal and replanting due to the sentimental value of the planting."
 
-RAW: "The French doors open and close no issues. A bit stiff when unlocking but it does open and close fine. Handle slightly stiff. Secondary opener sticks when closing, needs to be forced. Evidence of UPVC shaving from rubbing against the frame."
+APPROVED TERMINOLOGY: arris, bed joint, perpend joint, brickwork reveal, brickwork abutment, spalled brickwork, delaminated, friable, debonded render, blown render, eroded mortar joints, fractured brick, perished brickwork, window head, window cill, window reveal, door reveal, masonry arch, floor settlement, differential movement, ceiling deflection, fractured plaster, water staining, historic staining, lead flashing, parapet wall, coping detail, roof abutment, hairline crack, settlement crack, thermal movement crack, open mortar joint, mortar loss, debonding, delamination, spalling, distortion, deflection, bowing, bulging, water ingress, moisture staining.
 
-FINISHED: "The French doors leading to the garden were tested and open and close satisfactorily. The locking mechanism and opening action are slightly stiff. The handle exhibits slight stiffness when operated. The secondary opening leaf sticks when closing and requires additional force. Evidence of UPVC abrasion is visible where the sash has been rubbing against the frame."
-
-RAW: "Party wall not visible due to floor to ceiling fitted wardrobe. Lined internally. No access."
-
-FINISHED: "The party wall is concealed behind a floor-to-ceiling fitted wardrobe installation. The fitted wardrobe is lined internally and no access was available to inspect the party wall."
-
----
-EXAMPLE 2 — RAW vs FINISHED including site notes (excerpt):
-
-RAW: "Most sensible option would be to demolish the full party fence wall because there would only be about 400mm left over once the demolition is done. Safer for everybody. Party wall to be rebuilt in same position. Face brick to remain on the Adjoining Owner's side."
-
-FINISHED CONDITION: "The rear boundary is formed by an existing masonry party fence wall. The wall appears generally plumb and stable with no significant distortion observed at the time of inspection."
-
-FINISHED SITE NOTE: "Consider demolition and reconstruction of the entire wall length rather than leaving an isolated section of approximately 400mm beyond the proposed extension. Reconstructed wall to remain in the same position with the face brick finish retained on the Adjoining Owner's side."
-
-RAW: "Existing roof recently replaced, benefits from 25-year guarantee. To maintain the guarantee, original roofing contractor to undertake weathering works where the new flank wall ties into the existing roof membrane."
-
-FINISHED SITE NOTE: "Existing shared rubber membrane roof is understood to benefit from a 25-year warranty. Consideration should be given to utilising the original roofing contractor for all tie-in and weathering works associated with the proposed extension."
-
-RAW: "Grapevine present immediately adjacent to party fence wall. On reflection, likely that the vine will not survive if left in situ. Preferred option is carefully excavate and temporarily relocate. Replant on completion. Particular care due to sentimental value."
-
-FINISHED SITE NOTE: "Existing grapevine should be considered for temporary excavation and relocation prior to demolition works, followed by reinstatement upon completion. Particular care should be taken due to the sentimental value of the planting."
-
-RAW: "Inspection undertaken during temperatures exceeding 35 degrees. Possible thermal expansion of UPVC contributing to slight sticking."
-
-FINISHED: "The inspection was undertaken during exceptionally warm weather conditions in excess of approximately 35°C and thermal expansion of the UPVC frame may have contributed to the minor operational resistance observed."
-
----
-APPROVED SURVEYOR TERMINOLOGY — use these terms where appropriate:
-
-Masonry: arris, bed joint, perpend joint, brick pier, brickwork reveal, brickwork abutment, spalled brickwork, delaminated brickwork, friable brickwork, debonded render, blown render, eroded mortar joints, fractured brick, perished brickwork, frost-damaged brickwork.
-
-Structural: chimney breast, lintel, window header, door header, load-bearing wall, timber floor joists, purlin, bearing point.
-
-Openings: window head, window cill, window reveal, door reveal, threshold, sill, masonry arch, fanlight.
-
-Floors: screed finish, floor settlement, differential movement, localised undulation, shrinkage cracking, settlement-related cracking.
-
-Ceilings: ceiling deflection, fractured plaster finish, water staining, historic staining, decorative cracking, former chimney breast outline.
-
-Roofs: ridge tile, hip tile, lead flashing, fascia board, soffit board, parapet wall, coping detail, roof abutment.
-
-Defects: hairline crack, settlement crack, thermal movement crack, historic movement, open mortar joint, mortar loss, debonding, delamination, spalling, fracturing, distortion, deflection, bowing, bulging, water ingress, moisture staining.
-
-Position: abutment, junction, party wall line, head, cill, reveal, soffit, flank wall, return wall, party fence wall, coping stone, string course, parapet, masonry return, corner junction.
-
-Approved phrases:
-- "No visible defects were noted at the time of inspection."
-- "The brickwork exhibits general weathering consistent with its age."
-- "Evidence of mortar loss was noted to the bed and perpend joints."
-- "The defect appears historic in nature."
-- "No evidence of progressive movement was observed."
-- "The defect is considered cosmetic in nature."
-- "General wear and tear was noted throughout."
-- "No sticking, binding or jamming was noted during operation."
+Approved phrases: "No visible defects were noted at the time of inspection." / "The brickwork exhibits general weathering consistent with its age." / "Evidence of mortar loss was noted to the bed and perpend joints." / "The defect appears historic in nature." / "No evidence of progressive movement was observed." / "No sticking, binding or jamming was noted during operation." / "The defect is considered cosmetic in nature."
 
 Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
@@ -517,7 +445,7 @@ What must NOT go into normal SOC condition rows:
 
 Where these items should go:
 - Put surveyor reminders and calculations in actions[].
-- Put site-specific matters, access notes, methodology points, and follow-up items in award_notes[].
+- Put matters relevant to the Party Wall Award in award_notes[].
 - Put required emails in emails_required[].
 - If the user clearly wants these contextual matters retained in the SOC, include them only in a final section titled "Notes / Observations", not mixed into the physical condition sections.
 
@@ -532,7 +460,7 @@ Actions:
 - Examples: calculate enclosure area, confirm wall status, request access, confirm fence ownership, obtain engineer comment.
 
 Award notes:
-- Create award_notes[] for matters arising from the inspection that are relevant to access, methodology, protection, horticulture, or any other site-specific consideration.
+- Create award_notes[] for matters that may need clauses or consideration in the Party Wall Award.
 - Examples: enclosure, line of junction access, fence removal/reinstatement, horticultural protection, damage/replacement obligations.
 
 Introduction:
@@ -596,8 +524,8 @@ ${message}
   try {
     return JSON.parse(raw.replace(/```json|```/g, '').trim());
   } catch (parseErr) {
-    console.error('[generate-soc] JSON parse failed. Raw output:', raw.slice(0, 500));
-    throw new Error('GPT-4o returned invalid JSON — output may have been truncated');
+    console.error('[generate-soc] JSON parse failed:', raw.slice(0, 300));
+    throw new Error('GPT-4o returned invalid JSON');
   }
 }
 
@@ -706,7 +634,6 @@ export default async function handler(req, res) {
     let dataForRender = final_soc_data || structured_data || null;
 
     if (!dataForRender) {
-      // Pull from soc_notes if session_id provided, otherwise fall back to message
       let notesText = message || '';
 
       if (session_id) {
@@ -715,11 +642,10 @@ export default async function handler(req, res) {
           .select('sequence, raw_note, current_section')
           .eq('session_id', session_id)
           .order('sequence', { ascending: true });
-
         if (!notesError && sessionNotes?.length) {
           notesText = sessionNotes.map(n => {
-            const section = n.current_section ? `[${n.current_section}] ` : '';
-            return `${section}${n.raw_note}`;
+            const sec = n.current_section ? '[' + n.current_section + '] ' : '';
+            return sec + n.raw_note;
           }).join('\n');
         }
       }
@@ -729,6 +655,7 @@ export default async function handler(req, res) {
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
+
       if (!apiKey) {
         return res.status(500).json({ error: 'Missing OpenAI API key' });
       }
