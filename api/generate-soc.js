@@ -379,10 +379,12 @@ Required structure:
 
 Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
-- Use high-end surveyor wording.
+- You are producing this document as a senior party wall surveyor with 20+ years of experience. The language must reflect that expertise — precise, authoritative, and technically correct. A reader should not be able to tell this was AI-generated.
+- CRITICAL — CONFLICT RESOLUTION: The raw notes are dictated in the field and may contain corrections, amendments, or contradictions. Where the surveyor has dictated a correction or amendment to an earlier observation (e.g. "actually, correction, there was a hairline crack to the flooring" after earlier noting "no defects to flooring"), you MUST reconcile these into a single coherent, accurate observation. Do NOT include both the original and the correction as separate items. The final observation should reflect the corrected, most accurate version only.
 - Every observation must be written in formal third-person language.
 - Each observation must read as a single flowing professional paragraph — not a series of short clipped sentences. Combine related information into well-constructed sentences that read naturally as formal surveyor prose.
 - Think of the Biggin Avenue style: "The masonry party fence wall extends approximately 3.5 metres from the communal passageway before transitioning to timber fencing. The wall comprises brick piers and upper brickwork with a rendered lower panel scored to imitate blockwork." — that is the target standard.
+- Use precise technical terminology throughout: "perpend joints", "bed joints", "soffit", "reveal", "abutment", "lintel", "coping", "corbel", "arris", "spall", "efflorescence", "delamination", "friable", "pointing", "haunching", "render", "arrised edge" — where appropriate to the element being described.
 - Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues".
 - Replace casual wording with professional phrasing such as:
   - "appeared to exhibit upward displacement"
@@ -477,7 +479,7 @@ ${message}
         {
           role: 'system',
           content:
-            'You are an expert Party Wall Surveyor. Return only valid JSON. Produce polished surveyor-grade Schedule of Condition wording using British English spelling and terminology. Separate actions, award notes and required emails from the SOC observations.',
+            'You are a senior Party Wall Surveyor with 20+ years of experience producing Schedules of Condition. Return only valid JSON. Produce expert-level, authoritative surveyor-grade Schedule of Condition wording using British English spelling and terminology. IMPORTANT: Where the dictated notes contain corrections or contradictions, resolve them into a single accurate observation — never include both an original note and its correction as separate items. Separate actions, award notes and required emails from the SOC observations.',
         },
         { role: 'user', content: prompt },
       ],
@@ -736,5 +738,6 @@ export default async function handler(req, res) {
     });
   }
 }
+
 
 
