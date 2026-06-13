@@ -640,6 +640,7 @@ ${message}
     body: JSON.stringify({
       model: 'gpt-4o',
       temperature: 0.15,
+      max_tokens: 4000,
       messages: [
         {
           role: 'system',
@@ -659,7 +660,12 @@ ${message}
 
   const raw = payload.choices?.[0]?.message?.content || '';
 
-  return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  try {
+    return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  } catch (parseErr) {
+    console.error('[generate-soc] JSON parse failed. Raw output:', raw.slice(0, 500));
+    throw new Error('GPT-4o returned invalid JSON — output may have been truncated');
+  }
 }
 
 async function getSocDate(projectId, aoId, selectedAO) {
