@@ -3,14 +3,10 @@
 // returns "Noted." or an amendment confirmation.
 
 import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -67,17 +63,24 @@ Rules:
 Previous notes this session:
 ${previousContext}`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: 0.1,
-      max_tokens: 60,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: note }
-      ]
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0.1,
+        max_tokens: 60,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: note }
+        ]
+      })
     });
-
-    const aiResponse = completion.choices[0]?.message?.content?.trim() || 'Noted.';
+    const openaiData = await openaiRes.json();
+    const aiResponse = openaiData.choices?.[0]?.message?.content?.trim() || 'Noted.';
 
     // ── 4. Determine current section ────────────────────────────────────────
     // If this note is a room declaration, extract the section name
