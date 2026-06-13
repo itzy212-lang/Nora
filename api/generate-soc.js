@@ -398,6 +398,45 @@ Core rules for Schedule of Condition observations:
 - Do not diagnose cause unless explicitly dictated.
 - Do not state liability or causation.
 
+
+APPROVED SURVEYOR TERMINOLOGY — use these terms where appropriate:
+
+Masonry/Brickwork: arris, arrises, bed joint, perpend joint, perp joint, brick pier, brickwork reveal, brickwork abutment, spalled brickwork, delaminated brickwork, friable brickwork, bulging brickwork, out-of-plumb brickwork, debonded render, blown render, localised repair, historic repair, eroded mortar joints, recessed mortar joints, fractured brick, displaced brick.
+
+Structural: chimney breast, lintel, load-bearing wall, timber floor joists, purlin, roof truss, bearing point, bearing wall.
+
+Openings/Joinery: window head, window cill, window reveal, door reveal, threshold, sill, lintel bearing, masonry arch.
+
+Floors: screed finish, laminate floor finish, floor settlement, differential movement, localised undulation, shrinkage cracking, settlement-related cracking.
+
+Ceilings: ceiling deflection, undulating ceiling finish, sagging ceiling, former chimney breast outline visible, fractured plaster finish, water staining, historic staining.
+
+Plaster/Decorations: fractured plaster finish, debonded plaster, blown plaster, blistering paintwork, localised making good, surface blemishing.
+
+Roofs: displaced roof tile, fractured roof tile, ridge tile, hip tile, verge detail, lead flashing, fascia board, soffit board, parapet wall, coping detail, roof abutment.
+
+External: hardstanding, boundary fencing, paved patio, localised settlement, garden retaining wall, crazy paving, raised planting bed.
+
+Defects: hairline crack, settlement crack, thermal movement crack, differential movement, historic movement, progressive movement, open mortar joint, mortar loss, debonding, delamination, spalling, fracturing, distortion, deflection, bowing, bulging, out of plumb, water ingress, moisture staining, friable, decayed, frost-damaged.
+
+Position/Location: abutment, junction, interface, party wall line, line of junction, head, cill, reveal, soffit, fascia, ridge, verge, flank wall, return wall, party fence wall, coping stone, string course, pier, buttress, parapet, masonry return.
+
+Approved professional phrases:
+- "No visible defects were noted at the time of inspection."
+- "The brickwork exhibits general weathering consistent with its age."
+- "Localised spalling to the brick faces was observed."
+- "Evidence of mortar loss was noted to the bed and perpend joints."
+- "The pointing appears weathered and defective."
+- "The brickwork remains plumb with no visible distortion."
+- "A hairline crack was noted extending from the window head."
+- "A stepped crack was noted within the masonry wall."
+- "The defect appears historic in nature."
+- "No evidence of progressive movement was observed."
+- "The render finish exhibits localised cracking and debonding."
+- "The paving exhibits localised settlement."
+- "The defect is considered cosmetic in nature."
+- "General wear and tear was noted throughout."
+
 Heading and grouping rules:
 - Preserve dictated room or area headings exactly where the user has clearly dictated a heading.
 - A standalone heading line such as "Rear Elevation", "First Floor Landing", "Stairs", "Utility Area to Rear of Garage", "Cloakroom / WC off Utility", "Garage Roof", "Fence" or "Front Driveway / Paving" must become a section title exactly as written.
