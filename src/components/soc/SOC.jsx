@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
+import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -16,6 +17,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [textInput, setTextInput] = useState('');
   const [processing, setProcessing] = useState(false);
   const [pdfProcessing, setPdfProcessing] = useState(false);
+  const [oneDriveOverlay, setOneDriveOverlay] = useState(null); // { fileBase64, fileName, mimeType }
   const [selectedAOIndex, setSelectedAOIndex] = useState('0');
   const [previewHtml, setPreviewHtml] = useState('');
   const [structuredData, setStructuredData] = useState(null);
@@ -429,6 +431,51 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     }
   }, [onOpenComposer, previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
 
+  const handleSaveAndEmail = useCallback(async () => {
+    if (!previewHtml) return;
+    setPdfProcessing(true);
+    try {
+      const filenameBase = selectedAOAddress || projectAddress || 'Schedule of Condition';
+      const safeFilename = `Schedule of Condition - ${filenameBase}`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+      const response = await fetch('/api/export-soc-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: previewHtml,
+          filename: `${safeFilename}.pdf`,
+          ao_address: selectedAOAddress,
+          project_id: projectId || null,
+          ao_id: selectedAO?.id || selectedAO?.num || null,
+          user_id: 'help@sq1consulting.co.uk',
+        }),
+      });
+
+      if (!response.ok) throw new Error('Could not generate PDF.');
+
+      const blob = await response.blob();
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Open OneDrive folder selector overlay
+      setOneDriveOverlay({
+        fileName: `${safeFilename}.pdf`,
+        fileBase64: base64,
+        mimeType: 'application/pdf',
+        safeFilename,
+        base64ForEmail: base64,
+      });
+    } catch (err) {
+      alert('Error preparing PDF: ' + (err.message || err));
+    } finally {
+      setPdfProcessing(false);
+    }
+  }, [previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
+
   const contacts = getProjectContacts();
 
   // ── Setup phase ────────────────────────────────────────────────────────────
@@ -562,6 +609,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             setPhase('recording');
           }} style={s.secondaryBtn}>Back</button>
           <button onClick={sendSOCByEmail} disabled={pdfProcessing} style={{ ...s.secondaryBtn, opacity: pdfProcessing ? 0.65 : 1 }}>{pdfProcessing ? 'Preparing…' : 'Send SOC by Email'}</button>
+          <button onClick={handleSaveAndEmail} disabled={pdfProcessing} style={{ ...s.secondaryBtn, opacity: pdfProcessing ? 0.65 : 1, background: '#10b981', color: '#fff', border: 'none' }}>
+            {pdfProcessing ? 'Preparing…' : '💾 Save & Email'}
+          </button>
           <button onClick={printPreview} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }} disabled={pdfProcessing}>
             {pdfProcessing ? 'Generating PDF…' : 'Download PDF'}
           </button>
@@ -625,6 +675,29 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
       )}
     </div>
+
+      {oneDriveOverlay && (
+        <SaveToOneDriveOverlay
+          projectId={projectId}
+          aoIndex={selectedAOIndex}
+          fileName={oneDriveOverlay.fileName}
+          fileBase64={oneDriveOverlay.fileBase64}
+          mimeType={oneDriveOverlay.mimeType}
+          onSaved={({ web_url }) => {
+            setOneDriveOverlay(null);
+            // After saving, open email composer with the PDF attached
+            onOpenComposer?.({
+              mode: 'compose',
+              to: '',
+              subject: `Schedule of Condition - ${selectedAOAddress || projectAddress || ''}`,
+              body: `Dear [Recipient]\n\nPlease find attached the Schedule of Condition prepared in connection with the proposed works at ${projectAddress || '[Building Owner property]'}.\n\nThis schedule records the existing condition of the adjoining property at ${selectedAOAddress || '[Adjoining Owner property]'} prior to commencement of the notified works.\n\nKind Regards,`,
+              projectId,
+              attachments: [{ name: oneDriveOverlay.fileName, type: 'application/pdf', data: oneDriveOverlay.base64ForEmail }],
+            });
+          }}
+          onClose={() => setOneDriveOverlay(null)}
+        />
+      )}
   );
 }
 
@@ -661,6 +734,7 @@ const s = {
   draftParty: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' },
   draftBody: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 },
 };
+
 
 
 
