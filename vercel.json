@@ -18,12 +18,35 @@
     }
   ],
   "functions": {
-    "api/generate-doc.js":       { "maxDuration": 60 },
-    "api/send-loa.js":           { "maxDuration": 60 },
-    "api/ely-smart.js":          { "maxDuration": 60 },
-    "api/cdm-extract.js":        { "maxDuration": 60 },
-    "api/transcribe.js":         { "maxDuration": 60 },
-    "api/soc-vision.js":         { "maxDuration": 60 },
-    "api/detect-appointment.js": { "maxDuration": 60 }
+    "api/generate-doc.js": {
+      "maxDuration": 60
+    },
+    "api/send-loa.js": {
+      "maxDuration": 60
+    },
+    "api/ely-smart.js": {
+      "maxDuration": 60
+    },
+    "api/cdm-extract.js": {
+      "maxDuration": 60
+    },
+    "api/transcribe.js": {
+      "maxDuration": 60
+    },
+    "api/soc-vision.js": {
+      "maxDuration": 60
+    },
+    "api/detect-appointment.js": {
+      "maxDuration": 60
+    },
+    "api/generate-soc.js": {
+      "maxDuration": 60
+    },
+    "api/process-soc-note.js": {
+      "maxDuration": 60
+    },
+    "api/export-soc-pdf.js": {
+      "maxDuration": 60
+    }
   }
 }
