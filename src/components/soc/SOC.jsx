@@ -23,6 +23,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [structuredData, setStructuredData] = useState(null);
   const [reportId, setReportId] = useState(null);
   const [partyDrafts, setPartyDrafts] = useState([]);
+  const [sessionId] = useState(() => uid()); // stable for the lifetime of this inspection
 
   const recognitionRef = useRef(null);
   const accumulatedRef = useRef(''); // all finalised speech across restarts since last Send
@@ -292,7 +293,24 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       const reply = await askEly(note, photo || null);
       setMessages(prev => prev.map(m => m.pending ? { ...m, content: reply, pending: false } : m));
     } else {
-      setMessages(prev => prev.map(m => m.pending ? { ...m, content: 'Noted.', pending: false } : m));
+      // Send to per-note SOC processor
+      try {
+        const res = await fetch('/api/process-soc-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note: userContent,
+            session_id: sessionId,
+            project_id: projectId || null,
+            ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const reply = data.response || 'Noted.';
+        setMessages(prev => prev.map(m => m.pending ? { ...m, content: reply, pending: false } : m));
+      } catch {
+        setMessages(prev => prev.map(m => m.pending ? { ...m, content: 'Noted.', pending: false } : m));
+      }
     }
   }, [stopRecording, textInput, socPhoto, isQuestion, askEly]);
 
@@ -328,7 +346,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         body: JSON.stringify({
           message: text,
           project_id: projectId,
-          session_id: uid(),
+          session_id: sessionId,
           ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
           ao_name: aoName(selectedAO),
           ao_names: aoName(selectedAO),
