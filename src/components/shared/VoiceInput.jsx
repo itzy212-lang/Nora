@@ -364,19 +364,22 @@ export default function VoiceInput({
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
       let latestInterim = '';
+      let finalText = '';
 
-      for (let i = 0; i < event.results.length; i += 1) {
+      // Process only from resultIndex to avoid re-processing previous results
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
-
         if (!spoken) continue;
 
-        sessionResultsRef.current[i] = spoken;
-
-        if (!event.results[i].isFinal && i >= event.resultIndex) {
+        if (event.results[i].isFinal) {
+          finalText += (finalText ? ' ' : '') + spoken;
+          sessionResultsRef.current[i] = spoken;
+        } else {
           latestInterim = spoken;
         }
       }
 
+      // For finals, also collect all previous finals in this session
       const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
       const fullText = mergeWithoutRepeating(committedRef.current, sessionText);
 
