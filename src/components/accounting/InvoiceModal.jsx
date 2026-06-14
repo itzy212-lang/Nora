@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import sb from '../supabaseClient';
+import sb from '../../supabaseClient';
 
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
