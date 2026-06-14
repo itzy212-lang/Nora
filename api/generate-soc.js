@@ -425,24 +425,31 @@ Core rules for Schedule of Condition observations:
   - "hollow sounding when tapped" (never "sounds hollow when walked on")
 
 LAYMAN TO SURVEYOR CONVERSION TABLE — always apply these conversions:
-- "looks okay" / "looks fine" / "no issues" → "No visible defects were noted at the time of inspection."
-- "opens and closes fine" / "opens and closes no issues" → "operated satisfactorily without sticking, binding or jamming"
+- "looks okay" / "looks fine" / "no issues" / "nothing major" / "nothing of concern" / "no obvious concerns" → "No visible defects were noted at the time of inspection."
+- "opens and closes fine" / "opens and closes no issues" / "window works fine" → "operated satisfactorily without sticking, binding or jamming"
 - "sounds hollow" / "hollow when walked on" → "hollow sounding when tapped"
-- "feels level" / "floor feels okay" → "No uneven sections or movement was noted to the floor finish"
-- "looks dry" / "appears dry" → "Appears dry at the time of inspection with no evidence of active moisture ingress"
-- "looks old" / "appears old" (for cracks) → OMIT — age of crack is not recorded unless it is staining or moisture related
-- "historical" / "old" (for cracks) → OMIT entirely — all defects are existing condition, age is not stated for cracks
-- "historical" / "old" (for staining or water ingress) → "historic" — "Evidence of historic water staining was noted"
-- "crumbling" / "coming away" / "breaking apart" / "falling apart" → "perished"
+- "feels level" / "floor feels okay" / "floor level" → "No uneven sections or movement was noted to the floor finish"
+- "looks dry" / "appears dry" / "nothing wet" / "no active leaks" → "Appears dry at the time of inspection with no evidence of active moisture ingress"
+- "looks old" / "appears old" / "old" (for cracks) → OMIT entirely — never describe a crack as old or historic
+- "old staining" / "historic staining" / "old leak" → "Evidence of historic water staining was noted. The area appears dry at the time of inspection."
+- "historical" / "old" (for staining or water ingress only) → "historic"
+- "crumbling" / "coming away" / "breaking apart" / "falling apart" / "flaking off" → "perished"
 - "decayed" / "deteriorated" (brickwork) → "perished brickwork"
-- "weathered badly" / "badly weathered" → "perished" or "significantly weathered"
-- "next to" / "butting" / "beside" (wall meeting wall) → "abutting" — e.g. "the wall abutting the front elevation"
-- "next to" / "beside" (physical proximity without contact) → "adjacent to" — e.g. "adjacent to the window opening"
+- "weathered badly" / "badly weathered" / "worn away" (brickwork) → "perished" or "significantly weathered"
+- "pointing worn" / "pointing coming away" / "pointing deteriorated" / "pointing a bit worn" → "the pointing appears weathered and defective"
+- "mortar worn" / "mortar weathered" / "mortar looks a bit worn" → "evidence of mortar loss was noted to the bed and perpend joints"
+- "next to" / "butting" / "beside" (wall meeting wall, ceiling meeting wall) → "abutting" — "the wall abutting the front elevation wall"
+- "next to" / "beside" (physical proximity without structural contact) → "adjacent to" — "adjacent to the window opening"
+- "back door" / "back door opening" → "rear door opening"
+- "outside wall" / "outer wall" → "external wall" or "rear elevation wall" as appropriate
+- "gap between" (wall and element) → "open joint at the junction between"
 - "running down to the skirting" / "goes to the skirting" → "extending downward to the top of the skirting board"
 - "biological growth" → "moss growth" or "algae growth" or "lichen growth" or "organic staining"
-- "a bit of mortar missing" / "mortar worn away" → "evidence of mortar loss was noted to the bed and perpend joints"
-- "pointing worn" / "pointing deteriorated" → "the pointing appears weathered and defective"
-- "gap between" (wall and element) → "open joint at the junction between"
+- "sealant looks old" / "sealant worn" / "sealant deteriorated" → "the sealant exhibits age-related deterioration"
+- "no structural issues" / "no structural concerns" → "no structural defects were noted"
+- "The floor feels level" / "Floor level" → "No uneven sections were noted to the floor finish"
+- "appears sound" (brickwork) → "no visible defects were noted to the brickwork"
+- "not considered significant" / "not unusual" → OMIT — never qualify whether a defect is significant, just record it
 
 CRACK DIRECTION AND DESCRIPTION — always use these terms:
 - Straight up/down → "extending vertically"
@@ -459,10 +466,18 @@ ABUTTING vs ADJACENT TO — apply correct term based on context:
 - Crack or defect running to a fixed element → "extending to the abutment of" or "terminating at the junction with"
 - Physical proximity without structural connection → "adjacent to" — "adjacent to the window opening", "adjacent to the radiator"
 
-BUNDLING RULE — never combine multiple observations into one row:
-- Each distinct element gets its own observation row — ceiling, floor, wall, window, door, skirting are always separate
-- Each distinct defect gets its own row — a crack and a stain on the same wall are two separate rows
-- "No visible defects" observations can be combined only if they cover the same element type in the same location
+BUNDLING RULE — this is critical. Each observation must be its own row. Never combine:
+- Wall observations and ceiling observations → always separate rows
+- Wall observations and floor observations → always separate rows
+- A crack and a stain on the same wall → always separate rows
+- A defect and an "no visible defects" statement → always separate rows
+- Two different cracks in the same room → always separate rows
+- A finish description and a defect → always separate rows
+- A door/window test result and a crack near that door/window → always separate rows
+- Sealant condition and wall/tile condition → always separate rows
+- Roof timbers and felt staining → always separate rows
+- Any two distinct observations, however small → separate rows
+The ONLY time two things can share a row is if they are the same defect type on the same element in the same location.
 
 - Where a defect affects operation, state that clearly as an existing operational defect.
 - Preserve measurements exactly as dictated.
