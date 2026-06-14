@@ -345,7 +345,7 @@ Required structure:
       "title": "exact dictated heading where available",
       "rows": [
         {
-          "ref": "RE-01",
+          "ref": "DERIVE a 2-4 letter prefix from the section heading (e.g. EFE- for External Front Elevation, HW- for Hallway, FRR- for Front Reception Room, KT- for Kitchen, RE- for Rear Elevation, GD- for Garden, FL- for Landing, FB- for Front Bedroom, RB- for Rear Bedroom, BR- for Bathroom, LF- for Loft, RC- for Rear Chimney) followed by a sequential number starting at 01. NEVER use RE- for every section.",
           "observation": "professionally drafted surveyor-grade condition observation",
           "action": "Record only"
         }
@@ -493,6 +493,7 @@ Heading and grouping rules:
 - If the user does not dictate a heading, create a sensible inspection-area heading, but do not create unnecessary micro-sections.
 - Keep windows, floors, ceilings, skirtings and doors within the same room or area unless the user dictated them as separate headings.
 - Section 2 must be the first dictated room or inspection area. Section 1 is added automatically by the system.
+- REF NUMBERING: Derive a unique 2-4 letter prefix from each section heading. Examples: External Front Elevation → EFE-, Hallway → HW-, Front Reception Room → FRR-, Kitchen → KT-, Rear Elevation → RE-, Garden → GD-, Landing → FL-, Front Bedroom → FB-, Rear Bedroom → RB-, Bathroom → BR-, Loft → LF-, Rear Chimney → RC-, Party Wall → PW-, Dining Room → DR-, Living Room → LR-. NEVER use RE- as a universal prefix for all sections. Each section must have its own unique prefix. Numbering restarts at 01 for each new section.
 
 What must NOT go into normal SOC condition rows:
 - reminders to the surveyor
