@@ -290,6 +290,21 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     nextSectionNumber += 1;
   }
 
+  const awardNotes = (data.award_notes || []).filter(n => n && (n.description || n.topic));
+  if (awardNotes.length > 0) {
+    html +=
+      `<div class="soc-section-heading">${nextSectionNumber}. Site Notes</div>` +
+      '<div class="soc-intro-box"><ol class="soc-notes-list">';
+
+    awardNotes.forEach((note) => {
+      const text = note.description || note.topic || '';
+      html += `<li>${esc(text)}</li>`;
+    });
+
+    html += '</ol></div>';
+    nextSectionNumber += 1;
+  }
+
   html +=
     `<div class="soc-section-heading">${nextSectionNumber}. Crack Classification</div>` +
     '<div class="soc-intro-box"><p>The following classification table is used as reference when describing crack widths observed during this inspection:</p></div>' +
@@ -464,14 +479,14 @@ RAW: "Walls are a mix of paint and tiles. Tiles look fine, no cracks. There's a 
 FINISHED:
 KT-01 | The walls are partly painted and partly tiled. No visible defects were noted at the time of inspection. | Record only
 KT-02 | A hairline crack was noted above the rear door opening extending vertically towards the ceiling. | Record only
-KT-03 | An open joint was observed at the junction between the worktop and the adjoining wall surface in several locations. | Record only
+KT-03 | An open joint was observed at the junction between the worktop and the adjoining wall in several locations. | Record only
 KT-04 | The tiled floor finish was tested and several tiles were found to be hollow sounding when tapped. No cracked tiles were observed at the time of inspection. | Record only
 KT-05 | Evidence of staining was noted to the ceiling adjacent to the extractor unit. The area appears dry at the time of inspection with no evidence of active water ingress. | Record only
 
 RAW: "Brickwork looks reasonable. Mortar joints look a bit worn in places. Some pointing above the back door is coming away. No visible defects to the windows from ground level. Small crack next to the rendered area in the corner of the opening."
 
 FINISHED:
-RE-01 | The brickwork appears generally satisfactory. Evidence of mortar loss was noted to the bed and perpend joints in places. | Record only
+RE-01 | The brickwork appears generally satisfactory. The pointing exhibits evidence of deterioration in places. | Record only
 RE-02 | The pointing above the rear door opening appears weathered and defective. | Record only
 RE-03 | No visible defects were noted to the window openings from ground level inspection. | Record only
 RE-04 | A hairline crack was noted adjacent to the rendered finish at the corner of the rear door opening. | Record only
@@ -537,7 +552,7 @@ LAYMAN TO SURVEYOR CONVERSION TABLE — always apply these conversions:
 - "decayed" / "deteriorated" (brickwork) → "perished brickwork"
 - "weathered badly" / "badly weathered" / "worn away" (brickwork) → "perished" or "significantly weathered"
 - "pointing worn" / "pointing coming away" / "pointing deteriorated" / "pointing a bit worn" / "mortar worn" / "mortar weathered" / "mortar joints worn" / "mortar joints a bit worn" / "mortar joints weathered" → "the pointing appears weathered and defective"
-- CRITICAL: NEVER say "mortar joints" when describing the condition of brickwork jointing. Always say "pointing". "Mortar joints" is a structural term. "Pointing" is what is inspected and recorded in a SOC.
+- CRITICAL: NEVER say "mortar joints" when describing the condition of brickwork jointing. Always say "pointing". "Mortar joints" is a structural term. "Pointing" is what is inspected and recorded in a SOC. This applies everywhere including rear elevations, chimneys, boundary walls and all external brickwork.
 - "next to" / "butting" / "beside" (wall meeting wall, ceiling meeting wall) → "abutting" — "the wall abutting the front elevation wall"
 - "next to" / "beside" (physical proximity without structural contact) → "adjacent to" — "adjacent to the window opening"
 - "back door" / "back door opening" → "rear door opening"
@@ -589,7 +604,7 @@ The ONLY time two things can share a row is if they are the same defect type on 
 - NEVER invent or add observations not present in the dictated notes. If pointing was noted below the window, do not move it to the window opening. Preserve the exact location as dictated.
 - NEVER say "painted plaster" unless plaster was explicitly mentioned. If notes say "walls are painted" write "The walls are painted throughout." Nothing more.
 - NEVER say "ceiling finish" — always say "ceiling". e.g. "Evidence of staining was noted to the ceiling" not "ceiling finish".
-- NEVER say "wall surface" — always say "wall". e.g. "the adjoining wall" not "the adjoining wall surface".
+- NEVER say "wall surface" or "party wall surface" — always say "wall" or "party wall". e.g. "the adjoining wall" not "the adjoining wall surface". This applies everywhere without exception.
 - NEVER say "moisture ingress" — always say "water ingress".
 - WINDOW SILL vs WINDOW CILL: externally = "window sill" or "window ledge". Internally = "window cill". Never use "cill" for external observations.
 - "adjacent wall" / "adjoining wall" → use "abutting wall" when walls meet structurally. Use "adjoining wall" for general reference. Never use "wall surface".
@@ -619,6 +634,7 @@ What must NOT go into normal SOC condition rows:
 Where these items should go:
 - Put surveyor reminders and calculations in actions[].
 - Put matters relevant to the Party Wall Award in award_notes[].
+- CRITICAL: Any mention of access arrangements, shared gates, trees, horticulture, temporary works, protection measures, surveys required, or matters needing clarification from the Building Owner MUST go into award_notes[]. These must NEVER appear as condition rows. If the surveyor says "we need to find out", "flag to the building owner", "ask them to confirm", or "need to check" — that is an award_note, not a condition observation. Award notes must always be populated if any such matters arise.
 - Put required emails in emails_required[].
 - If the user clearly wants these contextual matters retained in the SOC, include them only in a final section titled "Notes / Observations", not mixed into the physical condition sections.
 
