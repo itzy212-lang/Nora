@@ -598,10 +598,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             onChange={handlePhotoChange}
           />
           <ChatInputBar
-            value={textInput}
-            onChange={setTextInput}
+            value={interimText || textInput}
+            onChange={(v) => { setInterimText(''); setTextInput(v); }}
             onSend={() => handleSend()}
-            onTranscript={(transcript) => { setTextInput(transcript); }}
+            onTranscript={(transcript, meta) => {
+              if (!meta?.recording) { setInterimText(''); setTextInput(transcript); }
+            }}
+            onPreview={(preview) => { if (preview) setInterimText(preview); }}
             placeholder="Type, paste or tap mic to dictate…"
             showAttach={true}
             onAttach={() => photoInputRef.current?.click()}
