@@ -81,6 +81,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
 
   const [saving, setSaving] = useState(false);
   const [polishing, setPolishing] = useState({});
+  const [expandedDesc, setExpandedDesc] = useState(null); // idx of expanded description field
 
   // Fetch next invoice number from Supabase on mount (new invoices only)
   useEffect(() => {
@@ -318,6 +319,8 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                           value={item.description}
                           placeholder="e.g. party wall fees for 2 storey extension"
                           onChange={e => setItem(idx, 'description', e.target.value)}
+                          onFocus={() => setExpandedDesc(idx)}
+                          readOnly
                         />
                         <button
                           onClick={() => handlePolish(idx)}
@@ -337,7 +340,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                         </button>
                       </div>
                       {!item.description?.trim() && (
-                        <div style={styles.aiHint}>Type a description, then click ✨ to polish it</div>
+                        <div style={styles.aiHint}>Tap to type a description, then click ✨ to polish it</div>
                       )}
                     </td>
                     <td style={styles.td}>
@@ -411,6 +414,57 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
           )}
         </div>
       </div>
+
+      {/* Mobile description expand overlay */}
+      {expandedDesc !== null && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          zIndex: 9999, display: 'flex', flexDirection: 'column',
+          padding: '20px 16px', boxSizing: 'border-box',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 16,
+            display: 'flex', flexDirection: 'column', gap: 12,
+            flex: 1, maxHeight: '80vh',
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: '#1a1a2e' }}>Line Item Description</div>
+            <textarea
+              autoFocus
+              style={{
+                flex: 1, border: '1.5px solid #3d5a99', borderRadius: 8,
+                padding: 12, fontSize: 15, resize: 'none', lineHeight: 1.5,
+                fontFamily: 'inherit', outline: 'none',
+              }}
+              value={form.items[expandedDesc]?.description || ''}
+              placeholder="e.g. Party wall surveyor's fees in connection with proposed works at..."
+              onChange={e => setItem(expandedDesc, 'description', e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => handlePolish(expandedDesc)}
+                disabled={polishing[expandedDesc] || !form.items[expandedDesc]?.description?.trim()}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, border: '1.5px solid #3d5a99',
+                  background: '#f0f4ff', color: '#3d5a99', fontWeight: 600, fontSize: 14,
+                  cursor: 'pointer', opacity: (!form.items[expandedDesc]?.description?.trim()) ? 0.4 : 1,
+                }}
+              >
+                {polishing[expandedDesc] ? '⟳ Polishing...' : '✨ Polish'}
+              </button>
+              <button
+                onClick={() => setExpandedDesc(null)}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+                  background: '#3d5a99', color: '#fff', fontWeight: 600, fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
