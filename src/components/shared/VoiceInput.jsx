@@ -321,6 +321,34 @@ export default function VoiceInput({
         interim: '',
         final: '',
       });
+
+      // Run Web Speech in parallel for live preview only — Whisper handles final accuracy
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        try {
+          const previewRec = new SpeechRecognition();
+          previewRec.continuous = true;
+          previewRec.interimResults = true;
+          previewRec.maxAlternatives = 1;
+          previewRec.onresult = (event) => {
+            if (!shouldKeepRecordingRef.current) return;
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              if (!event.results[i].isFinal) {
+                interim = cleanText(event.results[i][0]?.transcript || '');
+              }
+            }
+            if (interim) {
+              onPreview?.(interim, { recording: true, currentPhrase: interim, interim, final: '' });
+            }
+          };
+          previewRec.onerror = () => {};
+          previewRec.onend = () => {};
+          previewRec.start();
+          // Store so we can stop it when recording stops
+          recognitionRef.current = previewRec;
+        } catch {}
+      }
     } catch (error) {
       console.error('[VoiceInput] mobile recording failed:', error);
       shouldKeepRecordingRef.current = false;
@@ -364,22 +392,19 @@ export default function VoiceInput({
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
       let latestInterim = '';
-      let finalText = '';
 
-      // Process only from resultIndex to avoid re-processing previous results
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      for (let i = 0; i < event.results.length; i += 1) {
         const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
+
         if (!spoken) continue;
 
-        if (event.results[i].isFinal) {
-          finalText += (finalText ? ' ' : '') + spoken;
-          sessionResultsRef.current[i] = spoken;
-        } else {
+        sessionResultsRef.current[i] = spoken;
+
+        if (!event.results[i].isFinal && i >= event.resultIndex) {
           latestInterim = spoken;
         }
       }
 
-      // For finals, also collect all previous finals in this session
       const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
       const fullText = mergeWithoutRepeating(committedRef.current, sessionText);
 
@@ -452,13 +477,6 @@ export default function VoiceInput({
     }
 
     if (isMobileBrowser()) {
-      // Use Web Speech API on mobile if available — instant live results, no Whisper delay
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        startDesktopRecording(); // Web Speech works the same on mobile Chrome/Android
-        return;
-      }
-      // Fall back to Whisper only on browsers without Web Speech API (e.g. iOS Safari)
       startMobileRecording();
       return;
     }
