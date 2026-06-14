@@ -346,7 +346,7 @@ Required structure:
       "rows": [
         {
           "ref": "HW-01",
-          "observation": "The walls are finished in painted plaster. No visible defects were noted at the time of inspection.",
+          "observation": "The walls are painted throughout. No visible defects were noted at the time of inspection.",
           "action": "Record only"
         },
         {
@@ -356,7 +356,7 @@ Required structure:
         },
         {
           "ref": "HW-03",
-          "observation": "Intermittent hairline cracking was observed at the junction between the wall and ceiling finish.",
+          "observation": "Intermittent hairline cracking was observed at the junction between the wall and ceiling.",
           "action": "Record only"
         },
         {
@@ -443,9 +443,9 @@ EFE-03 | The pointing in the vicinity of the left-hand window opening appears we
 RAW: "Walls are painted. There's a small crack above the front door going up towards the ceiling. Looks like just a plaster crack. A few hairline cracks where the wall meets the ceiling. Floor feels solid. Can't do a full inspection because of the carpet."
 
 FINISHED:
-HW-01 | The walls are finished in painted plaster. No visible defects were noted at the time of inspection. | Record only
+HW-01 | The walls are painted throughout. No visible defects were noted at the time of inspection. | Record only
 HW-02 | A hairline crack was noted above the front door opening extending vertically towards the ceiling. | Record only
-HW-03 | Intermittent hairline cracking was observed at the junction between the wall and ceiling finish. | Record only
+HW-03 | Intermittent hairline cracking was observed at the junction between the wall and ceiling. | Record only
 HW-04 | The floor finish was not fully accessible for inspection due to the presence of carpet covering. | Record only
 
 RAW: "Walls painted throughout. There's a crack on the chimney breast, runs vertically from about skirting height upwards. Looks old. There's also a couple of small cracks where the chimney breast meets the side wall. Ceiling looks okay. There's a bit of staining in the front left corner of the ceiling. Looks dry at the moment. Window opens and closes fine. Floor feels level but there's carpet so can't see everything."
@@ -455,18 +455,18 @@ FRR-01 | The walls are finished in painted plaster throughout. No visible defect
 FRR-02 | A vertical crack was noted to the chimney breast, extending from the top of the skirting board upwards. | Record only
 FRR-03 | Hairline cracking was observed at the junction between the chimney breast and the adjacent wall surface. | Record only
 FRR-04 | The ceiling finish appears satisfactory. No visible defects were noted at the time of inspection. | Record only
-FRR-05 | Evidence of historic water staining was noted to the ceiling finish in the front left-hand corner. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+FRR-05 | Evidence of historic water staining was noted to the ceiling in the front left-hand corner. The area appears dry at the time of inspection with no evidence of active water ingress. | Record only
 FRR-06 | The window was tested and operated satisfactorily without sticking, binding or jamming. | Record only
 FRR-07 | The floor finish was not fully accessible for inspection due to the presence of carpet covering. | Record only
 
 RAW: "Walls are a mix of paint and tiles. Tiles look fine, no cracks. There's a crack above the back door going up to the ceiling. Small gap between the worktop and the wall in a couple of places. Floor is tiled. A few tiles sound a bit hollow when you walk on them but none are cracked. Small bit of staining on the ceiling next to the extractor. Looks dry."
 
 FINISHED:
-KT-01 | The walls are finished partly in painted plaster and partly in ceramic wall tiles. No visible defects were noted to the tiled or painted wall surfaces at the time of inspection. | Record only
+KT-01 | The walls are partly painted and partly tiled. No visible defects were noted at the time of inspection. | Record only
 KT-02 | A hairline crack was noted above the rear door opening extending vertically towards the ceiling. | Record only
 KT-03 | An open joint was observed at the junction between the worktop and the adjoining wall surface in several locations. | Record only
 KT-04 | The tiled floor finish was tested and several tiles were found to be hollow sounding when tapped. No cracked tiles were observed at the time of inspection. | Record only
-KT-05 | Evidence of staining was noted to the ceiling finish adjacent to the extractor unit. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+KT-05 | Evidence of staining was noted to the ceiling adjacent to the extractor unit. The area appears dry at the time of inspection with no evidence of active water ingress. | Record only
 
 RAW: "Brickwork looks reasonable. Mortar joints look a bit worn in places. Some pointing above the back door is coming away. No visible defects to the windows from ground level. Small crack next to the rendered area in the corner of the opening."
 
@@ -482,15 +482,15 @@ FINISHED:
 RB-01 | The walls are finished in painted plaster. No visible defects were noted to the general wall surfaces at the time of inspection. | Record only
 RB-02 | Several hairline cracks were noted to the party wall surface. | Record only
 RB-03 | A hairline crack was noted above the bedroom door opening. | Record only
-RB-04 | Evidence of staining was noted to the ceiling finish adjacent to the rear elevation wall. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+RB-04 | Evidence of staining was noted to the ceiling adjacent to the rear elevation wall. The area appears dry at the time of inspection with no evidence of active water ingress. | Record only
 RB-05 | Localised undulation was noted to the floor finish, with the surface appearing to slope towards the rear of the room. | Record only
 
 RAW: "Walls partly painted, partly tiled. No cracked tiles. Sealant around the bath looks a bit old and worn. Small area of staining on the ceiling near the outside wall. Nothing wet at the time of inspection. Floor level."
 
 FINISHED:
-BR-01 | The walls are finished partly in painted plaster and partly in ceramic wall tiles. No visible defects were noted to the tiled or painted wall surfaces at the time of inspection. | Record only
+BR-01 | The walls are partly painted and partly tiled. No visible defects were noted at the time of inspection. | Record only
 BR-02 | The mastic sealant at the perimeter of the bath exhibits age-related deterioration. | Record only
-BR-03 | Evidence of staining was noted to the ceiling finish in the vicinity of the external wall. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+BR-03 | Evidence of staining was noted to the ceiling in the vicinity of the external wall. The area appears dry at the time of inspection with no evidence of active water ingress. | Record only
 BR-04 | No uneven sections were noted to the floor finish at the time of inspection. | Record only
 
 RAW: "Got access through the loft hatch. Could only inspect from the hatch. Roof timbers look okay from what I can see. Some old staining on the underside of the felt. No active leaks noted."
@@ -586,6 +586,15 @@ The ONLY time two things can share a row is if they are the same defect type on 
 - NEVER use the term "biological growth" — use "moss growth", "algae growth", "lichen growth", or "organic staining" as appropriate.
 - NEVER add structural concerns such as "bulging", "displacement", "leaning", "out of plumb" unless explicitly stated in the dictated notes. Only record what was observed and stated.
 - Even if input notes appear already processed or professional, review all terminology and replace any non-standard terms with approved surveyor vocabulary. Never pass through terms a chartered party wall surveyor would not use.
+- NEVER invent or add observations not present in the dictated notes. If pointing was noted below the window, do not move it to the window opening. Preserve the exact location as dictated.
+- NEVER say "painted plaster" unless plaster was explicitly mentioned. If notes say "walls are painted" write "The walls are painted throughout." Nothing more.
+- NEVER say "ceiling finish" — always say "ceiling". e.g. "Evidence of staining was noted to the ceiling" not "ceiling finish".
+- NEVER say "wall surface" — always say "wall". e.g. "the adjoining wall" not "the adjoining wall surface".
+- NEVER say "moisture ingress" — always say "water ingress".
+- WINDOW SILL vs WINDOW CILL: externally = "window sill" or "window ledge". Internally = "window cill". Never use "cill" for external observations.
+- "adjacent wall" / "adjoining wall" → use "abutting wall" when walls meet structurally. Use "adjoining wall" for general reference. Never use "wall surface".
+- "no evidence of active moisture ingress" → always "no evidence of active water ingress"
+- Never add finish descriptions ("painted plaster", "rendered finish", "plaster finish") unless explicitly stated in the notes. If notes say "painted" write "painted". If notes say "tiled" write "tiled".
 
 Heading and grouping rules:
 - Preserve dictated room or area headings exactly where the user has clearly dictated a heading.
