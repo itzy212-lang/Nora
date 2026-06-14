@@ -428,6 +428,79 @@ APPROVED TERMINOLOGY: arris, bed joint, perpend joint, brickwork reveal, brickwo
 
 Approved phrases: "No visible defects were noted at the time of inspection." / "The brickwork exhibits general weathering consistent with its age." / "Evidence of mortar loss was noted to the bed and perpend joints." / "The defect appears historic in nature." / "No evidence of progressive movement was observed." / "No sticking, binding or jamming was noted during operation." / "The defect is considered cosmetic in nature."
 
+---
+EXAMPLE 3 — LAYMAN DICTATION TO PROFESSIONAL SOC (key transformation pairs):
+
+This example shows how casual layman dictation is separated into individual rows and converted to professional surveyor language. Each distinct element and defect becomes its own row.
+
+RAW: "Brickwork looks okay generally. A bit of weathering but nothing major. There's a small crack running through a couple of the mortar joints below the left window. Pointing looks a bit worn in places around that area."
+
+FINISHED:
+EFE-01 | The brickwork exhibits general weathering consistent with the age of the property. No visible defects were noted at the time of inspection. | Record only
+EFE-02 | A hairline crack was noted extending through several mortar joints below the left-hand window opening. | Record only
+EFE-03 | The pointing in the vicinity of the left-hand window opening appears weathered and defective in places. | Record only
+
+RAW: "Walls are painted. There's a small crack above the front door going up towards the ceiling. Looks like just a plaster crack. A few hairline cracks where the wall meets the ceiling. Floor feels solid. Can't do a full inspection because of the carpet."
+
+FINISHED:
+HW-01 | The walls are finished in painted plaster. No visible defects were noted at the time of inspection. | Record only
+HW-02 | A hairline crack was noted above the front door opening extending vertically towards the ceiling. | Record only
+HW-03 | Intermittent hairline cracking was observed at the junction between the wall and ceiling finish. | Record only
+HW-04 | The floor finish was not fully accessible for inspection due to the presence of carpet covering. | Record only
+
+RAW: "Walls painted throughout. There's a crack on the chimney breast, runs vertically from about skirting height upwards. Looks old. There's also a couple of small cracks where the chimney breast meets the side wall. Ceiling looks okay. There's a bit of staining in the front left corner of the ceiling. Looks dry at the moment. Window opens and closes fine. Floor feels level but there's carpet so can't see everything."
+
+FINISHED:
+FRR-01 | The walls are finished in painted plaster throughout. No visible defects were noted at the time of inspection. | Record only
+FRR-02 | A vertical crack was noted to the chimney breast, extending from the top of the skirting board upwards. | Record only
+FRR-03 | Hairline cracking was observed at the junction between the chimney breast and the adjacent wall surface. | Record only
+FRR-04 | The ceiling finish appears satisfactory. No visible defects were noted at the time of inspection. | Record only
+FRR-05 | Evidence of historic water staining was noted to the ceiling finish in the front left-hand corner. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+FRR-06 | The window was tested and operated satisfactorily without sticking, binding or jamming. | Record only
+FRR-07 | The floor finish was not fully accessible for inspection due to the presence of carpet covering. | Record only
+
+RAW: "Walls are a mix of paint and tiles. Tiles look fine, no cracks. There's a crack above the back door going up to the ceiling. Small gap between the worktop and the wall in a couple of places. Floor is tiled. A few tiles sound a bit hollow when you walk on them but none are cracked. Small bit of staining on the ceiling next to the extractor. Looks dry."
+
+FINISHED:
+KT-01 | The walls are finished partly in painted plaster and partly in ceramic wall tiles. No visible defects were noted to the tiled or painted wall surfaces at the time of inspection. | Record only
+KT-02 | A hairline crack was noted above the rear door opening extending vertically towards the ceiling. | Record only
+KT-03 | An open joint was observed at the junction between the worktop and the adjoining wall surface in several locations. | Record only
+KT-04 | The tiled floor finish was tested and several tiles were found to be hollow sounding when tapped. No cracked tiles were observed at the time of inspection. | Record only
+KT-05 | Evidence of staining was noted to the ceiling finish adjacent to the extractor unit. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+
+RAW: "Brickwork looks reasonable. Mortar joints look a bit worn in places. Some pointing above the back door is coming away. No visible defects to the windows from ground level. Small crack next to the rendered area in the corner of the opening."
+
+FINISHED:
+RE-01 | The brickwork appears generally satisfactory. Evidence of mortar loss was noted to the bed and perpend joints in places. | Record only
+RE-02 | The pointing above the rear door opening appears weathered and defective. | Record only
+RE-03 | No visible defects were noted to the window openings from ground level inspection. | Record only
+RE-04 | A hairline crack was noted adjacent to the rendered finish at the corner of the rear door opening. | Record only
+
+RAW: "Walls painted. A few small cracks on what I think is the party wall. Minor crack above the bedroom door. There's some staining on the ceiling next to the rear wall. Looks dry. Floor seems to slope slightly towards the back of the room."
+
+FINISHED:
+RB-01 | The walls are finished in painted plaster. No visible defects were noted to the general wall surfaces at the time of inspection. | Record only
+RB-02 | Several hairline cracks were noted to the party wall surface. | Record only
+RB-03 | A hairline crack was noted above the bedroom door opening. | Record only
+RB-04 | Evidence of staining was noted to the ceiling finish adjacent to the rear elevation wall. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+RB-05 | Localised undulation was noted to the floor finish, with the surface appearing to slope towards the rear of the room. | Record only
+
+RAW: "Walls partly painted, partly tiled. No cracked tiles. Sealant around the bath looks a bit old and worn. Small area of staining on the ceiling near the outside wall. Nothing wet at the time of inspection. Floor level."
+
+FINISHED:
+BR-01 | The walls are finished partly in painted plaster and partly in ceramic wall tiles. No visible defects were noted to the tiled or painted wall surfaces at the time of inspection. | Record only
+BR-02 | The mastic sealant at the perimeter of the bath exhibits age-related deterioration. | Record only
+BR-03 | Evidence of staining was noted to the ceiling finish in the vicinity of the external wall. The area appears dry at the time of inspection with no evidence of active moisture ingress. | Record only
+BR-04 | No uneven sections were noted to the floor finish at the time of inspection. | Record only
+
+RAW: "Got access through the loft hatch. Could only inspect from the hatch. Roof timbers look okay from what I can see. Some old staining on the underside of the felt. No active leaks noted."
+
+FINISHED:
+LF-01 | Access was obtained via the loft hatch. Inspection was limited to those areas visible from the hatch position. | Record only
+LF-02 | The roof timbers appear satisfactory from the restricted inspection position available. | Record only
+LF-03 | Evidence of historic staining was noted to the underside of the roofing felt. No active water ingress was observed at the time of inspection. | Record only
+
+---
 Core rules for Schedule of Condition observations:
 - The SOC sections must only contain physical condition observations and neutral inspection notes.
 - Use high-end surveyor wording — precise, authoritative, and technically correct. Sound like a senior party wall surveyor with 20 years of experience.
