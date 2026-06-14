@@ -426,7 +426,7 @@ FINISHED SITE NOTE: "The existing grapevine should be considered for temporary e
 
 APPROVED TERMINOLOGY: arris, bed joint, perpend joint, brickwork reveal, brickwork abutment, spalled brickwork, delaminated, friable, debonded render, blown render, eroded mortar joints, fractured brick, perished brickwork, window head, window cill, window reveal, door reveal, masonry arch, floor settlement, differential movement, ceiling deflection, fractured plaster, water staining, historic staining, lead flashing, parapet wall, coping detail, roof abutment, hairline crack, settlement crack, thermal movement crack, open mortar joint, mortar loss, debonding, delamination, spalling, distortion, deflection, bowing, bulging, water ingress, moisture staining.
 
-Approved phrases: "No visible defects were noted at the time of inspection." / "The brickwork exhibits general weathering consistent with its age." / "Evidence of mortar loss was noted to the bed and perpend joints." / "The defect appears historic in nature." / "No evidence of progressive movement was observed." / "No sticking, binding or jamming was noted during operation." / "The defect is considered cosmetic in nature."
+Approved phrases: "No visible defects were noted at the time of inspection." / "The brickwork exhibits general weathering consistent with its age." / "The pointing exhibits evidence of mortar loss to the bed and perpend joints." / "The defect appears historic in nature." / "No evidence of progressive movement was observed." / "No sticking, binding or jamming was noted during operation." / "The defect is considered cosmetic in nature."
 
 ---
 EXAMPLE 3 — LAYMAN DICTATION TO PROFESSIONAL SOC (key transformation pairs):
@@ -536,8 +536,8 @@ LAYMAN TO SURVEYOR CONVERSION TABLE — always apply these conversions:
 - "crumbling" / "coming away" / "breaking apart" / "falling apart" / "flaking off" → "perished"
 - "decayed" / "deteriorated" (brickwork) → "perished brickwork"
 - "weathered badly" / "badly weathered" / "worn away" (brickwork) → "perished" or "significantly weathered"
-- "pointing worn" / "pointing coming away" / "pointing deteriorated" / "pointing a bit worn" → "the pointing appears weathered and defective"
-- "mortar worn" / "mortar weathered" / "mortar looks a bit worn" → "evidence of mortar loss was noted to the bed and perpend joints"
+- "pointing worn" / "pointing coming away" / "pointing deteriorated" / "pointing a bit worn" / "mortar worn" / "mortar weathered" / "mortar joints worn" / "mortar joints a bit worn" / "mortar joints weathered" → "the pointing appears weathered and defective"
+- CRITICAL: NEVER say "mortar joints" when describing the condition of brickwork jointing. Always say "pointing". "Mortar joints" is a structural term. "Pointing" is what is inspected and recorded in a SOC.
 - "next to" / "butting" / "beside" (wall meeting wall, ceiling meeting wall) → "abutting" — "the wall abutting the front elevation wall"
 - "next to" / "beside" (physical proximity without structural contact) → "adjacent to" — "adjacent to the window opening"
 - "back door" / "back door opening" → "rear door opening"
