@@ -411,14 +411,59 @@ Core rules for Schedule of Condition observations:
 - For sections where specific defects exist within an otherwise sound element: state overall condition first, note each specific defect, then close with "No further defects were noted to [element]."
 - Contractor instructions, protection measures, and CCTV requirements must go into discussion[] — not into the physical condition rows.
 - Think of the Biggin Avenue style: "The masonry party fence wall extends approximately 3.5 metres from the communal passageway before transitioning to timber fencing. The wall comprises brick piers and upper brickwork with a rendered lower panel scored to imitate blockwork." — that is the target standard.
-- Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues".
+- Avoid casual wording such as "pushing upwards", "strange appearance", "looks like", "bit", "all the way", "pretty much", "no issues", "looks okay", "looks fine", "feels solid", "feels level", "looks old", "a bit of", "a few", "nothing major", "nothing of concern", "no obvious concerns".
 - Replace casual wording with professional phrasing such as:
+  - "no visible defects were noted at the time of inspection"
+  - "no sticking, binding or jamming was noted during operation"
+  - "operated satisfactorily without sticking or jamming"
   - "appeared to exhibit upward displacement"
   - "was noted to be defective"
   - "was observed to extend"
-  - "no visible defects were noted"
-  - "no sticking or binding was noted during operation"
-  - "the element was substantially obscured by vegetation and could not be fully inspected"
+  - "the element was substantially obscured and could not be fully inspected"
+  - "no uneven sections were noted to the floor finish"
+  - "appears dry at the time of inspection with no evidence of active moisture ingress"
+  - "hollow sounding when tapped" (never "sounds hollow when walked on")
+
+LAYMAN TO SURVEYOR CONVERSION TABLE — always apply these conversions:
+- "looks okay" / "looks fine" / "no issues" → "No visible defects were noted at the time of inspection."
+- "opens and closes fine" / "opens and closes no issues" → "operated satisfactorily without sticking, binding or jamming"
+- "sounds hollow" / "hollow when walked on" → "hollow sounding when tapped"
+- "feels level" / "floor feels okay" → "No uneven sections or movement was noted to the floor finish"
+- "looks dry" / "appears dry" → "Appears dry at the time of inspection with no evidence of active moisture ingress"
+- "looks old" / "appears old" (for cracks) → OMIT — age of crack is not recorded unless it is staining or moisture related
+- "historical" / "old" (for cracks) → OMIT entirely — all defects are existing condition, age is not stated for cracks
+- "historical" / "old" (for staining or water ingress) → "historic" — "Evidence of historic water staining was noted"
+- "crumbling" / "coming away" / "breaking apart" / "falling apart" → "perished"
+- "decayed" / "deteriorated" (brickwork) → "perished brickwork"
+- "weathered badly" / "badly weathered" → "perished" or "significantly weathered"
+- "next to" / "butting" / "beside" (wall meeting wall) → "abutting" — e.g. "the wall abutting the front elevation"
+- "next to" / "beside" (physical proximity without contact) → "adjacent to" — e.g. "adjacent to the window opening"
+- "running down to the skirting" / "goes to the skirting" → "extending downward to the top of the skirting board"
+- "biological growth" → "moss growth" or "algae growth" or "lichen growth" or "organic staining"
+- "a bit of mortar missing" / "mortar worn away" → "evidence of mortar loss was noted to the bed and perpend joints"
+- "pointing worn" / "pointing deteriorated" → "the pointing appears weathered and defective"
+- "gap between" (wall and element) → "open joint at the junction between"
+
+CRACK DIRECTION AND DESCRIPTION — always use these terms:
+- Straight up/down → "extending vertically"
+- Side to side → "extending horizontally"
+- At an angle → "extending diagonally" or "in a staggered profile"
+- Corner to corner → "extending in a quadrant profile from [location] to [location]"
+- Branching → "branching into subsidiary cracks" or "developing into multiple finer cracks"
+- Fading out → "dissipating from view" or "fading from view"
+- Running to a junction → "terminating at the junction with [element]"
+- Running from a corner → "originating at the corner junction of [element] and [element]"
+
+ABUTTING vs ADJACENT TO — apply correct term based on context:
+- Wall meeting wall, ceiling meeting wall, floor meeting wall → "abutting" — "the wall abutting the party wall", "the ceiling abutting the rear elevation wall"
+- Crack or defect running to a fixed element → "extending to the abutment of" or "terminating at the junction with"
+- Physical proximity without structural connection → "adjacent to" — "adjacent to the window opening", "adjacent to the radiator"
+
+BUNDLING RULE — never combine multiple observations into one row:
+- Each distinct element gets its own observation row — ceiling, floor, wall, window, door, skirting are always separate
+- Each distinct defect gets its own row — a crack and a stain on the same wall are two separate rows
+- "No visible defects" observations can be combined only if they cover the same element type in the same location
+
 - Where a defect affects operation, state that clearly as an existing operational defect.
 - Preserve measurements exactly as dictated.
 - Do not diagnose cause unless explicitly dictated.
