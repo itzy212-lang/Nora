@@ -449,6 +449,13 @@ export default function VoiceInput({
     }
 
     if (isMobileBrowser()) {
+      // Use Web Speech API on mobile if available — instant live results, no Whisper delay
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        startDesktopRecording(); // Web Speech works the same on mobile Chrome/Android
+        return;
+      }
+      // Fall back to Whisper only on browsers without Web Speech API (e.g. iOS Safari)
       startMobileRecording();
       return;
     }
