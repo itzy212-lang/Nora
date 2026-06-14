@@ -118,6 +118,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
       setItem(idx, 'description', improved);
     } catch (e) {
       console.error('AI polish failed:', e);
+      alert('Could not improve description — please try again.');
     } finally {
       setPolishing(p => ({ ...p, [idx]: false }));
     }
