@@ -345,11 +345,38 @@ Required structure:
       "title": "exact dictated heading where available",
       "rows": [
         {
-          "ref": "DERIVE a 2-4 letter prefix from the section heading (e.g. EFE- for External Front Elevation, HW- for Hallway, FRR- for Front Reception Room, KT- for Kitchen, RE- for Rear Elevation, GD- for Garden, FL- for Landing, FB- for Front Bedroom, RB- for Rear Bedroom, BR- for Bathroom, LF- for Loft, RC- for Rear Chimney) followed by a sequential number starting at 01. NEVER use RE- for every section.",
-          "observation": "professionally drafted surveyor-grade condition observation",
+          "ref": "HW-01",
+          "observation": "The walls are finished in painted plaster. No visible defects were noted at the time of inspection.",
+          "action": "Record only"
+        },
+        {
+          "ref": "HW-02",
+          "observation": "A hairline crack was noted above the front door extending vertically towards the ceiling.",
+          "action": "Record only"
+        },
+        {
+          "ref": "HW-03",
+          "observation": "Intermittent hairline cracking was observed at the junction between the wall and ceiling finish.",
+          "action": "Record only"
+        },
+        {
+          "ref": "HW-04",
+          "observation": "The floor finish was not fully accessible for inspection due to the presence of carpet covering.",
           "action": "Record only"
         }
       ]
+
+CRITICAL BUNDLING RULE — ONE OBSERVATION PER ROW, NO EXCEPTIONS:
+The hallway example above shows FOUR separate rows for walls, crack above door, ceiling cracks, and floor.
+- If a room has 10 observations → produce 10 rows
+- Walls and ceiling → always separate rows
+- Two cracks in the same room → always separate rows  
+- A crack and a stain → always separate rows
+- A finish description and a defect → always separate rows
+- A door test and nearby crack → always separate rows
+- Tiles and sealant → always separate rows
+- Roof timbers and felt staining → always separate rows
+This is the most important structural rule. When in doubt, split into more rows, never fewer.
     }
   ],
   "discussion": [],
