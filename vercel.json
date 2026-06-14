@@ -47,6 +47,9 @@
     },
     "api/export-soc-pdf.js": {
       "maxDuration": 60
+    },
+    "api/invoice-polish.js": {
+      "maxDuration": 30
     }
   }
 }
