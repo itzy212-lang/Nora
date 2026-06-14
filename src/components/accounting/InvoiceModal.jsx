@@ -1,37 +1,35 @@
 import React, { useState, useEffect } from 'react';
+import sb from '../supabaseClient';
 
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
-const INVOICE_SETTINGS_KEY = 'ely_invoice_settings';
-
-function getNextInvoiceNumberFromSettings(fallback) {
+async function getNextInvoiceNumber(fallback) {
   try {
-    const settings = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}');
-    const last = Number(settings.last_invoice_number);
-
-    if (Number.isFinite(last)) return last + 1;
-
-    const legacyNext = Number(settings.next_invoice_number);
-    if (Number.isFinite(legacyNext)) return legacyNext;
+    const { data, error } = await sb
+      .from('firm_settings')
+      .select('last_invoice_number')
+      .single();
+    if (!error && data?.last_invoice_number) {
+      return Number(data.last_invoice_number) + 1;
+    }
   } catch {}
-
   return fallback || 1601;
 }
 
-function markInvoiceNumberUsed(invoiceNumber) {
+async function markInvoiceNumberUsed(invoiceNumber) {
   const used = Number(invoiceNumber);
   if (!Number.isFinite(used)) return;
-
   try {
-    const settings = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}');
-    const currentLast = Number(settings.last_invoice_number);
-    const nextLast = Number.isFinite(currentLast) ? Math.max(currentLast, used) : used;
-
-    localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify({
-      ...settings,
-      last_invoice_number: nextLast,
-      next_invoice_number: nextLast + 1,
-    }));
+    const { data } = await sb
+      .from('firm_settings')
+      .select('last_invoice_number, id')
+      .single();
+    const currentLast = Number(data?.last_invoice_number || 0);
+    const nextLast = Math.max(currentLast, used);
+    await sb
+      .from('firm_settings')
+      .update({ last_invoice_number: nextLast })
+      .eq('id', data.id);
   } catch {}
 }
 
@@ -62,7 +60,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
   const isAO = String(role).toUpperCase() === 'AO';
 
   const [form, setForm] = useState({
-    invoice_number: invoice?.invoice_number || getNextInvoiceNumberFromSettings(nextNumber),
+    invoice_number: invoice?.invoice_number || nextNumber || 1601,
     invoice_date: invoice?.invoice_date || new Date().toISOString().split('T')[0],
     due_date: invoice?.due_date || '',
     bill_to_name: invoice?.bill_to_name || initialData?.bill_to_name || '',
@@ -83,6 +81,15 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
 
   const [saving, setSaving] = useState(false);
   const [polishing, setPolishing] = useState({});
+
+  // Fetch next invoice number from Supabase on mount (new invoices only)
+  useEffect(() => {
+    if (!invoice) {
+      getNextInvoiceNumber(nextNumber).then(num => {
+        setForm(f => ({ ...f, invoice_number: f.invoice_number === (nextNumber || 1601) ? num : f.invoice_number }));
+      });
+    }
+  }, []);
 
   const subtotal = form.items.reduce((s, it) => s + (parseFloat(it.unitPrice) || 0) * (parseFloat(it.qty) || 0), 0);
   const vatAmount = subtotal * (form.vat_rate / 100);
