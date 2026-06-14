@@ -608,7 +608,6 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             disabled={false}
             loading={false}
           />
-          )}
         </div>
 
         <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
@@ -738,7 +737,7 @@ const s = {
   chatArea: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 0', minHeight: 200, maxHeight: 'calc(100vh - 360px)' },
   emptyHint: { fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: '24px 16px', lineHeight: 1.7 },
   userBubble: { background: 'var(--blue)', color: '#fff', borderRadius: '14px 4px 14px 14px', padding: '9px 13px', fontSize: 13.5, lineHeight: 1.6, maxWidth: '82%', whiteSpace: 'pre-wrap' },
-  elyBubble: { background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: '4px 14px 14px 14px', padding: '7px 12px', fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic' },
+  elyBubble: { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '4px 14px 14px 14px', padding: '7px 12px', fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic' },
   // Input bar
   inputBar: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12 },
   micIdle: { width: 38, height: 38, borderRadius: '50%', background: 'var(--bg3)', border: '1.5px solid var(--border)', color: 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' },
