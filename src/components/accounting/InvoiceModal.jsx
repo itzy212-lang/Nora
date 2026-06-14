@@ -319,8 +319,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                           value={item.description}
                           placeholder="e.g. party wall fees for 2 storey extension"
                           onChange={e => setItem(idx, 'description', e.target.value)}
-                          onFocus={() => setExpandedDesc(idx)}
-                          readOnly
+                          onClick={() => { if (window.innerWidth < 768) setExpandedDesc(idx); }}
                         />
                         <button
                           onClick={() => handlePolish(idx)}
