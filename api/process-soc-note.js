@@ -136,6 +136,6 @@ ${previousContext}`;
 
   } catch (err) {
     console.error('[process-soc-note] fatal error:', err.message);
-    return res.status(500).json({ error: err.message || 'Failed to process note' });
+    return res.status(500).json({ error: err.message || 'Failed to process note', detail: String(err), stack: err.stack?.split('\n').slice(0,3) });
   }
 }
