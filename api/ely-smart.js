@@ -681,21 +681,6 @@ function inferModeHint(surface, prompt = '', body = {}) {
 
   return 'discuss';
 }
-) {
-  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
-
-  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) return 'email_summary';
-
-  if (hasExplicitDraftRequest(prompt)) return 'draft';
-
-  if (String(prompt || '').toLowerCase().includes('review') || String(prompt || '').toLowerCase().includes('compare')) return 'review';
-
-  if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId)) return 'email_summary';
-
-  if ((explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) && !String(prompt || '').trim()) return 'email_summary';
-
-  return 'discuss';
-}
 
 async function loadBrain({ userId, projectId, surface, modeHint }) {
   const sb = getSupabase();
