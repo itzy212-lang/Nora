@@ -401,11 +401,11 @@ async function loadProjectBundle(projectId) {
   };
 }
 
-// NORA V4 — wantsEmailContext
-// Only loads email context when explicitly relevant. No longer loads all emails just because a project is active.
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
   if (suppliedEmailContext || threadId || emailId) return true;
 
+  // v4: Do not load all project emails merely because a project is active.
+  // Only load when the prompt clearly refers to emails/correspondence.
   const lower = String(prompt || '').toLowerCase();
 
   return (
@@ -498,18 +498,22 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   return emails;
 }
 
-// ============================================================
+
+// ================================================================
 // NORA V4 INTENT CLASSIFIER
-// Build Package 1 — 15 June 2026
+// Build Package 1 — June 2026
 // Replaces: looksLikeDictation(), hasExplicitDraftRequest(), inferModeHint()
-// Removes: 20-word drafting trigger
-// ============================================================
+// Removed: 20-word drafting trigger
+// Added: normalisePromptForIntent(), hasDiscussionIntent(),
+//        looksLikeEmailDictation(), hasExplicitReviewRequest(),
+//        hasExecuteIntent(), inferIntent()
+// ================================================================
 
 function normalisePromptForIntent(prompt = '') {
   return String(prompt || '')
     .trim()
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
     .replace(/\s+/g, ' ');
 }
 
@@ -519,36 +523,36 @@ function hasDiscussionIntent(prompt = '') {
   if (!p) return false;
 
   return (
-    /\bwhat do you think\b/i.test(p) ||
-    /\bwhat's your view\b/i.test(p) ||
-    /\bwhats your view\b/i.test(p) ||
-    /\bwhat's your read\b/i.test(p) ||
-    /\bwhats your read\b/i.test(p) ||
-    /\bthoughts\??\b/i.test(p) ||
-    /\bcan (he|she|they|we|i) do that\b/i.test(p) ||
-    /\bis that right\b/i.test(p) ||
-    /\bis that correct\b/i.test(p) ||
-    /\bis that a breach\b/i.test(p) ||
-    /\btalk me through\b/i.test(p) ||
-    /\blet'?s discuss\b/i.test(p) ||
-    /\bchat through\b/i.test(p) ||
-    /\bam i missing something\b/i.test(p) ||
-    /\bwhat'?s his angle\b/i.test(p) ||
-    /\bwhat'?s her angle\b/i.test(p) ||
-    /\bwhat'?s their angle\b/i.test(p) ||
-    /\bwhy is (he|she|they) saying this\b/i.test(p) ||
-    /\bhow would a judge view this\b/i.test(p) ||
-    /\bhow would a third surveyor view this\b/i.test(p) ||
-    /\bhelp me form a response\b/i.test(p) ||
-    /\bwe need to discuss\b/i.test(p) ||
-    /\bi think\b/i.test(p) ||
-    /\bi am concerned\b/i.test(p) ||
-    /\bi'm concerned\b/i.test(p) ||
-    /\bthe issue is\b/i.test(p) ||
-    /\bthe risk is\b/i.test(p) ||
-    /\bthe difficulty is\b/i.test(p) ||
-    /\bi'?ve reviewed the thread and i think\b/i.test(p) ||
-    /\bi'?ve read the thread and i think\b/i.test(p)
+    /what do you think/i.test(p) ||
+    /what's your view/i.test(p) ||
+    /whats your view/i.test(p) ||
+    /what's your read/i.test(p) ||
+    /whats your read/i.test(p) ||
+    /thoughts\??/i.test(p) ||
+    /can (he|she|they|we|i) do that/i.test(p) ||
+    /is that right/i.test(p) ||
+    /is that correct/i.test(p) ||
+    /is that a breach/i.test(p) ||
+    /talk me through/i.test(p) ||
+    /let'?s discuss/i.test(p) ||
+    /chat through/i.test(p) ||
+    /am i missing something/i.test(p) ||
+    /what'?s his angle/i.test(p) ||
+    /what'?s her angle/i.test(p) ||
+    /what'?s their angle/i.test(p) ||
+    /why is (he|she|they) saying this/i.test(p) ||
+    /how would a judge view this/i.test(p) ||
+    /how would a third surveyor view this/i.test(p) ||
+    /help me form a response/i.test(p) ||
+    /we need to discuss/i.test(p) ||
+    /i think/i.test(p) ||
+    /i am concerned/i.test(p) ||
+    /i'm concerned/i.test(p) ||
+    /the issue is/i.test(p) ||
+    /the risk is/i.test(p) ||
+    /the difficulty is/i.test(p) ||
+    /i'?ve reviewed the thread and i think/i.test(p) ||
+    /i'?ve read the thread and i think/i.test(p)
   );
 }
 
@@ -559,11 +563,11 @@ function looksLikeEmailDictation(prompt = '') {
 
   if (/^(dear|hi|hello|good morning|good afternoon|good evening)\s+[a-z]/i.test(p)) return true;
 
-  if (/^(thank you for your email|thanks for your email|further to|following our|i refer to|with reference to)\b/i.test(p)) return true;
+  if (/^(thank you for your email|thanks for your email|further to|following our|i refer to|with reference to)/i.test(p)) return true;
 
-  if (/^(tell them|let them know|say that|just say|basically say|write to|reply to|respond to|send an email to|i need to say|i want to say|i need to tell|can you write|can you draft)\b/i.test(p)) return true;
+  if (/^(tell them|let them know|say that|just say|basically say|write to|reply to|respond to|send an email to|i need to say|i want to say|i need to tell|can you write|can you draft)/i.test(p)) return true;
 
-  if (/^(change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)\b/i.test(p)) return true;
+  if (/^(change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)/i.test(p)) return true;
 
   return false;
 }
@@ -574,28 +578,28 @@ function hasExplicitDraftRequest(prompt = '') {
   if (!p) return false;
 
   const expressDraft =
-    /\bdraft this\b/i.test(p) ||
-    /\bdraft a\b/i.test(p) ||
-    /\bdraft an\b/i.test(p) ||
-    /\bdraft the\b/i.test(p) ||
-    /\bdraft my\b/i.test(p) ||
-    /\blet'?s draft\b/i.test(p) ||
-    /\bwrite an email\b/i.test(p) ||
-    /\bwrite a letter\b/i.test(p) ||
-    /\bwrite to\b/i.test(p) ||
-    /\bprepare a response\b/i.test(p) ||
-    /\bprepare a reply\b/i.test(p) ||
-    /\bprepare an email\b/i.test(p) ||
-    /\bprepare a letter\b/i.test(p) ||
-    /\bcompose an email\b/i.test(p) ||
-    /\bcompose a letter\b/i.test(p) ||
-    /\bdraft a response\b/i.test(p) ||
-    /\bdraft a reply\b/i.test(p) ||
-    /\breply saying\b/i.test(p) ||
-    /\brespond saying\b/i.test(p) ||
-    /\brespond by saying\b/i.test(p) ||
-    /\bcreate the email\b/i.test(p) ||
-    /\bsend an email\b/i.test(p);
+    /draft this/i.test(p) ||
+    /draft a/i.test(p) ||
+    /draft an/i.test(p) ||
+    /draft the/i.test(p) ||
+    /draft my/i.test(p) ||
+    /let'?s draft/i.test(p) ||
+    /write an email/i.test(p) ||
+    /write a letter/i.test(p) ||
+    /write to/i.test(p) ||
+    /prepare a response/i.test(p) ||
+    /prepare a reply/i.test(p) ||
+    /prepare an email/i.test(p) ||
+    /prepare a letter/i.test(p) ||
+    /compose an email/i.test(p) ||
+    /compose a letter/i.test(p) ||
+    /draft a response/i.test(p) ||
+    /draft a reply/i.test(p) ||
+    /reply saying/i.test(p) ||
+    /respond saying/i.test(p) ||
+    /respond by saying/i.test(p) ||
+    /create the email/i.test(p) ||
+    /send an email/i.test(p);
 
   if (expressDraft) return true;
 
@@ -610,12 +614,12 @@ function hasExplicitReviewRequest(prompt = '') {
   if (!p) return false;
 
   return (
-    /\breview this (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
-    /\breview the (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
-    /\blook over this (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
-    /\bcheck this against\b/i.test(p) ||
-    /\bcompare these two\b/i.test(p) ||
-    /\bcompare this (award|notice|document|draft|email|letter|clause)\b/i.test(p)
+    /review this (award|notice|document|draft|email|letter|clause|schedule|soc)/i.test(p) ||
+    /review the (award|notice|document|draft|email|letter|clause|schedule|soc)/i.test(p) ||
+    /look over this (award|notice|document|draft|email|letter|clause|schedule|soc)/i.test(p) ||
+    /check this against/i.test(p) ||
+    /compare these two/i.test(p) ||
+    /compare this (award|notice|document|draft|email|letter|clause)/i.test(p)
   );
 }
 
@@ -626,12 +630,12 @@ function hasExecuteIntent(prompt = '', body = {}) {
 
   return (
     (
-      /\b(book|schedule|set|add|create|put in|diary|remind|reminder|block out)\b/i.test(p) &&
-      /\b(appointment|inspection|soc|survey|visit|call|meeting|deadline|reminder)\b/i.test(p)
+      /(book|schedule|set|add|create|put in|diary|remind|reminder|block out)/i.test(p) &&
+      /(appointment|inspection|soc|survey|visit|call|meeting|deadline|reminder)/i.test(p)
     ) ||
     (
-      /\b(send|save|delete|remove|archive|update|create|generate|download|export)\b/i.test(p) &&
-      /\b(email|draft|document|pdf|invoice|task|calendar|appointment|notice|award|report)\b/i.test(p)
+      /(send|save|delete|remove|archive|update|create|generate|download|export)/i.test(p) &&
+      /(email|draft|document|pdf|invoice|task|calendar|appointment|notice|award|report)/i.test(p)
     )
   );
 }
@@ -674,6 +678,21 @@ function inferModeHint(surface, prompt = '', body = {}) {
   if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId) && !hasExplicitDraftRequest(prompt)) {
     return 'email_summary';
   }
+
+  return 'discuss';
+}
+) {
+  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
+
+  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) return 'email_summary';
+
+  if (hasExplicitDraftRequest(prompt)) return 'draft';
+
+  if (String(prompt || '').toLowerCase().includes('review') || String(prompt || '').toLowerCase().includes('compare')) return 'review';
+
+  if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId)) return 'email_summary';
+
+  if ((explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) && !String(prompt || '').trim()) return 'email_summary';
 
   return 'discuss';
 }
@@ -787,33 +806,25 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-// ============================================================
-// NORA V4 INSTRUCTION HIERARCHY — Build Package 1
-// When instructions conflict, apply this order:
-// 1. Current user instruction
-// 2. Detected intent (from inferIntent / inferModeHint)
-// 3. Active mode rules
-// 4. Domain rules
-// 5. Supplied project / email / document context
-// 6. User preferences and standing memory
-// 7. General style preferences
-//
-// Memory must never override the current user instruction or detected intent.
-// Surface must never override detected intent.
-// Draft With Ely is a context surface, not a command to draft.
-// ============================================================
-
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
-  // NORA V4 MEMORY FILTER — Build Package 1
-  // TODO: When standing memory records are injected into the runtime prompt,
-  // filter out the following keys before injection:
-  // - preserve_working_features (development instruction, not runtime behaviour)
-  // - soc_template (outdated, conflicts with dedicated SOC engine)
-  // - email_style (behaviour parts conflict with v4 intent classifier — style parts only via preferences)
-  // - assistant_role (duplicates and conflicts with ely_master_v3)
-  // Memory must not override current user instruction or detected intent.
-  // See: Nora v4 Build Package 1 Part 5.
-
+  // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
+  // When instructions conflict, apply this order:
+  // 1. Current user instruction
+  // 2. Detected intent (modeHint from classifier)
+  // 3. Active mode rules (injected below based on modeHint)
+  // 4. Domain rules (party wall, award review etc.)
+  // 5. Supplied project/email/document context
+  // 6. User preferences and standing memory
+  // 7. General style preferences
+  //
+  // Memory must NEVER override the current user instruction or detected intent.
+  // Surface must NEVER override detected intent.
+  // Draft With Ely is a context surface, not a command to draft.
+  //
+  // TODO (Build Package 2): Filter memory records by type before injection.
+  // Excluded from runtime: preserve_working_features, soc_template,
+  // email_style (full record), assistant_role (full record).
+  // ──────────────────────────────────────────────────────────────────────────
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
 
   // Append output rules if present
@@ -1031,7 +1042,7 @@ ${JSON.stringify(draftingExamples, null, 2)}
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
+function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
   const { prompt, chatHistory = [], brainContext = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -1097,8 +1108,9 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint =
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
-  // ── Draft mode collaboration rules ─────────────────────────────────────
-  // NORA V4: isDraftMode now comes from the intent classifier, not workflow strings
+  // ── Draft mode collaboration rules ───────────────────────────────────────
+  // When a draft is requested in project chat or main chat, enforce collaboration-first
+  // v4: isDraftMode driven by classifier, not by workflow strings in body
   const isDraftMode = modeHint === 'draft';
 
   // ── Inline response mode ──────────────────────────────────────────────
