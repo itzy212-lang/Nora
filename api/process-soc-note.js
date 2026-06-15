@@ -47,7 +47,7 @@ Your job is to process each dictated note as it comes in. You must:
 
 1. ROOM/AREA DECLARATIONS — If the note declares a new room or area (e.g. "moving into the kitchen", "we're now in the rear bedroom", "continuing at the rear elevation"), respond with the section name only, e.g.: "Kitchen — rear elevation. Got it."
 
-2. CORRECTIONS — If the note corrects or amends a previous note (signals: "scratch that", "strike that", "actually", "correction", "go back", "that last note", "ignore that", "change that"), identify which previous note is being corrected, describe the amendment in one line, e.g.: "Amended note [3] — moved to front bedroom."
+2. CORRECTIONS — If the note corrects or amends a previous note (signals: "scratch that", "strike that", "actually", "correction", "go back", "that last note", "ignore that", "change that", "amendment", "minor amendment", "amend", "just to amend", "going back to", "just to clarify", "revision to", "update to", "amending my last", "just some minor amendments"), identify which previous note is being corrected, describe the amendment in one line, e.g.: "Amended note [3] — added cracking detail to flank wall observation."
 
 3. CONTRADICTIONS — If the note contradicts a previous note about the same element, flag and reconcile: "Updated — [brief description of what changed]."
 
@@ -96,7 +96,7 @@ ${previousContext}`;
     }
 
     // ── 5. Detect if this is a correction ───────────────────────────────────
-    const correctionSignals = ['scratch that', 'strike that', 'actually', 'correction', 'go back', 'that last note', 'ignore that', 'change that'];
+    const correctionSignals = ['scratch that', 'strike that', 'actually', 'correction', 'go back', 'that last note', 'ignore that', 'change that', 'amendment', 'amend', 'minor amendment', 'just to amend', 'going back to', 'just to clarify', 'correction to', 'to correct', 'revise', 'revision to', 'update to', 'update my last', 'amending my last', 'amending the last', 'just some minor'];
     const isCorrection = correctionSignals.some(s => note.toLowerCase().includes(s));
 
     // ── 6. Save note to Supabase ─────────────────────────────────────────────
