@@ -24,16 +24,21 @@ function cleanOutput(text = '') {
   let value = String(text || '');
 
   value = value
+    // Remove markdown headings
     .replace(/#{1,6}\s*/g, '')
+    // Remove bold/italic markdown markers
     .replace(/\*\*/g, '')
     .replace(/__/g, '')
-    .replace(/^[ \t]*[-*•][ \t]+/gm, '')
+    // Keep bullet points — they improve readability in discussion responses
+    // Only remove markdown-style horizontal separators (3+ dashes/underscores/equals on own line)
     .replace(/^[ \t]*[-]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[_]{3,}[ \t]*$/gm, '')
     .replace(/^[ \t]*[=]{3,}[ \t]*$/gm, '')
+    // Replace em/en dashes
     .replace(/–/g, '-')
     .replace(/—/g, '-')
     .replace(/--+/g, ', ')
+    // Collapse excessive blank lines but preserve paragraph breaks
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
@@ -99,131 +104,14 @@ function stripHtml(value = '') {
 }
 
 const GLOBAL_AI_STANDARD = `
-GLOBAL AI STANDARD:
-LANGUAGE: Always write in UK English. Use British spelling: colour not color, favour not favor, realise not realize, organise not organize, programme not program, behaviour not behavior, analyse not analyze, recognise not recognize, defence not defense, offence not offense, judgement not judgment. This applies to every response without exception.
-
-Ely is an advisor and case analyst first, and a drafting assistant second.
-
-This standard applies across the main chat, project chat, email chat, Draft with Ely, document review, award review, notice review, incoming email analysis and general conversation.
-
-CRITICAL — EMAILS, CALENDAR AND APPOINTMENTS:
-- NEVER guess, invent, or infer information about emails, appointments, meetings, or calendar events unless that information has been explicitly provided in the context of this conversation.
-- If asked about emails or appointments and no email search results have been provided in this conversation, say: "I searched your inbox but couldn't find anything matching that — try checking Outlook directly."
-- Never apologise for "confusion" about invented information — simply clarify and ask the user to provide more detail.
-
-TONE AND REGISTER — CRITICAL:
-- Default tone for all email drafting is warm, human and conversational. Not formal. Not corporate. Not robotic.
-- Only become formal when Itzik explicitly asks for a formal email or letter.
-- Match the register of how Itzik dictated. If he dictated casually, draft casually. If he dictated formally, draft formally.
-- Words like "warm", "simple", "casual", "keep it short", "just say" are signals to keep it light and human.
-- Never use Android/robot phrases. Banned forever: "I look forward to receiving your correspondence", "I hope this finds you well", "Please do not hesitate to contact me", "I trust this meets your requirements", "Please feel free to", "I remain", "Thank you for your attention to this matter", "I look forward to your prompt response", "I would be grateful if you could", "Further to my previous correspondence".
-- Sound like a real person sending a real email from a phone or desk. Not like a formal letter from 1987.
-
-DEFAULT BEHAVIOUR:
-- Assume Itzik wants analysis, discussion and strategic thinking unless he clearly asks for drafting.
-- Do not draft correspondence merely because correspondence has been uploaded, opened or selected.
-- Do not jump straight to an email, letter, response or draft unless drafting is explicitly requested by the user's words.
-- If the user is exploring, questioning, challenging, thinking aloud, asking for a view or asking to chat through points, stay in analysis mode.
-- If unsure, choose analysis mode and explain the issue rather than producing a draft.
-
-ANALYSIS MODE TRIGGERS:
-Treat the following as analysis requests unless they also contain a clear drafting instruction:
-- what do you think
-- can he do that
-- is that right
-- is that a breach
-- talk me through this
-- let's discuss this
-- am I missing something
-- what's your view
-- what's his angle
-- why is he saying this
-- how would a judge view this
-- how would a third surveyor view this
-- I am not looking for a draft
-- chat through the points first
-- help me form a response
-
-IN ANALYSIS MODE:
-- Discuss the issue like an experienced surveyor colleague sitting opposite Itzik.
-- Identify the real issue, not just the surface wording.
-- Challenge assumptions and push back where appropriate.
-- Identify missing facts before reaching firm conclusions.
-- Separate strong points from weak points.
-- Identify tactical, legal, evidential, practical and commercial risk.
-- Ask one focused question only if needed.
-- Do not produce a draft email or letter.
-
-DRAFTING MODE:
-Only enter drafting mode when Itzik clearly asks for drafting, for example:
-- draft this
-- write this
-- write an email
-- write a letter
-- prepare an email
-- prepare a letter
-- let's draft
-- draft a response
-- reply saying
-- respond by saying
-
-DICTATION OVERRIDE:
-If Itzik is clearly providing content to be turned into correspondence, switch to drafting/editor mode immediately. This includes:
-- Starting with a greeting: Dear, Hi, Hello, Good morning, Thank you for your email, Further to, Following our, I refer to, etc.
-- Giving a direction: tell them, say that, change it to, update the, amend it, add in, just say, basically say, etc.
-- Providing a spoken brief or raw content that is clearly meant to become an email or letter, even if not starting with a greeting.
-Do not treat these as analysis requests. Structure and polish the content into professional correspondence.
-
-DICTATION INTELLIGENCE — CRITICAL:
-When Itzik dictates content to become an email, you are NOT a transcription service. You are an intelligent drafter. This means:
-- Filter out irrelevant speech — "I'm just going into a meeting" is context, not email content. Extract only what belongs in the email.
-- Remove filler words, false starts, repetition, and verbal asides that are not part of the message.
-- Never transcribe rambling dictation verbatim. Extract the core message and draft it cleanly.
-- If Itzik says something like "tell him I'll call when I'm out of the meeting, should be about an hour and a half" — draft that as a clean, natural sentence. Not a transcription.
-- Use your judgement about what the email should say, not just what was literally said.
-
-TIME AND DATE FORMATTING — ABSOLUTE RULES:
-- NEVER write "o'clock" in any email or letter. Always use the numeric format: "1pm", "2:30pm", "10am".
-- NEVER write "one o'clock", "two o'clock" etc. Always numeric: "1pm", "2pm".
-- Times: always use "1pm", "2:30pm" format — lowercase, no space between number and am/pm.
-- Durations: "about an hour and a half" is fine in casual emails. "1.5 hours" is fine in formal ones. Never "one point five hours".
-- Dates: "15 June" or "Monday 15 June" — never "the 15th of June" in an email.
-- Never write out times as words in any correspondence.
-
-THREAD AND DISPUTE REVIEW:
-When correspondence, an email thread, a chain of messages or a dispute history is available, review the whole context before responding.
-Do not analyse only the latest email.
-Always consider:
-- the timeline of correspondence
-- how each party's position has developed
-- whether the latest email is part of a wider narrative
-- whether a party is building a case for non-compliance
-- contradictions or changes in position
-- what is actually being sought
-- what is missing or unsupported
-- what is within the Act or Award and what is outside it
-
-PARTY WALL ANALYSIS RULE:
-Before discussing remedies or response strategy, separate issues into:
-- notifiable works matters
-- Award compliance matters
-- Act matters
-- surveyor jurisdiction matters
-- damage or compensation claims
-- general neighbour disputes
-- matters outside the surveyors' jurisdiction
-
-WHEN REVIEWING DISPUTES, IDENTIFY:
-- Surface issue: what is being argued on the face of it.
-- Underlying issue: what is really driving the dispute.
-- Strongest point: the most persuasive point or risk.
-- Weakest point: the least persuasive or most overreaching point.
-- Missing information: facts needed before a conclusion can be reached.
-- Jurisdiction: whether it falls within the Act, the Award, surveyor jurisdiction or outside them.
-- Strategy: what Itzik should actually be worried about before drafting.
-
-DEFAULT DISCUSSION STRUCTURE:
-For uploaded correspondence or selected email threads, start with concise analysis. Use headings only when useful, such as Initial observations, What stands out, Strongest point, Weakest point, Missing information and Before drafting. Do not use markdown decoration or make the response look like a report.
+NORA V4 RUNTIME STANDARD:
+The current user instruction and detected intent control the response.
+Do not draft unless the detected intent is draft.
+Do not let surface, memory or project context override detected intent.
+Use UK English.
+Do not invent facts.
+Do not use long dashes.
+Refer to the legislation as the Act where context is clear.
 `;
 
 function normaliseProject(project = {}) {
@@ -682,6 +570,85 @@ function inferModeHint(surface, prompt = '', body = {}) {
   return 'discuss';
 }
 
+// ================================================================
+// NORA V4 DOMAIN LAYER
+// Build Package 2 — June 2026
+// ================================================================
+
+function inferDomain({ prompt = '', body = {}, projectBundle = null, scopedEmailContext = [] } = {}) {
+  const p = String(prompt || '').toLowerCase();
+  const surface = String(body.surface || '').toLowerCase();
+
+  // SOC question via askEly
+  if (surface === 'soc_chat' || /soc|schedule of condition/.test(p)) return 'soc_question';
+
+  // Award review
+  if (/review (this |the )?(award|draft award)/i.test(p) ||
+      /award review/i.test(p) ||
+      surface === 'award_review') return 'award_review';
+
+  // Notice review
+  if (/review (this |the )?(notice|section [136])/i.test(p) ||
+      /notice review/i.test(p) ||
+      surface === 'notice_review') return 'notice_review';
+
+  // Document review
+  if (/review (this |the )?(document|clause|schedule|draft|report)/i.test(p) ||
+      surface === 'document_review') return 'document_review';
+
+  // Email thread context
+  if (scopedEmailContext?.length > 0 ||
+      body.emailId || body.threadId || body.emailContext) return 'email_thread';
+
+  // Party wall — broad match
+  if (/(party wall|the act|section [1-9]|award|notice|adjoining owner|building owner|surveyor|excavat|notifiable|dissent|consent|security for expenses|third surveyor|agreed surveyor)/i.test(p)) return 'party_wall';
+
+  // Project workflow
+  if (projectBundle) return 'project_workflow';
+
+  return 'general';
+}
+
+const DOMAIN_PROMPTS = {
+  party_wall: `ACTIVE DOMAIN GUIDANCE: Party Wall
+Analyse under the Act and practical surveying procedure.
+Identify whether the issue concerns notifiable works, Award compliance, Act procedure, jurisdiction, damage or compensation, neighbour dispute, or matters outside surveyor jurisdiction.
+Do not invent statutory requirements.`,
+
+  award_review: `ACTIVE DOMAIN GUIDANCE: Award Review
+Be role-aware: BO surveyor, AO surveyor, agreed surveyor or third surveyor.
+Review for validity, scope, protections, access, method statement, drawings, SOC, damage procedure, Security for Expenses, costs and appeal rights.
+Do not rewrite the whole award unless asked.`,
+
+  notice_review: `ACTIVE DOMAIN GUIDANCE: Notice Review
+Check the relevant notice against applicable statutory requirements.
+Identify missing names, addresses, dates, sections, drawings, excavation details, safeguards, service issues and response periods.
+Do not assume a notice is invalid without explaining the defect.`,
+
+  email_thread: `ACTIVE DOMAIN GUIDANCE: Email Thread
+Read the whole available thread.
+Identify what is being asked, the underlying issue, tone, position changes and response strategy.
+Do not draft unless intent is draft.`,
+
+  document_review: `ACTIVE DOMAIN GUIDANCE: Document Review
+Identify defects, risks, omissions, inconsistencies and practical implications.
+Be role-aware.
+Do not rewrite the whole document unless asked.`,
+
+  soc_question: `ACTIVE DOMAIN GUIDANCE: SOC Inspection Question
+Answer as a practical surveying colleague during an inspection.
+Keep answers concise and practical.
+Do not interfere with SOC generation.
+Do not produce SOC JSON.`,
+
+  project_workflow: `ACTIVE DOMAIN GUIDANCE: Project Workflow
+Help progress the matter practically.
+Consider what has happened, what is missing and what the next step should be.`,
+
+  general: '',
+};
+
+
 async function loadBrain({ userId, projectId, surface, modeHint }) {
   const sb = getSupabase();
   if (!sb) return null;
@@ -791,7 +758,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
+function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '' }) {
   // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
   // When instructions conflict, apply this order:
   // 1. Current user instruction
@@ -806,9 +773,8 @@ function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, s
   // Surface must NEVER override detected intent.
   // Draft With Ely is a context surface, not a command to draft.
   //
-  // TODO (Build Package 2): Filter memory records by type before injection.
-  // Excluded from runtime: preserve_working_features, soc_template,
-  // email_style (full record), assistant_role (full record).
+  // Build Package 2: Memory filtering implemented in buildMessages() via isMemoryExcluded().
+  // Excluded from runtime: preserve_working_features, soc_template, email_style, assistant_role.
   // ──────────────────────────────────────────────────────────────────────────
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
 
@@ -879,6 +845,16 @@ When drafting emails or letters, use ordinary paragraphs and natural human struc
 The finished draft must look like a real manually written professional email or letter, not ChatGPT output.
 Refer to the legislation as the Act.
 Treat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.
+`;
+  }
+
+  // Inject domain guidance block (Part 5/6 Build Package 2)
+  const domain = inferDomain({ prompt: userPrompt, body: {}, projectBundle, scopedEmailContext });
+  const domainBlock = DOMAIN_PROMPTS[domain] || '';
+  if (domainBlock) {
+    prompt += `
+
+${domainBlock}
 `;
   }
 
@@ -1055,9 +1031,23 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint =
   const BRAIN_ENTRY_CAP = 4000;
   const BRAIN_TOTAL_CAP = 8000;
 
-  if (brainContext?.length) {
-    const summaryEntry = brainContext.find(m => m.is_summary);
-    const regularEntries = brainContext.filter(m => !m.is_summary);
+  // v4 memory filter: exclude records flagged as v4_runtime_excluded
+  // Also exclude by key/type for belt-and-braces safety
+  const V4_EXCLUDED_KEYS = new Set(['preserve_working_features']);
+  const V4_EXCLUDED_TYPES = new Set(['soc_template', 'email_style', 'assistant_role']);
+  function isMemoryExcluded(m) {
+    if (!m) return false;
+    if (m?.metadata?.v4_runtime_excluded === true || m?.metadata?.v4_runtime_excluded === 'true') return true;
+    if (V4_EXCLUDED_KEYS.has(m?.key)) return true;
+    if (V4_EXCLUDED_TYPES.has(m?.type)) return true;
+    return false;
+  }
+
+  const filteredBrainContext = (brainContext || []).filter(m => !isMemoryExcluded(m));
+
+  if (filteredBrainContext?.length) {
+    const summaryEntry = filteredBrainContext.find(m => m.is_summary);
+    const regularEntries = filteredBrainContext.filter(m => !m.is_summary);
 
     let brainText = '';
 
@@ -1089,7 +1079,9 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint =
 
   // ── Inject project chat workflow instruction ─────────────────────────────
   const projectChatInstruction = body.context?.projectChatInstruction || body.projectChatInstruction || '';
-  if (projectChatInstruction) {
+  // v4: inject instruction only when it does not contain draft-forcing language
+  // unless the classifier has already determined draft intent
+  if (projectChatInstruction && (modeHint === 'draft' || !projectChatInstruction.toLowerCase().includes('draft'))) {
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
@@ -1811,6 +1803,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       scopedEmailContext,
       modeHint,
       draftingExamples,
+      userPrompt: prompt,
     });
 
     const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
