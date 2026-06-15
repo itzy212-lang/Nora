@@ -1027,7 +1027,7 @@ ${JSON.stringify(draftingExamples, null, 2)}
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
+function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
   const { prompt, chatHistory = [], brainContext = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
