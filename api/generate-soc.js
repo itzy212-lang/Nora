@@ -581,6 +581,18 @@ ABUTTING vs ADJACENT TO — apply correct term based on context:
 - Crack or defect running to a fixed element → "extending to the abutment of" or "terminating at the junction with"
 - Physical proximity without structural connection → "adjacent to" — "adjacent to the window opening", "adjacent to the radiator"
 
+REVISION AND RECONCILIATION RULE — critical for accuracy:
+When notes contain a revision or amendment to a previous observation, reconcile them into a single observation. Never output both the original and the amendment as separate rows.
+
+Specific case — "no visible defects" followed by a revision adding a defect:
+- DO NOT produce one row saying "no visible defects" and a separate row noting the defect
+- DO produce a single reconciled row that: (a) describes the element, (b) notes the specific defect and its location, (c) states "The remaining [element] from [location] to [location] exhibits no visible defects at the time of inspection"
+- Example: Original note says "flank wall pebble dash render, no visible defects". Revision adds "intermittent vertical cracking at front left-hand corner". Reconciled output: "The exterior panelling on the adjoining owner's flank wall comprises pebble dash render. Intermittent vertical cracking was noted at the front left-hand corner. The remaining panelling along the flank wall from the front elevation to the rear exhibits no visible defects at the time of inspection."
+
+General revision rule:
+- If a note says "amendment to last comment" or "revision to previous note" or "actually" or "scratch that" — find the original observation and update it, do not create a duplicate
+- The final output should reflect only the corrected/amended version, never both versions
+
 BUNDLING RULE — this is critical. Each observation must be its own row. Never combine:
 - Wall observations and ceiling observations → always separate rows
 - Wall observations and floor observations → always separate rows
@@ -617,7 +629,7 @@ Heading and grouping rules:
 - If the user does not dictate a heading, create a sensible inspection-area heading, but do not create unnecessary micro-sections.
 - Keep windows, floors, ceilings, skirtings and doors within the same room or area unless the user dictated them as separate headings.
 - Section 2 must be the first dictated room or inspection area. Section 1 is added automatically by the system.
-- REF NUMBERING: Derive a unique 2-4 letter prefix from each section heading. Examples: External Front Elevation → EFE-, Hallway → HW-, Front Reception Room → FRR-, Kitchen → KT-, Rear Elevation → RE-, Garden → GD-, Landing → FL-, Front Bedroom → FB-, Rear Bedroom → RB-, Bathroom → BR-, Loft → LF-, Rear Chimney → RC-, Party Wall → PW-, Dining Room → DR-, Living Room → LR-. NEVER use RE- as a universal prefix for all sections. Each section must have its own unique prefix. Numbering restarts at 01 for each new section.
+- REF NUMBERING: Derive a unique 2-4 letter prefix from each section heading. Format is ALWAYS prefix + zero-padded number with NO hyphen between prefix and number — e.g. CP01, CP02, HW01, not CP-01 or CP-1. Numbers restart at 01 for each new section. Examples: External Front Elevation → EFE-, Hallway → HW-, Front Reception Room → FRR-, Kitchen → KT-, Rear Elevation → RE-, Garden → GD-, Landing → FL-, Front Bedroom → FB-, Rear Bedroom → RB-, Bathroom → BR-, Loft → LF-, Rear Chimney → RC-, Party Wall → PW-, Dining Room → DR-, Living Room → LR-. NEVER use RE- as a universal prefix for all sections. Each section must have its own unique prefix. Numbering restarts at 01 for each new section.
 
 What must NOT go into normal SOC condition rows:
 - reminders to the surveyor
@@ -634,7 +646,10 @@ What must NOT go into normal SOC condition rows:
 Where these items should go:
 - Put surveyor reminders and calculations in actions[].
 - Put matters relevant to the Party Wall Award in award_notes[].
-- CRITICAL: Any mention of access arrangements, shared gates, trees, horticulture, temporary works, protection measures, surveys required, or matters needing clarification from the Building Owner MUST go into award_notes[]. These must NEVER appear as condition rows. If the surveyor says "we need to find out", "flag to the building owner", "ask them to confirm", or "need to check" — that is an award_note, not a condition observation. Award notes must always be populated if any such matters arise.
+- CRITICAL: Any mention of access arrangements, shared gates, trees, horticulture, temporary works, protection measures, surveys required, trial pits, structural investigations, foundation queries, or matters needing clarification from the Building Owner, contractor, structural engineer or architect MUST go into award_notes[]. These must NEVER appear as condition rows.
+- If the surveyor says "we need to find out", "flag to the building owner", "ask them to confirm", "need to check", "note for the structural engineer", "note for the contractor", "we need a trial pit", "clarification required" — that is an award_note, not a condition observation.
+- If access was refused or not available during the inspection, that MUST appear as an award_note — e.g. "Access to the interior of the Adjoining Owner's property was not available at the time of inspection. A further inspection should be arranged prior to commencement of the notifiable works."
+- Award notes must always be populated if any such matters arise.
 - Put required emails in emails_required[].
 - If the user clearly wants these contextual matters retained in the SOC, include them only in a final section titled "Notes / Observations", not mixed into the physical condition sections.
 
