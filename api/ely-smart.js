@@ -401,11 +401,32 @@ async function loadProjectBundle(projectId) {
   };
 }
 
+// NORA V4 — wantsEmailContext
+// Only loads email context when explicitly relevant. No longer loads all emails just because a project is active.
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
   if (suppliedEmailContext || threadId || emailId) return true;
-  if (projectId) return true; // always load emails when in project context
+
   const lower = String(prompt || '').toLowerCase();
-  return lower.includes('email') || lower.includes('thread') || lower.includes('inbox') || lower.includes('reply') || lower.includes('correspondence') || lower.includes('letter') || lower.includes('wrote') || lower.includes('received');
+
+  return (
+    lower.includes('email') ||
+    lower.includes('thread') ||
+    lower.includes('inbox') ||
+    lower.includes('reply') ||
+    lower.includes('correspondence') ||
+    lower.includes('letter') ||
+    lower.includes('wrote') ||
+    lower.includes('received') ||
+    lower.includes('sent') ||
+    lower.includes('response') ||
+    lower.includes('respond') ||
+    lower.includes('draft') ||
+    lower.includes('what do you think about this email') ||
+    lower.includes('what did they say') ||
+    lower.includes('what is he asking') ||
+    lower.includes('what is she asking') ||
+    lower.includes('what are they asking')
+  );
 }
 
 async function buildScopedEmailContext({ prompt, projectId, emailContext = null, threadId = null, emailId = null }) {
@@ -477,64 +498,182 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   return emails;
 }
 
-function looksLikeDictation(prompt = '') {
-  const p = String(prompt || '').trim();
+// ============================================================
+// NORA V4 INTENT CLASSIFIER
+// Build Package 1 — 15 June 2026
+// Replaces: looksLikeDictation(), hasExplicitDraftRequest(), inferModeHint()
+// Removes: 20-word drafting trigger
+// ============================================================
 
-  // Classic greeting-led dictation
-  if (/^(dear|hi|hello|good morning|good afternoon|thank you for your email|thanks for your email|further to|following our|i refer to|i write|i am writing|please find|with reference to|just to confirm|just to let you know|as discussed|as agreed|following up|i wanted to|i would like to|please note|please be advised|we write|we refer|we are writing|we confirm|we note)[\s,]/i.test(p)) return true;
+function normalisePromptForIntent(prompt = '') {
+  return String(prompt || '')
+    .trim()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ');
+}
 
-  // User giving direction to write or change something
-  if (/^(tell them|let them know|say that|write to|respond to|reply to|send an email|draft something|i need to say|i want to say|i need to tell|can you write|can you draft|just say|basically say|change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)/i.test(p)) return true;
+function hasDiscussionIntent(prompt = '') {
+  const p = normalisePromptForIntent(prompt).toLowerCase();
 
-  // Long prompt with no analysis trigger — treat as a drafting brief
-  const hasAnalysisTrigger = /(what do you think|can he do that|is that right|is that a breach|talk me through|let's discuss|am i missing|what's your view|what's his angle|why is he saying|how would a|chat through|help me form|not looking for a draft)/i.test(p);
-  const wordCount = p.split(/\s+/).filter(Boolean).length;
-  if (wordCount > 20 && !hasAnalysisTrigger) return true;
+  if (!p) return false;
+
+  return (
+    /\bwhat do you think\b/i.test(p) ||
+    /\bwhat's your view\b/i.test(p) ||
+    /\bwhats your view\b/i.test(p) ||
+    /\bwhat's your read\b/i.test(p) ||
+    /\bwhats your read\b/i.test(p) ||
+    /\bthoughts\??\b/i.test(p) ||
+    /\bcan (he|she|they|we|i) do that\b/i.test(p) ||
+    /\bis that right\b/i.test(p) ||
+    /\bis that correct\b/i.test(p) ||
+    /\bis that a breach\b/i.test(p) ||
+    /\btalk me through\b/i.test(p) ||
+    /\blet'?s discuss\b/i.test(p) ||
+    /\bchat through\b/i.test(p) ||
+    /\bam i missing something\b/i.test(p) ||
+    /\bwhat'?s his angle\b/i.test(p) ||
+    /\bwhat'?s her angle\b/i.test(p) ||
+    /\bwhat'?s their angle\b/i.test(p) ||
+    /\bwhy is (he|she|they) saying this\b/i.test(p) ||
+    /\bhow would a judge view this\b/i.test(p) ||
+    /\bhow would a third surveyor view this\b/i.test(p) ||
+    /\bhelp me form a response\b/i.test(p) ||
+    /\bwe need to discuss\b/i.test(p) ||
+    /\bi think\b/i.test(p) ||
+    /\bi am concerned\b/i.test(p) ||
+    /\bi'm concerned\b/i.test(p) ||
+    /\bthe issue is\b/i.test(p) ||
+    /\bthe risk is\b/i.test(p) ||
+    /\bthe difficulty is\b/i.test(p) ||
+    /\bi'?ve reviewed the thread and i think\b/i.test(p) ||
+    /\bi'?ve read the thread and i think\b/i.test(p)
+  );
+}
+
+function looksLikeEmailDictation(prompt = '') {
+  const p = normalisePromptForIntent(prompt);
+
+  if (!p) return false;
+
+  if (/^(dear|hi|hello|good morning|good afternoon|good evening)\s+[a-z]/i.test(p)) return true;
+
+  if (/^(thank you for your email|thanks for your email|further to|following our|i refer to|with reference to)\b/i.test(p)) return true;
+
+  if (/^(tell them|let them know|say that|just say|basically say|write to|reply to|respond to|send an email to|i need to say|i want to say|i need to tell|can you write|can you draft)\b/i.test(p)) return true;
+
+  if (/^(change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)\b/i.test(p)) return true;
 
   return false;
 }
 
 function hasExplicitDraftRequest(prompt = '') {
-  const p = String(prompt || '').toLowerCase();
+  const p = normalisePromptForIntent(prompt).toLowerCase();
 
-  if (looksLikeDictation(prompt)) return true;
+  if (!p) return false;
+
+  const expressDraft =
+    /\bdraft this\b/i.test(p) ||
+    /\bdraft a\b/i.test(p) ||
+    /\bdraft an\b/i.test(p) ||
+    /\bdraft the\b/i.test(p) ||
+    /\bdraft my\b/i.test(p) ||
+    /\blet'?s draft\b/i.test(p) ||
+    /\bwrite an email\b/i.test(p) ||
+    /\bwrite a letter\b/i.test(p) ||
+    /\bwrite to\b/i.test(p) ||
+    /\bprepare a response\b/i.test(p) ||
+    /\bprepare a reply\b/i.test(p) ||
+    /\bprepare an email\b/i.test(p) ||
+    /\bprepare a letter\b/i.test(p) ||
+    /\bcompose an email\b/i.test(p) ||
+    /\bcompose a letter\b/i.test(p) ||
+    /\bdraft a response\b/i.test(p) ||
+    /\bdraft a reply\b/i.test(p) ||
+    /\breply saying\b/i.test(p) ||
+    /\brespond saying\b/i.test(p) ||
+    /\brespond by saying\b/i.test(p) ||
+    /\bcreate the email\b/i.test(p) ||
+    /\bsend an email\b/i.test(p);
+
+  if (expressDraft) return true;
+
+  if (looksLikeEmailDictation(prompt)) return true;
+
+  return false;
+}
+
+function hasExplicitReviewRequest(prompt = '') {
+  const p = normalisePromptForIntent(prompt).toLowerCase();
+
+  if (!p) return false;
 
   return (
-    p.includes('draft this') ||
-    p.includes('draft a') ||
-    p.includes('draft an') ||
-    p.includes('draft the') ||
-    p.includes("let's draft") ||
-    p.includes('lets draft') ||
-    p.includes('write an email') ||
-    p.includes('write a letter') ||
-    p.includes('write to') ||
-    p.includes('prepare an email') ||
-    p.includes('prepare a letter') ||
-    p.includes('compose an email') ||
-    p.includes('compose a letter') ||
-    p.includes('draft a response') ||
-    p.includes('draft a reply') ||
-    p.includes('reply saying') ||
-    p.includes('respond saying') ||
-    p.includes('respond by saying') ||
-    p.includes('send this') ||
-    p.includes('create the email')
+    /\breview this (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
+    /\breview the (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
+    /\blook over this (award|notice|document|draft|email|letter|clause|schedule|soc)\b/i.test(p) ||
+    /\bcheck this against\b/i.test(p) ||
+    /\bcompare these two\b/i.test(p) ||
+    /\bcompare this (award|notice|document|draft|email|letter|clause)\b/i.test(p)
   );
 }
 
-function inferModeHint(surface, prompt = '', body = {}) {
+function hasExecuteIntent(prompt = '', body = {}) {
+  const p = normalisePromptForIntent(prompt).toLowerCase();
+
+  if (body?.pending_booking_confirm || body?.case_review_confirmed || body?.email_search) return true;
+
+  return (
+    (
+      /\b(book|schedule|set|add|create|put in|diary|remind|reminder|block out)\b/i.test(p) &&
+      /\b(appointment|inspection|soc|survey|visit|call|meeting|deadline|reminder)\b/i.test(p)
+    ) ||
+    (
+      /\b(send|save|delete|remove|archive|update|create|generate|download|export)\b/i.test(p) &&
+      /\b(email|draft|document|pdf|invoice|task|calendar|appointment|notice|award|report)\b/i.test(p)
+    )
+  );
+}
+
+function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
   const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
+  const p = normalisePromptForIntent(prompt);
 
-  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) return 'email_summary';
+  if (hasExecuteIntent(p, body)) return 'execute';
 
-  if (hasExplicitDraftRequest(prompt)) return 'draft';
+  if (!p && (body.emailContext || body.emailId || body.threadId)) return 'discuss';
 
-  if (String(prompt || '').toLowerCase().includes('review') || String(prompt || '').toLowerCase().includes('compare')) return 'review';
+  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) return 'discuss';
 
-  if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId)) return 'email_summary';
+  if (hasExplicitDraftRequest(p)) return 'draft';
 
-  if ((explicitMode.includes('collaborative_reply') || explicitMode.includes('draft')) && !String(prompt || '').trim()) return 'email_summary';
+  if (hasExplicitReviewRequest(p)) return 'review';
+
+  if (hasDiscussionIntent(p)) return 'discuss';
+
+  return 'discuss';
+}
+
+function inferModeHint(surface, prompt = '', body = {}) {
+  const intent = inferIntent({ surface, prompt, body });
+
+  if (intent === 'execute') return 'execute';
+  if (intent === 'draft') return 'draft';
+  if (intent === 'review') return 'review';
+
+  if (!String(prompt || '').trim() && (body.emailContext || body.emailId || body.threadId)) {
+    return 'email_summary';
+  }
+
+  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
+  if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) {
+    return 'email_summary';
+  }
+
+  if (surface === 'email_composer' && (body.emailContext || body.emailId || body.threadId) && !hasExplicitDraftRequest(prompt)) {
+    return 'email_summary';
+  }
 
   return 'discuss';
 }
@@ -648,7 +787,33 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
+// ============================================================
+// NORA V4 INSTRUCTION HIERARCHY — Build Package 1
+// When instructions conflict, apply this order:
+// 1. Current user instruction
+// 2. Detected intent (from inferIntent / inferModeHint)
+// 3. Active mode rules
+// 4. Domain rules
+// 5. Supplied project / email / document context
+// 6. User preferences and standing memory
+// 7. General style preferences
+//
+// Memory must never override the current user instruction or detected intent.
+// Surface must never override detected intent.
+// Draft With Ely is a context surface, not a command to draft.
+// ============================================================
+
 function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [] }) {
+  // NORA V4 MEMORY FILTER — Build Package 1
+  // TODO: When standing memory records are injected into the runtime prompt,
+  // filter out the following keys before injection:
+  // - preserve_working_features (development instruction, not runtime behaviour)
+  // - soc_template (outdated, conflicts with dedicated SOC engine)
+  // - email_style (behaviour parts conflict with v4 intent classifier — style parts only via preferences)
+  // - assistant_role (duplicates and conflicts with ely_master_v3)
+  // Memory must not override current user instruction or detected intent.
+  // See: Nora v4 Build Package 1 Part 5.
+
   let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
 
   // Append output rules if present
@@ -866,7 +1031,7 @@ ${JSON.stringify(draftingExamples, null, 2)}
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
+function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
   const { prompt, chatHistory = [], brainContext = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -932,12 +1097,9 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [] }) {
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
-  // ── Draft mode collaboration rules ───────────────────────────────────────
-  // When a draft is requested in project chat or main chat, enforce collaboration-first
-  const isDraftMode = (body.projectChatWorkflow || '').includes('draft') ||
-    (body.mainChatWorkflow || '').includes('draft') ||
-    (projectChatInstruction || '').includes('draft') ||
-    (body.mainChatInstruction || '').includes('draft');
+  // ── Draft mode collaboration rules ─────────────────────────────────────
+  // NORA V4: isDraftMode now comes from the intent classifier, not workflow strings
+  const isDraftMode = modeHint === 'draft';
 
   // ── Inline response mode ──────────────────────────────────────────────
   // Triggered when user wants to respond point-by-point inline in blue
@@ -1654,7 +1816,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       draftingExamples,
     });
 
-    const messages = buildMessages({ body, systemPrompt, scopedEmailContext });
+    const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
 
     // ── Knowledge base lookup for statutory questions ─────────────────────
     if (isStatutoryQuestion(prompt)) {
