@@ -305,10 +305,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
           }),
         });
+        if (!res.ok) console.error('[SOC] process-soc-note HTTP error:', res.status, await res.text().catch(() => ''));
         const data = await res.json().catch(() => ({}));
         const reply = data.response || 'Noted.';
         setMessages(prev => prev.map(m => m.pending ? { ...m, content: reply, pending: false } : m));
-      } catch {
+      } catch (err) {
+        console.error('[SOC] process-soc-note failed:', err);
         setMessages(prev => prev.map(m => m.pending ? { ...m, content: 'Noted.', pending: false } : m));
       }
     }
