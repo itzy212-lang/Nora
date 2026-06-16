@@ -1,6 +1,6 @@
 /**
  * draftUtils.js — shared draft utilities for Nora
- * 
+ *
  * Imported by ALL composers and chat surfaces.
  * Fix it here = fixed everywhere.
  */
@@ -8,6 +8,7 @@
 /**
  * Convert plain text to HTML paragraphs.
  * If already HTML, returns as-is.
+ * Preserves paragraph breaks (double newline → <p>) and line breaks (single newline → <br>).
  */
 export function toHtml(text) {
   if (!text) return '';
@@ -23,22 +24,33 @@ export function toHtml(text) {
 
 /**
  * Strip wrong sign-offs and names from a draft.
- * Always ends with "Kind Regards," and nothing after it.
+ * Always ends with "Kind regards," and nothing after it.
+ * Handles multi-word names, wrong sign-offs, mixed capitalisation.
  */
 export function cleanSignOff(draft) {
   if (!draft) return '';
-  return draft
-    // Remove name after Kind regards
-    .replace(/(Kind Regards,?\s*)\n\s*\w+\s*$/i, 'Kind Regards,')
-    // Replace wrong sign-offs with Kind regards
-    .replace(/\n(Cheers|Best|Best wishes|Regards|Warm regards|Many thanks|Thanks),?\s*\n?\s*\w*\s*$/i, '\n\nKind Regards,')
-    // Remove standalone name at very end
-    .replace(/\n(Kind Regards,)\s*\n\s*[A-Z][a-z]+\s*$/m, '\nKind Regards,')
-    .trimEnd();
+
+  let text = String(draft);
+
+  // Remove any name (one or two words) after Kind regards
+  // Handles: "Kind regards,\nItzik" or "Kind regards,\nItzik Darel"
+  text = text.replace(
+    /(Kind regards,?\s*)\n[\s\S]{0,50}$/i,
+    'Kind regards,'
+  );
+
+  // Replace wrong sign-offs (Best, Cheers, Regards, etc.) with Kind regards
+  // Also strips any name that follows on the next line
+  text = text.replace(
+    /\n(Cheers|Best|Best regards|Best wishes|Regards|Warm regards|Many thanks|Thanks|Yours sincerely|Yours faithfully),?[\s\S]{0,80}$/i,
+    '\n\nKind regards,'
+  );
+
+  return text.trimEnd();
 }
 
 /**
- * Full draft clean — HTML conversion + sign-off fix.
+ * Full draft clean — sign-off fix then HTML conversion.
  * Call this before displaying any draft to the user.
  */
 export function cleanDraft(draft) {
@@ -67,4 +79,3 @@ export function stripHtml(html) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
-
