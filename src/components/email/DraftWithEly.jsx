@@ -158,7 +158,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const [liveBottom, setLiveBottom] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [summarising, setSummarising] = useState(false);
+
   const [initialized, setInitialized] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const messagesEndRef = useRef(null);
@@ -221,41 +221,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     // Auto-summarise disabled — go straight to waiting for input
   }, [email, initialized]);
 
-  const autoSummarise = useCallback(async () => {
-    setSummarising(true);
-
-    try {
-      const result = await send('', {
-        mode: 'email_thread_summary',
-        workflowStage: 'summary',
-        emailId: email?.id || email?.external_id,
-        threadId: threadId || email?.thread_id,
-        projectId,
-        emailContext: {
-          from: email?.from || email?.from_email || '',
-          subject: email?.subject || '',
-          body: (email?.body || email?.preview || '').slice(0, 6000),
-        },
-      });
-
-      if (result.sessionId) setSessionId(result.sessionId);
-
-      setMessages([{
-        id: uid(),
-        role: 'ely',
-        messageType: 'summary',
-        content: result.reply,
-      }]);
-    } catch (err) {
-      setMessages([{
-        id: uid(),
-        role: 'ely',
-        content: `I couldn't load the email context. ${err.message}`,
-      }]);
-    } finally {
-      setSummarising(false);
-    }
-  }, [email, threadId, projectId, send]);
+  // autoSummarise removed — user requests summary manually if needed
 
   const handleSend = useCallback(async (overrideText) => {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim();
@@ -308,8 +274,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
           messageType: 'draft',
         });
       } else {
-        // Fallback — if no draft detected, show as plain text
-        newMsgs.push({ id: uid(), role: 'ely', content: raw, messageType: 'brief' });
+        // No draft detected — show as plain Ely response (discussion, analysis, question answer etc.)
+        newMsgs.push({ id: uid(), role: 'ely', content: raw });
       }
 
       setMessages(prev => [...prev, ...newMsgs]);
