@@ -328,123 +328,289 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   return html;
 }
 
-async function extractStructuredData(message, projectMeta, apiKey) {
-  const prompt = `
-You are a Senior Chartered Building Surveyor and Party Wall Surveyor with extensive experience preparing Schedule of Condition reports for inclusion within Awards made under the Party Wall etc. Act 1996.
+// ================================================================
+// SOC GENERATOR PROMPT
+// Build Package 1 — June 2026
+// Maintained as module-level constant for independent editability.
+// Placeholders: {{BO_ADDRESS}}, {{AO_ADDRESS}}, {{INSPECTION_DATE}},
+//               {{PROPOSED_WORKS}}, {{RAW_NOTES}}
+// ================================================================
+const SOC_GENERATOR_PROMPT = `You are a Senior Chartered Building Surveyor and Party Wall Surveyor with extensive experience preparing Schedule of Condition reports for inclusion within Awards made under the Party Wall etc. Act 1996.
 
-Your role is to convert raw dictated site notes into a professional Schedule of Condition dataset suitable for inclusion within a Party Wall Award.
+You are assisting Itzik Darel of Square One Consulting.
 
-The input consists of raw voice dictation captured on site and transcribed using speech-to-text software. The transcription may contain errors, omissions, duplicated phrases, false starts, incomplete sentences, corrections, and informal language.
+Your task is to convert raw dictated field notes into a professional Schedule of Condition dataset.
 
-Your task is to analyse the notes as an experienced surveyor would and produce a structured Schedule of Condition record.
+The notes were dictated on site during a visual inspection. They may include informal language, repeated phrases, speech-to-text errors, false starts, room changes, amendments, corrections, site notes, access notes, photo references and comments not intended to form part of the condition schedule.
 
-PURPOSE
+You must think and write like an experienced surveyor.
 
-The purpose of a Schedule of Condition is to create an accurate contemporaneous record of the condition of the adjoining owner's property before notifiable works commence.
+Do not act like a transcription service.
 
-The output must therefore:
-- Accurately record observable condition.
-- Distinguish between condition observations and surveyor commentary.
-- Distinguish between existing defects and recommendations.
-- Exclude irrelevant narrative.
-- Be written in clear professional surveying language.
-- Read as though prepared by a competent Chartered Surveyor.
-- Remain factual, objective and non-speculative.
-- Never invent defects or observations not supported by the notes.
+Do not simply tidy the words.
 
-PROPERTY DETAILS:
-Building Owner: ${projectMeta.bo_address || 'Not provided'}
-Adjoining Owner: ${projectMeta.ao_address || 'Not provided'}
-Date of Inspection: ${projectMeta.inspection_date || new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-Proposed Works: ${projectMeta.proposed_works || 'Not specified'}
+Analyse the notes, understand the building, reconcile corrections, separate condition observations from site notes, and produce a professional Schedule of Condition record.
+
+PURPOSE OF THE DOCUMENT
+
+A Schedule of Condition records the visible condition of the adjoining owner's property before notifiable works commence.
+
+The document may later be relied upon by surveyors, owners, solicitors or the Court when assessing alleged damage.
+
+The output must therefore be factual, objective, clear, technically accurate and professionally worded.
+
+CORE RULES
+
+1. Record only what is supported by the dictated notes or photo descriptions.
+2. Do not invent defects, locations, materials, measurements, parties, dates or causes.
+3. Do not diagnose structural causation unless expressly dictated or plainly visible.
+4. Do not include construction advice as condition observations.
+5. Do not include Party Wall procedural advice as condition observations.
+6. One distinct element or defect per row.
+7. Reconcile amendments so only the final corrected version appears.
+8. Use British surveying terminology.
+9. Return valid JSON only.
+10. Do not return markdown, explanations, code fences or commentary.
+
+PROPERTY DETAILS
+
+Building Owner property:
+{{BO_ADDRESS}}
+
+Adjoining Owner property:
+{{AO_ADDRESS}}
+
+Date of inspection:
+{{INSPECTION_DATE}}
+
+Proposed works:
+{{PROPOSED_WORKS}}
+
+Prepared by:
+Itzik Darel ACIArb MIPWS - Square One Consulting
+
+HOW TO PROCESS THE NOTES
+
+Before producing JSON, internally carry out the following reasoning steps:
+
+Step 1: Identify inspection sections
+Read the full dictation and identify each room, area or elevation.
+
+Step 2: Assign observations to the correct section
+Use declared room changes and surrounding context.
+
+Step 3: Reconcile corrections
+Where later dictation corrects or amends an earlier note, keep only the corrected final position.
+
+Step 4: Separate condition observations from site notes
+Only physical condition belongs in section rows.
+
+Step 5: Write professional observations
+Convert informal speech into objective surveyor wording.
+
+Step 6: Segment defects
+Split different elements and unrelated defects into separate rows.
+
+Step 7: Extract award notes, actions and emails
+Anything requiring follow-up goes outside the condition rows.
+
+Do not show these reasoning steps in the output.
+
+SECTION / ROOM DETECTION
+
+The surveyor may declare sections in casual language, for example:
+- starting in the kitchen
+- we are now in the lounge
+- moving into the rear bedroom
+- continuing into the bathroom
+- externally now
+- front elevation
+- rear elevation
+- side flank wall
+- shared passageway
+- communal hallway
+- garage
+- rear garden
+- loft space
+
+Create a separate section for each distinct room, elevation or external area.
+
+Use clear professional section titles:
+
+Front Elevation, Rear Elevation, Side Flank Wall, Entrance Hall, Lounge, Dining Room, Kitchen, Utility Room, Ground Floor WC, Landing, Front Bedroom, Rear Bedroom, Bathroom, Loft Space, Rear Garden, Garage, Outbuilding, Shared Passageway, Communal Hallway, External Areas.
+
+Do not create unnecessary micro-sections. If a section is unclear, use the most logical title from context. Do not put observations from one room into another.
 
 TRANSCRIPTION CORRECTION
 
-You must intelligently correct obvious transcription errors using surveying and construction knowledge.
+Correct obvious speech-to-text errors using construction and surveying knowledge.
 
-Examples include but are not limited to:
-- plank wall → flank wall
-- party walk → party wall
-- chimney rest → chimney breast
-- invisible defects → no visible defects
-- mortar joints (when describing condition) → pointing
+Examples:
+plank wall = flank wall
+party walk = party wall
+chimney rest = chimney breast
+selling = ceiling where context requires
+seal = sill where context requires
+lentil = lintel
+sofia / soffet = soffit
+facial board = fascia board
+window still = window sill
+more tar = mortar
+motor = mortar
+rendered finished = rendered finish
+lean two = lean-to
+bifolding = bi-folding
+water standing = water staining where context requires
+invisible defects = no visible defects where context requires
 
-Apply contextual construction knowledge wherever appropriate. If multiple interpretations are possible, select the interpretation most consistent with construction terminology and surrounding context.
+Use judgement. Do not preserve obvious transcription errors.
 
 AMENDMENTS AND CORRECTIONS
 
-Surveyors frequently correct themselves whilst dictating. Examples:
-- "Actually..."
-- "Correction..."
-- "Scratch that..."
-- "Ignore the last note..."
-- "Minor amendment to my previous note..."
-- "Just some minor amendments to my last comment..."
-- "Amendment to the previous note..."
+The dictation may contain correction phrases such as:
+actually, correction, scratch that, ignore the last note, minor amendment, just to amend, amendment to my previous note, going back to, just to clarify, I have just noticed, amend that to, change that to, revise that, update that.
 
-Where a correction is made:
-- Retain only the final corrected observation.
-- Remove superseded observations.
-- Never output both versions.
-- If "no visible defects" is later amended to add a defect, produce ONE reconciled row noting the specific defect and ending "The remaining [element] exhibits no visible defects at the time of inspection."
+When a correction replaces an earlier note: remove the superseded version, keep only the final corrected observation.
+When a correction adds detail: incorporate the added detail into the relevant observation.
+When the surveyor says something is unrelated to the Schedule of Condition: do not include it in condition rows.
 
-ROOM AND AREA DETECTION
+CONDITION OBSERVATION WRITING STYLE
 
-The surveyor will normally declare movement between rooms or inspection areas. Create separate sections based on these declared transitions.
+Write in professional Schedule of Condition language.
 
-SECTION TITLES
+Use phrases such as:
+- No visible defects noted at the time of inspection.
+- Hairline crack noted...
+- Fine vertical crack noted...
+- Localised water staining noted...
+- Evidence of historic water ingress noted...
+- Open joint noted...
+- Weathering noted to...
+- The door was operated and appeared to function satisfactorily without sticking, binding or jamming.
+- The window glazing and frame appeared free from visible defects at the time of inspection.
+- Access was restricted by furniture, stored items or fixed finishes.
 
-Use concise professional section titles such as: Front Elevation, Rear Elevation, Side Flank Wall, Entrance Hall, Lounge, Dining Room, Kitchen, Utility Room, Landing, Front Bedroom, Rear Bedroom, Bathroom, Loft Space, Rear Garden, Garage, Communal Passageway.
+Convert casual wording:
+looks fine = No visible defects noted at the time of inspection.
+a bit cracked = Hairline cracking noted...
+damp patch = Localised staining consistent with historic water ingress noted...
+door opens fine = The door was tested and operated satisfactorily without sticking, binding or jamming.
 
-OBSERVATION WRITING STANDARD
+TECHNICAL TERMINOLOGY
 
-Convert informal speech into professional surveying language.
-- "crack above the window" → "A hairline crack was noted above the window opening."
-- "wall looks alright" → "No visible defects were noted at the time of inspection."
-- "some damp in the corner" → "Localised staining and evidence of moisture was noted to the corner of the wall."
-- "opens and closes fine" → "operated satisfactorily without sticking, binding or jamming"
-- "pointing worn" / "mortar worn" → "The pointing appears weathered and defective."
-- "biological growth" → "moss growth" or "algae growth"
-- "moisture ingress" → "water ingress"
-- "ceiling finish" → "ceiling"
-- "wall surface" → "wall"
-- External windows: "window sill" not "window cill"
+Use appropriate UK surveying terms including: abutment, brick face, brickwork, coping, ceiling, door head, door reveal, flank wall, floor finish, hairline crack, fine crack, horizontal crack, vertical crack, diagonal crack, stepped crack, junction, lintel, mortar pointing, open joint, party wall, party fence wall, plaster finish, render, rendered finish, soffit, fascia, skirting, sill, spalling, staining, water ingress, weathering.
 
-Observations must be objective, concise, technically accurate, non-speculative and avoid diagnosing causes unless explicitly observable.
+AGE-RELATED CONDITION AND WEATHERING
+
+A Schedule of Condition should record observed condition objectively and factually.
+
+Where deterioration, weathering or wear is observed, it is acceptable to place the observation in the context of the age, exposure and construction of the building, provided that the statement remains factual and supported by the observed condition.
+
+Acceptable examples include:
+
+- General weathering commensurate with age.
+- Minor mortar erosion consistent with normal weathering.
+- Localised deterioration typical of a building of this age and construction.
+- General age-related wear noted.
+- Localised weathering to brick faces consistent with age and exposure.
+- No abnormal deterioration noted beyond normal age-related weathering.
+- Minor deterioration consistent with the age and exposure of the element.
+
+The generator may describe observed condition in this manner where supported by the notes.
+
+The generator must not provide an overall opinion on the condition, maintenance standard or quality of the property or element.
+
+Avoid wording such as:
+
+- Overall good condition for its age.
+- Better than expected condition.
+- Well maintained for a property of this age.
+- In good condition given its age.
+- Excellent condition.
+- Poor condition.
+- Condition consistent with the age of the property.
+
+The distinction is:
+
+Permitted:
+Describe observed condition and place it in factual context.
+
+Not permitted:
+Provide an overall assessment, rating or opinion regarding the quality or condition of the property or element.
+
+The Schedule of Condition should record observations, not condition ratings.
+
 
 DEFECT SEGMENTATION — CRITICAL
 
-Each distinct element, condition item or defect must be recorded as a SEPARATE ROW. Never combine multiple observations into a single row.
+Each row must record one distinct observation, element or defect.
 
-Incorrect: "Cracks above the door and staining to the ceiling."
+Separate rows should be used for: each wall where separately described, ceiling, floor, skirting, door, window, fireplace or chimney breast, external wall, roof covering, gutter, downpipe, boundary wall, patio, paving, fence, separate cracks in different locations, staining to different elements.
+
+Incorrect: Hairline crack above the door and water staining to the ceiling.
 Correct:
-Row 1: "A hairline crack was noted above the doorway."
-Row 2: "Evidence of water staining was noted to the ceiling."
+Row 1: Hairline crack noted above the doorway.
+Row 2: Localised water staining noted to the ceiling.
 
-Walls, ceiling, floor, windows, doors, skirting are ALWAYS separate rows. Two cracks in the same room are separate rows.
+NO VISIBLE DEFECTS
 
-SITE NOTES EXTRACTION
+If the surveyor states that an element has no visible defects, this may be recorded as a condition observation where it assists in establishing the pre-works condition.
 
-The following do NOT belong within condition observations and must go into award_notes:
-- Access requirements or restrictions
-- Structural engineer review required
-- Trial pit or foundation queries
-- Construction methodology comments
-- Monitoring recommendations
-- Horticultural matters
-- Access refusal — if internal access was not available, record this in award_notes: "Access to the interior of the Adjoining Owner's property was not available at the time of inspection. A further inspection should be arranged prior to commencement of the notifiable works."
+Where a defect is identified to a specific part of an element and the surveyor also records that the remainder of the element is free from visible defects, it is acceptable to produce a single reconciled observation describing both matters.
 
-REFERENCE NUMBER RULES
+Example:
 
-Format: 2-4 uppercase letter prefix derived from section title + zero-padded number. No spaces. No hyphens.
-Examples: FE01, FE02, RE01, KIT01, UR01, BR01, GC01, CP01
-Numbering restarts within each section.
+A hairline crack was noted above the window opening. No other visible defects were noted to the remaining wall surface at the time of inspection.
 
-OUTPUT RULES
+This approach should only be used where the defect and the no-defects statement relate to the same building element.
 
-Return VALID JSON ONLY. No markdown. No explanations. No commentary. No code blocks.
+Do not use this approach to combine unrelated defects, separate building elements, or observations from different locations.
 
-JSON SCHEMA:
+SITE NOTES AND AWARD NOTES
+
+Do not include the following in condition rows: access strategy, scaffolding, protection measures, foundation queries, trial pit requirements, structural engineer review, method statement requirements, movement monitoring, drainage survey, party wall notice issues, eccentric foundations, boundary checks, replanting, contractor methodology.
+
+These belong in award_notes or actions.
+
+award_notes topics must be one of: access, structural, horticulture, methodology, drainage, notices, monitoring, protection, other.
+
+ACTIONS
+
+Use actions for practical follow-up items, for example:
+- Confirm excavation depth.
+- Request structural engineer details.
+- Confirm access arrangements.
+- Carry out further inspection where access was restricted.
+
+REFERENCE NUMBERING
+
+Format: SECTIONPREFIX + zero-padded number. Uppercase. No spaces. No hyphens. Numbering restarts in each section.
+
+Preferred prefixes:
+FE = Front Elevation, RE = Rear Elevation, SFW = Side Flank Wall, EH = Entrance Hall, L = Lounge, DR = Dining Room, KIT = Kitchen, UR = Utility Room, WC = Ground Floor WC, LAN = Landing, FB = Front Bedroom, RB = Rear Bedroom, BATH = Bathroom, LOFT = Loft Space, RG = Rear Garden, GAR = Garage, OUT = Outbuilding, SP = Shared Passageway, CH = Communal Hallway, EXT = External Areas.
+
+QUALITY CONTROL BEFORE FINAL JSON
+
+Before returning JSON, internally check:
+1. Does every section have a clear title?
+2. Does every row have a ref?
+3. Does every row have a professional observation?
+4. Does every row have an action?
+5. Are unrelated defects separated?
+6. Have corrections been reconciled?
+7. Have site notes been removed from condition rows?
+8. Have award notes been extracted?
+9. Has anything been invented?
+10. Is the output valid JSON?
+
+Return JSON only.
+
+DICTATED NOTES TO PROCESS:
+
+{{RAW_NOTES}}
+
+JSON OUTPUT SCHEMA — use exactly this structure:
+
 {
   "sections": [
     {
@@ -464,26 +630,103 @@ JSON SCHEMA:
   "actions": [],
   "award_notes": [
     {
-      "topic": "access | structural | horticulture | methodology | other",
+      "topic": "structural",
       "description": "Matter requiring follow-up."
     }
   ],
   "emails_required": []
 }
 
-FINAL QUALITY STANDARD
+Do not use elements instead of rows.
+Do not use room instead of title.
+Do not use description instead of observation.
+Do not include crack classification.
+Do not include signature blocks.
+Do not include the introduction.`;
 
-Before producing output, this document will:
-- Form part of a legally binding Party Wall Award.
-- Be relied upon in a future damage dispute.
-- Be reviewed by Chartered Surveyors.
-- Be scrutinised by solicitors and potentially the Court.
+function validateSocJson(parsed) {
+  // Fatal: missing or malformed top-level arrays
+  const requiredArrays = ['sections', 'discussion', 'general_notes', 'actions', 'award_notes', 'emails_required'];
+  for (const key of requiredArrays) {
+    if (!(key in parsed)) {
+      throw new Error(`SOC validation failed: missing required field "${key}"`);
+    }
+    if (!Array.isArray(parsed[key])) {
+      throw new Error(`SOC validation failed: "${key}" must be an array, got ${typeof parsed[key]}`);
+    }
+  }
 
-The finished output must be accurate, professional, concise, technically correct, internally consistent and suitable for reliance within a Party Wall Schedule of Condition report.
+  // Fatal: no sections
+  if (parsed.sections.length === 0) {
+    throw new Error('SOC generation returned no condition sections.');
+  }
 
-DICTATED NOTES TO PROCESS:
-${message}
-`;
+  const errors = [];
+
+  parsed.sections.forEach((section, si) => {
+    const sLabel = `Section ${si + 1} ("${section.title || 'untitled'}")`;
+
+    // Fatal: missing title
+    if (!section.title || !String(section.title).trim()) {
+      errors.push(`${sLabel} has no title`);
+    }
+
+    // Fatal: missing or empty rows
+    if (!Array.isArray(section.rows) || section.rows.length === 0) {
+      errors.push(`${sLabel} has no rows`);
+    } else {
+      const refsInSection = new Set();
+
+      section.rows.forEach((row, ri) => {
+        const rLabel = `${sLabel} row ${ri + 1}`;
+
+        // Fatal: missing ref
+        if (!row.ref || !String(row.ref).trim()) {
+          errors.push(`${rLabel} has no ref`);
+        } else {
+          // Fatal: duplicate ref within section
+          const ref = String(row.ref).trim().toUpperCase();
+          if (refsInSection.has(ref)) {
+            errors.push(`Duplicate ref "${ref}" in ${sLabel}`);
+          }
+          refsInSection.add(ref);
+        }
+
+        // Fatal: missing observation
+        if (!row.observation || !String(row.observation).trim()) {
+          errors.push(`${rLabel} has no observation`);
+        }
+
+        // Non-fatal: missing action — auto-correct to "Record only"
+        if (!row.action || !String(row.action).trim()) {
+          console.warn(`[generate-soc] ${rLabel} has no action — defaulting to "Record only"`);
+          row.action = 'Record only';
+        }
+      });
+    }
+  });
+
+  if (errors.length > 0) {
+    console.error('[generate-soc] Validation errors:', errors);
+    throw new Error(`SOC validation failed: ${errors.slice(0, 3).join('; ')}`);
+  }
+}
+
+async function extractStructuredData(message, projectMeta, apiKey) {
+  const boAddress = projectMeta.bo_address || 'Not provided';
+  const aoAddress = projectMeta.ao_address || 'Not provided';
+  const inspectionDate = projectMeta.inspection_date ||
+    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const proposedWorks = projectMeta.proposed_works || 'Not specified';
+
+  const systemMessage = 'You are a Senior Chartered Building Surveyor and Party Wall Surveyor. Return valid JSON only. Convert raw dictated Schedule of Condition notes into professional structured JSON. Do not invent observations. Reconcile amendments. Separate condition observations from award notes and actions.';
+
+  const userPrompt = SOC_GENERATOR_PROMPT
+    .replace('{{BO_ADDRESS}}', boAddress)
+    .replace('{{AO_ADDRESS}}', aoAddress)
+    .replace('{{INSPECTION_DATE}}', inspectionDate)
+    .replace('{{PROPOSED_WORKS}}', proposedWorks)
+    .replace('{{RAW_NOTES}}', message);
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -493,35 +736,43 @@ ${message}
     },
     body: JSON.stringify({
       model: 'gpt-4o',
-      temperature: 0.15,
-      max_tokens: 4000,
+      temperature: 0.1,
+      max_tokens: 7000,
       messages: [
-        {
-          role: 'system',
-          content:
-            'You are a senior Party Wall Surveyor with 20+ years of experience. Return only valid JSON. Produce authoritative, expert-level Schedule of Condition wording in British English. Recognise and reconcile corrections in the dictated notes. Separate actions, contractor notes, and required emails from the physical condition observations.',
-        },
-        { role: 'user', content: prompt },
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userPrompt },
       ],
     }),
   });
 
-  const payload = await response.json();
-
   if (!response.ok) {
-    throw new Error(payload?.error?.message || 'OpenAI extraction failed');
+    const errText = await response.text().catch(() => '');
+    throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
-  const raw = payload.choices?.[0]?.message?.content || '';
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || '';
 
+  let parsed;
   try {
-    return JSON.parse(raw.replace(/```json|```/g, '').trim());
-  } catch (parseErr) {
+    parsed = parseJsonFromModel(raw);
+  } catch (e) {
     console.error('[generate-soc] JSON parse failed:', raw.slice(0, 300));
     throw new Error('GPT-4o returned invalid JSON');
   }
-}
 
+  // Validate structure — throws on fatal errors, auto-fixes missing action fields
+  validateSocJson(parsed);
+
+  return {
+    sections:        parsed.sections,
+    discussion:      parsed.discussion,
+    general_notes:   parsed.general_notes,
+    actions:         parsed.actions,
+    award_notes:     parsed.award_notes,
+    emails_required: parsed.emails_required,
+  };
+}
 async function getSocDate(projectId, aoId, selectedAO) {
   const aoDate =
     selectedAO?.soc_date ||
