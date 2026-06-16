@@ -328,6 +328,33 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   return html;
 }
 
+function parseJsonFromModel(raw = '') {
+  const text = String(raw || '').trim();
+
+  // Strip markdown code fences if present
+  const cleaned = text
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+
+  // Try direct parse first
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // Try extracting JSON object by first { and last }
+  const first = cleaned.indexOf('{');
+  const last = cleaned.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    try {
+      return JSON.parse(cleaned.slice(first, last + 1));
+    } catch {}
+  }
+
+  throw new Error('GPT returned invalid JSON');
+}
+
 // ================================================================
 // SOC GENERATOR PROMPT
 // Build Package 1 — June 2026
@@ -757,8 +784,12 @@ async function extractStructuredData(message, projectMeta, apiKey) {
   try {
     parsed = parseJsonFromModel(raw);
   } catch (e) {
-    console.error('[generate-soc] JSON parse failed:', raw.slice(0, 300));
-    throw new Error('GPT-4o returned invalid JSON');
+    console.error('[generate-soc] JSON parse failed. finish_reason:', data.choices?.[0]?.finish_reason);
+    console.error('[generate-soc] Raw response start:', raw.slice(0, 500));
+    const reason = data.choices?.[0]?.finish_reason === 'length'
+      ? 'GPT-4o returned invalid JSON (response truncated — increase max_tokens or reduce notes length)'
+      : 'GPT-4o returned invalid JSON';
+    throw new Error(reason);
   }
 
   // Validate structure — throws on fatal errors, auto-fixes missing action fields
@@ -823,6 +854,10 @@ export default async function handler(req, res) {
       final_soc_data,
     } = req.body || {};
 
+    // Validate ao_id — Supabase expects a UUID; sanitise to null if invalid
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safeAoId = ao_id && UUID_RE.test(String(ao_id)) ? ao_id : null;
+
     if (!project_id) {
       return res.status(400).json({ error: 'Missing project_id' });
     }
@@ -850,7 +885,7 @@ export default async function handler(req, res) {
       bo_names: ownerNameFromProject(project),
       proposed_works: project.works || project.notifiable_works || '',
       prepared_by: 'Itzik Darel ACIArb MIPWS - Square One Consulting',
-      ao_id: ao_id || selectedAO?.id || selectedAO?.num || null,
+      ao_id: safeAoId || (selectedAO?.id && UUID_RE.test(String(selectedAO.id)) ? selectedAO.id : null),
       ao_names: selectedAONames || '',
       ao_address: selectedAOAddress || '',
       ao_service_address: ao_service_address || aoServiceAddress(selectedAO) || '',
