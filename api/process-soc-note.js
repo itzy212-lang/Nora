@@ -72,7 +72,7 @@ export default async function handler(req, res) {
 
 Process each dictated note and respond with ONE LINE only:
 
-1. ROOM/AREA DECLARATION — note declares a location ("moving into the kitchen", "now in rear bedroom", "external rear elevation"):
+1. ROOM/AREA DECLARATION — note declares a location, for example: "moving into the kitchen", "now in rear bedroom", "external rear elevation", "front elevation", "rear elevation", "side elevation", "external rear", "rear garden", "shared passageway", "communal hallway", "garage", "landing", "first floor rear bedroom", "ground floor kitchen", "loft space", "outbuilding", "utility room", "bathroom":
    Respond: "[Room name]. Got it."
 
 2. CORRECTION/AMENDMENT — note corrects a previous one ("scratch that", "amendment", "minor amendment", "actually", "just to amend", "going back to", "just some minor amendments to my last"):
