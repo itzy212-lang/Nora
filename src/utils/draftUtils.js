@@ -6,6 +6,29 @@
  */
 
 /**
+ * Strip HTML tags from a draft and convert to plain text.
+ * Used when the AI returns HTML markup in a draft despite being told not to.
+ */
+export function stripHtmlFromDraft(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Only strip if the text actually contains HTML tags
+  if (!/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Convert plain text to HTML paragraphs.
  * If already HTML, returns as-is.
  * Preserves paragraph breaks (double newline → <p>) and line breaks (single newline → <br>).
@@ -26,11 +49,13 @@ export function toHtml(text) {
  * Strip wrong sign-offs and names from a draft.
  * Always ends with "Kind regards," and nothing after it.
  * Handles multi-word names, wrong sign-offs, mixed capitalisation.
+ * Also strips HTML tags if the AI generated them.
  */
 export function cleanSignOff(draft) {
   if (!draft) return '';
 
-  let text = String(draft);
+  // Strip any HTML tags the AI may have generated
+  let text = stripHtmlFromDraft(String(draft));
 
   // Remove any name (one or two words) after Kind regards
   // Handles: "Kind regards,\nItzik" or "Kind regards,\nItzik Darel"
@@ -50,7 +75,7 @@ export function cleanSignOff(draft) {
 }
 
 /**
- * Full draft clean — sign-off fix then HTML conversion.
+ * Full draft clean — strip HTML, fix sign-off, then convert to HTML.
  * Call this before displaying any draft to the user.
  */
 export function cleanDraft(draft) {
