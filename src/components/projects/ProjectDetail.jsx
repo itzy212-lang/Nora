@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
-import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName } from '../../utils/buildLOAPlaceholders';
+import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, buildBOLOAPdfPlaceholders, buildAOLOAPdfPlaceholders, buildLOAPdfFileName } from '../../utils/buildLOAPlaceholders';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
@@ -1408,20 +1408,39 @@ function AOCard({
               </button>
             )}
 
-            <button
-              className="btn btn-sm btn-ghost"
-              disabled={loaLoading}
-              onClick={() => onGenerateAOLOA?.(ao)}
-              style={{
-                cursor: loaLoading ? 'not-allowed' : 'pointer',
-                fontSize: 12,
-                borderRadius: 99,
-                opacity: loaLoading ? 0.65 : 1,
-                color: isAOAppointment ? 'var(--purple)' : 'var(--text2)',
-              }}
-            >
-              {loaLoading ? 'Sending…' : isAOAppointment ? '📄 Send AO LoA' : '🔥 Agreed Surveyor LoA'}
-            </button>
+            <div style={{ display: 'flex', gap: 1 }}>
+              <button
+                className="btn btn-sm btn-ghost"
+                disabled={!!loaLoading}
+                onClick={() => onGenerateAOLOA?.(ao)}
+                style={{
+                  cursor: loaLoading ? 'not-allowed' : 'pointer',
+                  fontSize: 12,
+                  borderRadius: '99px 0 0 99px',
+                  opacity: loaLoading ? 0.65 : 1,
+                  color: isAOAppointment ? 'var(--purple)' : 'var(--text2)',
+                  paddingRight: 8,
+                }}
+              >
+                {loaLoading ? 'Sending…' : isAOAppointment ? '📄 LoA eSignature' : '🔥 Agreed Surveyor LoA'}
+              </button>
+              <button
+                className="btn btn-sm btn-ghost"
+                disabled={!!loaLoading}
+                onClick={() => onDownloadAOLOAPdf?.(ao)}
+                style={{
+                  cursor: loaLoading ? 'not-allowed' : 'pointer',
+                  fontSize: 12,
+                  borderRadius: '0 99px 99px 0',
+                  opacity: loaLoading ? 0.65 : 1,
+                  color: isAOAppointment ? 'var(--purple)' : 'var(--text2)',
+                  paddingLeft: 8,
+                  borderLeft: '1px solid var(--border2)',
+                }}
+              >
+                {loaLoading === `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}` ? 'Generating…' : '⬇ PDF'}
+              </button>
+            </div>
 
             <button
               className="btn btn-sm btn-ghost"
@@ -2752,6 +2771,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [sendForSignature, project, bo, boEmail]);
 
+  const handleDownloadBOLOAPdf = useCallback(async () => {
+    setLoaLoading('bo_pdf');
+    try {
+      const r = await generateDocument({
+        templateKey: 'loa_bo_pdf',
+        mergeData: buildBOLOAPdfPlaceholders(project),
+        fileName: buildLOAPdfFileName('bo', project),
+        projectId: project.id,
+      });
+      if (!r.success) alert(r.error || 'Could not generate LoA PDF.');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoaLoading(null);
+    }
+  }, [generateDocument, project]);
+
   const handleGenerateAOLOA = useCallback(async (ao) => {
     const aoEmail = ao.email || ao.surv_email || ao.surveyorEmail;
 
@@ -2783,6 +2819,24 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       setLoaLoading(null);
     }
   }, [sendForSignature, project, role]);
+
+  const handleDownloadAOLOAPdf = useCallback(async (ao) => {
+    const aoKey = `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}`;
+    setLoaLoading(aoKey);
+    try {
+      const r = await generateDocument({
+        templateKey: 'loa_ao_pdf',
+        mergeData: buildAOLOAPdfPlaceholders(project, ao),
+        fileName: buildLOAPdfFileName('ao', project, ao),
+        projectId: project.id,
+      });
+      if (!r.success) alert(r.error || 'Could not generate LoA PDF.');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoaLoading(null);
+    }
+  }, [generateDocument, project]);
 
   const handleGenerateAward = useCallback(async (ao) => {
     const aoKey = `ao-${ao.id || ao.num || ao.name || 'unknown'}`;
@@ -3523,20 +3577,39 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   )}
 
                   {(role === 'BO' || boAgreedSurveyorMode) && (
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      disabled={loaLoading === 'bo'}
-                      onClick={handleGenerateBOLOA}
-                      style={{
-                        cursor: loaLoading === 'bo' ? 'not-allowed' : 'pointer',
-                        marginTop: 6,
-                        fontSize: 12,
-                        borderRadius: 99,
-                        opacity: loaLoading === 'bo' ? 0.65 : 1,
-                      }}
-                    >
-                      {loaLoading === 'bo' ? 'Sending…' : '📄 Send BO LoA'}
-                    </button>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <div style={{ display: 'flex', gap: 1, marginTop: 6 }}>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          disabled={!!loaLoading}
+                          onClick={handleGenerateBOLOA}
+                          style={{
+                            cursor: loaLoading ? 'not-allowed' : 'pointer',
+                            fontSize: 12,
+                            borderRadius: '99px 0 0 99px',
+                            opacity: loaLoading ? 0.65 : 1,
+                            paddingRight: 8,
+                          }}
+                        >
+                          {loaLoading === 'bo' ? 'Sending…' : '📄 LoA eSignature'}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          disabled={!!loaLoading}
+                          onClick={handleDownloadBOLOAPdf}
+                          style={{
+                            cursor: loaLoading ? 'not-allowed' : 'pointer',
+                            fontSize: 12,
+                            borderRadius: '0 99px 99px 0',
+                            opacity: loaLoading ? 0.65 : 1,
+                            paddingLeft: 8,
+                            borderLeft: '1px solid var(--border2)',
+                          }}
+                        >
+                          {loaLoading === 'bo_pdf' ? 'Generating…' : '⬇ PDF'}
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {project.bo_loa_signed_at ? (
                     <span title={`BO LOA signed ${new Date(project.bo_loa_signed_at).toLocaleDateString('en-GB')}`}
@@ -3632,6 +3705,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onOpenComposer={onOpenComposer}
                       project={project}
                       onGenerateAOLOA={handleGenerateAOLOA}
+                      onDownloadAOLOAPdf={handleDownloadAOLOAPdf}
                       onGenerateAward={handleGenerateAward}
                       onEditAO={setEditingAO}
                       onServeNotice={handleServeNotice}
