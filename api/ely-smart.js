@@ -1922,7 +1922,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const hasSuppliedEmail = !!suppliedEmailContext || !!body.threadId || !!body.emailId;
     const needsEmails = hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId);
     const needsProject = needsProjectContext(prompt);
-    const needsBrain = !!projectId; // always load brain summary if in a project — but keep it short
+    const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
       needsProject ? loadProjectBundle(projectId) : Promise.resolve(null),
