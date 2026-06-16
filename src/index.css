@@ -107,8 +107,12 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 .ely-md h2 { font-size: 15px; margin-top: 16px; color: var(--blue); }
 .ely-md h3 { font-size: 13.5px; color: var(--text); }
 .ely-md p { margin: 7px 0; }
-.ely-md ul, .ely-md ol { margin: 7px 0 10px 20px; padding-left: 8px; }
-.ely-md li { margin: 4px 0; padding-left: 2px; }
+.ely-md ul { margin: 7px 0 10px 0; padding-left: 0; list-style: none; }
+.ely-md ol { margin: 7px 0 10px 0; padding-left: 0; list-style: none; counter-reset: ely-counter; }
+.ely-md ul > li { margin: 5px 0; padding-left: 1.3em; text-indent: -1.3em; line-height: 1.6; }
+.ely-md ul > li::before { content: "•"; font-size: 1.1em; margin-right: 0.45em; color: var(--text); }
+.ely-md ol > li { margin: 5px 0; padding-left: 1.6em; text-indent: -1.6em; line-height: 1.6; counter-increment: ely-counter; }
+.ely-md ol > li::before { content: counter(ely-counter) "."; margin-right: 0.45em; color: var(--text); }
 .ely-md strong { font-weight: 650; color: var(--text); }
 .ely-md blockquote { margin: 9px 0; padding: 10px 12px; border-left: 3px solid var(--blue); background: var(--bg4); border-radius: 8px; color: var(--text); }
 .ely-md code { font-family: var(--mono); font-size: 12px; background: var(--bg4); border: 1px solid var(--border); padding: 1px 4px; border-radius: 5px; }
