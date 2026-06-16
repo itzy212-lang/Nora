@@ -41,17 +41,19 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button
           onClick={toggleAutoPlay}
-          title={autoPlay ? 'Auto-read on — tap to turn off' : 'Auto-read off — tap to turn on'}
+          title={autoPlay ? 'Voice on — tap to mute' : 'Voice off — tap to enable'}
           style={{
-            width: 32, height: 32, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', gap: 4,
+            height: 32, borderRadius: 99, padding: '0 10px',
             background: autoPlay ? 'var(--blue-bg)' : 'var(--bg3)',
             border: autoPlay ? '1px solid var(--blue)' : '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, cursor: 'pointer', flexShrink: 0,
+            cursor: 'pointer', flexShrink: 0,
             color: autoPlay ? 'var(--blue)' : 'var(--text2)',
+            fontSize: 13, fontWeight: 500,
           }}
         >
-          🔊
+          <span style={{ fontSize: 15 }}>{autoPlay ? '🔊' : '🔇'}</span>
+          <span style={{ fontSize: 11 }}>{autoPlay ? 'On' : 'Off'}</span>
         </button>
         <button
           className="btn btn-sm btn-primary"
