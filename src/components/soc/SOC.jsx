@@ -331,8 +331,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       .map(m => m.content)
       .join('\n\n');
 
-    // Also grab anything currently in the mic
-    const currentNote = [committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
+    // Also grab anything currently in the mic (including accumulated finalised speech not yet sent)
+    const currentNote = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
     const text = [allNotes, currentNote].filter(Boolean).join('\n\n');
 
     if (!text.trim()) { alert('No notes to process.'); return; }
