@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { renderMarkdown } from '../../utils/formatters';
 import DraftCard from './DraftCard';
+import { useSpeech } from '../../hooks/useSpeech';
 
 function stripHtml(html = '') {
   const div = document.createElement('div');
@@ -119,6 +120,15 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
+  const { speak, stop, speaking, autoPlay } = useSpeech();
+
+  // Auto-play when a new Ely response arrives
+  useEffect(() => {
+    if (!isUser && autoPlay && replyText) {
+      speak(replyText);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msg.id]);
 
   const replyText = msg.content || msg.reply || '';
   const draftSource = msg.draft || msg.documentText || (isDraft ? replyText : '');
@@ -210,10 +220,34 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
         ) : (
           <div className="ely-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(replyText) }} />
         )}
+        {!isUser && replyText && (
+          <button
+            type="button"
+            onClick={() => speaking ? stop() : speak(replyText)}
+            title={speaking ? 'Stop reading' : 'Read aloud'}
+            style={{
+              marginTop: 6, marginLeft: 2,
+              background: 'none', border: 'none',
+              cursor: 'pointer', fontSize: 13,
+              color: speaking ? 'var(--blue)' : 'var(--text3)',
+              padding: '2px 4px', borderRadius: 6,
+              opacity: 0.7,
+            }}
+          >
+            {speaking ? '⏹' : '🔊'}
+          </button>
+        )}
       </div>
 
       {isDraft && actionText.trim().length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
+          <button type="button" onClick={() => speaking ? stop() : speak(actionText)} style={{
+            border: '1px solid var(--border)', background: speaking ? 'var(--blue-bg)' : 'var(--bg2)',
+            color: speaking ? 'var(--blue)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
+            fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }} title={speaking ? 'Stop reading' : 'Read aloud'}>
+            {speaking ? '⏹ Stop' : '🔊 Read'}
+          </button>
           <button type="button" onClick={handleCopy} style={{
             border: '1px solid var(--border)', background: copied ? 'var(--green-bg)' : 'var(--bg2)',
             color: copied ? 'var(--green)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
