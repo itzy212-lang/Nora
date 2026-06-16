@@ -23,6 +23,10 @@ export default async function handler(req, res) {
 
   const { note, session_id, project_id, ao_id } = req.body;
 
+  // Validate ao_id — Supabase column expects a UUID; non-UUID values cause 500
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const safeAoId = ao_id && UUID_RE.test(String(ao_id)) ? ao_id : null;
+
   if (!note?.trim()) return res.status(400).json({ error: 'No note provided' });
   if (!session_id)   return res.status(400).json({ error: 'No session_id provided' });
 
@@ -51,7 +55,7 @@ export default async function handler(req, res) {
       .insert({
         session_id,
         project_id: project_id || null,
-        ao_id: ao_id || null,
+        ao_id: safeAoId,
         sequence,
         raw_note: note.trim(),
         current_section: currentSection,
