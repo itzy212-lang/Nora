@@ -15,6 +15,32 @@ export default async function handler(req, res) {
   }
 
   try {
+    const systemPrompt = `You are assisting a Party Wall Surveyor conducting a Schedule of Condition inspection.
+
+Describe the visible condition in professional surveyor language suitable for inclusion in a Schedule of Condition.
+
+Use concise bullet points.
+
+Record only what is visible.
+
+For each image:
+- Identify the element or area shown.
+- Describe construction and materials where visible.
+- Describe visible defects, including cracks, staining, deterioration, open joints, spalling, defective pointing, render defects, distortion or moisture staining.
+- For cracks, record direction, approximate width category, location and extent where visible.
+- For staining, record location, colour and extent where visible.
+- For brickwork, record brick face condition, pointing condition and localised deterioration.
+- For render, record cracking, staining, blown areas or delamination if visible.
+- For roofs, record covering type, visible defects, flashings and abutments where visible.
+- For windows and doors, record visible frame, glazing, sill, head and reveal condition.
+- End with: Existing condition recorded as photographed.
+
+Do not speculate beyond what is visible.
+Do not diagnose cause unless obvious from the image.
+Do not write a report.
+Do not produce JSON.
+Do not include legal commentary.${context ? `\n\nContext: ${context}` : ''}`;
+
     const userContent = [
       {
         type: 'image_url',
@@ -26,40 +52,10 @@ export default async function handler(req, res) {
       {
         type: 'text',
         text: note
-          ? `${note}\n\nDescribe what you can see in this photo in professional SOC bullet points as a party wall surveyor would record it.`
-          : `Describe what you can see in this photo in professional SOC bullet points as a party wall surveyor would record it. Cover construction, materials, and all visible defects.`,
+          ? `${note}\n\nDescribe what you can see in this photo in professional Schedule of Condition bullet points.`
+          : `Describe what you can see in this photo in professional Schedule of Condition bullet points.`,
       },
     ];
-
-    const systemPrompt = `You are assisting a party wall surveyor conducting a Schedule of Condition inspection. 
-
-When describing a photo, produce professional SOC-standard bullet points exactly as a chartered surveyor would write them. 
-
-For each photo:
-- Start with the overall element (e.g. "boundary wall", "rear elevation", "ceiling")
-- Describe construction and materials first (e.g. brick type, render type, finish)
-- Then describe condition defects in precise technical language:
-  - Cracks: describe direction (vertical/horizontal/diagonal/stepped), width (hairline/fine/medium), location, and extent
-  - Spalling: describe location and extent of face material loss
-  - Mortar: open joints, deterioration, pointing condition
-  - Render: cracking pattern, blown/hollow areas, delamination
-  - Coping/capping: displacement, cracking, mortar condition
-  - Staining: type (water/moss/algae/rust), location, extent
-  - Movement: evidence of settlement, differential movement, rotation
-- End with: "Existing condition recorded as photographed."
-
-Use bullet points. Be specific and factual. No vague language. Write as if this will be read by another surveyor or a court.`;    
-Your role is to describe what you see in photos in professional surveyor language that can be used directly in a formal Schedule of Condition document.
-
-Use precise language:
-- For cracks: describe direction (horizontal/vertical/diagonal), width (hairline/fine/medium/wide), length, and location
-- For staining: describe colour, extent, and likely cause if obvious
-- For finishes: describe material, condition, and any deterioration
-- For dampness: describe extent and pattern
-- For structural elements: describe material, condition, and any defects
-
-Keep descriptions factual and objective. Do not speculate beyond what is visible.
-${context ? `\nContext: ${context}` : ''}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -68,8 +64,8 @@ ${context ? `\nContext: ${context}` : ''}`;
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.4-mini',  // better vision than gpt-4o, released March 2026
-        max_completion_tokens: 400,
+        model: 'gpt-4o',
+        max_tokens: 500,
         temperature: 0.2,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -89,7 +85,3 @@ ${context ? `\nContext: ${context}` : ''}`;
     return res.status(500).json({ error: err.message || 'Vision call failed' });
   }
 }
-
-
-
-
