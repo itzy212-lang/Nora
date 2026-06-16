@@ -72,3 +72,22 @@ export function buildLOAFileName(type, project = {}, ao = {}) {
   }
   return `${ref}_${address}_BO_LOA.docx`;
 }
+
+export function buildBOLOAPdfPlaceholders(project = {}) {
+  const base = buildBOLOAPlaceholders(project);
+  // Remove Firma anchor strings — not needed for plain PDF download
+  const { 'DATE HERE': _d, BO_2_DATE_HERE: _d2, 'SIGN HERE': _s, BO_2_SIGN_HERE: _s2, ...rest } = base;
+  return rest;
+}
+
+export function buildAOLOAPdfPlaceholders(project = {}, ao = {}) {
+  const base = buildAOLOAPlaceholders(project, ao);
+  // Remove Firma anchor strings — not needed for plain PDF download
+  const { 'DATE HERE': _d, AO_2_DATE_HERE: _d2, 'SIGN HERE': _s, AO_2_SIGN_HERE: _s2, ...rest } = base;
+  return rest;
+}
+
+export function buildLOAPdfFileName(type, project = {}, ao = {}) {
+  const base = buildLOAFileName(type, project, ao);
+  return base.replace(/\.docx$/i, '.pdf');
+}
