@@ -241,8 +241,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     try {
       const result = await send(text, {
-        mode: 'collaborative_reply_assistant',
-        workflowStage: 'discussion_or_draft',
+        mode: 'draft_with_ely',
+        workflowStage: 'draft_with_ely',
         sessionId,
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
