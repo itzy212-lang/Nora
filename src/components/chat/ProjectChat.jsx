@@ -763,6 +763,22 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       // Load brain context to pass to Ely
       const brainContext = await loadBrainContext(projectId, 40);
 
+      // Load previously uploaded documents from project_memory
+      let projectMemoryUploads = [];
+      try {
+        const { data: memUploads } = await supabase
+          .from('project_memory')
+          .select('title, content, metadata')
+          .eq('project_id', String(projectId))
+          .eq('source_type', 'chat_upload')
+          .not('content', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        projectMemoryUploads = (memUploads || []).filter(m => m.content && m.content.length > 20);
+      } catch (e) {
+        console.warn('[ProjectChat] could not load memory uploads:', e.message);
+      }
+
       // If we're awaiting case review confirmation and user says yes / full / confirms
       const confirmWords = ['yes', 'full', 'full case review', 'case review', 'confirm', 'go ahead', 'proceed', 'do it', 'all of it', 'everything'];
       const isConfirmingCaseReview = caseReviewPending && confirmWords.some(w => messageText.toLowerCase().includes(w));
@@ -790,6 +806,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               mime_type: file.mime_type,
               extracted_text: file.extracted_text,
             })),
+          projectMemoryUploads,
           projectChatInstruction: wantsDraft
             ? 'Return any discussion separately from the draft. The draft itself must be clean final text only with no commentary inside or after it.'
             : null,
