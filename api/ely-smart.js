@@ -449,16 +449,21 @@ function looksLikeEmailDictation(prompt = '') {
 
   if (!p) return false;
 
+  // Greeting starters — clearly dictating an email
   if (/^(dear|hi|hello|good morning|good afternoon|good evening)\s+[a-z]/i.test(p)) return true;
 
-  if (/^(thank you for your email|thanks for your email|further to|following our|i refer to|with reference to)/i.test(p)) return true;
+  // Thread continuation / follow-up starters
+  if (/^(thank you for your email|thanks for your email|thanks for (confirming|coming back|sending|your)|further to|following our|i refer to|with reference to|just to follow|just following|following up)\b/i.test(p)) return true;
 
-  if (/^(tell them|let them know|say that|just say|basically say|write to|reply to|respond to|send an email to|i need to say|i want to say|i need to tell|can you write|can you draft)/i.test(p)) return true;
+  // Instruction starters — user telling Ely what to say
+  if (/^(tell (them|him|her)|let (them|him|her) know|say that|just say|basically say|write to|reply to|respond to|send an email to|i need to say|i want to say|i need to tell|can you write|can you draft)\b/i.test(p)) return true;
 
-  if (/^(change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)/i.test(p)) return true;
+  // Amendment starters — editing an existing draft
+  if (/^(change it to|change the|update it to|update the|amend it|amend the|replace|remove the|take out|add in|add to|insert)\b/i.test(p)) return true;
 
   return false;
 }
+
 
 function hasExplicitDraftRequest(prompt = '') {
   const p = normalisePromptForIntent(prompt).toLowerCase();
