@@ -41,7 +41,11 @@ export function toHtml(text) {
     .split(/\n\n+/)
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+    .map((p, i, arr) => {
+      const isLast = i === arr.length - 1;
+      const margin = isLast ? '0' : '0 0 10px 0';
+      return `<p style="margin:${margin}">${p.replace(/\n/g, '<br>')}</p>`;
+    })
     .join('');
 }
 
