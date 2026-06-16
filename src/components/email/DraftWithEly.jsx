@@ -5,13 +5,47 @@ import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/
 import { toHtml, cleanSignOff, stripHtml } from '../../utils/draftUtils';
 
 // Split Ely response into brief + draft + after
+function isBriefOrSummary(text = '') {
+  // Returns true if text is a summary/brief rather than an actual draft email body.
+  const t = String(text || '').trim();
+  if (!t) return true;
+  if (/^From:/im.test(t)) return true;
+  if (/^(Latest email is asking for|Asking for|Context from thread|What stands out|Suggested approach|Suggested reply):/im.test(t)) return true;
+  const briefPhrases = [
+    /Acknowledge the confirmation/i,
+    /Ensure all necessary/i,
+    /Review for compliance/i,
+    /Consider whether/i,
+    /Suggested approach/i,
+    /It would be helpful to/i,
+    /for compliance and safety/i,
+    /structural details are documented/i,
+  ];
+  if (briefPhrases.some(rx => rx.test(t))) return true;
+  const hasGreeting = /^(Subject\s*:|Dear\s+\S|Hi\s+\S|Hello\s+\S|Good morning|Good afternoon|Thank you for your email|Further to|Following our|I refer to)/im.test(t);
+  const hasSignOff = /Kind regards|Yours sincerely|Yours faithfully|Best regards/i.test(t);
+  if (!hasGreeting && !hasSignOff) return true;
+  return false;
+}
+
 function splitAssistantResponseLocal(raw = '') {
   const text = String(raw || '').trim();
-  const markers = [/\bSubject\s*:/i, /\bDear\s+[A-Z0-9]/i, /\bHi\s+[A-Z0-9]/i, /\bHello\s+[A-Z0-9]/i];
+
+  // Extended greeting markers — include "Thanks" and "Thank you" openers
+  const markers = [
+    /\bSubject\s*:/i,
+    /\bDear\s+[A-Z0-9]/i,
+    /\bHi\s+[A-Z0-9]/i,
+    /\bHello\s+[A-Z0-9]/i,
+    /\bThanks\s+[A-Z0-9]/i,
+    /\bThank you\s+[A-Z0-9]/i,
+  ];
   const positions = markers
     .map(rx => { const m = text.match(rx); return m ? m.index : -1; })
     .filter(i => i >= 0);
-  if (!positions.length) return { brief: text, draft: '', after: '' };
+
+  if (!positions.length) return { brief: text, draft: '', after: '', isBrief: true };
+
   const idx = Math.min(...positions);
   const brief = text.slice(0, idx).trim();
   let draft = text.slice(idx).trim();
@@ -19,7 +53,8 @@ function splitAssistantResponseLocal(raw = '') {
   const afterRx = /\n\s*(Let me know|Please let me know|Happy to|Feel free|Shall I|Would you like|Do you want)[\s\S]*$/i;
   const afterMatch = draft.match(afterRx);
   if (afterMatch) { after = afterMatch[0].trim(); draft = draft.replace(afterRx, '').trim(); }
-  return { brief, draft, after };
+
+  return { brief, draft, after, isBrief: false };
 }
 import VoiceInput from '../shared/VoiceInput';
 import ChatInputBar from '../shared/ChatInputBar';
