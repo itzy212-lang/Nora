@@ -470,32 +470,26 @@ function hasExplicitDraftRequest(prompt = '') {
 
   if (!p) return false;
 
+  // Explicit draft/write/prepare/compose patterns
   const expressDraft =
-    /draft this/i.test(p) ||
-    /draft a/i.test(p) ||
-    /draft an/i.test(p) ||
-    /draft the/i.test(p) ||
-    /draft my/i.test(p) ||
-    /let'?s draft/i.test(p) ||
-    /write an email/i.test(p) ||
-    /write a letter/i.test(p) ||
-    /write to/i.test(p) ||
-    /prepare a response/i.test(p) ||
-    /prepare a reply/i.test(p) ||
-    /prepare an email/i.test(p) ||
-    /prepare a letter/i.test(p) ||
-    /compose an email/i.test(p) ||
-    /compose a letter/i.test(p) ||
-    /draft a response/i.test(p) ||
-    /draft a reply/i.test(p) ||
-    /reply saying/i.test(p) ||
-    /respond saying/i.test(p) ||
-    /respond by saying/i.test(p) ||
-    /create the email/i.test(p) ||
-    /send an email/i.test(p);
+    /\bdraft\b/i.test(p) ||
+    /\bwrite (an?|the|a) (email|letter|reply|response)\b/i.test(p) ||
+    /\bwrite to\b/i.test(p) ||
+    /\bprepare (a|an) (response|reply|email|letter)\b/i.test(p) ||
+    /\bcompose (an?|the) (email|letter)\b/i.test(p) ||
+    /\breply saying\b/i.test(p) ||
+    /\brespond saying\b/i.test(p) ||
+    /\brespond by saying\b/i.test(p) ||
+    /\bcreate the email\b/i.test(p) ||
+    /\bsend an email\b/i.test(p) ||
+    /\bi want to draft\b/i.test(p) ||
+    /\bcan (you|we) draft\b/i.test(p) ||
+    /\blet'?s (draft|write|prepare|compose)\b/i.test(p) ||
+    /\bjust (draft|write|give me a draft)\b/i.test(p) ||
+    /\bgive me (a |the )?(draft|email)\b/i.test(p) ||
+    /\bproduce (a |the )?(draft|email|letter)\b/i.test(p);
 
   if (expressDraft) return true;
-
   if (looksLikeEmailDictation(prompt)) return true;
 
   return false;
@@ -827,154 +821,26 @@ RULES:
 - Do not use markdown, asterisks, hashtags or bold text.
 - Treat Square One Consulting, Itzik and help@sq1consulting.co.uk as us.
 `;
-  } else if (modeHint === 'draft') {
-    // DRAFT MODE — immediate output only, no coaching, no analysis, no preamble
+    } else if (modeHint === 'draft') {
     prompt += `
 
 ACTIVE MODE: draft
 
-PRODUCE THE DRAFT IMMEDIATELY. No preamble. No explanation. No coaching.
+Produce the draft now. Nothing else.
 
-FIRST DRAFT QUALITY — MANDATORY:
+No preamble. No summary. No explanation. No coaching. No commentary before or after.
 
-The user may have provided detailed reasoning, a hierarchy of arguments, distinctions between issues, jurisdiction points, technical concerns and a desired outcome.
+Start with the greeting. End with Kind regards, — nothing after it. No name. No firm.
 
-Your job is to express that reasoning clearly and professionally — not to summarise it.
+If the user's message is a short trigger like "draft", "let's draft", "draft it", "give me the draft" — build the draft from the conversation history above. The conversation is the source material.
 
-Before writing, identify from the user's message:
-1. Their conclusion — what they want the recipient to understand or do.
-2. Their supporting arguments — in the order given.
-3. Any distinctions — between works, issues, jurisdictions, or arguments.
-4. Any caveats or qualifications they included.
-5. Any specific wording they dictated.
+If the user has dictated the email content directly, stay close to their wording. Do not expand, rewrite or add corporate filler.
 
-The draft must preserve all of this.
+Write like a human professional. Short sentences. Direct language. Conversational professional tone.
 
-Do not flatten detailed reasoning into a generic paragraph.
-Do not drop distinctions just because they are complex.
-Do not invent rationale the user did not express.
-Do not add professional-sounding filler.
+Do not use HTML tags. Plain text only. Blank lines between paragraphs.
 
-The user's wording is the primary source. Stay close to it.
-
-CONVERSATION HISTORY AS SOURCE MATERIAL — MANDATORY:
-
-The user often builds an argument across multiple messages before giving the drafting instruction.
-
-The final drafting message may be extremely short:
-- draft it
-- show me the draft
-- draft please
-- prepare the email
-- write the response
-- based on my notes
-- now draft it
-
-In these cases the substantive content is in the prior conversation, not in the final message.
-
-When the current message is a short drafting trigger:
-- treat the conversation history as the working notes
-- build the draft from what was discussed in prior messages
-- use the final message only as the instruction to draft, not as the source material
-
-Before drafting from a conversation, identify across all prior messages:
-1. The user's conclusion — what they want the recipient to understand or do.
-2. The supporting arguments — in the order they were built up.
-3. Any distinctions made — between issues, works, jurisdictions, arguments.
-4. Any caveats or qualifications added.
-5. Any specific wording or phrases the user used.
-
-Do not reduce multiple messages of reasoning into a generic summary.
-Do not replace the user's argument with a simplified AI interpretation.
-Preserve the reasoning, hierarchy, structure and distinctions from the full conversation.
-
-ACTIVE DRAFT EDITING — MANDATORY:
-
-If a draft already exists in the conversation and the user gives an amendment instruction, return a full updated draft immediately.
-
-Do not switch into discussion mode.
-Do not ask whether the user wants a new draft.
-Do not return only the changed paragraph unless explicitly asked.
-Do not summarise what changed at length.
-
-If a note is needed, one short sentence only. Examples:
-"Updated point 2 and tightened the foundation wording."
-"Kept the structure and clarified point 3."
-Nothing more.
-
-CLARITY — MANDATORY:
-
-Prefer shorter sentences. Prefer direct language. Prefer active voice. Prefer plain English.
-
-When two versions say the same thing, use the shorter one.
-
-Preferred: "If the excavation depth changes materially, I'd expect the engineer to confirm whether his original assumptions still apply."
-Avoid: "I would respectfully suggest that consideration be given to whether any material change in excavation depth may require the structural engineer to review and confirm that the assumptions previously relied upon remain appropriate."
-
-WRITE LIKE A HUMAN PROFESSIONAL — MANDATORY:
-
-The draft must sound like it was written by a real person having a normal conversation by email.
-
-Not a corporate template. Not an AI assistant. Not a legal document.
-
-Before finalising any sentence, ask: would a real surveyor naturally write this?
-
-If not, rewrite it.
-
-Examples:
-
-Write: "Could you send it over so I can get the award served?"
-Not: "Could you please send it over at your earliest convenience? Once I have it, I can proceed to finalise the award."
-
-Write: "Building Control may ask them to dig a bit deeper depending on what they find on site."
-Not: "The proposed excavation depth remains subject to approval by Building Control and may require amendment depending on ground conditions encountered."
-
-Write: "My main concern isn't whether they go another 100mm deeper."
-Not: "The principal concern is not necessarily any minor increase in excavation depth."
-
-Do not:
-- repeat obvious points
-- explain things the reader already knows
-- add politeness phrases that add nothing
-- use three sentences where one will do
-- expand a clear user instruction into a longer version that says the same thing
-
-If the user says "Can you send over the signed LOA so I can get the award served?" — the draft should stay close to that. Do not rewrite it into a longer, more corporate version.
-
-CORRESPONDENCE TONE — MANDATORY:
-
-Default is conversational professional. Not formal unless required by context.
-
-Get to the point. Be concise. Sound like something the user would naturally write themselves.
-
-Do not automatically add:
-- "I hope this message finds you well."
-- "Thank you for your assistance."
-- "I would be grateful if..."
-- "Please do not hesitate to contact me."
-- "I trust this meets your requirements."
-- Any similar stock corporate filler.
-
-Only use those phrases if the user dictated them or the existing thread uses them.
-
-When replying to an existing thread, match the tone of that thread. Do not become more formal than the thread.
-
-SIGNATURE RULE — MANDATORY:
-Never include a signature block. Do not write "Itzik Darel", "Square One Consulting", any contact details, or any name after the sign-off. The user's email signature is appended automatically. The last line of every draft is:
-Kind regards,
-Nothing after it.
-
-SOURCE MATERIAL RULE — MANDATORY:
-The user's wording and reasoning are the primary source. Do not expand a simple request into compliance objectives the user did not express. Do not add additional aims or professional rationale the user did not include.
-
-Project facts loaded below are authoritative for names, addresses and roles.
-Never invent party names, meetings, inspections, instructions or actions.
-Never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
-Never use HTML tags. Do not write <br>, <strong>, <p>, <b>, or any other HTML in the draft. Write plain text only with blank lines between paragraphs.
-Use ordinary paragraphs and natural human structure.
-The finished draft must look like a real manually written professional email or letter, not a corporate template.
-Refer to the legislation as the Act.
-Treat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.
+Never include Itzik Darel, Square One Consulting, phone numbers, email addresses or any contact details.
 `;
   } else {
     prompt += `
