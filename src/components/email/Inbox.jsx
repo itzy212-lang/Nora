@@ -315,9 +315,10 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
             : (m.content || m.explanation || ''),
         }));
 
-      // If we have a working draft, inject it so Ely holds it
-      const promptWithDraft = workingDraft && !isAuto
-        ? `Current working draft:\n---\n${workingDraft}\n---\n\nInstruction: ${text}`
+      // Only inject workingDraft if it is a genuine draft body, not a summary/brief
+      const safeWorkingDraft = workingDraft && !isBriefContent(workingDraft) ? workingDraft : null;
+      const promptWithDraft = safeWorkingDraft && !isAuto
+        ? `Current working draft:\n---\n${safeWorkingDraft}\n---\n\nInstruction: ${text}`
         : text;
 
       const res = await fetch('/api/ely-smart', {
@@ -357,8 +358,8 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
         setMessages(prev => [...prev, newMsg]);
       }
 
-      // Always update working draft with latest draft
-      if (draft) {
+      // Only store as workingDraft if it is an actual email draft body, not a brief/summary
+      if (draft && !isBriefContent(draft)) {
         setWorkingDraft(draft);
         workingDraftRef.current = draft;
       }
@@ -1267,6 +1268,42 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 }
 
 // ── Main Inbox ────────────────────────────────────────────────────────────────
+function isBriefContent(text = '') {
+  // Returns true if the text is a summary/brief rather than an actual draft body.
+  // Brief content must never be stored as workingDraft.
+  if (!text || typeof text !== 'string') return true;
+  const t = text.trim();
+
+  // Summaries have structured headers typical of email_summary mode
+  if (/^From:/im.test(t)) return true;
+  if (/^(Latest email is asking for|Asking for|Context from thread|What stands out|Suggested approach|Suggested reply):/im.test(t)) return true;
+
+  // Contains coaching/compliance language that would contaminate a draft
+  const briefPhrases = [
+    /Acknowledge the confirmation/i,
+    /Ensure all necessary/i,
+    /Review for compliance/i,
+    /Consider whether/i,
+    /Suggested approach/i,
+    /It would be helpful to/i,
+    /documentation for compliance/i,
+    /for compliance and safety/i,
+    /structural details are documented/i,
+  ];
+  if (briefPhrases.some(rx => rx.test(t))) return true;
+
+  // A real draft body starts with a greeting or Subject line
+  const hasGreeting = /^(Subject\s*:|Dear\s+\S|Hi\s+\S|Hello\s+\S|Good morning|Good afternoon|Thank you for your email|Further to|Following our|I refer to|I write)/im.test(t);
+  // A real draft has a sign-off
+  const hasSignOff = /Kind regards|Yours sincerely|Yours faithfully|Best regards/i.test(t);
+
+  // If it has neither greeting nor sign-off, it's probably a brief
+  if (!hasGreeting && !hasSignOff) return true;
+
+  return false;
+}
+
+
 export default function Inbox({ onOpenComposer }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
