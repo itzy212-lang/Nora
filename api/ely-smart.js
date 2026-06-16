@@ -1566,8 +1566,9 @@ export default async function handler(req, res) {
     const canBook = isMainChat || isProjectChat;
 
     // ── Calendar booking flow ─────────────────────────────────────────────
+    // NEVER intercept if modeHint is draft — draft always wins over booking
     // If user is confirming a pending booking, create the entry
-    if (body.pending_booking_confirm && body.pending_booking) {
+    if (!['draft', 'review'].includes(modeHint) && body.pending_booking_confirm && body.pending_booking) {
       try {
         const booking = body.pending_booking;
         await createCalendarEntry({
@@ -1596,7 +1597,7 @@ export default async function handler(req, res) {
     }
 
     // ── Detect new booking intent ─────────────────────────────────────────
-    const bookingIntent = canBook ? parseBookingIntent(prompt) : null;    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
+    const bookingIntent = canBook && !['draft', 'review'].includes(modeHint) ? parseBookingIntent(prompt) : null;    if (bookingIntent && (bookingIntent.rawDate || bookingIntent.rawProject)) {
       // Build a confirmation prompt for GPT to flesh out the details
       const taskTypeLabels = {
         soc: 'Schedule of Condition',
