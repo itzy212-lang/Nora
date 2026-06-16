@@ -198,9 +198,15 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
         {isUser ? (
           msg.content
         ) : isDraft ? (
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 1.65 }}>
-            {draftText}
-          </pre>
+          <div
+            className="draft-body"
+            style={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}
+            dangerouslySetInnerHTML={{
+              __html: draftText.trim().startsWith('<')
+                ? draftText
+                : draftText.split(/\n\n+/).filter(Boolean).map(p => `<p style="margin:0 0 0.75em 0">${p.replace(/\n/g, '<br>')}</p>`).join('')
+            }}
+          />
         ) : (
           <div className="ely-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(replyText) }} />
         )}
