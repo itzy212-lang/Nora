@@ -445,6 +445,10 @@ style.textContent = `
 .email-body-editor p { margin: 0 0 10px 0; }
 .email-body-editor p:last-child { margin-bottom: 0; }
 .email-body-editor br + br { display: block; margin-top: 8px; }
+.email-body-editor ul, .email-body-editor ol { margin: 8px 0 10px 20px; padding-left: 4px; }
+.email-body-editor ul { list-style-type: disc; }
+.email-body-editor ol { list-style-type: decimal; }
+.email-body-editor li { margin: 4px 0; padding-left: 4px; line-height: 1.6; }
 `;
 if (!document.getElementById('email-composer-style')) {
   style.id = 'email-composer-style';
