@@ -1047,6 +1047,22 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint =
     }
   }
 
+  // Inject documents previously uploaded to this project (from project_memory chat_upload records)
+  const memoryUploads = (body.context?.projectMemoryUploads || []);
+  if (memoryUploads.length > 0) {
+    const memoryDocBlocks = memoryUploads
+      .filter(m => m.content && String(m.content).trim().length > 20)
+      .map(m => `PREVIOUSLY UPLOADED DOCUMENT: ${m.title || 'file'}\n\n${String(m.content).slice(0, 6000)}`)
+      .join('\n\n---\n\n');
+
+    if (memoryDocBlocks) {
+      messages.push({
+        role: 'system',
+        content: `The following document(s) were previously uploaded to this project and are available for reference:\n\n${memoryDocBlocks}`,
+      });
+    }
+  }
+
   // Inject project brain — persistent memory from previous sessions
   // Cap at ~4000 chars per entry and ~8000 chars total to stay within token budget
   const BRAIN_ENTRY_CAP = 4000;
