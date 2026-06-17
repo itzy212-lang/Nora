@@ -795,7 +795,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ width: 52, flexShrink: 0 }} />
                 <div
-                  style={{ flex: 1, padding: '10px 14px', background: '#fff', borderRadius: 10, border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.8, overflowX: 'auto' }}
+                  style={{ flex: 1, padding: '8px 12px', background: '#fff', borderRadius: 8, border: '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', lineHeight: 1.5, maxHeight: 60, overflow: 'hidden', opacity: 0.7 }}
                   dangerouslySetInnerHTML={{ __html: signatureHtml }}
                 />
               </div>
