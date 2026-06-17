@@ -236,7 +236,7 @@ function extractDraft(text) {
 // ── Draft with Ely — full screen overlay ─────────────────────────────────────
 // Left: original email in full | Right: Ely collaboration with voice
 
-function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) {
+function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft, onClose }) {
   const windowWidth = useWindowWidth();
   const isMobile = isMobileWidth(windowWidth);
   const [messages, setMessages]       = useState([]);
@@ -409,11 +409,14 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
                   || [...messages].reverse().find(m => m.role === 'ely')?.explanation
                   || '';
                 if (!body) { alert('Ask Ely to produce a draft first.'); return; }
-                onSendWithDraft({
-                  to: email?.sender_email || '',
-                  subject: `Re: ${email?.subject || ''}`,
-                  body,
-                });
+                const sendFn = onSendWithDraft || onUseDraft;
+                if (sendFn) {
+                  sendFn({
+                    to: email?.sender_email || '',
+                    subject: `Re: ${email?.subject || ''}`,
+                    body,
+                  });
+                }
               }}
               style={{
                 padding: '7px 18px', borderRadius: 99, border: 'none',
@@ -502,7 +505,8 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
                             const htmlDraft = msg.draft && !msg.draft.trim().startsWith('<')
                               ? msg.draft.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
                               : msg.draft || '';
-                            onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: htmlDraft });
+                            const sendFn2 = onSendWithDraft || onUseDraft;
+                          if (sendFn2) sendFn2({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: htmlDraft });
                           }}
                             style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: 'none', background: 'var(--blue)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
                             ↩ Send this
