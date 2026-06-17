@@ -424,6 +424,19 @@ export default function VoiceInput({
       }
 
       sessionResultsRef.current = {};
+
+      // Emit with restarting:true so consumers know not to treat this as a final stop
+      const fullSoFar = committedRef.current;
+      if (fullSoFar) {
+        onTranscript?.(fullSoFar, {
+          recording: true,
+          restarting: true,
+          currentPhrase: '',
+          interim: '',
+          final: '',
+        });
+      }
+
       setRecording(true);
 
       restartTimerRef.current = setTimeout(() => {
