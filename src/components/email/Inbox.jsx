@@ -260,6 +260,87 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
 
   // Auto-summary on open disabled — opens blank, user drafts on their own terms
 
+  // ── Silent thread read on open ───────────────────────────────────────────────
+  // Silently reads the full email thread the moment Draft With Ely opens.
+  // Internalises participants, tone, history and any escalation directed at Itzik.
+  // Nothing is shown to the user unless a flag is warranted.
+  const hasReadRef = useRef(null);
+
+  useEffect(() => {
+    if (!email || hasReadRef.current === email.id) return;
+    hasReadRef.current = email.id;
+
+    const sorted = [...(threadEmails || [email])]
+      .sort((a, b) => new Date(a.received_at || 0) - new Date(b.received_at || 0));
+
+    const threadText = sorted
+      .map(e => {
+        const from = e.sender_name || e.sender_email || e.from || 'Unknown';
+        const body = stripHtml(e.body || e.body_preview || '').slice(0, 1500);
+        const date = e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB') : '';
+        return `[${date}] From: ${from}\n${body}`;
+      })
+      .join('\n\n---\n\n');
+
+    const silentPrompt = `SILENT THREAD READ — DO NOT SUMMARISE OR OUTPUT TO USER.
+
+Read the following email thread in full. Identify:
+1. All participants and their roles (who is Itzik/Square One, who are the other parties)
+2. The nature of the conversation — casual professional, formal, technical, contentious
+3. The tone trajectory — is it escalating, de-escalating, or stable
+4. Any red flags DIRECTED AT ITZIK/SQUARE ONE specifically:
+   - Terse or accusatory language aimed at Itzik
+   - Liability language: "your failure to", "we hold you responsible", "without prejudice"
+   - Deadlines or ultimatums aimed at Itzik
+   - Position hardening against Itzik across multiple emails
+5. Any names, firms or contacts mentioned in the thread
+
+Do NOT flag escalation between other parties where Itzik is not the target.
+Do NOT summarise the thread.
+
+If there is a genuine red flag directed at Itzik, respond with ONE short sentence only, starting with "Flag:".
+If there is no flag, respond with the single word: "Ready."
+
+Thread:
+${threadText}`;
+
+    fetch('/api/ely-smart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: silentPrompt,
+        surface: 'inbox_draft',
+        mode: 'silent_read',
+        workflowStage: 'silent_read',
+        emailContext: {
+          from: email.sender_name || email.sender_email || '',
+          subject: email.subject || '',
+          threadText,
+          body: threadText,
+        },
+        chatHistory: [],
+        isSilentRead: true,
+      }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      const reply = (data.reply || data.replyText || '').trim();
+      // If it's just "Ready." — say nothing, thread is now in context
+      if (!reply || reply === 'Ready.' || reply.toLowerCase() === 'ready') return;
+      // If it starts with "Flag:" — show it as a brief system note
+      if (reply.toLowerCase().startsWith('flag:')) {
+        const flagText = reply.replace(/^flag:\s*/i, '').trim();
+        setMessages([{
+          id: Date.now(),
+          role: 'ely',
+          content: `⚠️ ${flagText}`,
+          isFlag: true,
+        }]);
+      }
+    })
+    .catch(() => {}); // Fail silently — never block the user
+  }, [email, threadEmails]);
+
   const callEly = async (text, threadTextOverride, isAuto = false) => {
     if (loading) return;
     setLoading(true);
