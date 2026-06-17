@@ -147,10 +147,15 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     const { subject, body } = splitSubjectFromDraft(actionText);
     if (!body) return;
 
-    // Convert plain text line breaks to HTML for the rich text editor
-    const htmlBody = body
+    // Clean sign-off, then convert to HTML with paragraph spacing
+    let cleanBody = body
+      .replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,')
+      .replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,')
+      .trim();
+
+    const htmlBody = cleanBody
       .split(/\n\n+/)
-      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .map((para, i, arr) => `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${para.replace(/\n/g, '<br>')}</p>`)
       .join('');
 
     onOpenInComposer?.({
