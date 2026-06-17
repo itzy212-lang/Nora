@@ -1503,6 +1503,107 @@ async function callClaude(messages = []) {
   return cleanOutput(`*This is a bit too large for me — let me get our admin team on that for you right away.* 📋\n\n${raw}`);
 }
 
+
+// ── Unknown proper noun checker ───────────────────────────────────────────────
+// When modeHint is draft, scan the user prompt for proper nouns that don't
+// appear anywhere in the known context. If found, return a clarification
+// question instead of drafting.
+
+function extractProperNouns(text = '') {
+  if (!text) return [];
+  // Match capitalised words that are NOT at the start of a sentence
+  // and NOT common party wall / professional terms
+  const commonWords = new Set([
+    'I', 'The', 'This', 'That', 'These', 'Those', 'We', 'You', 'He', 'She',
+    'They', 'It', 'My', 'Your', 'Our', 'His', 'Her', 'Its', 'Their',
+    'Party', 'Wall', 'Act', 'Award', 'Notice', 'SOC', 'LOA', 'BO', 'AO',
+    'Building', 'Owner', 'Adjoining', 'Surveyor', 'Engineer', 'Section',
+    'Schedule', 'Condition', 'Draft', 'Email', 'Letter', 'Reply',
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+    'January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December',
+    'Square', 'One', 'Consulting', 'Itzik', 'Nora', 'Ely',
+    'London', 'Road', 'Street', 'Avenue', 'Close', 'Lane', 'Drive',
+    'Ltd', 'Limited', 'LLP', 'PLC', 'Inc',
+    'Hi', 'Dear', 'Kind', 'Regards', 'Thank', 'Thanks', 'Please',
+    'Perfect', 'Great', 'Good', 'OK', 'Yes', 'No',
+    'As', 'In', 'On', 'At', 'To', 'For', 'Of', 'With', 'By', 'From',
+    'And', 'Or', 'But', 'So', 'If', 'When', 'Once', 'After', 'Before',
+  ]);
+
+  const words = text.replace(/[^a-zA-Z\s'-]/g, ' ').split(/\s+/);
+  const nouns = [];
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    // Must be capitalised, 3+ chars, not in common list, not all caps (abbreviation)
+    if (
+      word.length >= 3 &&
+      /^[A-Z][a-z]+/.test(word) &&
+      !commonWords.has(word) &&
+      !/^[A-Z]{2,}$/.test(word)
+    ) {
+      nouns.push(word);
+    }
+  }
+
+  return [...new Set(nouns)];
+}
+
+function buildKnownNounSet(projectBundle = null, emailContext = null, chatHistory = []) {
+  const known = new Set();
+
+  // From project data
+  if (projectBundle?.project) {
+    const p = projectBundle.project;
+    const fields = [
+      p.name, p.bo_1_name, p.bo_2_name, p.ao_client_name,
+      p.bos_name, p.bos_firm, p.bo_company, p.bo, p.ref,
+    ];
+    fields.forEach(f => {
+      if (f) String(f).split(/\s+/).forEach(w => known.add(w));
+    });
+  }
+
+  // From adjoining owners
+  if (projectBundle?.adjoining_owners) {
+    projectBundle.adjoining_owners.forEach(ao => {
+      [ao.name, ao.surveyor_name, ao.surveyor_firm, ao.address].forEach(f => {
+        if (f) String(f).split(/\s+/).forEach(w => known.add(w));
+      });
+    });
+  }
+
+  // From email context
+  if (emailContext) {
+    [emailContext.from, emailContext.sender_name, emailContext.from_email,
+     emailContext.subject, emailContext.body, emailContext.threadText].forEach(f => {
+      if (f) String(f).split(/\s+/).forEach(w => known.add(w));
+    });
+  }
+
+  // From chat history
+  chatHistory.forEach(m => {
+    if (m.content) String(m.content).split(/\s+/).forEach(w => known.add(w));
+  });
+
+  return known;
+}
+
+function findUnknownNouns(prompt = '', knownNouns = new Set()) {
+  const candidates = extractProperNouns(prompt);
+  return candidates.filter(noun => {
+    // Check if this word (or a close match) appears in the known set
+    const lc = noun.toLowerCase();
+    for (const known of knownNouns) {
+      if (String(known).toLowerCase().includes(lc) || lc.includes(String(known).toLowerCase())) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
@@ -1840,6 +1941,41 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       draftingExamples = data || [];
     } catch (err) {
       console.warn('[ely-smart] drafting examples load failed:', err.message);
+    }
+
+    // ── Unknown proper noun check (draft mode only) ─────────────────────────
+    // If the user's prompt contains a proper noun not in any known context,
+    // pause and ask for clarification rather than inventing or misusing it.
+    if (modeHint === 'draft' && prompt && prompt.trim().length > 10) {
+      const knownNouns = buildKnownNounSet(
+        projectBundle,
+        scopedEmailContext || body.emailContext || null,
+        body.chatHistory || []
+      );
+      const unknownNouns = findUnknownNouns(prompt, knownNouns);
+
+      if (unknownNouns.length > 0) {
+        // Build a helpful clarification — suggest likely meanings based on context
+        const noun = unknownNouns[0]; // address the first unknown
+        const hasAO = projectBundle?.adjoining_owners?.length > 0;
+        const aoSurveyorName = projectBundle?.adjoining_owners?.[0]?.surveyor_name;
+        const aoName = projectBundle?.adjoining_owners?.[0]?.name;
+
+        let suggestion = '';
+        if (/surveyor|survey/i.test(prompt) || hasAO) {
+          suggestion = aoSurveyorName
+            ? `the adjoining owner's surveyor (${aoSurveyorName})`
+            : `the adjoining owner's surveyor`;
+        } else if (aoName) {
+          suggestion = `the adjoining owner (${aoName})`;
+        }
+
+        const clarification = suggestion
+          ? `I don't recognise "${noun}" — did you mean ${suggestion}? Just confirm and I'll draft it correctly.`
+          : `I don't recognise "${noun}" — I can't find that name in the project or email thread. Could you clarify who you mean?`;
+
+        return res.status(200).json({ reply: clarification, replyText: clarification });
+      }
     }
 
     const systemPrompt = buildSystemPrompt({
