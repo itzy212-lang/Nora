@@ -185,6 +185,12 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     SERVICE_ADDRESS: aoServiceAddress,
     SURVEYOR_NAME: clean(project.surveyor_name || project.user_name || 'Itzik Darel'),
     SURVEYOR_FIRM: clean(project.surveyor_firm || 'Square One Consulting'),
+    THIRD_SURVEYOR: clean(ao.third_surveyor_name || ao.thirdSurveyorName || ''),
+    FURD_SURVEYOR: clean(ao.third_surveyor_name || ao.thirdSurveyorName || ''),
+    THIRD_SURVEYOR_FIRM: clean(ao.third_surveyor_firm || ao.thirdSurveyorFirm || ''),
+    FURD_SURVEYOR_FIRM: clean(ao.third_surveyor_firm || ao.thirdSurveyorFirm || ''),
+    THIRD_SURVEYOR_EMAIL: clean(ao.third_surveyor_email || ao.thirdSurveyorEmail || ''),
+    FURD_SURVEYOR_EMAIL: clean(ao.third_surveyor_email || ao.thirdSurveyorEmail || ''),
   };
   return addAliasFields(base);
 }
