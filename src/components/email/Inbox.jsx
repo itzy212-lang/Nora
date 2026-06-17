@@ -1240,7 +1240,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
                 </div>
               )}
             </div>
-            <button onClick={() => onDraftWithEly()} className="btn btn-sm btn-primary" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>
+
           </div>
         </div>
       </div>
