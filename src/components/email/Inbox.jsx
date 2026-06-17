@@ -489,15 +489,17 @@ ${threadText}`;
                   || extractDraft([...messages].reverse().find(m => m.role === 'ely')?.explanation || '')
                   || [...messages].reverse().find(m => m.role === 'ely')?.explanation
                   || '';
-                if (!body) { alert('Ask Ely to produce a draft first.'); return; }
+                // Strip Subject line from body before transferring to composer
+                const cleanedBody = body.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
+                if (!cleanedBody) { alert('Ask Ely to produce a draft first.'); return; }
                 if (onSendWithDraft) {
                   onSendWithDraft({
                     to: email?.sender_email || '',
                     subject: `Re: ${email?.subject || ''}`,
-                    body,
+                    body: cleanedBody,
                   });
                 } else if (onUseDraft) {
-                  onUseDraft(body);
+                  onUseDraft(cleanedBody);
                 }
               }}
               style={{
@@ -712,10 +714,18 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   };
 
   const handleElyDraft = (draft, close = false) => {
-    // Convert plain text line breaks to HTML paragraphs
-    const html = draft && !draft.trim().startsWith('<')
-      ? draft.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-      : draft || '';
+    // Strip Subject line, clean sign-off, convert to HTML with paragraph spacing
+    let raw = typeof draft === 'string' ? draft : draft?.body || '';
+    // Strip Subject: line if present
+    raw = raw.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
+    // Strip name after Kind regards
+    raw = raw.replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,');
+    raw = raw.replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,');
+    const html = raw && !raw.trim().startsWith('<')
+      ? raw.split(/\n\n+/).map((p, i, arr) =>
+          `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
+        ).join('')
+      : raw || '';
     setBody(html);
     if (bodyEditorRef.current) {
       bodyEditorRef.current.innerHTML = html;
