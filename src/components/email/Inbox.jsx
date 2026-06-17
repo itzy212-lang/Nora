@@ -846,20 +846,26 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </div>
             )}
 
-            {/* Footer buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Footer buttons — two rows on mobile */}
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Row 1: Attach + Draft with Ely */}
               <div style={{ display: 'flex', gap: 8 }}>
-                <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
-                <button onClick={() => fileInputRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 12.5, cursor: 'pointer', color: 'var(--text2)' }}>
-                  📎 Attach file
+                <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
+                  📎 Attach
                 </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
                 {!showEly && (
-                  <button onClick={() => setShowEly(true)} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>
+                  <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+                    ✨ Draft with Ely
+                  </button>
                 )}
-                <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>
+              </div>
+              {/* Row 2: Cancel + Send */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)', fontWeight: 500 }}>
+                  Cancel
+                </button>
+                <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} style={{ flex: 2, padding: '10px', borderRadius: 10, background: sending || !body.trim() || !to.trim() ? 'var(--bg3)' : 'var(--blue)', color: sending || !body.trim() || !to.trim() ? 'var(--text3)' : '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
                   {sending ? 'Sending…' : '↩ Send reply'}
                 </button>
               </div>
