@@ -709,7 +709,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               >A</button>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {!showEly && <button onClick={() => setShowEly(true)} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>}
+              
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 20, cursor: 'pointer' }}>✕</button>
             </div>
           </div>
@@ -854,8 +854,11 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                   📎 Attach file
                 </button>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>Cancel</button>
+                {!showEly && (
+                  <button onClick={() => setShowEly(true)} className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>✨ Draft with Ely</button>
+                )}
                 <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>
                   {sending ? 'Sending…' : '↩ Send reply'}
                 </button>
