@@ -1531,7 +1531,8 @@ function extractProperNouns(text = '') {
     'And', 'Or', 'But', 'So', 'If', 'When', 'Once', 'After', 'Before',
   ]);
 
-  const words = text.replace(/[^a-zA-Z\s'-]/g, ' ').split(/\s+/);
+  // Strip possessives before extracting — "Shashi's" becomes "Shashi"
+  const words = text.replace(/'s\b/g, '').replace(/[^a-zA-Z\s'-]/g, ' ').split(/\s+/);
   const nouns = [];
 
   for (let i = 1; i < words.length; i++) {
@@ -1578,7 +1579,12 @@ function buildKnownNounSet(projectBundle = null, emailContext = null, chatHistor
   if (emailContext) {
     [emailContext.from, emailContext.sender_name, emailContext.from_email,
      emailContext.subject, emailContext.body, emailContext.threadText].forEach(f => {
-      if (f) String(f).split(/\s+/).forEach(w => known.add(w));
+      if (f) String(f)
+        .replace(/<[^>]+>/g, ' ')  // strip email angle brackets
+        .replace(/[^a-zA-Z\s]/g, ' ')  // strip punctuation
+        .split(/\s+/)
+        .filter(w => w.length > 1)
+        .forEach(w => known.add(w));
     });
   }
 
@@ -1594,9 +1600,11 @@ function findUnknownNouns(prompt = '', knownNouns = new Set()) {
   const candidates = extractProperNouns(prompt);
   return candidates.filter(noun => {
     // Check if this word (or a close match) appears in the known set
-    const lc = noun.toLowerCase();
+    // Strip possessives from both sides before comparing
+    const lc = noun.replace(/'s$/i, '').toLowerCase();
     for (const known of knownNouns) {
-      if (String(known).toLowerCase().includes(lc) || lc.includes(String(known).toLowerCase())) {
+      const klc = String(known).replace(/'s$/i, '').toLowerCase();
+      if (klc.includes(lc) || lc.includes(klc)) {
         return false;
       }
     }
