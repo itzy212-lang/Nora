@@ -1081,12 +1081,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     setInput(draft);
                     requestAnimationFrame(resizeTextarea);
                   }}
-                  onOpenInComposer={(draft) => onOpenComposer?.({
-                    mode: 'compose',
-                    body: draft,
-                    bodyIsHtml: draft.trim().startsWith('<'),
-                    projectId,
-                  })}
+                  onOpenInComposer={(draft) => {
+                    // Strip Subject line and clean sign-off before opening composer
+                    let raw = typeof draft === 'string' ? draft : draft?.body || '';
+                    raw = raw.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
+                    raw = raw.replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,');
+                    raw = raw.replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,');
+                    const isHtml = raw.trim().startsWith('<');
+                    const htmlBody = isHtml ? raw : raw.split(/\n\n+/).map((p, i, arr) =>
+                      `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
+                    ).join('');
+                    onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId });
+                  }}
                 />
 
                 {msg.attachments?.length > 0 && (
