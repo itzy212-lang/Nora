@@ -2843,7 +2843,42 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     setAwardLoading(aoKey);
 
     try {
-      const award = buildAwardPlaceholders(project, ao);
+      // Load notices served for this project and AO to build the correct section string
+      let noticeSection = null;
+      let noticeServedDate = null;
+      try {
+        const { data: noticeRows } = await sb
+          .from('notices')
+          .select('section_1, section_3, section_6, notice_date')
+          .eq('project_id', String(project.id))
+          .eq('status', 'served')
+          .order('notice_date', { ascending: true });
+
+        if (noticeRows && noticeRows.length > 0) {
+          // Aggregate sections across all served notices for this project
+          const hasS1 = noticeRows.some(n => n.section_1);
+          const hasS3 = noticeRows.some(n => n.section_3);
+          const hasS6 = noticeRows.some(n => n.section_6);
+          const parts = [];
+          if (hasS1) parts.push('Section 1');
+          if (hasS3) parts.push('Section 3');
+          if (hasS6) parts.push('Section 6');
+          if (parts.length > 0) {
+            noticeSection = parts.length === 1
+              ? parts[0]
+              : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+          }
+          // Use earliest notice date
+          noticeServedDate = noticeRows[0].notice_date;
+        }
+      } catch (e) {
+        console.warn('[Award] Could not load notices:', e.message);
+      }
+
+      const award = buildAwardPlaceholders(project, ao, {
+        ...(noticeSection ? { noticeSection } : {}),
+        ...(noticeServedDate ? { noticeDate: noticeServedDate } : {}),
+      });
 
       if (!award?.isValid) {
         alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${(award?.missing || []).map(item => `• ${item}`).join('\n')}`);
