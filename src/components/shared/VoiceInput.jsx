@@ -432,7 +432,23 @@ export default function VoiceInput({
       }, 180);
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      const errType = event?.error || '';
+
+      // Permission denied — tell the user clearly
+      if (errType === 'not-allowed' || errType === 'service-not-allowed') {
+        shouldKeepRecordingRef.current = false;
+        setRecording(false);
+        alert('Microphone access was denied.\n\nTo fix this in Chrome:\n1. Click the padlock icon in the address bar\n2. Set Microphone to Allow\n3. Refresh the page and try again');
+        return;
+      }
+
+      // Network error or aborted — just stop cleanly
+      if (errType === 'network' || errType === 'aborted' || errType === 'no-speech') {
+        // These are recoverable — let the restart logic handle it
+        return;
+      }
+
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -444,6 +460,11 @@ export default function VoiceInput({
     };
 
     recognitionRef.current = recognition;
+
+    // Chrome silently fails if the document doesn't have focus
+    if (typeof document !== 'undefined' && !document.hasFocus()) {
+      window.focus();
+    }
 
     try {
       recognition.start();
