@@ -1816,8 +1816,11 @@ if (syncErr) throw syncErr;
           overflow: 'hidden',
           background: 'var(--bg2)',
           position: isMobile ? 'fixed' : 'relative',
-          inset: isMobile ? 0 : 'unset',
-          zIndex: isMobile ? 50 : 'unset',
+          top: isMobile ? 0 : 'unset',
+          left: isMobile ? 0 : 'unset',
+          right: isMobile ? 0 : 'unset',
+          bottom: isMobile ? 0 : 'unset',
+          zIndex: isMobile ? 49 : 'unset',
         }}>
           {/* Mobile back button */}
           {isMobile && mobileShowEmail && (
