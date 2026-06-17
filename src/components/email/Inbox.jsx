@@ -258,36 +258,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
       .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
   }, []);
 
-  // Auto-draft on open
-  useEffect(() => {
-    if (hasAutoRun.current === email?.id || !email) return;
-    hasAutoRun.current = email.id;
-
-    const fullThread = threadEmails.length > 1
-      ? [...threadEmails]
-          .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
-          .map(e => `--- ${fmtDate(e.received_at)} | From: ${e.sender_name || e.sender_email} ---\n${stripHtml(e.body || e.body_preview || '')}`)
-          .join('\n\n')
-      : stripHtml(email.body || email.body_preview || '');
-
-    const sigNote = firmSettings ? 'Do not add a sign-off, name or signature.' : '';
-    const prompt = `Read this ${threadEmails.length > 1 ? `email thread (${threadEmails.length} emails)` : 'email'} and give me a brief plain-text summary:
-
-From: [sender name and firm]
-
-Asking for:
-- [what they are specifically requesting]
-
-Context:
-- [key background only if relevant to replying]
-
-Suggested reply:
-[1-2 sentences on best approach]
-
-No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instructions before drafting. ${sigNote}`;
-
-    callEly(prompt, fullThread, true);
-  }, [email, threadEmails, firmSettings]);
+  // Auto-summary on open disabled — opens blank, user drafts on their own terms
 
   const callEly = async (text, threadTextOverride, isAuto = false) => {
     if (loading) return;
@@ -327,6 +298,8 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
         body: JSON.stringify({
           prompt: promptWithDraft,
           surface: 'inbox_draft',
+          mode: 'draft_with_ely',
+          workflowStage: 'draft_with_ely',
           chatHistory: isAuto ? [] : history,
           emailContext: {
             from: email.sender_name || email.sender_email,
@@ -334,6 +307,7 @@ No markdown, no asterisks, no bold, no long headings. Be concise. Wait for instr
             threadText: fullThread,
             body: fullThread,
           },
+          threadContext: fullThread,
         }),
       });
 
