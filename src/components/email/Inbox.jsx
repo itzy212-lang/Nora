@@ -480,7 +480,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onClose }) 
                 )}
                 {msg.role === 'ely' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {msg.explanation && msg.explanation.length > 5 && (
+                    {msg.explanation && msg.explanation.length > 5 && !msg.draft && (
                       <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
                         {msg.explanation}
                       </div>
