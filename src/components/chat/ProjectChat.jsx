@@ -858,6 +858,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   };
 
   const handleVoice = (transcript, meta) => {
+    // Ignore micro-stops during Web Speech API restart gaps on desktop
+    if (meta?.restarting) {
+      if (transcript) latestTranscriptRef.current = transcript;
+      return;
+    }
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
       setInput(transcript);
