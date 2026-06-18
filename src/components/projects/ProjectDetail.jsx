@@ -2878,6 +2878,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const award = buildAwardPlaceholders(project, ao, {
         ...(noticeSection ? { noticeSection } : {}),
         ...(noticeServedDate ? { noticeDate: noticeServedDate } : {}),
+        ...(boAgreedSurveyorMode ? { agreedSurveyor: true } : {}),
       });
 
       if (!award?.isValid) {
@@ -3579,7 +3580,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       flexWrap: 'wrap',
                     }}>
                       <div
-                        onClick={() => setBoAgreedSurveyorMode(v => !v)}
+                        onClick={async () => {
+                          const next = !boAgreedSurveyorMode;
+                          setBoAgreedSurveyorMode(next);
+                          // Save agreed_surveyor flag to all AOs and project record
+                          const currentAOs = project.aos || [];
+                          if (currentAOs.length > 0) {
+                            const updatedAOs = currentAOs.map(ao => ({
+                              ...ao,
+                              agreed_surveyor: next,
+                              agreedSurveyor: next,
+                            }));
+                            await updateProjectSafely(project.id, {
+                              aos: updatedAOs,
+                              bo_agreed_surveyor: next,
+                            });
+                            setProject(prev => ({ ...prev, aos: updatedAOs, bo_agreed_surveyor: next }));
+                          } else {
+                            await updateProjectSafely(project.id, { bo_agreed_surveyor: next });
+                            setProject(prev => ({ ...prev, bo_agreed_surveyor: next }));
+                          }
+                        }}
                         role="switch"
                         aria-checked={boAgreedSurveyorMode}
                         title="Toggle agreed surveyor appointment for the Building Owner"
