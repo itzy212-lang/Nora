@@ -424,24 +424,6 @@ export default function VoiceInput({
       }
 
       sessionResultsRef.current = {};
-
-      // Emit with restarting:true so consumers know not to treat this as a final stop
-      const fullSoFar = committedRef.current;
-      const restartMeta = {
-        recording: true,
-        restarting: true,
-        currentPhrase: '',
-        interim: '',
-        final: '',
-      };
-      if (fullSoFar) {
-        onPreview?.(fullSoFar, restartMeta);
-        onTranscript?.(fullSoFar, restartMeta);
-      } else {
-        // Even with no text yet, signal that we're restarting not stopping
-        onPreview?.('', restartMeta);
-      }
-
       setRecording(true);
 
       restartTimerRef.current = setTimeout(() => {
@@ -450,23 +432,7 @@ export default function VoiceInput({
       }, 180);
     };
 
-    recognition.onerror = (event) => {
-      const errType = event?.error || '';
-
-      // Permission denied — tell the user clearly
-      if (errType === 'not-allowed' || errType === 'service-not-allowed') {
-        shouldKeepRecordingRef.current = false;
-        setRecording(false);
-        alert('Microphone access was denied.\n\nTo fix this in Chrome:\n1. Click the padlock icon in the address bar\n2. Set Microphone to Allow\n3. Refresh the page and try again');
-        return;
-      }
-
-      // Network error or aborted — just stop cleanly
-      if (errType === 'network' || errType === 'aborted' || errType === 'no-speech') {
-        // These are recoverable — let the restart logic handle it
-        return;
-      }
-
+    recognition.onerror = () => {
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -478,11 +444,6 @@ export default function VoiceInput({
     };
 
     recognitionRef.current = recognition;
-
-    // Chrome silently fails if the document doesn't have focus
-    if (typeof document !== 'undefined' && !document.hasFocus()) {
-      window.focus();
-    }
 
     try {
       recognition.start();
