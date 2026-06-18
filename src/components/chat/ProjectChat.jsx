@@ -853,6 +853,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      // Never send on Enter while voice is recording — prevents fragment submission on desktop
+      if (voicePhase === 'recording') return;
       handleSend();
     }
   };
