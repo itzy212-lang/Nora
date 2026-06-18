@@ -34,6 +34,39 @@ export default function Accounting({ projects = [], settings = {} }) {
     setShowModal(true);
   };
 
+  const handleDownload = async (inv) => {
+    try {
+      const res = await fetch('/api/generate-invoice-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice: inv,
+          invoice_id: inv.id,
+          project_id: inv.project_id,
+          user_id: 'help@sq1consulting.co.uk',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.file_data) {
+        alert(data.error || 'Could not generate PDF.');
+        return;
+      }
+      // Trigger browser download
+      const byteChars = atob(data.file_data);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArr], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.file_name || `Invoice-${inv.invoice_number}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Download failed: ' + e.message);
+    }
+  };
+
   const handleMarkPaid = async (inv) => {
     await markPaid(inv.id);
   };
@@ -156,6 +189,7 @@ export default function Accounting({ projects = [], settings = {} }) {
                 onEdit={openEdit}
                 onMarkPaid={handleMarkPaid}
                 onDelete={(id) => setConfirmDelete(id)}
+                onDownload={handleDownload}
               />
             </div>
           )}
@@ -173,6 +207,7 @@ export default function Accounting({ projects = [], settings = {} }) {
                 invoices={paidInvoices}
                 onEdit={openEdit}
                 onDelete={(id) => setConfirmDelete(id)}
+                onDownload={handleDownload}
                 isPaid
               />
             </div>
@@ -262,7 +297,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function InvoiceTable({ invoices, onEdit, onMarkPaid, onDelete, isPaid }) {
+function InvoiceTable({ invoices, onEdit, onMarkPaid, onDelete, onDownload, isPaid }) {
   return (
     <div>
       {invoices.map(inv => (
@@ -280,6 +315,9 @@ function InvoiceTable({ invoices, onEdit, onMarkPaid, onDelete, isPaid }) {
             </div>
             <div style={styles.actions}>
               <button onClick={() => onEdit(inv)} style={styles.actionBtn} title="Edit">✏️</button>
+              {onDownload && (
+                <button onClick={() => onDownload(inv)} style={styles.actionBtn} title="Download PDF">⬇️</button>
+              )}
               {!isPaid && onMarkPaid && (
                 <button onClick={() => onMarkPaid(inv)} style={styles.actionBtn} title="Mark paid">✅</button>
               )}
