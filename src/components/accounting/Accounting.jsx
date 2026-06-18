@@ -47,21 +47,15 @@ export default function Accounting({ projects = [], settings = {} }) {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.file_data) {
+      if (!res.ok || !data.base64) {
         alert(data.error || 'Could not generate PDF.');
         return;
       }
-      // Trigger browser download
-      const byteChars = atob(data.file_data);
-      const byteArr = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-      const blob = new Blob([byteArr], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      // Trigger browser download — API returns data URI
       const a = document.createElement('a');
-      a.href = url;
+      a.href = data.base64;
       a.download = data.file_name || `Invoice-${inv.invoice_number}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
     } catch (e) {
       alert('Download failed: ' + e.message);
     }
