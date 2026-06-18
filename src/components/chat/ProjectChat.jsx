@@ -875,6 +875,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   };
 
   const handleVoicePreview = (phrase, meta) => {
+    // Ignore restart signals — never switch away from recording during a restart gap
+    if (meta?.restarting) return;
+
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
