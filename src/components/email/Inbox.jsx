@@ -246,7 +246,6 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [loading, setLoading]         = useState(false);
   const [interimText, setInterimText] = useState('');
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
   const voiceBaseRef  = useRef('');
   const endRef        = useRef(null);
@@ -442,16 +441,6 @@ ${threadText}`;
 
   // VoiceInput handler — accumulates transcript onto typed base
   const handleVoice = (transcript, meta) => {
-    // Track recording state for Enter-to-send blocking
-    if (meta?.recording === false && !meta?.restarting) {
-      setIsVoiceRecording(false);
-    } else if (meta?.recording) {
-      setIsVoiceRecording(true);
-    }
-
-    // Ignore micro-stops during Web Speech API restart gaps
-    if (meta?.restarting) return;
-
     if (meta?.interim) {
       setInterimText(meta.interim);
     } else {
@@ -650,7 +639,7 @@ ${threadText}`;
               <textarea
                 value={input}
                 onChange={handleTextChange}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isVoiceRecording) handleSend(); }}}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
                 placeholder="Ask Ely to adjust, change tone, add a point…"
                 rows={2}
                 style={{ flex: 1, padding: '8px 10px', fontSize: 13, resize: 'none', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }}
