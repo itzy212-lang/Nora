@@ -853,18 +853,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // Never send on Enter while voice is recording — prevents fragment submission on desktop
-      if (voicePhase === 'recording') return;
       handleSend();
     }
   };
 
   const handleVoice = (transcript, meta) => {
-    // Ignore micro-stops during Web Speech API restart gaps on desktop
-    if (meta?.restarting) {
-      if (transcript) latestTranscriptRef.current = transcript;
-      return;
-    }
     if (!meta?.recording && transcript) {
       latestTranscriptRef.current = transcript;
       setInput(transcript);
@@ -875,9 +868,6 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   };
 
   const handleVoicePreview = (phrase, meta) => {
-    // Ignore restart signals — never switch away from recording during a restart gap
-    if (meta?.restarting) return;
-
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
