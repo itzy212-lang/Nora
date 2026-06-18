@@ -427,14 +427,19 @@ export default function VoiceInput({
 
       // Emit with restarting:true so consumers know not to treat this as a final stop
       const fullSoFar = committedRef.current;
+      const restartMeta = {
+        recording: true,
+        restarting: true,
+        currentPhrase: '',
+        interim: '',
+        final: '',
+      };
       if (fullSoFar) {
-        onTranscript?.(fullSoFar, {
-          recording: true,
-          restarting: true,
-          currentPhrase: '',
-          interim: '',
-          final: '',
-        });
+        onPreview?.(fullSoFar, restartMeta);
+        onTranscript?.(fullSoFar, restartMeta);
+      } else {
+        // Even with no text yet, signal that we're restarting not stopping
+        onPreview?.('', restartMeta);
       }
 
       setRecording(true);
