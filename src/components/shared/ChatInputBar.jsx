@@ -80,17 +80,21 @@ export default function ChatInputBar({
         setLivePreview(p);
         onChange?.(p);
       }
-    } else if (meta.recording === false) {
+    } else if (meta.recording === false && !meta.restarting) {
       setVoicePhase('transcribing');
       setLivePreview('');
     }
   }, [onChange]);
 
-  const handleTranscript = useCallback((transcript) => {
-    setVoicePhase('idle');
-    setLivePreview('');
+  const handleTranscript = useCallback((transcript, meta) => {
+    // Only switch to idle when recording has actually finished
+    // If meta.recording is still true, we're mid-session — stay in recording phase
+    if (!meta?.recording) {
+      setVoicePhase('idle');
+      setLivePreview('');
+    }
     onChange?.(transcript);
-    onTranscript?.(transcript);
+    onTranscript?.(transcript, meta);
     setTimeout(resize, 50);
   }, [onChange, onTranscript, resize]);
 
