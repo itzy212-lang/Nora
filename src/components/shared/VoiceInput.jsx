@@ -424,6 +424,15 @@ export default function VoiceInput({
       }
 
       sessionResultsRef.current = {};
+
+      // Signal consumers that this is a restart gap, not a final stop
+      // This prevents voicePhase switching to idle/transcribing during the gap
+      const restartMeta = { recording: true, restarting: true, currentPhrase: '', interim: '', final: '' };
+      onPreview?.(committedRef.current || '', restartMeta);
+      if (committedRef.current) {
+        onTranscript?.(committedRef.current, restartMeta);
+      }
+
       setRecording(true);
 
       restartTimerRef.current = setTimeout(() => {
