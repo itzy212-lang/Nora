@@ -2630,7 +2630,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [loaLoading, setLoaLoading] = useState(null);
   const [awardLoading, setAwardLoading] = useState(null);
-  const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(false);
+  const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(
+    () => (initialProject?.aos || []).some(a => a.agreed_surveyor || a.agreedSurveyor)
+  );
   const [project, setProject] = useState(initialProject);
   const [showProjectEdit, setShowProjectEdit] = useState(false);
   const [editingAO, setEditingAO] = useState(null);
@@ -3583,22 +3585,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                         onClick={async () => {
                           const next = !boAgreedSurveyorMode;
                           setBoAgreedSurveyorMode(next);
-                          // Save agreed_surveyor flag to all AOs and project record
+                          // Save agreed_surveyor flag into each AO in the aos JSON array
                           const currentAOs = project.aos || [];
-                          if (currentAOs.length > 0) {
-                            const updatedAOs = currentAOs.map(ao => ({
-                              ...ao,
-                              agreed_surveyor: next,
-                              agreedSurveyor: next,
-                            }));
-                            await updateProjectSafely(project.id, {
-                              aos: updatedAOs,
-                              bo_agreed_surveyor: next,
-                            });
-                            setProject(prev => ({ ...prev, aos: updatedAOs, bo_agreed_surveyor: next }));
-                          } else {
-                            await updateProjectSafely(project.id, { bo_agreed_surveyor: next });
-                            setProject(prev => ({ ...prev, bo_agreed_surveyor: next }));
+                          const updatedAOs = currentAOs.map(a => ({
+                            ...a,
+                            agreed_surveyor: next,
+                            agreedSurveyor: next,
+                          }));
+                          try {
+                            await updateProjectSafely(project.id, { aos: updatedAOs });
+                            setProject(prev => ({ ...prev, aos: updatedAOs }));
+                          } catch (e) {
+                            console.warn('[agreed surveyor toggle] save failed:', e.message);
                           }
                         }}
                         role="switch"
