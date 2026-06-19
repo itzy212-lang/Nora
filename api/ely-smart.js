@@ -826,42 +826,49 @@ RULES:
 
 ACTIVE MODE: draft
 
-Produce the draft now. No preamble. No summary. No explanation. No coaching. Nothing before or after the draft.
+Produce the draft immediately. Nothing before it. Nothing after it. No preamble, no explanation, no coaching, no commentary.
 
-NAMES: Read the email thread. Use the actual sender name for the greeting. Never use bracketed placeholders like [Name] or [Surveyor]. If you cannot find the name, use "Hi" with nothing after it.
+GREETING: Read the email thread. Use the actual sender name. Never use placeholders. If name not found, use "Hi" only.
 
-SOURCE MATERIAL:
-The user's reasoning and wording are the source material. Polish — do not expand.
-If the final message is a short trigger ("draft", "let's draft", "give me the draft"), build the draft from the full conversation history above.
-If the user dictated content, stay close to their wording. Improve grammar, flow and clarity. Do not add content, rationale or explanations they did not include.
+YOUR ROLE — EDITOR NOT TRANSCRIBER:
+You are editing the user's dictation into a professional email. Not transcribing it. Not copying it with light changes.
 
-DICTATION: Remove filler words, repetition, false starts, emotional language and AI-directed phrases. Keep the intent. Keep the reasoning. Restructure if needed.
+Apply this to every part of the dictation:
+- KEEP: wording already professional and clear — tidy grammar only
+- FIX: rough speech, doesn't make sense as written, sounds like talking — rewrite it properly
+- REMOVE: filler words, false starts, repetition, AI instructions ("make sure you", "word for word", "new paragraph")
 
-Do not expand vague references from the thread. If the user says "it" — keep "it". Do not substitute with thread details unless the user included them.
+The test: does each sentence read like a professional surveyor wrote it? If it sounds like transcribed speech — rewrite it.
 
-PARAGRAPH STRUCTURE — MANDATORY:
-Structure paragraphs by ideas, not by sentence count.
-Start a new paragraph for each new point, question or subject change.
-Every email — even a short one — must have blank lines between the greeting, each point and the sign-off.
-Never produce a wall of text.
+DICTATION INSTRUCTIONS: When the user says "new paragraph", "next paragraph", "finish that sentence there", "word for word", "make sure you include this" — these are instructions to you, not content. Act on them silently. Never write them into the email.
 
-Correct:
-Hi Shashi,
+SOURCE MATERIAL: If the final message is a short trigger ("draft", "draft it", "give me the draft") — build the draft from the full conversation history. The conversation is the working notes.
 
-I've been reviewing the drawings and just wanted to clarify one point.
+PARAGRAPH STRUCTURE — NON-NEGOTIABLE:
+Every separate point = separate paragraph. Every question = separate paragraph. Every request = separate paragraph.
+Blank line between every paragraph. Blank line after greeting. Blank line before sign-off.
+Never run two different points into the same paragraph.
 
-Can you confirm whether the shared chimney breast with No. 9 is being removed?
+Example of correct paragraph structure:
+Hi Robin,
+
+I didn't want to include this in the last email, given that Justin was copied in.
+
+Could you confirm you received my earlier invoice?
+
+Given that we're now questioning the status of the wall at No. 9, I'm happy to hold back the £200 relating to the notices for the demolition works until we agree on the position. If we end up using those notices, you can settle that separately — no problem.
+
+That leaves a balance of £900 outstanding.
+
+If you have any questions, do let me know.
 
 Kind regards,
 
-Wrong:
-Hi Shashi, I've been reviewing the drawings and just wanted to clarify one point. Can you confirm whether the shared chimney breast with No. 9 is being removed? Kind regards,
+TONE: Conversational professional. Short sentences. Direct. Plain English. Not corporate. Not legalistic.
 
-TONE: Conversational professional. Short sentences. Direct language. Plain English. Not corporate. Not legalistic.
+SIGN-OFF: Kind regards, — nothing after it. No name. No firm.
 
-SIGN-OFF: End with Kind regards, — nothing after it. No name. No firm. No contact details.
-
-Do not use HTML tags. Plain text only with blank lines between paragraphs.
+Plain text only. Blank lines between paragraphs. No HTML.
 `;
   } else {
     prompt += `
@@ -1997,40 +2004,6 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       console.warn('[ely-smart] drafting examples load failed:', err.message);
     }
 
-    // ── Unknown proper noun check (draft mode only) ─────────────────────────
-    // If the user's prompt contains a proper noun not in any known context,
-    // pause and ask for clarification rather than inventing or misusing it.
-    if (modeHint === 'draft' && prompt && prompt.trim().length > 10) {
-      const knownNouns = buildKnownNounSet(
-        projectBundle,
-        scopedEmailContext || body.emailContext || null,
-        body.chatHistory || []
-      );
-      const unknownNouns = findUnknownNouns(prompt, knownNouns);
-
-      if (unknownNouns.length > 0) {
-        // Build a helpful clarification — suggest likely meanings based on context
-        const noun = unknownNouns[0]; // address the first unknown
-        const hasAO = projectBundle?.adjoining_owners?.length > 0;
-        const aoSurveyorName = projectBundle?.adjoining_owners?.[0]?.surveyor_name;
-        const aoName = projectBundle?.adjoining_owners?.[0]?.name;
-
-        let suggestion = '';
-        if (/surveyor|survey/i.test(prompt) || hasAO) {
-          suggestion = aoSurveyorName
-            ? `the adjoining owner's surveyor (${aoSurveyorName})`
-            : `the adjoining owner's surveyor`;
-        } else if (aoName) {
-          suggestion = `the adjoining owner (${aoName})`;
-        }
-
-        const clarification = suggestion
-          ? `I don't recognise "${noun}" — did you mean ${suggestion}? Just confirm and I'll draft it correctly.`
-          : `I don't recognise "${noun}" — I can't find that name in the project or email thread. Could you clarify who you mean?`;
-
-        return res.status(200).json({ reply: clarification, replyText: clarification });
-      }
-    }
 
     const systemPrompt = buildSystemPrompt({
       brain,
