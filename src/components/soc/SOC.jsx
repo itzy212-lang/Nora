@@ -30,6 +30,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [editableSections, setEditableSections] = useState([]);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [reportId, setReportId] = useState(null);
+  const [editPersistPending, setEditPersistPending] = useState(false);
+  const [generationIncomplete, setGenerationIncomplete] = useState(false);
+  const [generationWarning, setGenerationWarning] = useState(null);
 
   // ── Sidebar state ────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -106,7 +110,19 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // ── Sync editable sections when structured data arrives ──────────────────
   useEffect(() => {
     if (structuredData?.sections) {
-      setEditableSections(JSON.parse(JSON.stringify(structuredData.sections)));
+      // If there's an edit_state (saved manual edits), prefer that over AI draft
+      const sectionsToUse = structuredData.edit_state?.sections || structuredData.sections;
+      setEditableSections(JSON.parse(JSON.stringify(sectionsToUse)));
+    }
+    // Track report_id for save persistence
+    if (structuredData?.report_id) setReportId(structuredData.report_id);
+    // Handle incomplete generation
+    if (structuredData?.generation_status === 'incomplete') {
+      setGenerationIncomplete(true);
+      setGenerationWarning(structuredData.warning || 'Generation incomplete — please retry.');
+    } else {
+      setGenerationIncomplete(false);
+      setGenerationWarning(null);
     }
   }, [structuredData]);
 
@@ -253,7 +269,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // ── Get re-rendered HTML from current edited sections ───────────────────
   const getRenderedHtml = useCallback(async () => {
-    const editedData = { ...structuredData, sections: editableSections };
+    // Always use the current edited sections — these are the authoritative state
+    const editedData = {
+      ...(structuredData || {}),
+      sections: editableSections,
+      report_id: reportId,
+    };
     const res = await fetch('/api/generate-soc', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -270,7 +291,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     const data = await res.json();
     if (data.preview_html) setPreviewHtml(data.preview_html);
     return data.preview_html;
-  }, [structuredData, editableSections, projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
+  }, [structuredData, editableSections, reportId, projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
 
   // ── Save draft ────────────────────────────────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
@@ -369,7 +390,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       const [row] = next[fromSectionIdx].rows.splice(rowIdx, 1);
       const toIdx = next.findIndex(s => s.title === toSectionTitle);
       if (toIdx >= 0) next[toIdx].rows.push(row);
-      return next.filter(s => s.rows.length > 0);
+      const filtered = next.filter(s => s.rows.length > 0);
+      schedulePersistEdits(filtered);
+      return filtered;
     });
   }
 
@@ -377,8 +400,35 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setEditableSections(prev => {
       const next = JSON.parse(JSON.stringify(prev));
       next[sectionIdx].rows[rowIdx][field] = value;
+      schedulePersistEdits(next);
       return next;
     });
+  }
+
+  // ── Auto-persist manual edits to Supabase ───────────────────────────────
+  const persistEditsRef = useRef(null);
+  function schedulePersistEdits(newSections) {
+    if (!reportId) return;
+    if (persistEditsRef.current) clearTimeout(persistEditsRef.current);
+    persistEditsRef.current = setTimeout(async () => {
+      setEditPersistPending(true);
+      try {
+        await fetch('/api/soc-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_edited_preview',
+            report_id: reportId,
+            edited_sections: newSections,
+            session_id: socSessionId,
+          }),
+        });
+      } catch (e) {
+        console.warn('[SOC] auto-save failed:', e.message);
+      } finally {
+        setEditPersistPending(false);
+      }
+    }, 1500); // debounce 1.5s
   }
 
   // ── Styles ───────────────────────────────────────────────────────────────
@@ -498,6 +548,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
 
         <div style={s.reviewContent}>
+          {/* Generation incomplete warning */}
+          {generationIncomplete && (
+            <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 13, color: '#991b1b', marginBottom: 8 }}>
+              ⚠ <strong>Generation incomplete</strong> — {generationWarning || 'Some stages failed. This draft may be missing content.'} This is not a complete Schedule of Conditions.
+              <button onClick={() => setPhase('recording')} style={{ marginLeft: 12, fontSize: 12, color: '#991b1b', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>
+                ← Retry generation
+              </button>
+            </div>
+          )}
+
+          {/* Edit persist indicator */}
+          {editPersistPending && (
+            <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right', marginBottom: 4 }}>Saving edits…</div>
+          )}
+
           {/* Flagged summary */}
           {flaggedCount > 0 && (
             <div style={{ padding: '10px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10, fontSize: 13, color: '#92400e' }}>
