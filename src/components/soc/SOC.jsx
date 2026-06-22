@@ -30,7 +30,6 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [editableSections, setEditableSections] = useState([]);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
-  const [reportId, setReportId] = useState(null);
   const [editPersistPending, setEditPersistPending] = useState(false);
   const [generationIncomplete, setGenerationIncomplete] = useState(false);
   const [generationWarning, setGenerationWarning] = useState(null);
