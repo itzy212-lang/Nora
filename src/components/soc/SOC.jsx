@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
+import { supabase } from '../../supabaseClient';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -52,70 +53,101 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     return t.endsWith('?') || /^(have i|did i|what|which|how many|is there|are there|do i)/i.test(t);
   }
 
-  // ── Stable sessionId per project+AO ─────────────────────────────────────
-  const [sessionId, setSessionId] = useState(() => {
-    if (!defaultProjectId) return uid();
-    // Key must match the useEffect key — selectedAOIndex defaults to '0'
-    const normAOIndex = String(defaultAOIndex ?? '0');
-    const key = `soc_session_${defaultProjectId}_${normAOIndex}`;
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const fresh = uid();
-    localStorage.setItem(key, fresh);
-    return fresh;
-  });
+  // ── SOC session — one ai_session per project+AO, stored in Supabase ────────
+  const [socSessionId, setSocSessionId] = useState(null); // ai_sessions.id (UUID)
 
-  // Update sessionId when project or AO changes
+  // ── Find or create SOC session in ai_sessions, then load notes ─────────────
   useEffect(() => {
     if (!projectId) return;
-    const key = `soc_session_${projectId}_${selectedAOIndex}`;
-    const existing = localStorage.getItem(key);
-    if (existing && existing !== sessionId) {
-      setSessionId(existing);
-      setMessages([]);
-      setPreviewHtml('');
-      setStructuredData(null);
-    } else if (!existing) {
-      const fresh = uid();
-      localStorage.setItem(key, fresh);
-      setSessionId(fresh);
-      setMessages([]);
-      setPreviewHtml('');
-      setStructuredData(null);
-    }
-  }, [projectId, selectedAOIndex]);
+    const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
 
-  // ── Restore notes from Supabase on mount / session change ────────────────
-  useEffect(() => {
-    if (!sessionId || !projectId) return;
-    fetch(`/api/soc-session?session_id=${sessionId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.notes?.length) {
-          setMessages(data.notes.map(n => ({
-            id: `note-${n.sequence}`,
-            role: 'user',
-            content: n.raw_note,
-            aiResponse: n.ai_response,
-            section: n.current_section,
-          })));
-          if (phase === 'setup') setPhase('recording');
-        }
-      })
-      .catch(() => {});
-  }, [sessionId]);
+    async function initSession() {
+      // Look for existing SOC session for this project+AO
+      const { data: existing } = await supabase
+        .from('ai_sessions')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('session_type', 'soc')
+        .eq('ao_id', aoId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      let sid = existing?.[0]?.id || null;
+
+      if (!sid) {
+        // Create a new SOC session for this project+AO
+        const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+        const { data: created } = await supabase
+          .from('ai_sessions')
+          .insert({
+            user_id: 'itzy212@gmail.com',
+            project_id: projectId,
+            ao_id: aoId,
+            session_type: 'soc',
+            surface: 'soc',
+            title: aoAddr,
+            auto_title: aoAddr,
+          })
+          .select('id')
+          .single();
+        sid = created?.id || null;
+      }
+
+      if (!sid) return;
+      setSocSessionId(sid);
+
+      // Load existing notes for this session
+      const { data: msgs } = await supabase
+        .from('ai_messages')
+        .select('id, role, content, created_at')
+        .eq('session_id', sid)
+        .order('created_at', { ascending: true });
+
+      if (msgs?.length) {
+        setMessages(msgs.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+        })));
+        if (phase === 'setup') setPhase('recording');
+      }
+    }
+
+    initSession().catch(console.error);
+  }, [projectId, selectedAOIndex]);
 
   // ── Load session history for sidebar ────────────────────────────────────
   const loadSessionHistory = useCallback(async () => {
     if (!projectId) return;
     setLoadingSessions(true);
     try {
-      const res = await fetch(`/api/soc-sessions?project_id=${projectId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSessionHistory(data.sessions || []);
+      // Read SOC sessions directly from ai_sessions
+      const { data: sessions } = await supabase
+        .from('ai_sessions')
+        .select('id, title, auto_title, ao_id, created_at, last_message_at')
+        .eq('project_id', projectId)
+        .eq('session_type', 'soc')
+        .order('last_message_at', { ascending: false, nullsFirst: false });
+
+      if (sessions) {
+        // Get note counts from ai_messages
+        const enriched = await Promise.all(sessions.map(async s => {
+          const { count } = await supabase
+            .from('ai_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('session_id', s.id)
+            .eq('role', 'user');
+          return {
+            sessionId: s.id,
+            aoId: s.ao_id,
+            aoAddress: s.title || s.auto_title || 'Adjoining Owner',
+            noteCount: count || 0,
+            lastUpdated: s.last_message_at || s.created_at,
+          };
+        }));
+        setSessionHistory(enriched);
       }
-    } catch {}
+    } catch (e) { console.error(e); }
     setLoadingSessions(false);
   }, [projectId]);
 
@@ -124,17 +156,25 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   }, [sidebarOpen, loadSessionHistory]);
 
   // Open a historical session from the sidebar
-  const openSession = useCallback((session) => {
-    const key = `soc_session_${projectId}_${session.ao_index ?? session.aoId}`;
-    localStorage.setItem(key, session.sessionId);
-    setSessionId(session.sessionId);
-    setSelectedAOIndex(String(session.ao_index ?? '0'));
+  const openSession = useCallback(async (session) => {
+    setSocSessionId(session.sessionId);
     setMessages([]);
     setPreviewHtml('');
     setStructuredData(null);
-    setPhase('recording');
     setSidebarOpen(false);
-  }, [projectId]);
+
+    // Load notes for this session
+    const { data: msgs } = await supabase
+      .from('ai_messages')
+      .select('id, role, content, created_at')
+      .eq('session_id', session.sessionId)
+      .order('created_at', { ascending: true });
+
+    if (msgs?.length) {
+      setMessages(msgs.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    }
+    setPhase('recording');
+  }, []);
 
   // Start a new session for a different AO
   const startNewSession = useCallback(() => {
@@ -181,34 +221,34 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setInterimText('');
   }, []);
 
-  // ── Submit a note ────────────────────────────────────────────────────────
+  // ── Submit a note — saves directly to ai_messages ───────────────────────
   const handleSend = useCallback(async (overrideText) => {
     const userContent = (overrideText ?? textInput).trim();
     if (!userContent) return;
+    if (!socSessionId) { alert('Session not ready — please wait a moment and try again.'); return; }
 
     const msgId = uid();
     setMessages(prev => [...prev, { id: msgId, role: 'user', content: userContent }]);
-    setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: '…', pending: true }]);
     setTextInput('');
 
-    try {
-      const res = await fetch('/api/process-soc-note', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          note: userContent,
-          session_id: sessionId,
-          project_id: projectId || null,
-          ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      const reply = data.response || 'Noted.';
-      setMessages(prev => prev.map(m => m.pending ? { ...m, content: reply, pending: false } : m));
-    } catch {
-      setMessages(prev => prev.map(m => m.pending ? { ...m, content: 'Noted.', pending: false } : m));
+    // Save directly to ai_messages — same table that already works
+    const { error } = await supabase.from('ai_messages').insert({
+      id: msgId,
+      session_id: socSessionId,
+      role: 'user',
+      content: userContent,
+      project_id: projectId || null,
+      surface: 'soc',
+    });
+
+    if (error) {
+      console.error('[SOC] save failed:', error.message);
+      setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: 'Note could not be saved. Please check your connection.' }]);
+    } else {
+      // Show a simple acknowledgement — no API call needed
+      setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: 'Noted.' }]);
     }
-  }, [textInput, sessionId, projectId, selectedAO, selectedAOIndex]);
+  }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex]);
 
   const handleMicToggle = useCallback(() => {
     if (isRecording) {
@@ -235,7 +275,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         body: JSON.stringify({
           message: text,
           project_id: projectId,
-          session_id: sessionId,
+          session_id: socSessionId,
           ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
           ao_name: aoName(selectedAO),
           ao_names: aoName(selectedAO),
@@ -263,7 +303,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     } finally {
       setProcessing(false);
     }
-  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, sessionId, stopRecording, textInput]);
+  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, stopRecording, textInput]);
 
   // ── Print / PDF ──────────────────────────────────────────────────────────
   const printPreview = useCallback(async () => {
@@ -456,7 +496,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                         <button disabled={item.resolving} onClick={async () => {
                           setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
                           try {
-                            const res = await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: sessionId, project_id: projectId || null, resolution: 'allocated', force_section: item.suggested_section, source_note_index: item.note_index }) });
+                            const res = await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: socSessionId, project_id: projectId || null, resolution: 'allocated', force_section: item.suggested_section, source_note_index: item.note_index }) });
                             if (res.ok) setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
                             else setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n));
                           } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
@@ -468,7 +508,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                         <button key={label} disabled={item.resolving} onClick={async () => {
                           setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
                           try {
-                            await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: sessionId, project_id: projectId || null, resolution: label.toLowerCase().replace(' ', '_'), source_note_index: item.note_index }) });
+                            await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: socSessionId, project_id: projectId || null, resolution: label.toLowerCase().replace(' ', '_'), source_note_index: item.note_index }) });
                             setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
                           } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
                         }} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: label === 'Exclude' ? '#fee2e2' : 'var(--bg3)', color: label === 'Exclude' ? '#991b1b' : 'var(--text2)', border: label === 'Exclude' ? 'none' : '1px solid var(--border)', cursor: 'pointer' }}>
@@ -530,7 +570,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
               ) : sessionHistory.length === 0 ? (
                 <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No saved sessions yet</div>
               ) : sessionHistory.map((s2, i) => {
-                const isActive = s2.sessionId === sessionId;
+                const isActive = s2.sessionId === socSessionId;
                 return (
                   <div key={i} onClick={() => openSession(s2)}
                     style={{ ...s.sidebarItem, ...(isActive ? s.sidebarItemActive : {}), background: isActive ? 'var(--blue-bg)' : 'transparent' }}>
