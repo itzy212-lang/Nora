@@ -300,11 +300,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         body: JSON.stringify({ html: htmlToExport, filename: safeFilename }),
       });
       if (!res.ok) throw new Error('PDF export failed');
-      const { base64, filename } = await res.json();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = `data:application/pdf;base64,${base64}`;
-      link.download = filename || `${safeFilename}.pdf`;
+      link.href = url;
+      link.download = `${safeFilename}.pdf`;
       link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (err) {
       alert('PDF error: ' + err.message);
     } finally {
@@ -325,8 +327,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         body: JSON.stringify({ html: htmlToExport, filename: safeFilename }),
       });
       if (!res.ok) throw new Error('PDF export failed');
-      const { base64, filename: fn } = await res.json();
-      setOneDriveOverlay({ base64, filename: fn || `${safeFilename}.pdf`, projectId, previewHtml });
+      const blob = await res.blob();
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      setOneDriveOverlay({ base64, filename: `${safeFilename}.pdf`, projectId, previewHtml: htmlToExport });
     } catch (err) {
       alert('Save error: ' + err.message);
     } finally {
