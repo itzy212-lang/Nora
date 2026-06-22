@@ -55,7 +55,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // ── Stable sessionId per project+AO ─────────────────────────────────────
   const [sessionId, setSessionId] = useState(() => {
     if (!defaultProjectId) return uid();
-    const key = `soc_session_${defaultProjectId}_${defaultAOIndex ?? '0'}`;
+    // Key must match the useEffect key — selectedAOIndex defaults to '0'
+    const normAOIndex = String(defaultAOIndex ?? '0');
+    const key = `soc_session_${defaultProjectId}_${normAOIndex}`;
     const existing = localStorage.getItem(key);
     if (existing) return existing;
     const fresh = uid();
@@ -85,7 +87,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // ── Restore notes from Supabase on mount / session change ────────────────
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !projectId) return;
     fetch(`/api/soc-session?session_id=${sessionId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
