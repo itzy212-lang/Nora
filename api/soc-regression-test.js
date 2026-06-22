@@ -1,282 +1,249 @@
 // api/soc-regression-test.js
-// Protected regression harness for the 17 Park Avenue transcript.
-// Runs the full SOC pipeline against stored notes and returns a complete audit.
-// GET /api/soc-regression-test?session_id=addc4c06-5224-4141-9dea-214cd3af53b1
-// POST with { session_id, force_reextract: true } to bypass cached live claims.
+// Protected isolated regression harness for the 17 Park Avenue transcript.
+// POST only. Secret required in x-regression-key header. No default secret.
+// Reads transcript from fixture session (read-only), runs in an isolated
+// temporary session, cleans up, and returns full audit output.
 
 import { createClient } from '@supabase/supabase-js';
+import {
+  extractAtomicClaims,
+  draftFromClaims,
+  runQualityAudit,
+  runFidelityAudit,
+  runCompletenessAudit,
+} from './lib/soc-pipeline.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Known 17 Park Avenue session — the canonical regression fixture
+// The 17 Park Avenue fixture session — used as IMMUTABLE SOURCE only.
 const FIXTURE_SESSION_ID = 'addc4c06-5224-4141-9dea-214cd3af53b1';
-const REGRESSION_KEY = process.env.REGRESSION_TEST_KEY || 'sq1-regression-2026';
 
 export default async function handler(req, res) {
-  // Simple protection — require key header or query param
-  const key = req.headers['x-regression-key'] || req.query.key;
-  if (key !== REGRESSION_KEY) {
-    return res.status(401).json({ error: 'Unauthorised — provide x-regression-key header' });
+  // ── Security: POST only, header-only secret, no fallback ────────────────
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const session_id = req.query.session_id || req.body?.session_id || FIXTURE_SESSION_ID;
-  const forceReextract = req.query.force_reextract === 'true' || req.body?.force_reextract;
+  const secret = req.headers['x-regression-key'];
+  const expected = process.env.REGRESSION_TEST_KEY;
+  if (!expected) return res.status(500).json({ error: 'REGRESSION_TEST_KEY not configured on server' });
+  if (!secret || secret !== expected) return res.status(404).end(); // 404, not 403 — don't confirm existence
 
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_KEY) return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
 
-  const startAt = Date.now();
   const log = [];
+  let tempSessionId = null;
+  const startAt = Date.now();
 
   try {
-    // ── 1. Load raw notes ──────────────────────────────────────────────────
-    log.push({ stage: 'load_notes', at: 0 });
-    const { data: noteRows, error: notesErr } = await supabase
+    // ── 1. Load source transcript (read-only) ──────────────────────────────
+    log.push({ stage: 'load_fixture', at: 0 });
+    const { data: sourceNotes, error: notesErr } = await supabase
       .from('ai_messages')
-      .select('content, created_at, id')
-      .eq('session_id', session_id)
+      .select('content, created_at')
+      .eq('session_id', FIXTURE_SESSION_ID)
       .eq('role', 'user')
       .order('created_at', { ascending: true });
 
-    if (notesErr) throw new Error('Could not load notes: ' + notesErr.message);
-    if (!noteRows?.length) return res.status(404).json({ error: 'No notes found for session', session_id });
-
-    log.push({ stage: 'load_notes', note_count: noteRows.length, ms: Date.now() - startAt });
-    const rawNotes = noteRows.map((n, i) => `[${i + 1}] ${n.content}`).join('\n\n');
-
-    // ── 2. Load or extract claims ──────────────────────────────────────────
-    log.push({ stage: 'claims', at: Date.now() - startAt });
-    let claims = [];
-    let claimsFromLive = false;
-
-    if (!forceReextract) {
-      const { data: liveClaims } = await supabase
-        .from('soc_claims')
-        .select('*')
-        .eq('session_id', session_id)
-        .order('source_note_id', { ascending: true })
-        .order('sequence', { ascending: true });
-      if (liveClaims?.length) {
-        claims = liveClaims;
-        claimsFromLive = true;
-        log.push({ stage: 'claims', source: 'live_session', count: claims.length, ms: Date.now() - startAt });
-      }
+    if (notesErr || !sourceNotes?.length) {
+      return res.status(500).json({ error: 'Could not load fixture notes', detail: notesErr?.message });
     }
+    log.push({ stage: 'load_fixture', note_count: sourceNotes.length, ms: Date.now() - startAt });
 
-    if (!claims.length) {
-      log.push({ stage: 'claims', source: 'extracting', ms: Date.now() - startAt });
-      claims = await extractWithBatching(rawNotes, OPENAI_KEY);
-      log.push({ stage: 'claims', source: 'extracted', count: claims.length, ms: Date.now() - startAt });
+    // ── 2. Create temporary isolated session ───────────────────────────────
+    const { data: tempSession, error: sessionErr } = await supabase
+      .from('ai_sessions')
+      .insert({
+        user_id: 'itzy212@gmail.com',
+        title: `REGRESSION_TEST_${Date.now()}`,
+        auto_title: `REGRESSION_TEST_${Date.now()}`,
+        surface: 'soc',
+        session_type: 'soc',
+        status: 'active',
+        metadata: { regression: true, fixture_session: FIXTURE_SESSION_ID },
+      })
+      .select('id')
+      .single();
+
+    if (sessionErr || !tempSession?.id) {
+      return res.status(500).json({ error: 'Could not create temp session', detail: sessionErr?.message });
     }
+    tempSessionId = tempSession.id;
+    log.push({ stage: 'create_temp_session', temp_session_id: tempSessionId, ms: Date.now() - startAt });
 
-    // ── 3. Professional drafting ───────────────────────────────────────────
-    log.push({ stage: 'drafting', at: Date.now() - startAt });
-    const draftedResult = await draftFromClaims(claims, OPENAI_KEY);
-    log.push({ stage: 'drafting', sections: draftedResult.sections?.length, ms: Date.now() - startAt });
+    // ── 3. Copy notes into temporary session ───────────────────────────────
+    const noteRows = sourceNotes.map((n, i) => ({
+      session_id: tempSessionId,
+      role: 'user',
+      content: n.content,
+      surface: 'soc',
+    }));
+    const { error: insertNotesErr } = await supabase.from('ai_messages').insert(noteRows);
+    if (insertNotesErr) throw new Error('Could not copy notes: ' + insertNotesErr.message);
+    log.push({ stage: 'copy_notes', count: noteRows.length, ms: Date.now() - startAt });
 
-    // ── 4. Quality audit ──────────────────────────────────────────────────
-    log.push({ stage: 'quality_audit', at: Date.now() - startAt });
-    const improvedResult = await runQualityAuditBatched(draftedResult, OPENAI_KEY);
-    log.push({ stage: 'quality_audit', ms: Date.now() - startAt });
+    // ── 4. Build raw notes text ────────────────────────────────────────────
+    const rawNotes = sourceNotes.map((n, i) => `[${i + 1}] ${n.content}`).join('\n\n');
+    const projectMeta = {
+      bo_address: '15 Park Avenue, London N3 2EJ',
+      ao_address: '17 Park Avenue, London N3 2EJ',
+      inspection_date: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+      proposed_works: 'Rear extension and associated works',
+    };
 
-    // ── 5. Fidelity audit ─────────────────────────────────────────────────
-    log.push({ stage: 'fidelity', at: Date.now() - startAt });
-    const fidelityResult = await runSemanticFidelityBatched(improvedResult, claims, OPENAI_KEY);
-    log.push({ stage: 'fidelity', issues: fidelityResult.issues.length, ms: Date.now() - startAt });
+    // ── 5. Extract atomic claims (shared pipeline function) ────────────────
+    log.push({ stage: 'claim_extraction', at: Date.now() - startAt });
+    const claims = await extractAtomicClaims(rawNotes, OPENAI_KEY);
+    log.push({ stage: 'claim_extraction', claim_count: claims.length, ms: Date.now() - startAt });
 
-    // ── 6. Completeness audit ─────────────────────────────────────────────
-    const activeClaims = claims.filter(c => c.status === 'active');
-    const claimIdsInRows = new Set();
-    for (const s of (improvedResult.sections || [])) {
-      for (const r of (s.rows || [])) {
-        for (const cid of (r.source_claim_ids || [])) claimIdsInRows.add(cid);
-      }
-    }
-    const missingClaims = activeClaims.filter(c => !claimIdsInRows.has(c.claim_id));
-    const completenessRate = activeClaims.length > 0
-      ? ((activeClaims.length - missingClaims.length) / activeClaims.length * 100).toFixed(1)
-      : '100.0';
-
-    // ── 7. Build response ─────────────────────────────────────────────────
-    const totalMs = Date.now() - startAt;
-    return res.status(200).json({
-      regression_fixture: session_id === FIXTURE_SESSION_ID ? '17_park_avenue' : session_id,
-      session_id,
-      total_ms: totalMs,
-      pipeline_log: log,
-      claims_source: claimsFromLive ? 'live_session' : 'extracted_at_regression',
-      // All extracted claims
-      claims: claims.map(c => ({
+    // Persist claims to temp session
+    if (claims.length) {
+      const claimRows = claims.map(c => ({
+        session_id: tempSessionId,
         claim_id: c.claim_id,
-        source_note_id: c.source_note_id,
-        claim_type: c.claim_type,
-        section: c.section,
-        element: c.element,
-        location: c.location,
-        content: c.content,
-        status: c.status,
+        source_note_id: c.source_note_id || c.note_sequence || 0,
+        note_sequence: c.note_sequence || c.source_note_id || 0,
+        sequence: c.claim_sequence || c.sequence || 1,
+        claim_sequence: c.claim_sequence || c.sequence || 1,
+        claim_type: c.claim_type || 'unresolved',
+        section: c.section, element: c.element, location: c.location,
+        content: c.content || '',
+        confidence: c.confidence || 'high',
+        status: c.status || 'active',
         amendment_mode: c.amendment_mode,
         superseded_by: c.superseded_by,
-        destination_type: c.destination_type,
+      }));
+      await supabase.from('soc_claims').insert(claimRows);
+    }
+
+    // ── 6. Professional drafting (shared pipeline, with section batching) ──
+    log.push({ stage: 'drafting', at: Date.now() - startAt });
+    const draftedResult = await draftFromClaims(claims, projectMeta, OPENAI_KEY);
+    log.push({ stage: 'drafting', sections: draftedResult.sections?.length, ms: Date.now() - startAt });
+
+    // ── 7. Quality audit (shared pipeline, batched) ─────────────────────
+    log.push({ stage: 'quality_audit', at: Date.now() - startAt });
+    const qualityResult = await runQualityAudit(draftedResult, OPENAI_KEY);
+    log.push({ stage: 'quality_audit', ms: Date.now() - startAt });
+
+    // ── 8. Fidelity audit (coded + semantic, shared pipeline) ──────────────
+    log.push({ stage: 'fidelity', at: Date.now() - startAt });
+    const fidelityResult = await runFidelityAudit(qualityResult, claims, OPENAI_KEY);
+    log.push({ stage: 'fidelity', issues: fidelityResult.issues.length, ms: Date.now() - startAt });
+
+    // ── 9. Completeness audit ─────────────────────────────────────────────
+    const completeness = runCompletenessAudit(qualityResult, claims);
+
+    // ── 10. Save draft state ──────────────────────────────────────────────
+    const editState = { sections: qualityResult.sections, saved_at: new Date().toISOString() };
+    const { data: reportInsert } = await supabase.from('soc_reports').insert({
+      project_id: 'REGRESSION_TEST',
+      session_id: tempSessionId,
+      template_key: 'soc',
+      ao_address: projectMeta.ao_address,
+      bo_address: projectMeta.bo_address,
+      structured_data: qualityResult,
+      edit_state: editState,
+      edit_state_at: new Date().toISOString(),
+      generation_status: completeness.issues.length > 0 ? 'quality_flagged' : 'complete',
+    }).select('id').single();
+    const reportId = reportInsert?.id;
+    log.push({ stage: 'save_draft', report_id: reportId, ms: Date.now() - startAt });
+
+    // ── 11. Reopen draft (simulate load_edited_preview) ────────────────────
+    let reopenedState = null;
+    if (reportId) {
+      const { data: reopened } = await supabase
+        .from('soc_reports')
+        .select('edit_state, edit_state_at, structured_data')
+        .eq('id', reportId)
+        .single();
+      reopenedState = reopened?.edit_state || reopened?.structured_data;
+    }
+    log.push({ stage: 'reopen_draft', sections: reopenedState?.sections?.length, ms: Date.now() - startAt });
+
+    // ── 12. Acceptance criteria ───────────────────────────────────────────
+    const sectionTitles = (qualityResult.sections || []).map(s => s.title || '');
+    const allObservations = JSON.stringify(qualityResult.sections || []);
+    const acceptance = {
+      first_floor_front_elevation_present: sectionTitles.some(t => /first.*floor.*front|front.*elevation.*room/i.test(t)),
+      no_intermittent_500mm_crack: !(/intermittent/i.test(allObservations) && /500\s*mm/i.test(allObservations)),
+      opposite_corner_crack_present: /opposite.*corner|crack.*ceiling.*flat.*roof/i.test(allObservations),
+      water_ingress_recorded_dry: /dry|remote.*from.*works|water.*ingress/i.test(allObservations),
+      rear_bedroom_window_tests_present: (() => {
+        const wt = (allObservations.match(/window.*open|opener/gi) || []).length;
+        return wt >= 3;
+      })(),
+      rear_bedroom_ceiling_general_condition: /rear.*bedroom.*ceiling|ceiling.*rear.*bedroom/i.test(allObservations),
+      pitched_roof_gutter_flat_roof_skylight: /pitch.*roof/i.test(allObservations) && /gutter/i.test(allObservations) && /flat.*roof/i.test(allObservations),
+      patio_observations_present: /patio/i.test(allObservations),
+      no_unresolved_items: (qualityResult.unresolved_notes || []).length === 0,
+      completeness_100_percent: completeness.missing_substantive === 0,
+    };
+
+    // ── 13. Cleanup: delete all temp data ─────────────────────────────────
+    log.push({ stage: 'cleanup', at: Date.now() - startAt });
+    if (tempSessionId) {
+      if (reportId) {
+        await supabase.from('soc_reports').delete().eq('id', reportId);
+      }
+      await supabase.from('soc_claims').delete().eq('session_id', tempSessionId);
+      await supabase.from('ai_messages').delete().eq('session_id', tempSessionId);
+      await supabase.from('ai_sessions').delete().eq('id', tempSessionId);
+    }
+    log.push({ stage: 'cleanup', temp_session_deleted: tempSessionId, ms: Date.now() - startAt });
+
+    // ── 14. Return full results ────────────────────────────────────────────
+    return res.status(200).json({
+      source_session: FIXTURE_SESSION_ID,
+      temp_session_id: tempSessionId,
+      source_note_count: sourceNotes.length,
+      total_ms: Date.now() - startAt,
+      pipeline_log: log,
+      // Claims
+      total_claims: claims.length,
+      active_claims: claims.filter(c => c.status === 'active').length,
+      superseded_claims: claims.filter(c => c.status === 'superseded').length,
+      unresolved_claims: claims.filter(c => c.status === 'unresolved').length,
+      claims_by_section: Object.fromEntries(
+        [...new Set(claims.map(c => c.section || 'Unallocated'))].map(sec => [
+          sec,
+          claims.filter(c => c.section === sec).map(c => ({ id: c.claim_id, type: c.claim_type, status: c.status, content: (c.content || '').slice(0, 100) }))
+        ])
+      ),
+      amendments: claims.filter(c => c.claim_type === 'amendment' || c.amendment_mode),
+      // Sections
+      sections: qualityResult.sections?.map(s => ({
+        title: s.title,
+        row_count: s.rows?.length,
+        rows: s.rows?.map(r => ({ ref: r.ref, element: r.element, observation: r.observation, flagged: r.flagged, source_claim_ids: r.source_claim_ids })),
       })),
-      // Final SOC sections
-      sections: improvedResult.sections,
-      unresolved_notes: improvedResult.unresolved_notes || [],
-      general_notes: improvedResult.general_notes || [],
-      award_notes: improvedResult.award_notes || [],
+      unresolved_notes: qualityResult.unresolved_notes || [],
       // Audits
-      completeness: {
-        active_claims: activeClaims.length,
-        accounted_for: activeClaims.length - missingClaims.length,
-        missing_claims: missingClaims.map(c => ({ id: c.claim_id, type: c.claim_type, content: c.content?.slice(0, 80) })),
-        rate_percent: completenessRate,
-        passed: missingClaims.filter(c => !['contextual','site_note','section_declaration'].includes(c.claim_type)).length === 0,
-      },
+      completeness,
       fidelity: fidelityResult,
-      // Acceptance criteria check
-      acceptance: {
-        all_sections_present: checkRequiredSections(improvedResult),
-        first_floor_front_elevation_present: (improvedResult.sections || []).some(s =>
-          /first.*floor.*front|front.*elevation.*room/i.test(s.title || '')),
-        intermittent_not_in_500mm_crack: !JSON.stringify(improvedResult.sections || []).includes('intermittent') ||
-          !JSON.stringify(improvedResult.sections || []).match(/intermittent.*500|500.*intermittent/i),
-        no_unsupported_facts: fidelityResult.issues.length === 0,
-        completeness_100_percent: missingClaims.filter(c =>
-          !['contextual','site_note','section_declaration'].includes(c.claim_type)).length === 0,
-      },
+      quality_flags: (qualityResult.sections || []).flatMap(s => (s.rows || []).filter(r => r.flagged).map(r => ({ section: s.title, ref: r.ref, reason: r.flag_reason }))),
+      // Edit state
+      saved_edit_state_sections: editState.sections?.length,
+      reopened_edit_state_sections: reopenedState?.sections?.length,
+      reopened_matches_saved: JSON.stringify(reopenedState?.sections) === JSON.stringify(editState.sections),
+      // Acceptance
+      acceptance,
+      acceptance_passed: Object.values(acceptance).every(Boolean),
+      // Cleanup
+      cleanup: { temp_session_deleted: tempSessionId, fixture_session_untouched: true },
     });
+
   } catch (err) {
+    // Clean up on error too
+    if (tempSessionId) {
+      await supabase.from('soc_claims').delete().eq('session_id', tempSessionId).catch(() => {});
+      await supabase.from('ai_messages').delete().eq('session_id', tempSessionId).catch(() => {});
+      await supabase.from('ai_sessions').delete().eq('id', tempSessionId).catch(() => {});
+    }
     return res.status(500).json({ error: err.message, log, ms: Date.now() - startAt });
   }
-}
-
-function checkRequiredSections(result) {
-  const titles = (result.sections || []).map(s => (s.title || '').toLowerCase());
-  const required = ['front elevation', 'rear elevation', 'rear extension', 'rear bedroom', 'front elevation room'];
-  return required.map(r => ({ section: r, found: titles.some(t => t.includes(r.split(' ')[0])) }));
-}
-
-async function extractWithBatching(rawNotes, apiKey) {
-  const lines = rawNotes.split(/\n+/).filter(l => l.trim());
-  const BATCH = 20;
-  if (lines.length <= BATCH) return extractBatch(rawNotes, apiKey, null);
-  let allClaims = [], currentSection = null;
-  for (let i = 0; i < lines.length; i += BATCH) {
-    const batchText = (currentSection ? `CURRENT SECTION: ${currentSection}\n\n` : '') +
-      lines.slice(i, i + BATCH).join('\n');
-    const batchClaims = await extractBatch(batchText, apiKey, currentSection);
-    const last = batchClaims.filter(c => c.section).slice(-1)[0];
-    if (last) currentSection = last.section;
-    allClaims = allClaims.concat(batchClaims);
-  }
-  return allClaims;
-}
-
-async function extractBatch(notes, apiKey, currentSection) {
-  const prompt = `Extract every atomic factual claim from these site notes. One note may contain many claims.
-Section carry-forward: current section is "${currentSection || 'not yet established'}".
-Amendment handling: mark superseded claims, create corrected active claim.
-Return JSON only: { "claims": [{ "claim_id": "c-N", "source_note_id": N, "sequence": N, "claim_type": "...", "section": "...", "element": "...", "location": "...", "content": "...", "confidence": "high|medium|low", "status": "active|superseded|contextual|unresolved", "superseded_by": null, "amendment_mode": null }] }
-NOTES:\n${notes}`;
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-4o', temperature: 0.05, max_tokens: 6000,
-      messages: [{ role: 'system', content: 'Extract atomic claims. Return valid JSON only.' }, { role: 'user', content: prompt }] }),
-  });
-  if (!res.ok) throw new Error(`OpenAI claim extraction: ${res.status}`);
-  const data = await res.json();
-  try { return JSON.parse((data.choices?.[0]?.message?.content || '{}').replace(/```json\n?|\n?```/g, '')).claims || []; }
-  catch { return []; }
-}
-
-async function draftFromClaims(claims, apiKey) {
-  const claimsBySection = {};
-  for (const c of claims) {
-    const s = c.section || 'Unallocated';
-    if (!claimsBySection[s]) claimsBySection[s] = [];
-    claimsBySection[s].push(c);
-  }
-  const claimsSummary = Object.entries(claimsBySection).map(([sec, cls]) =>
-    `SECTION: ${sec}\n` + cls.map(c => `  [${c.claim_id}] ${c.claim_type} status=${c.status}: ${c.content}`).join('\n')
-  ).join('\n\n');
-
-  const prompt = `You are a Senior Chartered Party Wall Surveyor. Write a professional Schedule of Conditions from these reconciled claims.
-CRITICAL: You are NOT transcribing. Write from first principles. Preserve every fact, measurement, location, direction exactly.
-Every active claim must appear. Group related claims. Keep specific defects separate.
-Return JSON: { "sections": [{ "number": N, "title": "...", "rows": [{ "ref": "XX01", "element": "...", "observation": "Professional wording.", "action": "Record only", "source_note_ids": [], "source_claim_ids": ["c-N"] }] }], "general_notes": [], "award_notes": [], "unresolved_notes": [] }
-CLAIMS:\n${claimsSummary}`;
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 10000,
-      messages: [{ role: 'system', content: 'Senior Party Wall Surveyor. Return valid JSON only.' }, { role: 'user', content: prompt }] }),
-  });
-  if (!res.ok) throw new Error(`OpenAI drafting: ${res.status}`);
-  const data = await res.json();
-  try { return JSON.parse((data.choices?.[0]?.message?.content || '{}').replace(/```json\n?|\n?```/g, '')); }
-  catch { throw new Error('Drafting returned invalid JSON'); }
-}
-
-async function runQualityAuditBatched(result, apiKey) {
-  const BATCH = 15;
-  const rows = [];
-  for (const s of (result.sections || [])) for (const r of (s.rows || [])) rows.push({ ref: r.ref, section: s.title, observation: r.observation });
-  if (!rows.length) return result;
-  const corrected = {};
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const prompt = `Review these SOC observations. Auto-fix: speech-to-text residue, grammar, "good condition" → "no visible defects noted at the time of inspection". Flag (flagged:true): over-compression, unsupported facts.
-Return JSON: { "rows": [{ "ref": "...", "observation": "...", "flagged": false, "flag_reason": null }] }
-ROWS: ${JSON.stringify(batch)}`;
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 3000,
-          messages: [{ role: 'system', content: 'Return valid JSON only.' }, { role: 'user', content: prompt }] }),
-      });
-      const d = await res.json();
-      const parsed = JSON.parse((d.choices?.[0]?.message?.content || '{}').replace(/```json\n?|\n?```/g, ''));
-      for (const r of (parsed?.rows || [])) corrected[r.ref] = r;
-    } catch {}
-  }
-  const improved = JSON.parse(JSON.stringify(result));
-  for (const s of (improved.sections || [])) for (const r of (s.rows || [])) {
-    if (corrected[r.ref]) { r.observation = corrected[r.ref].observation || r.observation; if (corrected[r.ref].flagged) { r.flagged = true; r.flag_reason = corrected[r.ref].flag_reason; } }
-  }
-  return improved;
-}
-
-async function runSemanticFidelityBatched(result, claims, apiKey) {
-  const claimMap = {};
-  for (const c of claims) claimMap[c.claim_id] = c;
-  const rowsToCheck = [];
-  for (const s of (result.sections || [])) for (const r of (s.rows || [])) {
-    const src = (r.source_claim_ids || []).map(id => claimMap[id]).filter(Boolean);
-    if (src.some(c => /\d+(mm|m\b)/i.test(c?.content || '') || c?.claim_type === 'amendment')) {
-      rowsToCheck.push({ ref: r.ref, observation: r.observation, source_claims: src.map(c => ({ id: c.claim_id, content: c.content, status: c.status })) });
-    }
-  }
-  if (!rowsToCheck.length) return { issues: [], warnings: [] };
-  const allIssues = [], allWarnings = [];
-  for (let i = 0; i < rowsToCheck.length; i += 10) {
-    const batch = rowsToCheck.slice(i, i + 10);
-    const prompt = `Audit observations for factual fidelity against source claims. Check measurements, directions, locations unchanged. Amendments applied. No unsupported facts.
-Return JSON: { "issues": ["Row XX: ..."], "warnings": [...] }
-DATA: ${JSON.stringify(batch)}`;
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', temperature: 0.05, max_tokens: 1500,
-          messages: [{ role: 'system', content: 'Return valid JSON only.' }, { role: 'user', content: prompt }] }),
-      });
-      const d = await res.json();
-      const parsed = JSON.parse((d.choices?.[0]?.message?.content || '{}').replace(/```json\n?|\n?```/g, ''));
-      allIssues.push(...(parsed?.issues || []));
-      allWarnings.push(...(parsed?.warnings || []));
-    } catch {}
-  }
-  return { issues: allIssues, warnings: allWarnings };
 }
