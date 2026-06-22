@@ -358,14 +358,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       .filter(Boolean)
   );
 
-  function isRowFlagged(row, sectionTitle) {
-    if ((row.source_note_ids || []).some(id => flaggedNoteIds.has(id))) return true;
-    if (
-      flaggedSectionTitles.has(sectionTitle) &&
-      /no visible defects/i.test(row.observation || '') &&
-      !/except|apart from|other than/i.test(row.observation || '')
-    ) return true;
-    return false;
+  function isRowFlagged(row) {
+    // Only flag rows whose source notes were genuinely unresolved/unallocated
+    return (row.source_note_ids || []).some(id => flaggedNoteIds.has(id));
   }
 
   function moveRow(fromSectionIdx, rowIdx, toSectionTitle) {
@@ -477,7 +472,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       ...new Set([...editableSections.map(s => s.title), ...STANDARD_SECTIONS]),
     ];
     const flaggedCount = editableSections.reduce(
-      (n, sec) => n + sec.rows.filter(r => isRowFlagged(r, sec.title)).length, 0
+      (n, sec) => n + sec.rows.filter(r => isRowFlagged(r)).length, 0
     );
 
     return (
@@ -515,9 +510,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
             <div key={sIdx} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
                 {section.number || sIdx + 2}. {section.title}
+                {flaggedSectionTitles.has(section.title) && (
+                  <span style={{ fontSize: 11, fontWeight: 500, color: '#b45309', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 4, padding: '2px 7px', marginLeft: 10 }}>
+                    ⚠ check no-defects wording
+                  </span>
+                )}
               </div>
               {(section.rows || []).map((row, rIdx) => {
-                const flagged = isRowFlagged(row, section.title);
+                const flagged = isRowFlagged(row);
                 return (
                   <div key={rIdx} style={{
                     background: flagged ? '#fffbeb' : 'var(--bg2)',
