@@ -23,6 +23,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [structuredData, setStructuredData] = useState(null);
   const [reportId, setReportId] = useState(null);
   const [partyDrafts, setPartyDrafts] = useState([]);
+  const [unresolvedNotes, setUnresolvedNotes] = useState([]);
+  const [auditIssues, setAuditIssues] = useState([]);
+  const [auditWarnings, setAuditWarnings] = useState([]);
+  const [unresolvedOverridden, setUnresolvedOverridden] = useState(false);
   const [sessionId] = useState(() => uid()); // stable for the lifetime of this inspection
 
   const recognitionRef = useRef(null);
@@ -364,6 +368,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
       setPreviewHtml(payload.preview_html);
       setStructuredData(payload.structured_data || null);
+      setUnresolvedNotes(payload.structured_data?.unresolved_notes || []);
+      setAuditIssues(payload.structured_data?.audit_issues || []);
+      setAuditWarnings(payload.structured_data?.audit_warnings || []);
       setReportId(payload.report_id || null);
       setPartyDrafts(payload.partyDrafts || []);
       setPhase('review');
@@ -663,21 +670,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
       </div>
 
-      {(unresolvedNotes.length > 0 || auditIssues.length > 0) && (
+      {((unresolvedNotes || []).length > 0 || (auditIssues || []).length > 0) && (
         <div style={{ marginBottom: 12, padding: '12px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
             {unresolvedOverridden ? '⚠ Draft generated with unresolved items — not fully reconciled' : '⚠ Review before finalising'}
           </div>
 
           {/* Coded audit issues */}
-          {auditIssues.map((issue, i) => (
+          {(auditIssues || []).map((issue, i) => (
             <div key={`ai-${i}`} style={{ marginBottom: 6, fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 6, padding: '4px 8px' }}>
               {issue}
             </div>
           ))}
 
           {/* Unresolved notes — interactive, persisted to server */}
-          {unresolvedNotes.map((item, i) => (
+          {(unresolvedNotes || []).map((item, i) => (
             <div key={i} style={{ marginBottom: 10, padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #fcd34d', opacity: item.resolving ? 0.6 : 1 }}>
               <div style={{ fontStyle: 'italic', fontSize: 13, color: 'var(--text)', marginBottom: 6 }}>
                 "{item.note_text}"
