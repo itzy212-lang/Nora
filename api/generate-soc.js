@@ -577,91 +577,93 @@ Do not omit source_note_ids.`;
 
 
 // ── Coded completeness audit ────────────────────────────────────────────
-// Runs after GPT returns JSON. Compares raw notes against output.
-// Returns { issues: string[], warnings: string[] }
+// Every source note must have a classification. 100% accounting required.
+// A note may be contextual/site/award/excluded/unresolved — but it must not disappear.
 function runCompletenessAudit(parsed, rawNotesText = '') {
   const issues = [];
   const warnings = [];
 
+  // Parse raw notes — skip blank lines and section headers
   const rawNotes = rawNotesText
     .split('\n')
     .map(l => l.trim())
-    .filter(Boolean);
+    .filter(l => l.length > 5 && !/^\[.+\]\s*$/.test(l));
 
-  // Count all rows across all sections
-  const allRows = (parsed.sections || []).flatMap(s => s.rows || []);
-  const allSourceIds = new Set(allRows.flatMap(r => r.source_note_ids || []));
-  const unresolvedNotes = parsed.unresolved_notes || [];
-
-  // 1. Raw notes with no destination
   const totalNotes = rawNotes.length;
-  const coveredCount = allSourceIds.size + unresolvedNotes.length;
-  if (totalNotes > 0 && coveredCount < totalNotes * 0.7) {
+  if (totalNotes === 0) return { issues, warnings };
+
+  // Build full accounting of all notes
+  const allRows = (parsed.sections || []).flatMap(s => s.rows || []);
+  const unresolved = parsed.unresolved_notes || [];
+  const siteNotes = (parsed.general_notes || []).filter(n =>
+    typeof n === 'string' ? n : n.note || n.text || ''
+  );
+  const awardNotes = parsed.award_notes || [];
+  const excluded = parsed.excluded_notes || [];
+
+  // All source_note_ids referenced across all output
+  const allSourceIds = new Set([
+    ...allRows.flatMap(r => r.source_note_ids || []),
+    ...unresolved.map(n => n.note_index).filter(Boolean),
+    ...siteNotes.flatMap(n => n.source_note_ids || []),
+    ...awardNotes.flatMap(n => n.source_note_ids || []),
+    ...excluded.map(n => n.note_index).filter(Boolean),
+  ]);
+
+  // Coverage check — must be 100% when all classifications included
+  const accounted = allSourceIds.size;
+  const unaccountedCount = totalNotes - accounted;
+
+  if (unaccountedCount > 0) {
     issues.push(
-      `Coverage warning: ${coveredCount} of ${totalNotes} raw notes have a destination. ` +
-      `${totalNotes - coveredCount} may be missing from the output.`
+      `COVERAGE FAILURE: ${unaccountedCount} of ${totalNotes} source notes have no destination. ` +
+      `Every note must be allocated, classified as contextual/site/award, or explicitly excluded. ` +
+      `Notes without a destination: indices not in [${[...allSourceIds].sort((a,b)=>a-b).join(', ')}]`
     );
   }
 
-  // 2. Final rows with no source note
+  // Rows with no source note — invention risk
   const rowsWithoutSource = allRows.filter(r => !r.source_note_ids || r.source_note_ids.length === 0);
   if (rowsWithoutSource.length > 0) {
-    warnings.push(
-      `${rowsWithoutSource.length} row(s) have no source_note_ids: ` +
-      rowsWithoutSource.map(r => r.ref).join(', ')
+    issues.push(
+      `${rowsWithoutSource.length} final row(s) have no source_note_ids — possible invention: ` +
+      rowsWithoutSource.map(r => r.ref || '?').join(', ')
     );
   }
 
-  // 3. Contradictory observations — same section has both no-defects and defect rows
+  // Contradictory observations in same section
   for (const section of (parsed.sections || [])) {
     const rows = section.rows || [];
-    const hasNoDefects = rows.some(r =>
-      /no visible defects/i.test(r.observation) ||
-      /free from visible defects/i.test(r.observation)
+    const noDefectsRows = rows.filter(r =>
+      /no visible defects/i.test(r.observation) &&
+      !/except/i.test(r.observation) &&
+      !/apart from/i.test(r.observation) &&
+      !/other than/i.test(r.observation)
     );
-    const hasDefects = rows.some(r =>
-      /crack|stain|spall|deteriorat|displace|bulgе|damp|mould|missing|defect|fractur|damaged/i.test(r.observation) &&
-      !/no visible/i.test(r.observation)
+    const defectRows = rows.filter(r =>
+      /crack|stain|spall|deteriorat|displace|bulg|damp|mould|missing|defect(?!s noted)|fractur|damaged|displaced|eroded|split/i.test(r.observation) &&
+      !/no visible defects/i.test(r.observation)
     );
-    if (hasNoDefects && hasDefects) {
-      // Check if the no-defects statement is properly qualified
-      const unqualifiedNoDefects = rows.filter(r =>
-        (/no visible defects/i.test(r.observation) || /free from visible defects/i.test(r.observation)) &&
-        !/except/i.test(r.observation) && !/apart from/i.test(r.observation)
+    if (noDefectsRows.length > 0 && defectRows.length > 0) {
+      issues.push(
+        `Section "${section.title}": unqualified no-defects statement alongside ${defectRows.length} defect row(s). ` +
+        `The no-defects statement must be qualified or removed.`
       );
-      if (unqualifiedNoDefects.length > 0) {
-        warnings.push(
-          `Section "${section.title}": has both a general no-defects statement and specific defect rows. ` +
-          `The no-defects statement should be qualified (e.g. "...except that...").`
-        );
-      }
     }
   }
 
-  // 4. Unresolved notes remaining
-  if (unresolvedNotes.length > 0) {
-    issues.push(
-      `${unresolvedNotes.length} note(s) could not be allocated: ` +
-      unresolvedNotes.map(n => `"${String(n.note_text || '').slice(0, 60)}..."`).join('; ')
+  // Unresolved notes remaining
+  if (unresolved.length > 0) {
+    warnings.push(
+      `${unresolved.length} note(s) unresolved: ` +
+      unresolved.map(n => `"${String(n.note_text || '').slice(0, 80)}"`).join('; ')
     );
   }
 
-  // 5. Sections with only one row that appears generic
-  for (const section of (parsed.sections || [])) {
-    if ((section.rows || []).length === 1) {
-      const obs = section.rows[0].observation || '';
-      if (/photographically only|not accessible|access restricted/i.test(obs)) {
-        // Fine — intentional photo-only section
-      } else if (obs.length < 40) {
-        warnings.push(
-          `Section "${section.title}" has only one very short observation — may be incomplete.`
-        );
-      }
-    }
-  }
-
-  return { issues, warnings };
+  // Note: 0% unaccounted is the target. Any missing notes are flagged as issues, not warnings.
+  return { issues, warnings, totalNotes, accountedNotes: accounted };
 }
+
 
 function validateSocJson(parsed) {
   // Fatal: missing or malformed top-level arrays
