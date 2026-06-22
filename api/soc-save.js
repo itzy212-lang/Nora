@@ -178,6 +178,22 @@ export default async function handler(req, res) {
       });
     }
 
+    // Mark claims as excluded when a row is deleted from the editable preview
+    if (action === 'mark_claims_excluded') {
+      const { session_id: claimSession, claim_ids, row_ref } = req.body;
+      if (!claim_ids?.length) return res.status(400).json({ error: 'claim_ids required' });
+
+      const supabase2 = supabase; // same client
+      const { error } = await supabase2
+        .from('soc_claims')
+        .update({ status: 'excluded', destination_type: 'excluded', destination_id: row_ref || 'deleted' })
+        .in('claim_id', claim_ids)
+        .eq('session_id', claimSession || '');
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true, excluded: claim_ids.length });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   }
 
