@@ -1025,7 +1025,109 @@ function validateSocJson(parsed) {
 // Auto-fixes stylistic issues. Flags factual/ambiguous issues for review.
 // Uses gpt-4o.
 // ═══════════════════════════════════════════════════════════════════════════
+// Apply quality corrections back to drafted result
+function applyQualityCorrections(draftedResult, correctedByRef) {
+  const improved = JSON.parse(JSON.stringify(draftedResult));
+  for (const section of (improved.sections || [])) {
+    for (const row of (section.rows || [])) {
+      const correction = correctedByRef[row.ref];
+      if (correction) {
+        if (correction.observation) row.observation = correction.observation;
+        if (correction.flagged) { row.flagged = true; row.flag_reason = correction.flag_reason; }
+      }
+    }
+  }
+  return improved;
+}
+
+async function runQualityAuditBatch(rowsForReview, apiKey) {
+  const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing Schedule of Conditions observations.
+
+For each row below:
+AUTO-FIX these (change observation, flagged:false): speech-to-text residue, poor grammar, sentence fragments, missing articles, "good condition"/"very good condition" (→ "no visible defects noted at the time of inspection"), informal language, vague expressions.
+FLAG these (flagged:true, do not change observation): over-compression, over-fragmentation, unsupported causation/diagnosis, invented facts.
+NEVER remove or omit claims.
+
+Return JSON only: { "rows": [ { "ref": "...", "observation": "...", "flagged": false, "flag_reason": null } ] }
+
+ROWS: ${JSON.stringify(rowsForReview, null, 2)}`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 3000,
+        messages: [{ role: 'system', content: 'Return valid JSON only.' },
+                   { role: 'user', content: QUALITY_PROMPT }] }),
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim();
+    const parsed = parseJsonFromModel(raw);
+    const byRef = {};
+    for (const r of (parsed?.rows || [])) byRef[r.ref] = r;
+    return byRef;
+  } catch { return {}; }
+}
+
+// ── Semantic fidelity audit (GPT-based) ────────────────────────────────────────
+async function runSemanticFidelityCheck(draftedResult, claims, apiKey) {
+  if (!claims?.length) return { issues: [], warnings: [] };
+  const claimMap = {};
+  for (const c of claims) claimMap[c.claim_id] = c;
+
+  // Check rows with source_claim_ids that have measurements/directions
+  const rowsToCheck = [];
+  for (const section of (draftedResult.sections || [])) {
+    for (const row of (section.rows || [])) {
+      const sourceClaims = (row.source_claim_ids || []).map(id => claimMap[id]).filter(Boolean);
+      const activeClaims = sourceClaims.filter(c => c?.status === 'active');
+      const hasMeasurements = activeClaims.some(c => /\d+(mm|cm|m\b)/i.test(c.content || ''));
+      const hasAmendments = activeClaims.some(c => c.claim_type === 'amendment');
+      if (hasMeasurements || hasAmendments) {
+        rowsToCheck.push({
+          ref: row.ref,
+          observation: row.observation,
+          source_claims: activeClaims.map(c => ({ id: c.claim_id, type: c.claim_type, content: c.content, status: c.status })),
+        });
+      }
+    }
+  }
+
+  if (rowsToCheck.length === 0) return { issues: [], warnings: [] };
+
+  const FIDELITY_PROMPT = `You are auditing Schedule of Conditions observations for factual fidelity.
+
+For each row, check its observation against the source claims:
+1. Are all measurements preserved exactly?
+2. Are all directions preserved (left/right/upper/lower/diagonal/vertical)?
+3. Are all locations preserved?
+4. Have amendments been correctly applied (superseded wording must not survive)?
+5. Are there unsupported facts, diagnoses or causes not in the source claims?
+
+Return JSON: { "issues": ["Row XX: measurement changed from Xmm to Ymm", ...], "warnings": [...] }
+
+ROWS TO CHECK: ${JSON.stringify(rowsToCheck, null, 2)}`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', temperature: 0.05, max_tokens: 2000,
+        messages: [{ role: 'system', content: 'Return valid JSON only.' },
+                   { role: 'user', content: FIDELITY_PROMPT }] }),
+    });
+    if (!res.ok) return { issues: [], warnings: [] };
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim();
+    const parsed = parseJsonFromModel(raw);
+    return { issues: parsed?.issues || [], warnings: parsed?.warnings || [] };
+  } catch { return { issues: [], warnings: [] }; }
+}
+
+
 async function runQualityAudit(draftedResult, claims, projectMeta, apiKey) {
+  const QUALITY_BATCH_SIZE = 15;
   const rowsForReview = [];
   for (const section of (draftedResult.sections || [])) {
     for (const row of (section.rows || [])) {
@@ -1033,6 +1135,18 @@ async function runQualityAudit(draftedResult, claims, projectMeta, apiKey) {
     }
   }
   if (rowsForReview.length === 0) return draftedResult;
+
+  // Batch if needed
+  if (rowsForReview.length > QUALITY_BATCH_SIZE) {
+    console.log(`[generate-soc] Quality audit batching: ${rowsForReview.length} rows in batches of ${QUALITY_BATCH_SIZE}`);
+    const correctedByRef = {};
+    for (let i = 0; i < rowsForReview.length; i += QUALITY_BATCH_SIZE) {
+      const batchRows = rowsForReview.slice(i, i + QUALITY_BATCH_SIZE);
+      const batchResult = await runQualityAuditBatch(batchRows, apiKey);
+      Object.assign(correctedByRef, batchResult);
+    }
+    return applyQualityCorrections(draftedResult, correctedByRef);
+  }
 
   const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing drafted Schedule of Conditions observations for quality.
 
@@ -1121,7 +1235,7 @@ ${JSON.stringify(rowsForReview, null, 2)}`;
 // Compares each final row against its source claims.
 // Flags where facts changed, measurements differ, or superseded wording survived.
 // ═══════════════════════════════════════════════════════════════════════════
-function runFidelityAudit(draftedResult, claims) {
+function runCodedFidelityChecks(draftedResult, claims) {
   if (!claims?.length) return { issues: [], warnings: [] };
 
   const issues = [];
@@ -1178,7 +1292,43 @@ function runFidelityAudit(draftedResult, claims) {
 // Breaks every raw note into separate factual claims before drafting.
 // Uses gpt-4o-mini (fast extraction task).
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Claim extraction with deterministic batching ─────────────────────────────
+// Processes notes in batches of 20 to avoid token limits on large sessions.
+// Each batch carries section context from the previous batch.
+const CLAIM_BATCH_SIZE = 20;
+
 async function extractAtomicClaims(rawNotes, projectMeta, apiKey) {
+  const lines = rawNotes.split(/\n/).filter(l => l.trim());
+  if (lines.length <= CLAIM_BATCH_SIZE) {
+    return extractAtomicClaimsSingleBatch(rawNotes, projectMeta, apiKey);
+  }
+
+  console.log(`[generate-soc] Batching claim extraction: ${lines.length} note-lines, batch size ${CLAIM_BATCH_SIZE}`);
+  const batches = [];
+  for (let i = 0; i < lines.length; i += CLAIM_BATCH_SIZE) {
+    batches.push(lines.slice(i, i + CLAIM_BATCH_SIZE).join('\n'));
+  }
+
+  let allClaims = [];
+  let currentSection = null;
+  for (let b = 0; b < batches.length; b++) {
+    const batchContext = currentSection
+      ? `CURRENT ACTIVE SECTION (carry forward from previous batch): ${currentSection}\n\n`
+      : '';
+    const batchClaims = await extractAtomicClaimsSingleBatch(batchContext + batches[b], projectMeta, apiKey);
+    // Detect last known section for carry-forward
+    const sectionClaims = batchClaims.filter(cl => cl.section);
+    if (sectionClaims.length > 0) {
+      currentSection = sectionClaims[sectionClaims.length - 1].section;
+    }
+    allClaims = allClaims.concat(batchClaims);
+    console.log(`[generate-soc] Batch ${b+1}/${batches.length} yielded ${batchClaims.length} claims`);
+  }
+  return allClaims;
+}
+
+
+async function extractAtomicClaimsSingleBatch(rawNotes, projectMeta, apiKey) {
   const CLAIM_EXTRACTION_PROMPT = `You are assisting a party wall surveyor preparing a Schedule of Conditions.
 
 Your task: extract every atomic factual claim from the raw dictated site notes below.
@@ -1590,7 +1740,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   }
 
   // Stage 4: Factual fidelity audit
-  const fidelity = runFidelityAudit(draftedResult, claims);
+  const fidelity = await runFidelityAudit(draftedResult, claims, apiKey);
   if (fidelity.issues.length > 0) console.warn('[generate-soc] Fidelity issues:', fidelity.issues);
 
   // Claim-level completeness audit
@@ -1605,20 +1755,41 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   // Update claim destinations (non-blocking)
   if (sessionId) updateClaimDestinations(draftedResult, sessionId).catch(() => {});
 
+  const generationState = draftedResult._emergency_draft ? 'emergency_draft'
+    : (audit.issues.length > 0 || fidelity.issues.length > 0) ? 'quality_flagged'
+    : 'complete';
+
   return {
-    sections:          draftedResult.sections,
-    discussion:        draftedResult.discussion,
-    general_notes:     draftedResult.general_notes,
-    actions:           draftedResult.actions,
-    award_notes:       draftedResult.award_notes,
-    emails_required:   draftedResult.emails_required,
-    unresolved_notes:  draftedResult.unresolved_notes || [],
-    audit_issues:      [...audit.issues, ...fidelity.issues],
-    audit_warnings:    [...audit.warnings, ...fidelity.warnings],
-    claims_extracted:  claims.length,
-    claims_from_live:  claimsFromLive,
+    sections:           draftedResult.sections,
+    discussion:         draftedResult.discussion,
+    general_notes:      draftedResult.general_notes,
+    actions:            draftedResult.actions,
+    award_notes:        draftedResult.award_notes,
+    emails_required:    draftedResult.emails_required,
+    unresolved_notes:   draftedResult.unresolved_notes || [],
+    audit_issues:       [...audit.issues, ...fidelity.issues],
+    audit_warnings:     [...audit.warnings, ...fidelity.warnings],
+    claims_extracted:   claims.length,
+    claims_from_live:   claimsFromLive,
+    generation_status:  generationState,
+    generation_stages:  {
+      claim_source: claimsFromLive ? 'live_session' : 'extracted_at_generate',
+      claim_count: claims.length,
+      stage1_complete: claims.length > 0,
+      stage2_complete: !!draftedResult && !draftedResult._emergency_draft,
+      stage3_complete: true,
+      stage4_complete: true,
+      emergency_draft: !!draftedResult._emergency_draft,
+    },
   };
 }
+
+async function runFidelityAudit(draftedResult, claims, apiKey) {
+  const coded = runCodedFidelityChecks(draftedResult, claims);
+  const semantic = await runSemanticFidelityCheck(draftedResult, claims, apiKey).catch(() => ({ issues: [], warnings: [] }));
+  return { issues: [...coded.issues, ...semantic.issues], warnings: [...coded.warnings, ...semantic.warnings] };
+}
+
 
 // Update claim destination field after drafting
 async function updateClaimDestinations(draftedResult, sessionId) {
