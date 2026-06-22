@@ -1,4 +1,3 @@
-import { GENERATOR_SYSTEM_PROMPT } from './soc-framework.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1204,16 +1203,16 @@ export default async function handler(req, res) {
       let notesText = message || '';
 
       if (session_id) {
+        // Read from ai_messages (soc surface) — where notes now save
         const { data: sessionNotes, error: notesError } = await supabase
-          .from('soc_notes')
-          .select('sequence, raw_note, current_section')
+          .from('ai_messages')
+          .select('id, content, created_at')
           .eq('session_id', session_id)
-          .order('sequence', { ascending: true });
+          .eq('surface', 'soc')
+          .eq('role', 'user')
+          .order('created_at', { ascending: true });
         if (!notesError && sessionNotes?.length) {
-          notesText = sessionNotes.map(n => {
-            const sec = n.current_section ? '[' + n.current_section + '] ' : '';
-            return sec + n.raw_note;
-          }).join('\n');
+          notesText = sessionNotes.map((n, i) => `[${i + 1}] ${n.content}`).join('\n\n');
         }
       }
 
