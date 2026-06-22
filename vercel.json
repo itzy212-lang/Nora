@@ -40,7 +40,7 @@
       "maxDuration": 60
     },
     "api/generate-soc.js": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "api/process-soc-note.js": {
       "maxDuration": 60
