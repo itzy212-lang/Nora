@@ -1128,6 +1128,27 @@ In discussion mode, do not draft correspondence unless explicitly asked.
 In review mode, review and analyse before suggesting changes. Do not rewrite unless explicitly asked.
 In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
 
+INVOICE MODE:
+When the user asks to raise, create, generate or send an invoice, switch into invoice mode.
+Extract line items from their dictation. Each item needs: description and amount (£).
+Format amounts as numbers without currency symbols in the structured data.
+Respond with a clean summary card showing the line items and total.
+Ask the user to confirm or amend.
+When the user says "generate it", "looks good", "confirm", "yes" or similar — indicate you are ready to generate.
+Always bill to the Building Owner from the project data.
+Never suggest or invent fee amounts — use only amounts the user states.
+
+INVOICE JSON FORMAT — when returning invoice data, include it as a JSON block at the end of your reply:
+<invoice_data>
+{
+  "items": [{"description": "...", "total": 350, "qty": 1, "unitPrice": "350"}],
+  "bill_to_name": "...",
+  "bill_to_address": "...",
+  "property_address": "...",
+  "bo_email": "..."
+}
+</invoice_data>
+
 EMAIL CONTEXT RULE:
 If selected email context is provided, it is authoritative. Read the whole available thread before responding. For Draft With Ely and email composer workflows, do not assume the user wants an email drafted simply because the selected context is an email. If the user prompt is blank, summarise the selected email/thread and suggest the response strategy. If the user asks to talk it through, analyse. Draft only when the user clearly asks for drafting.
 
@@ -1507,6 +1528,57 @@ async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
 function detectsCaseReview(prompt = '') {
   const lower = prompt.toLowerCase();
   return lower.includes('case review') || lower.includes('full review') || lower.includes('full case');
+}
+
+// ── Invoice intent detection ──────────────────────────────────────────────
+function detectsInvoiceIntent(prompt = '') {
+  const p = prompt.toLowerCase();
+  return (
+    /(raise|create|generate|send|prepare|draft|do|write)/i.test(p) &&
+    /(invoice|bill|fee|charge|payment)/i.test(p)
+  ) ||
+  /(invoice for|bill (them|him|her|the building owner)|invoice (the |)building owner)/i.test(p) ||
+  /(raise an invoice|raise invoice|generate (an |the |)invoice)/i.test(p);
+}
+
+function detectsInvoiceGenerate(prompt = '') {
+  const p = prompt.toLowerCase();
+  return /(generate it|generate the invoice|send it|create it|produce it|go ahead|confirm it|looks good|that'?s (right|correct|good|fine)|yes (please|send|generate)|ok (send|generate))/i.test(p);
+}
+
+function parseInvoiceItems(prompt = '') {
+  // Extract line items from dictation like "consultation £350, two site visits £400 each"
+  const items = [];
+  const p = prompt;
+
+  // Pattern: description + £amount or amount + description
+  const linePatterns = [
+    // "description £amount" or "description £amount each"
+    /([a-z][^,
+£]{3,40}?)\s+£\s*(\d+(?:\.\d{2})?)/gi,
+    // "description - £amount"
+    /([a-z][^,
+£]{3,40}?)\s*[-–]\s*£\s*(\d+(?:\.\d{2})?)/gi,
+  ];
+
+  for (const pattern of linePatterns) {
+    let match;
+    while ((match = pattern.exec(p)) !== null) {
+      const description = match[1].trim()
+        .replace(/^(and|,)\s*/i, '')
+        .replace(/\s+/g, ' ');
+      const amount = parseFloat(match[2]);
+      if (description.length > 3 && amount > 0) {
+        items.push({ description, amount });
+      }
+    }
+  }
+
+  return items;
+}
+
+function parseInvoiceItemsFromChat(prompt = '') {
+  return parseInvoiceItems(prompt);
 }
 
 function parseBookingIntent(prompt = '') {
@@ -1999,7 +2071,83 @@ Never summarise. Never explain. Never ask questions.`,
     // ── Calendar booking flow ─────────────────────────────────────────────
     // NEVER intercept if modeHint is draft — draft always wins over booking
     // If user is confirming a pending booking, create the entry
-    if (!['draft', 'review'].includes(modeHint) && body.pending_booking_confirm && body.pending_booking) {
+    // ── Invoice generation confirm ────────────────────────────────────────
+    if (body.pending_invoice_confirm && body.pending_invoice) {
+      const inv = body.pending_invoice;
+      try {
+        // Save the invoice to Supabase
+        const { createClient } = await import('@supabase/supabase-js');
+        const sbInv = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY);
+
+        // Get next invoice number
+        const { data: existingInvoices } = await sbInv.from('invoices').select('invoice_number').order('invoice_number', { ascending: false }).limit(1);
+        const nextNum = existingInvoices?.[0]?.invoice_number ? existingInvoices[0].invoice_number + 1 : 1601;
+
+        const subtotal = inv.items.reduce((s, i) => s + (parseFloat(i.total || i.amount || 0)), 0);
+        const invoiceRecord = {
+          invoice_number: nextNum,
+          invoice_date: new Date().toISOString().split('T')[0],
+          status: 'unpaid',
+          bill_to_name: inv.bill_to_name,
+          bill_to_address: inv.bill_to_address,
+          property_address: inv.property_address,
+          project_id: projectId || null,
+          items: inv.items,
+          subtotal,
+          vat_rate: 0,
+          vat_amount: 0,
+          total: subtotal,
+        };
+
+        const { data: savedInvoice, error: saveErr } = await sbInv.from('invoices').insert(invoiceRecord).select().single();
+        if (saveErr) throw new Error(saveErr.message);
+
+        // Generate PDF
+        const pdfRes = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/generate-invoice-pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice: savedInvoice, invoice_id: savedInvoice.id, project_id: projectId, user_id: 'help@sq1consulting.co.uk' }),
+        });
+
+        const pdfData = await pdfRes.json().catch(() => ({}));
+        if (!pdfRes.ok || !pdfData.base64) throw new Error(pdfData.error || 'PDF generation failed');
+
+        return res.status(200).json({
+          reply: `✅ Invoice ${nextNum} generated for £${subtotal.toFixed(2)}.`,
+          invoice_generated: true,
+          invoice: savedInvoice,
+          invoice_pdf_base64: pdfData.base64,
+          invoice_file_name: pdfData.file_name || `Invoice-${nextNum}.pdf`,
+          invoice_storage_path: pdfData.storage_path,
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      } catch (invErr) {
+        return res.status(200).json({
+          reply: `Sorry, I couldn't generate the invoice: ${invErr.message}. Please try again or use the invoice screen.`,
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      }
+    }
+
+    // ── Invoice intent detection (project_chat surface only) ─────────────
+    if (body.surface === 'project_chat' && !body.pending_invoice_confirm) {
+      const rawPrompt = String(body.prompt || '').trim();
+
+      if (detectsInvoiceGenerate(rawPrompt) && body.pending_invoice) {
+        // User said "generate it" — confirm with them before generating
+        const inv = body.pending_invoice;
+        const total = inv.items.reduce((s, i) => s + (parseFloat(i.total || i.amount || 0)), 0);
+        const itemLines = inv.items.map(i => `• ${i.description} — £${parseFloat(i.total || i.amount || 0).toFixed(2)}`).join('\n');
+        return res.status(200).json({
+          reply: `Ready to generate the invoice.\n\n${itemLines}\n\n**Total: £${total.toFixed(2)}**\n\nSending to: ${inv.bill_to_name} (${inv.bo_email || 'email not on file'})\n\nConfirm?`,
+          pending_invoice: inv,
+          pending_invoice_confirm: true,
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      }
+    }
+
+        if (!['draft', 'review'].includes(modeHint) && body.pending_booking_confirm && body.pending_booking) {
       try {
         const booking = body.pending_booking;
         await createCalendarEntry({
