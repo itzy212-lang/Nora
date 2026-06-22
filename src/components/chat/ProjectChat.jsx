@@ -954,6 +954,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
       if (result.invoice_generated && result.invoice) {
         // Invoice PDF generated — show preview with Send/Edit buttons
+        setInvoiceGenerating(false);
         setPendingInvoice(null);
         setPendingInvoiceConfirm(false);
         setMessages(prev => [...prev, {
@@ -984,6 +985,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
       setAttachments(prev => prev.filter(a => a.upload_status !== 'uploaded'));
     } catch (err) {
+      setInvoiceGenerating(false);
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
@@ -1324,6 +1326,74 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* ── Pending Invoice Confirmation Card ─────────────────────── */}
+          {pendingInvoice && (
+            <div style={{
+              margin: '0 16px 8px',
+              borderRadius: 12,
+              border: '1px solid var(--blue)',
+              overflow: 'hidden',
+              background: 'var(--blue-bg)',
+            }}>
+              <div style={{
+                padding: '8px 12px',
+                background: 'rgba(79,127,255,0.12)',
+                borderBottom: '1px solid var(--blue)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Invoice draft
+                </span>
+                <button
+                  onClick={() => { setPendingInvoice(null); setPendingInvoiceConfirm(false); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                >×</button>
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                {/* Line items */}
+                {(pendingInvoice.items || []).map((item, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--text)' }}>
+                    <span style={{ flex: 1, paddingRight: 8 }}>{item.description}</span>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>£{parseFloat(item.total || item.unitPrice || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+                {/* Total */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, color: 'var(--blue)', borderTop: '1px solid var(--blue)', paddingTop: 6, marginTop: 6 }}>
+                  <span>Total</span>
+                  <span>£{parseFloat(pendingInvoice.total || pendingInvoice.subtotal || 0).toFixed(2)}</span>
+                </div>
+                {/* Recipient */}
+                {(pendingInvoice.bill_to_name || pendingInvoice.bo_email) && (
+                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 6 }}>
+                    To: {pendingInvoice.bill_to_name}{pendingInvoice.bo_email ? ` — ${pendingInvoice.bo_email}` : ''}
+                  </div>
+                )}
+              </div>
+              {/* Actions */}
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => { setPendingInvoice(null); setPendingInvoiceConfirm(false); }}
+                  style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={invoiceGenerating}
+                  onClick={() => {
+                    setInvoiceGenerating(true);
+                    setPendingInvoiceConfirm(true);
+                    handleSend('generate it');
+                  }}
+                  style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12, border: 'none', background: 'var(--blue)', color: '#fff', fontWeight: 600, cursor: invoiceGenerating ? 'not-allowed' : 'pointer', opacity: invoiceGenerating ? 0.7 : 1 }}
+                >
+                  {invoiceGenerating ? 'Generating…' : 'Generate & Preview PDF'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={{ padding: '8px 16px', display: 'flex', gap: 5, flexWrap: 'wrap', borderTop: '1px solid var(--border)' }}>
             {QUICK_TAGS.map((tag, i) => (
