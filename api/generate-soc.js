@@ -1,4 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+  extractAtomicClaims,
+  draftFromClaims,
+  runQualityAudit,
+  runFidelityAudit,
+  runCompletenessAudit,
+} from './lib/soc-pipeline.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -863,92 +870,6 @@ Do not omit source_note_ids.`;
 // ── Coded completeness audit ────────────────────────────────────────────
 // Every source note must have a classification. 100% accounting required.
 // A note may be contextual/site/award/excluded/unresolved — but it must not disappear.
-function runCompletenessAudit(parsed, rawNotesText = '') {
-  const issues = [];
-  const warnings = [];
-
-  // Parse raw notes — skip blank lines and section headers
-  const rawNotes = rawNotesText
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 5 && !/^\[.+\]\s*$/.test(l));
-
-  const totalNotes = rawNotes.length;
-  if (totalNotes === 0) return { issues, warnings };
-
-  // Build full accounting of all notes
-  const allRows = (parsed.sections || []).flatMap(s => s.rows || []);
-  const unresolved = parsed.unresolved_notes || [];
-  const siteNotes = (parsed.general_notes || []).filter(n =>
-    typeof n === 'string' ? n : n.note || n.text || ''
-  );
-  const awardNotes = parsed.award_notes || [];
-  const excluded = parsed.excluded_notes || [];
-
-  // All source_note_ids referenced across all output
-  const allSourceIds = new Set([
-    ...allRows.flatMap(r => r.source_note_ids || []),
-    ...unresolved.map(n => n.note_index).filter(Boolean),
-    ...siteNotes.flatMap(n => n.source_note_ids || []),
-    ...awardNotes.flatMap(n => n.source_note_ids || []),
-    ...excluded.map(n => n.note_index).filter(Boolean),
-  ]);
-
-  // Coverage check — must be 100% when all classifications included
-  const accounted = allSourceIds.size;
-  const unaccountedCount = totalNotes - accounted;
-
-  if (unaccountedCount > 0) {
-    issues.push(
-      `COVERAGE FAILURE: ${unaccountedCount} of ${totalNotes} source notes have no destination. ` +
-      `Every note must be allocated, classified as contextual/site/award, or explicitly excluded. ` +
-      `Notes without a destination: indices not in [${[...allSourceIds].sort((a,b)=>a-b).join(', ')}]`
-    );
-  }
-
-  // Rows with no source note — invention risk
-  const rowsWithoutSource = allRows.filter(r => !r.source_note_ids || r.source_note_ids.length === 0);
-  if (rowsWithoutSource.length > 0) {
-    issues.push(
-      `${rowsWithoutSource.length} final row(s) have no source_note_ids — possible invention: ` +
-      rowsWithoutSource.map(r => r.ref || '?').join(', ')
-    );
-  }
-
-  // Contradictory observations in same section
-  for (const section of (parsed.sections || [])) {
-    const rows = section.rows || [];
-    const noDefectsRows = rows.filter(r =>
-      /no visible defects/i.test(r.observation) &&
-      !/except/i.test(r.observation) &&
-      !/apart from/i.test(r.observation) &&
-      !/other than/i.test(r.observation)
-    );
-    const defectRows = rows.filter(r =>
-      /crack|stain|spall|deteriorat|displace|bulg|damp|mould|missing|defect(?!s noted)|fractur|damaged|displaced|eroded|split/i.test(r.observation) &&
-      !/no visible defects/i.test(r.observation)
-    );
-    if (noDefectsRows.length > 0 && defectRows.length > 0) {
-      issues.push(
-        `Section "${section.title}": unqualified no-defects statement alongside ${defectRows.length} defect row(s). ` +
-        `The no-defects statement must be qualified or removed.`
-      );
-    }
-  }
-
-  // Unresolved notes remaining
-  if (unresolved.length > 0) {
-    warnings.push(
-      `${unresolved.length} note(s) unresolved: ` +
-      unresolved.map(n => `"${String(n.note_text || '').slice(0, 80)}"`).join('; ')
-    );
-  }
-
-  // Note: 0% unaccounted is the target. Any missing notes are flagged as issues, not warnings.
-  return { issues, warnings, totalNotes, accountedNotes: accounted };
-}
-
-
 function validateSocJson(parsed) {
   // Fatal: missing or malformed top-level arrays
   const requiredArrays = ['sections', 'discussion', 'general_notes', 'actions', 'award_notes', 'emails_required'];
@@ -1126,115 +1047,6 @@ ROWS TO CHECK: ${JSON.stringify(rowsToCheck, null, 2)}`;
 }
 
 
-async function runQualityAudit(draftedResult, claims, projectMeta, apiKey) {
-  const QUALITY_BATCH_SIZE = 15;
-  const rowsForReview = [];
-  for (const section of (draftedResult.sections || [])) {
-    for (const row of (section.rows || [])) {
-      if (row.observation) rowsForReview.push({ ref: row.ref, section: section.title, observation: row.observation });
-    }
-  }
-  if (rowsForReview.length === 0) return draftedResult;
-
-  // Batch if needed
-  if (rowsForReview.length > QUALITY_BATCH_SIZE) {
-    console.log(`[generate-soc] Quality audit batching: ${rowsForReview.length} rows in batches of ${QUALITY_BATCH_SIZE}`);
-    const correctedByRef = {};
-    for (let i = 0; i < rowsForReview.length; i += QUALITY_BATCH_SIZE) {
-      const batchRows = rowsForReview.slice(i, i + QUALITY_BATCH_SIZE);
-      const batchResult = await runQualityAuditBatch(batchRows, apiKey);
-      Object.assign(correctedByRef, batchResult);
-    }
-    return applyQualityCorrections(draftedResult, correctedByRef);
-  }
-
-  const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing drafted Schedule of Conditions observations for quality.
-
-For each row, check:
-WORDING ISSUES (auto-fix if purely stylistic):
-- wording too close to raw dictation sentence structure
-- sentence fragments or missing verbs
-- poor grammar or missing articles
-- speech-to-text residue (e.g. "and and", "that that", garbled phrases)
-- vague expressions ("looks fine", "seems okay", "appears good")
-- repeated phrases across consecutive rows
-- "good condition" or "very good condition" (use "no visible defects noted")
-- unnecessary repetition of "no visible defects noted" without naming the element
-- informal language
-
-FACTUAL ISSUES (flag with flagged:true, do NOT auto-fix):
-- over-fragmented rows (separate claims that belong together)
-- over-compressed rows (multiple unrelated defects merged into one)
-- unsupported diagnosis or causation
-- invented measurements not in source claims
-
-PROHIBITED TERMS: "looks fine", "seems fine", "good condition", "very good condition", "appears okay", "no issues", "all fine"
-
-PREFERRED: "no visible defects were noted at the time of inspection", "appeared generally free from visible defects"
-
-Return the full rows array with corrections applied where stylistic, and flagged:true + flag_reason where factual.
-
-Return JSON only: { "rows": [ { "ref": "...", "observation": "corrected or original", "flagged": false, "flag_reason": null } ] }
-
-ROWS TO REVIEW:
-${JSON.stringify(rowsForReview, null, 2)}`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        temperature: 0.1,
-        max_tokens: 6000,
-        messages: [
-          { role: 'system', content: 'You are a quality reviewer for Schedule of Conditions drafts. Return valid JSON only.' },
-          { role: 'user', content: QUALITY_PROMPT.replace('${JSON.stringify(rowsForReview, null, 2)}', JSON.stringify(rowsForReview, null, 2)) },
-        ],
-      }),
-    });
-
-    if (!res.ok) { console.warn('[generate-soc] Stage 3 quality audit failed:', res.status); return draftedResult; }
-    const data = await res.json();
-    const raw = (data.choices?.[0]?.message?.content || '').trim();
-    let qualityResult;
-    try { qualityResult = parseJsonFromModel(raw); } catch { return draftedResult; }
-
-    if (!Array.isArray(qualityResult?.rows)) return draftedResult;
-
-    // Build lookup: ref → corrected row
-    const correctedByRef = {};
-    for (const r of qualityResult.rows) correctedByRef[r.ref] = r;
-
-    // Apply corrections to draftedResult
-    const improved = JSON.parse(JSON.stringify(draftedResult));
-    for (const section of (improved.sections || [])) {
-      for (const row of (section.rows || [])) {
-        const correction = correctedByRef[row.ref];
-        if (correction) {
-          if (correction.observation && correction.observation !== row.observation) {
-            row.observation = correction.observation;
-          }
-          if (correction.flagged) {
-            row.flagged = true;
-            row.flag_reason = correction.flag_reason || 'Quality review flagged';
-          }
-        }
-      }
-    }
-    console.log('[generate-soc] Stage 3 quality audit complete');
-    return improved;
-  } catch (e) {
-    console.warn('[generate-soc] Stage 3 quality audit error (non-fatal):', e.message);
-    return draftedResult;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STAGE 4: FACTUAL FIDELITY AUDIT
-// Compares each final row against its source claims.
-// Flags where facts changed, measurements differ, or superseded wording survived.
-// ═══════════════════════════════════════════════════════════════════════════
 function runCodedFidelityChecks(draftedResult, claims) {
   if (!claims?.length) return { issues: [], warnings: [] };
 
@@ -1287,496 +1099,119 @@ function runCodedFidelityChecks(draftedResult, claims) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STAGE 1: ATOMIC CLAIM EXTRACTION
-// Breaks every raw note into separate factual claims before drafting.
-// Uses gpt-4o-mini (fast extraction task).
-// ═══════════════════════════════════════════════════════════════════════════
-// ── Claim extraction with deterministic batching ─────────────────────────────
-// Processes notes in batches of 20 to avoid token limits on large sessions.
-// Each batch carries section context from the previous batch.
-const CLAIM_BATCH_SIZE = 20;
-
-async function extractAtomicClaims(rawNotes, projectMeta, apiKey) {
-  const lines = rawNotes.split(/\n/).filter(l => l.trim());
-  if (lines.length <= CLAIM_BATCH_SIZE) {
-    return extractAtomicClaimsSingleBatch(rawNotes, projectMeta, apiKey);
-  }
-
-  console.log(`[generate-soc] Batching claim extraction: ${lines.length} note-lines, batch size ${CLAIM_BATCH_SIZE}`);
-  const batches = [];
-  for (let i = 0; i < lines.length; i += CLAIM_BATCH_SIZE) {
-    batches.push(lines.slice(i, i + CLAIM_BATCH_SIZE).join('\n'));
-  }
-
-  let allClaims = [];
-  let currentSection = null;
-  for (let b = 0; b < batches.length; b++) {
-    const batchContext = currentSection
-      ? `CURRENT ACTIVE SECTION (carry forward from previous batch): ${currentSection}\n\n`
-      : '';
-    const batchClaims = await extractAtomicClaimsSingleBatch(batchContext + batches[b], projectMeta, apiKey);
-    // Detect last known section for carry-forward
-    const sectionClaims = batchClaims.filter(cl => cl.section);
-    if (sectionClaims.length > 0) {
-      currentSection = sectionClaims[sectionClaims.length - 1].section;
-    }
-    allClaims = allClaims.concat(batchClaims);
-    console.log(`[generate-soc] Batch ${b+1}/${batches.length} yielded ${batchClaims.length} claims`);
-  }
-  return allClaims;
-}
-
-
-async function extractAtomicClaimsSingleBatch(rawNotes, projectMeta, apiKey) {
-  const CLAIM_EXTRACTION_PROMPT = `You are assisting a party wall surveyor preparing a Schedule of Conditions.
-
-Your task: extract every atomic factual claim from the raw dictated site notes below.
-One note may contain many separate claims. Do not force one note into one claim.
-One note may contain: section changes, construction, finish, general condition, specific defects, access limitations, operational tests, contextual info, corrections, site notes.
-
-SECTION CARRY-FORWARD: Once a section is established, all subsequent claims belong to it until: (a) explicit new room/area; (b) physically incompatible content (external vs internal); (c) surveyor reassigns. Claims with no room name inherit the current active section. Do NOT leave a claim unallocated merely because it has no room name.
-
-RETROACTIVE REASSIGNMENT: "The last N notes were in [room]" — apply retroactively.
-
-AMENDMENT HANDLING: Where a note corrects a measurement, direction or wording:
-- Mark the original claim status: "superseded", superseded_by: "[correcting claim_id]"
-- The correcting claim status: "active", claim_type: "amendment"
-- Final active claim must contain only the corrected version.
-- Example: "intermittent crack" then "correction: single hairline crack 500mm" → supersede first, active claim says "A hairline crack extends approximately 500mm".
-
-Claim types: section_declaration | construction_description | finish_description | general_condition | specific_defect | access_limitation | operational_test | contextual | amendment | site_note | award_note | excluded | unresolved
-
-IMPORTANT: content field should state the fact in clean English — not the raw dictation wording. But do NOT embellish: state only what the note says.
-
-Return valid JSON only. No markdown. No preamble.
-
-{
-  "claims": [
-    {
-      "claim_id": "claim-001",
-      "source_note_id": 1,
-      "sequence": 1,
-      "claim_type": "construction_description",
-      "section": "Ground Floor Front Elevation Room",
-      "element": "Party wall",
-      "location": null,
-      "content": "The party wall has a plastered and painted finish.",
-      "confidence": "high",
-      "status": "active",
-      "superseded_by": null,
-      "amendment_mode": null
-    }
-  ]
-}
-
-RAW NOTES:
-${rawNotes}`;
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      temperature: 0.05,
-      max_tokens: 8000,
-      messages: [
-        { role: 'system', content: 'You extract atomic factual claims from site notes. Return valid JSON only.' },
-        { role: 'user', content: CLAIM_EXTRACTION_PROMPT.replace('${rawNotes}', rawNotes) },
-      ],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Claim extraction OpenAI error ${response.status}`);
-  const data = await response.json();
-  const raw = (data.choices?.[0]?.message?.content || '').trim();
-  try {
-    const parsed = parseJsonFromModel(raw);
-    return Array.isArray(parsed.claims) ? parsed.claims : [];
-  } catch (e) {
-    console.error('[generate-soc] claim extraction parse failed:', raw.slice(0, 300));
-    return [];
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STAGE 2: PROFESSIONAL DRAFTING FROM CLAIMS
-// Groups related claims into observations and writes professional SOC prose.
-// Uses gpt-4o (quality matters here).
-// ═══════════════════════════════════════════════════════════════════════════
-async function draftFromClaims(claims, projectMeta, rawNotes, apiKey) {
-  const boAddress = projectMeta.bo_address || 'Not provided';
-  const aoAddress = projectMeta.ao_address || 'Not provided';
-  const inspectionDate = projectMeta.inspection_date ||
-    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const proposedWorks = projectMeta.proposed_works || 'Not specified';
-
-  // Group claims by section for easier reading
-  const claimsBySection = {};
-  const sectionOrder = [];
-  for (const c of claims) {
-    const sec = c.section || 'Unallocated';
-    if (!claimsBySection[sec]) { claimsBySection[sec] = []; sectionOrder.push(sec); }
-    claimsBySection[sec].push(c);
-  }
-  const claimsSummary = sectionOrder.map(sec =>
-    `SECTION: ${sec}\n` + claimsBySection[sec].map(c =>
-      `  [${c.claim_id}] type=${c.claim_type} status=${c.status}${c.element ? ' element=' + c.element : ''}${c.location ? ' location=' + c.location : ''}\n  content: ${c.content}`
-    ).join('\n')
-  ).join('\n\n');
-
-  const PROFESSIONAL_DRAFTER_PROMPT = `You are a Senior Chartered Party Wall Surveyor preparing a Schedule of Conditions report under the Party Wall etc. Act 1996, prepared by Itzik Darel ACIArb MIPWS of Square One Consulting.
-
-You have been given a set of reconciled atomic factual claims extracted from site notes.
-
-CRITICAL: You are NOT transcribing or lightly editing the surveyor's words. You are interpreting the reconciled factual record and writing a professional Schedule of Conditions observation from first principles. Preserve every supported fact. Do not preserve the surveyor's sentence structure.
-
-COMPLETENESS RULE: Every active claim must appear in the final output. Do not omit any claim with status "active". Contextual claims may be noted briefly. Site notes go in general_notes. Award notes go in award_notes. Unresolved claims go in unresolved_notes. No active claim may silently disappear.
-
-GROUPING RULES:
-- Combine claims about the same element (construction + finish + general condition) into ONE observation row.
-- Keep separate where: different elements, different specific defects, different locations, separate operational tests, separate access limitations.
-- Do not produce one mechanical row per claim.
-
-PROFESSIONAL WRITING STANDARD:
-- Past tense for condition observations: appeared, was noted, were observed.
-- Full sentences. No fragments.
-- No invented facts. No unsupported diagnosis. No unsupported causation.
-- Preserve measurements, directions, locations exactly.
-- "No visible defects" must name the element and include "at the time of inspection."
-- Window/door tests: state what was tested and the result.
-- Staining: note whether dry at time of inspection.
-- Access limitations: note what was not accessible and why.
-
-EXAMPLES (raw claim → professional wording):
-"Party wall plastered painted finish" + "No visible defects to party wall"
-→ "The party wall has a plastered and painted finish and appeared generally free from visible defects at the time of inspection."
-
-"Ceiling plasterboard" + "Painted finish" + "No defects ceiling"
-→ "The ceiling is formed in plasterboard with a painted finish and appeared free from visible defects at the time of inspection."
-
-"Crack left corner diagonal" + "Crack left corner vertical to ceiling"
-→ "Two hairline cracks were noted at the upper left-hand corner. One extends diagonally towards the ceiling junction, while the second extends vertically from the corner to the ceiling."
-
-"Window sticks on frame"
-→ "The window opener closest to the party wall was tested and opened partially but bound against the frame, preventing it from opening fully."
-
-"Door opens closes no sticking"
-→ "The door was tested and operated satisfactorily without sticking, binding or jamming."
-
-"No visible defects" only — if no construction/finish info: do NOT invent it.
-
-PROPERTY DETAILS:
-Building Owner: ${boAddress}
-Adjoining Owner: ${aoAddress}
-Inspection date: ${inspectionDate}
-Proposed works: ${proposedWorks}
-Prepared by: Itzik Darel ACIArb MIPWS – Square One Consulting
-
-Return valid JSON only. No markdown. No commentary. No code fences.
-
-Required JSON structure:
-{
-  "sections": [
-    {
-      "number": 1,
-      "title": "Section Title",
-      "rows": [
-        {
-          "ref": "XX01",
-          "element": "Party wall",
-          "observation": "Professional observation text.",
-          "action": "Record only",
-          "source_note_ids": [1, 2],
-          "source_claim_ids": ["claim-001", "claim-002"],
-          "flagged": false,
-          "flag_reason": null
-        }
-      ]
-    }
-  ],
-  "general_notes": [],
-  "discussion": "",
-  "actions": [],
-  "award_notes": [],
-  "emails_required": [],
-  "unresolved_notes": [
-    {
-      "note_index": 5,
-      "note_text": "Raw text",
-      "suggested_section": "Suggested section",
-      "reason": "Why unresolved"
-    }
-  ]
-}
-
-Flag a row (flagged: true) only where the claim was genuinely unresolved/uncertain.
-
-RECONCILED CLAIMS BY SECTION:
-${claimsSummary}`;
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      temperature: 0.1,
-      max_tokens: 8000,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a Senior Chartered Party Wall Surveyor writing a professional Schedule of Conditions. Return valid JSON only. No markdown. No commentary.',
-        },
-        {
-          role: 'user',
-          content: PROFESSIONAL_DRAFTER_PROMPT
-            .replace('${boAddress}', boAddress)
-            .replace('${aoAddress}', aoAddress)
-            .replace('${inspectionDate}', inspectionDate)
-            .replace('${proposedWorks}', proposedWorks)
-            .replace('${claimsSummary}', claimsSummary),
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Professional drafting OpenAI error ${response.status}`);
-  const data = await response.json();
-  const raw = (data.choices?.[0]?.message?.content || '').trim();
-  try {
-    return parseJsonFromModel(raw);
-  } catch (e) {
-    console.error('[generate-soc] professional drafting parse failed:', raw.slice(0, 500));
-    throw new Error('Professional drafting stage returned invalid JSON');
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CLAIM-LEVEL COMPLETENESS AUDIT
-// ═══════════════════════════════════════════════════════════════════════════
-function runClaimCompletenessAudit(draftedJSON, claims, rawNotes) {
-  const issues = [];
-  const warnings = [];
-
-  if (!claims || claims.length === 0) {
-    // Fallback to note-level audit if no claims available
-    return runCompletenessAudit(draftedJSON, rawNotes);
-  }
-
-  // Build set of all claim_ids referenced in final rows
-  const referencedClaimIds = new Set();
-  for (const section of (draftedJSON.sections || [])) {
-    for (const row of (section.rows || [])) {
-      for (const cid of (row.source_claim_ids || [])) referencedClaimIds.add(cid);
-    }
-  }
-
-  // Check every active claim has a destination
-  const activeClaims = claims.filter(c => c.status === 'active');
-  const unaccountedClaims = activeClaims.filter(c => !referencedClaimIds.has(c.claim_id));
-
-  for (const c of unaccountedClaims) {
-    // Contextual/site_note/award_note may legitimately not appear in rows
-    if (['contextual', 'site_note', 'award_note', 'section_declaration'].includes(c.claim_type)) {
-      warnings.push(`Claim ${c.claim_id} (${c.claim_type}) not in any row — check contextual/note placement.`);
-    } else {
-      issues.push(`MISSING: claim ${c.claim_id} (${c.claim_type}, section "${c.section}") has no destination in the drafted SOC. Content: ${c.content?.slice(0, 80)}`);
-    }
-  }
-
-  // Check for no-defects + defect contradiction at same element level
-  for (const section of (draftedJSON.sections || [])) {
-    const sectionTitle = section.title || '';
-    const noDefectsRows = (section.rows || []).filter(r =>
-      /no visible defects/i.test(r.observation || '') && !/except|apart from|other than/i.test(r.observation || '')
-    );
-    const defectRows = (section.rows || []).filter(r =>
-      /crack|open joint|staining|spalling|deteriorat|displaced|damage/i.test(r.observation || '')
-    );
-
-    for (const nd of noDefectsRows) {
-      for (const df of defectRows) {
-        // Only flag if same element
-        if (nd.element && df.element && nd.element.toLowerCase() === df.element.toLowerCase()) {
-          warnings.push(`Section "${sectionTitle}": unqualified no-defects statement for "${nd.element}" alongside defect observation. Consider qualifying the no-defects row.`);
-        }
-      }
-    }
-  }
-
-  return { issues, warnings };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PERSIST CLAIMS TO soc_claims TABLE (non-blocking)
-// ═══════════════════════════════════════════════════════════════════════════
-async function persistClaimsToDb(claims, sessionId, projectId, aoId, reportId) {
-  if (!claims?.length || !sessionId) return;
-  try {
-    const rows = claims.map(c => ({
-      session_id: sessionId,
-      project_id: projectId || null,
-      ao_id: aoId || null,
-      report_id: reportId || null,
-      claim_id: c.claim_id,
-      source_note_id: c.source_note_id || 0,
-      sequence: c.sequence || 0,
-      claim_type: c.claim_type || 'unresolved',
-      section: c.section || null,
-      element: c.element || null,
-      location: c.location || null,
-      content: c.content || '',
-      confidence: c.confidence || 'high',
-      status: c.status || 'active',
-      superseded_by: c.superseded_by || null,
-      amendment_mode: c.amendment_mode || null,
-    }));
-    await supabase.from('soc_claims').insert(rows);
-  } catch (e) {
-    console.warn('[generate-soc] claim DB persist failed (non-fatal):', e.message);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN EXTRACTION FUNCTION — now multi-stage pipeline
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Main pipeline orchestrator ────────────────────────────────────────────────
+// Calls shared soc-pipeline.js functions in sequence.
+// Uses live persisted claims from DB if available; otherwise runs Stage 1 extraction.
 async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId) {
-  // ── Try to load live persisted claims first ──────────────────────────────
+  // Load live claims from DB first
   let claims = [];
   let claimsFromLive = false;
-
   if (sessionId) {
     try {
       const { data: liveClaims } = await supabase
         .from('soc_claims')
         .select('*')
         .eq('session_id', sessionId)
-        .order('source_note_id', { ascending: true })
-        .order('sequence', { ascending: true });
-      if (liveClaims?.length > 0) {
-        claims = liveClaims;
-        claimsFromLive = true;
-        console.log(`[generate-soc] Loaded ${claims.length} persisted live claims`);
-      }
-    } catch (e) {
-      console.warn('[generate-soc] Could not load live claims:', e.message);
-    }
+        .order('note_sequence', { ascending: true })   // numeric integer column
+        .order('claim_sequence', { ascending: true });  // numeric integer column
+      if (liveClaims?.length) { claims = liveClaims; claimsFromLive = true; }
+    } catch (e) { console.warn('[generate-soc] Could not load live claims:', e.message); }
   }
 
-  // Stage 1: Extract claims from raw notes if we don't have live ones
+  // Stage 1: Extract if no live claims
   if (!claimsFromLive) {
-    console.log('[generate-soc] Stage 1: extracting atomic claims from raw notes...');
+    console.log('[generate-soc] Stage 1: extracting claims...');
     try {
-      claims = await extractAtomicClaims(message, projectMeta, apiKey);
-      console.log(`[generate-soc] Stage 1 complete: ${claims.length} claims extracted`);
-    } catch (claimErr) {
-      console.warn('[generate-soc] Stage 1 failed — will use emergency fallback:', claimErr.message);
-      claims = []; // proceed to emergency fallback below
+      claims = await extractAtomicClaims(message, apiKey);
+    } catch (e) {
+      console.warn('[generate-soc] Stage 1 failed:', e.message);
     }
+    if (!claims.length) throw new Error('GENERATION_INCOMPLETE: No claims extracted. Please retry.');
   }
+  console.log(`[generate-soc] ${claimsFromLive ? 'Loaded' : 'Extracted'} ${claims.length} claims`);
 
-  if (claims.length === 0) {
-    throw new Error('GENERATION_INCOMPLETE: No claims could be extracted from the dictation. Please check notes and retry.');
-  }
-
-  // Stage 2: Professional drafting from claims
-  console.log('[generate-soc] Stage 2: professional drafting from claims...');
+  // Stage 2: Professional drafting (section-batched)
+  console.log('[generate-soc] Stage 2: drafting...');
   let draftedResult;
   try {
-    draftedResult = await draftFromClaims(claims, projectMeta, message, apiKey);
-    console.log('[generate-soc] Stage 2 complete');
-  } catch (draftErr) {
-    console.warn('[generate-soc] Stage 2 failed — will use emergency fallback:', draftErr.message);
-    // draftedResult remains null — emergency fallback below
+    draftedResult = await draftFromClaims(claims, projectMeta, apiKey);
+  } catch (e) {
+    console.warn('[generate-soc] Stage 2 failed:', e.message);
   }
 
-  // Emergency fallback if Stage 2 failed (draftedResult is still null)
+  // Emergency fallback if stage 2 failed
   if (!draftedResult) {
-    console.warn('[generate-soc] Stages 1+2 failed — running emergency single-stage pipeline');
+    console.warn('[generate-soc] Emergency fallback — single stage');
     try {
-      const fbUserPrompt = SOC_GENERATOR_PROMPT
-        .replace('{{BO_ADDRESS}}', projectMeta.bo_address || 'Not provided')
-        .replace('{{AO_ADDRESS}}', projectMeta.ao_address || 'Not provided')
-        .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date ||
-          new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
-        .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || 'Not specified')
+      const userPrompt = SOC_GENERATOR_PROMPT
+        .replace('{{BO_ADDRESS}}', projectMeta.bo_address || '')
+        .replace('{{AO_ADDRESS}}', projectMeta.ao_address || '')
+        .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date || new Date().toLocaleDateString('en-GB'))
+        .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || '')
         .replace('{{RAW_NOTES}}', message);
       const fbRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 8000,
-          messages: [{ role: 'system', content: GENERATOR_SYSTEM_PROMPT }, { role: 'user', content: fbUserPrompt }] }),
+          messages: [{ role: 'system', content: GENERATOR_SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] }),
       });
       if (fbRes.ok) {
         const fbData = await fbRes.json();
-        const fbRaw = fbData.choices?.[0]?.message?.content || '';
-        draftedResult = parseJsonFromModel(fbRaw);
+        draftedResult = parseJsonFromModel(fbData.choices?.[0]?.message?.content || '');
         draftedResult._emergency_draft = true;
-        draftedResult._generation_note = 'EMERGENCY DRAFT: Generated without claim extraction. May be missing content. Retry generation for a complete SOC.';
       }
-    } catch (fbErr) {
-      console.error('[generate-soc] Emergency fallback also failed:', fbErr.message);
-    }
-    if (!draftedResult) {
-      throw new Error('GENERATION_INCOMPLETE: All generation stages failed. Raw notes preserved. Please retry.');
-    }
+    } catch {}
+    if (!draftedResult) throw new Error('GENERATION_INCOMPLETE: All stages failed.');
   }
 
-  // Stage 3: Quality audit (auto-fixes stylistic issues, flags factual ones)
-  console.log('[generate-soc] Stage 3: quality audit...');
+  // Stage 3: Quality audit (batched)
+  let qualityResult = draftedResult;
   try {
-    draftedResult = await runQualityAudit(draftedResult, claims, projectMeta, apiKey);
-  } catch (qualErr) {
-    console.warn('[generate-soc] Stage 3 quality audit failed (non-fatal):', qualErr.message);
-  }
+    qualityResult = await runQualityAudit(draftedResult, apiKey);
+  } catch (e) { console.warn('[generate-soc] Stage 3 failed (non-fatal):', e.message); }
 
-  validateSocJson(draftedResult);
+  validateSocJson(qualityResult);
 
   // Assign stable row IDs
-  for (const section of (draftedResult.sections || [])) {
-    for (const row of (section.rows || [])) {
-      if (!row.row_id) row.row_id = crypto.randomUUID?.() || `row-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    }
-  }
+  for (const s of (qualityResult.sections || []))
+    for (const r of (s.rows || []))
+      if (!r.row_id) r.row_id = `row-${s.number || 0}-${r.ref}-${Date.now()}`;
 
-  // Stage 4: Factual fidelity audit
-  const fidelity = await runFidelityAudit(draftedResult, claims, apiKey);
-  if (fidelity.issues.length > 0) console.warn('[generate-soc] Fidelity issues:', fidelity.issues);
+  // Stage 4: Fidelity audit
+  const fidelity = await runFidelityAudit(qualityResult, claims, apiKey).catch(() => ({ issues: [], warnings: [] }));
 
-  // Claim-level completeness audit
-  const audit = runClaimCompletenessAudit(draftedResult, claims, message);
-  if (audit.issues.length > 0) console.warn('[generate-soc] Completeness issues:', audit.issues);
+  // Completeness audit
+  const audit = runCompletenessAudit(qualityResult, claims);
 
-  // Persist new claims to DB if we freshly extracted them
-  if (!claimsFromLive && claims.length > 0 && sessionId) {
+  // Persist extracted claims
+  if (!claimsFromLive && claims.length && sessionId) {
     persistClaimsToDb(claims, sessionId, projectId, aoId, null).catch(() => {});
   }
 
-  // Update claim destinations (non-blocking)
-  if (sessionId) updateClaimDestinations(draftedResult, sessionId).catch(() => {});
+  // Update claim destinations
+  if (sessionId) updateClaimDestinations(qualityResult, sessionId).catch(() => {});
 
-  const generationState = draftedResult._emergency_draft ? 'emergency_draft'
-    : (audit.issues.length > 0 || fidelity.issues.length > 0) ? 'quality_flagged'
-    : 'complete';
+  const status = draftedResult._emergency_draft ? 'emergency_draft'
+    : (audit.issues.length || fidelity.issues.length) ? 'quality_flagged' : 'complete';
 
   return {
-    sections:           draftedResult.sections,
-    discussion:         draftedResult.discussion,
-    general_notes:      draftedResult.general_notes,
-    actions:            draftedResult.actions,
-    award_notes:        draftedResult.award_notes,
-    emails_required:    draftedResult.emails_required,
-    unresolved_notes:   draftedResult.unresolved_notes || [],
-    audit_issues:       [...audit.issues, ...fidelity.issues],
-    audit_warnings:     [...audit.warnings, ...fidelity.warnings],
-    claims_extracted:   claims.length,
-    claims_from_live:   claimsFromLive,
-    generation_status:  generationState,
-    generation_stages:  {
-      claim_source: claimsFromLive ? 'live_session' : 'extracted_at_generate',
-      claim_count: claims.length,
+    sections:         qualityResult.sections,
+    discussion:       qualityResult.discussion,
+    general_notes:    qualityResult.general_notes,
+    actions:          qualityResult.actions,
+    award_notes:      qualityResult.award_notes,
+    emails_required:  qualityResult.emails_required,
+    unresolved_notes: qualityResult.unresolved_notes || [],
+    audit_issues:     [...audit.issues, ...fidelity.issues],
+    audit_warnings:   [...audit.warnings, ...fidelity.warnings],
+    claims_extracted: claims.length,
+    claims_from_live: claimsFromLive,
+    generation_status: status,
+    generation_stages: {
+      claim_source:    claimsFromLive ? 'live_session' : 'extracted_at_generate',
+      claim_count:     claims.length,
       stage1_complete: claims.length > 0,
-      stage2_complete: !!draftedResult && !draftedResult._emergency_draft,
+      stage2_complete: !draftedResult._emergency_draft,
       stage3_complete: true,
       stage4_complete: true,
       emergency_draft: !!draftedResult._emergency_draft,
@@ -1784,30 +1219,6 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   };
 }
 
-async function runFidelityAudit(draftedResult, claims, apiKey) {
-  const coded = runCodedFidelityChecks(draftedResult, claims);
-  const semantic = await runSemanticFidelityCheck(draftedResult, claims, apiKey).catch(() => ({ issues: [], warnings: [] }));
-  return { issues: [...coded.issues, ...semantic.issues], warnings: [...coded.warnings, ...semantic.warnings] };
-}
-
-
-// Update claim destination field after drafting
-async function updateClaimDestinations(draftedResult, sessionId) {
-  const updates = [];
-  for (const section of (draftedResult.sections || [])) {
-    for (const row of (section.rows || [])) {
-      for (const cid of (row.source_claim_ids || [])) {
-        updates.push({ claim_id: cid, destination_type: 'soc_row', destination_id: row.row_id || row.ref, represented: true });
-      }
-    }
-  }
-  for (const u of updates) {
-    await supabase.from('soc_claims')
-      .update({ destination_type: u.destination_type, destination_id: u.destination_id, represented: true })
-      .eq('session_id', sessionId)
-      .eq('claim_id', u.claim_id);
-  }
-}
 
 async function getSocDate(projectId, aoId, selectedAO) {
   const aoDate =
