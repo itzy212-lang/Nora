@@ -358,12 +358,28 @@ function makeObsId(section, sequence) {
 // ── Live atomic claim extraction + persistence ────────────────────────────
 // Called non-blocking after every dictated note.
 // Uses gpt-4o-mini (fast, low latency for on-site use).
+// Detect note complexity — escalates to gpt-4o for amendments, long notes, multi-element notes
+function noteComplexity(note, noteType, isCorrection) {
+  const words = note.split(/\s+/).length;
+  const hasMeasurement = /\d+\s*(mm|cm|m|ft|inch)/i.test(note);
+  const hasMultipleDefects = (note.match(/crack|joint|defect|stain|spall/gi) || []).length > 1;
+  const hasDirections = /(left|right|upper|lower|corner|diagonal|vertical|horizontal)/i.test(note);
+  if (noteType === 'amendment' || isCorrection) return 'high';
+  if (words > 50 || (hasMeasurement && hasMultipleDefects) || (hasMultipleDefects && hasDirections)) return 'high';
+  if (words > 25 || hasMeasurement) return 'medium';
+  return 'low';
+}
+
 async function extractAndPersistClaims({
   note, sequence, session_id, project_id, ao_id,
   aiResult, finalSection, noteType, correctionMode, previousNotes,
 }) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) return;
+  if (!OPENAI_KEY) return 0;
+  
+  const complexity = noteComplexity(note, noteType, aiResult?.correction_mode != null);
+  const model = complexity === 'high' ? 'gpt-4o' : 'gpt-4o-mini';
+  const maxTokens = complexity === 'high' ? 2000 : 1000;
 
   // Build minimal context from recent notes
   const recentContext = (previousNotes || []).slice(-5).map(n =>
@@ -406,9 +422,9 @@ Return JSON only: { "claims": [...] }`;
       method: 'POST',
       headers: { Authorization: `Bearer \${OPENAI_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: model,
         temperature: 0.05,
-        max_tokens: 1200,
+        max_tokens: maxTokens,
         messages: [
           { role: 'system', content: 'Extract atomic claims from a single site note. Return valid JSON only.' },
           { role: 'user', content: prompt },
@@ -443,7 +459,8 @@ Return JSON only: { "claims": [...] }`;
       amendment_mode: c.amendment_mode || null,
     }));
 
-    await supabase.from('soc_claims').insert(rows);
+    const { error: insertError } = await supabase.from('soc_claims').insert(rows);
+    if (insertError) throw new Error(`soc_claims insert failed: ${insertError.message}`);
 
     // If this is an amendment, mark prior claims as superseded
     if (noteType === 'amendment' && correctionMode === 'replace') {
@@ -464,8 +481,9 @@ Return JSON only: { "claims": [...] }`;
       }
     }
   } catch (e) {
-    // Non-blocking — never throw
+    throw e; // propagate so caller can log
   }
+  return rows?.length || 0;
 }
 
 export default async function handler(req, res) {
@@ -775,19 +793,27 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
       .eq('sequence', sequence);
 
 
-    // ── 7. Extract atomic claims for this note (non-blocking, persists to soc_claims) ─────
-    extractAndPersistClaims({
-      note: note.trim(),
-      sequence,
-      session_id,
-      project_id: project_id || null,
-      ao_id: safeAoId,
-      aiResult,
-      finalSection,
-      noteType,
-      correctionMode,
-      previousNotes,
-    }).catch(e => console.warn('[process-soc-note] live claim persist failed (non-fatal):', e.message));
+    // ── 7. Extract and persist atomic claims SYNCHRONOUSLY before acknowledging ──────
+    // Acknowledgement is only returned after claims are committed to DB.
+    let claimCount = 0;
+    let claimError = null;
+    try {
+      claimCount = await extractAndPersistClaims({
+        note: note.trim(),
+        sequence,
+        session_id,
+        project_id: project_id || null,
+        ao_id: safeAoId,
+        aiResult,
+        finalSection,
+        noteType,
+        correctionMode,
+        previousNotes,
+      });
+    } catch (claimErr) {
+      claimError = claimErr.message;
+      console.warn('[process-soc-note] claim extraction failed for note', sequence, claimErr.message);
+    }
 
     return res.status(200).json({
       response: aiResponse,
@@ -798,6 +824,8 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
       note_status: noteStatus,
       observation_id: observationId,
       is_correction: isCorrection,
+      claims_extracted: claimCount,
+      claim_error: claimError || undefined,
     });
 
   } catch (err) {
