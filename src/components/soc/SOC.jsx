@@ -663,86 +663,127 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
       </div>
 
-      {(unresolvedNotes.length > 0 || auditIssues.length > 0) && !unresolvedOverridden && (
+      {(unresolvedNotes.length > 0 || auditIssues.length > 0) && (
         <div style={{ marginBottom: 12, padding: '12px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-            ⚠ Review before finalising
+            {unresolvedOverridden ? '⚠ Draft generated with unresolved items — not fully reconciled' : '⚠ Review before finalising'}
           </div>
 
-          {/* Audit issues */}
+          {/* Coded audit issues */}
           {auditIssues.map((issue, i) => (
             <div key={`ai-${i}`} style={{ marginBottom: 6, fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 6, padding: '4px 8px' }}>
               {issue}
             </div>
           ))}
 
-          {/* Unresolved notes — interactive */}
+          {/* Unresolved notes — interactive, persisted to server */}
           {unresolvedNotes.map((item, i) => (
-            <div key={i} style={{ marginBottom: 10, padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #fcd34d' }}>
+            <div key={i} style={{ marginBottom: 10, padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #fcd34d', opacity: item.resolving ? 0.6 : 1 }}>
               <div style={{ fontStyle: 'italic', fontSize: 13, color: 'var(--text)', marginBottom: 6 }}>
                 "{item.note_text}"
               </div>
-              {item.suggested_section && (
+              {item.suggested_section && !unresolvedOverridden && (
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>
                   Suggested: {item.suggested_section}{item.reason ? ` — ${item.reason}` : ''}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {/* Accept suggestion */}
-                {item.suggested_section && (
-                  <button
-                    onClick={() => {
-                      setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
-                      setStructuredData(prev => {
-                        if (!prev) return prev;
-                        const sections = [...(prev.sections || [])];
-                        const existing = sections.find(s => s.title === item.suggested_section);
-                        const row = { ref: `UN${String(i+1).padStart(2,'0')}`, observation: item.note_text, action: 'Record only', source_note_ids: [item.note_index] };
-                        if (existing) {
-                          existing.rows = [...(existing.rows || []), row];
-                        } else {
-                          sections.push({ title: item.suggested_section, number: sections.length + 2, rows: [row] });
+              {!unresolvedOverridden && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {item.suggested_section && (
+                    <button
+                      disabled={item.resolving}
+                      onClick={async () => {
+                        // Mark as resolving optimistically
+                        setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
+                        try {
+                          // Send to server to process through professional SOC wording
+                          const res = await fetch('/api/process-soc-note', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              note: item.note_text,
+                              session_id: sessionId,
+                              project_id: projectId || null,
+                              resolution: 'allocated',
+                              force_section: item.suggested_section,
+                              source_note_index: item.note_index,
+                            }),
+                          });
+                          if (res.ok) {
+                            // Remove only after server confirmed
+                            setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
+                            // Update soc_notes status in DB via the response
+                          } else {
+                            setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n));
+                          }
+                        } catch {
+                          setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n));
                         }
-                        return { ...prev, sections, unresolved_notes: prev.unresolved_notes?.filter((_, idx) => idx !== i) || [] };
-                      });
+                      }}
+                      style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                    >
+                      {item.resolving ? 'Processing…' : `Add to ${item.suggested_section}`}
+                    </button>
+                  )}
+                  <button
+                    disabled={item.resolving}
+                    onClick={async () => {
+                      setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
+                      try {
+                        await fetch('/api/process-soc-note', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ note: item.note_text, session_id: sessionId, project_id: projectId || null, resolution: 'contextual', source_note_index: item.note_index }),
+                        });
+                        setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
+                      } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
                     }}
-                    style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}
-                  >
-                    Add to {item.suggested_section}
-                  </button>
-                )}
-                {/* Contextual */}
-                <button
-                  onClick={() => setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolved: true, resolution: 'contextual' } : n).filter((n, idx) => idx !== i))}
-                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
-                >
-                  Contextual
-                </button>
-                {/* Site note */}
-                <button
-                  onClick={() => setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i))}
-                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
-                >
-                  Site note
-                </button>
-                {/* Exclude */}
-                <button
-                  onClick={() => setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i))}
-                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: '#fee2e2', color: '#991b1b', border: 'none', cursor: 'pointer' }}
-                >
-                  Exclude
-                </button>
-              </div>
+                    style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
+                  >Contextual</button>
+                  <button
+                    disabled={item.resolving}
+                    onClick={async () => {
+                      setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
+                      try {
+                        await fetch('/api/process-soc-note', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ note: item.note_text, session_id: sessionId, project_id: projectId || null, resolution: 'site_note', source_note_index: item.note_index }),
+                        });
+                        setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
+                      } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
+                    }}
+                    style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
+                  >Site note</button>
+                  <button
+                    disabled={item.resolving}
+                    onClick={async () => {
+                      setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
+                      try {
+                        await fetch('/api/process-soc-note', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ note: item.note_text, session_id: sessionId, project_id: projectId || null, resolution: 'excluded', source_note_index: item.note_index }),
+                        });
+                        setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
+                      } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
+                    }}
+                    style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: '#fee2e2', color: '#991b1b', border: 'none', cursor: 'pointer' }}
+                  >Exclude</button>
+                </div>
+              )}
             </div>
           ))}
 
-          {/* Generate anyway option */}
-          <button
-            onClick={() => setUnresolvedOverridden(true)}
-            style={{ marginTop: 8, padding: '6px 14px', borderRadius: 99, fontSize: 12, background: 'transparent', border: '1px solid #f59e0b', color: '#b45309', cursor: 'pointer' }}
-          >
-            Generate anyway
-          </button>
+          {/* Generate draft with unresolved items — does not dismiss the warning */}
+          {!unresolvedOverridden && unresolvedNotes.length > 0 && (
+            <button
+              onClick={() => setUnresolvedOverridden(true)}
+              style={{ marginTop: 8, padding: '6px 14px', borderRadius: 99, fontSize: 12, background: 'transparent', border: '1px solid #f59e0b', color: '#b45309', cursor: 'pointer' }}
+            >
+              Generate draft with unresolved items
+            </button>
+          )}
         </div>
       )}
 
