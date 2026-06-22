@@ -501,7 +501,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
           {/* Flagged summary */}
           {flaggedCount > 0 && (
             <div style={{ padding: '10px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10, fontSize: 13, color: '#92400e' }}>
-              ⚠ {flaggedCount} item{flaggedCount !== 1 ? 's' : ''} highlighted — review and reassign if needed
+              ⚠ {flaggedCount} item{flaggedCount !== 1 ? 's' : ''} highlighted for review — will remain in the report unless edited, reassigned or removed
             </div>
           )}
 
@@ -546,7 +546,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                       rows={3}
                       style={{ ...s.input, width: '100%', resize: 'vertical', fontSize: 13, lineHeight: 1.5, boxSizing: 'border-box', display: 'block' }}
                     />
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{row.action || 'Record only'}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{row.action || 'Record only'}</div>
+                      {flagged && row.flag_reason && (
+                        <div style={{ fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>{row.flag_reason}</div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
