@@ -116,10 +116,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     }
     // Track report_id for save persistence
     if (structuredData?.report_id) setReportId(structuredData.report_id);
-    // Handle incomplete generation
+    // Handle incomplete/emergency generation states
     if (structuredData?.generation_status === 'incomplete') {
       setGenerationIncomplete(true);
       setGenerationWarning(structuredData.warning || 'Generation incomplete — please retry.');
+    } else if (structuredData?._emergency_draft) {
+      setGenerationIncomplete(true);
+      setGenerationWarning(structuredData._generation_note || 'Emergency draft — claim extraction failed. Retry for complete SOC.');
     } else {
       setGenerationIncomplete(false);
       setGenerationWarning(null);
