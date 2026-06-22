@@ -126,6 +126,58 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // Save manually edited preview state
+    if (action === 'save_edited_preview') {
+      const { report_id, edited_sections, session_id: editSessionId } = req.body;
+      if (!report_id || !edited_sections) {
+        return res.status(400).json({ error: 'report_id and edited_sections required' });
+      }
+
+      const { error } = await supabase
+        .from('soc_reports')
+        .update({
+          edit_state: { sections: edited_sections, saved_at: new Date().toISOString() },
+          edit_state_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', report_id);
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      // Also update soc_drafts content_json
+      if (editSessionId) {
+        await supabase
+          .from('soc_drafts')
+          .update({ content_json: { sections: edited_sections, saved_at: new Date().toISOString() } })
+          .eq('session_id', editSessionId)
+          .order('created_at', { ascending: false });
+      }
+
+      return res.status(200).json({ ok: true, saved_at: new Date().toISOString() });
+    }
+
+    // Load saved edited preview state
+    if (action === 'load_edited_preview') {
+      const { report_id } = req.body;
+      if (!report_id) return res.status(400).json({ error: 'report_id required' });
+
+      const { data, error } = await supabase
+        .from('soc_reports')
+        .select('edit_state, edit_state_at, structured_data, preview_html')
+        .eq('id', report_id)
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      // Return edit_state if it exists, otherwise structured_data
+      return res.status(200).json({
+        edit_state: data?.edit_state || null,
+        edit_state_at: data?.edit_state_at || null,
+        structured_data: data?.structured_data || null,
+        preview_html: data?.preview_html || null,
+      });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   }
 
