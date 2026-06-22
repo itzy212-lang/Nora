@@ -2373,83 +2373,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     console.log('[ely-smart] responded with model:', modelUsed);
 
     // ── Draft With Ely: missing points analysis ───────────────────────────
-    // Non-blocking: draft is always returned regardless of whether this succeeds
-    // isDraftWithEly declared earlier
-    let missingPoints = [];
-
-    if (isDraftWithEly && fullReply) {
-      try {
-        const fullThreadText = suppliedEmailContext?.threadText
-          || body.context?.threadContext
-          || body.threadContext
-          || suppliedEmailContext?.body
-          || '';
-
-        if (fullThreadText && fullThreadText.length > 50) {
-          const mpMessages = [
-            {
-              role: 'system',
-              content: `You are reviewing a draft reply against the full email thread to identify material omissions.
-
-Identify points from the LATEST incoming email that the draft has NOT addressed.
-
-Do NOT flag a point if:
-- The draft addresses it, even briefly or implicitly
-- An earlier message in the thread already provided that information
-- The point is a pleasantry, acknowledgement or does not require action
-- The point is clearly trivial or administrative
-- The user appears to have deliberately chosen not to address it
-
-Only flag genuine material omissions — specific questions or requests the sender is waiting for.
-
-Keep each item short. One plain sentence per point. Maximum 5 items. No repetition. No explanation.
-Start each item with the sender's first name or "The sender".
-
-Return ONLY a valid JSON array. No markdown. Empty array [] if nothing material is missing.
-
-Example: ["David asked for a copy of the signed Letter of Appointment.", "David requested copies of the notice and drawings."]`,
-            },
-            {
-              role: 'user',
-              content: \`FULL EMAIL THREAD:
-\${fullThreadText.slice(0, 4000)}
-
-DRAFT REPLY:
-\${fullReply.slice(0, 2000)}\`,
-            },
-          ];
-
-          const mpTimeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('mp-timeout')), 5000)
-          );
-
-          const mpFetch = fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': \`Bearer \${process.env.OPENAI_API_KEY}\` },
-            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 300, temperature: 0.1, messages: mpMessages }),
-          });
-
-          const mpResponse = await Promise.race([mpFetch, mpTimeout]).catch(() => null);
-
-          if (mpResponse && mpResponse.ok) {
-            const mpData = await mpResponse.json().catch(() => ({}));
-            const mpRaw = (mpData.choices?.[0]?.message?.content || '').trim()
-              .replace(/^```json\n?/, '').replace(/\n?```$/, '');
-            try {
-              const parsed = JSON.parse(mpRaw);
-              missingPoints = Array.isArray(parsed)
-                ? [...new Set(parsed.filter(s => typeof s === 'string' && s.length > 5))].slice(0, 5)
-                : [];
-            } catch {
-              missingPoints = [];
-            }
-          }
-        }
-      } catch (mpErr) {
-        console.warn('[ely-smart] missing points analysis failed silently:', mpErr.message);
-        missingPoints = [];
-      }
-    }
+    // Disabled: running this synchronously was causing mobile connection drops
+    // on long drafts. Will re-enable as async when architecture supports it.
+    const isDraftWithElyMP = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
+    const missingPoints = [];
 
     return res.status(200).json({
       reply: fullReply,
