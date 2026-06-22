@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
-import { supabase } from '../../supabaseClient';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -62,53 +61,22 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
 
     async function initSession() {
-      // Look for existing SOC session for this project+AO
-      const { data: existing } = await supabase
-        .from('ai_sessions')
-        .select('id')
-        .eq('project_id', projectId)
-        .eq('session_type', 'soc')
-        .eq('ao_id', aoId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      let sid = existing?.[0]?.id || null;
-
-      if (!sid) {
-        // Create a new SOC session for this project+AO
-        const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
-        const { data: created } = await supabase
-          .from('ai_sessions')
-          .insert({
-            user_id: 'itzy212@gmail.com',
-            project_id: projectId,
-            ao_id: aoId,
-            session_type: 'soc',
-            surface: 'soc',
-            title: aoAddr,
-            auto_title: aoAddr,
-          })
-          .select('id')
-          .single();
-        sid = created?.id || null;
-      }
-
-      if (!sid) return;
-      setSocSessionId(sid);
+      const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+      // Find or create SOC session via API (service-role key)
+      const initRes = await fetch('/api/soc-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr }),
+      });
+      const initData = await initRes.json();
+      if (!initData.session_id) { console.error('[SOC] init_session failed:', initData); return; }
+      setSocSessionId(initData.session_id);
 
       // Load existing notes for this session
-      const { data: msgs } = await supabase
-        .from('ai_messages')
-        .select('id, role, content, created_at')
-        .eq('session_id', sid)
-        .order('created_at', { ascending: true });
-
-      if (msgs?.length) {
-        setMessages(msgs.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-        })));
+      const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
+      const notesData = await notesRes.json();
+      if (notesData.notes?.length) {
+        setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
         if (phase === 'setup') setPhase('recording');
       }
     }
@@ -121,32 +89,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     if (!projectId) return;
     setLoadingSessions(true);
     try {
-      // Read SOC sessions directly from ai_sessions
-      const { data: sessions } = await supabase
-        .from('ai_sessions')
-        .select('id, title, auto_title, ao_id, created_at, last_message_at')
-        .eq('project_id', projectId)
-        .eq('session_type', 'soc')
-        .order('last_message_at', { ascending: false, nullsFirst: false });
-
-      if (sessions) {
-        // Get note counts from ai_messages
-        const enriched = await Promise.all(sessions.map(async s => {
-          const { count } = await supabase
-            .from('ai_messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('session_id', s.id)
-            .eq('role', 'user');
-          return {
-            sessionId: s.id,
-            aoId: s.ao_id,
-            aoAddress: s.title || s.auto_title || 'Adjoining Owner',
-            noteCount: count || 0,
-            lastUpdated: s.last_message_at || s.created_at,
-          };
-        }));
-        setSessionHistory(enriched);
-      }
+      const res = await fetch(`/api/soc-save?project_id=${projectId}`);
+      const data = await res.json();
+      if (data.sessions) setSessionHistory(data.sessions);
     } catch (e) { console.error(e); }
     setLoadingSessions(false);
   }, [projectId]);
@@ -163,15 +108,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setStructuredData(null);
     setSidebarOpen(false);
 
-    // Load notes for this session
-    const { data: msgs } = await supabase
-      .from('ai_messages')
-      .select('id, role, content, created_at')
-      .eq('session_id', session.sessionId)
-      .order('created_at', { ascending: true });
-
-    if (msgs?.length) {
-      setMessages(msgs.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    const res = await fetch(`/api/soc-save?session_id=${session.sessionId}`);
+    const data = await res.json();
+    if (data.notes?.length) {
+      setMessages(data.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
     }
     setPhase('recording');
   }, []);
@@ -231,22 +171,18 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     setMessages(prev => [...prev, { id: msgId, role: 'user', content: userContent }]);
     setTextInput('');
 
-    // Save directly to ai_messages — same table that already works
-    const { error } = await supabase.from('ai_messages').insert({
-      id: msgId,
-      session_id: socSessionId,
-      role: 'user',
-      content: userContent,
-      project_id: projectId || null,
-      surface: 'soc',
+    // Save via API route (service-role key required)
+    const saveRes = await fetch('/api/soc-save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_note', session_id: socSessionId, content: userContent, project_id: projectId || null }),
     });
-
-    if (error) {
-      console.error('[SOC] save failed:', error.message);
-      setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: 'Note could not be saved. Please check your connection.' }]);
-    } else {
-      // Show a simple acknowledgement — no API call needed
+    if (saveRes.ok) {
       setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: 'Noted.' }]);
+    } else {
+      const err = await saveRes.json().catch(() => ({}));
+      console.error('[SOC] save_note failed:', err);
+      setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
     }
   }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex]);
 
