@@ -635,8 +635,17 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
           <button onClick={handleSaveAndEmail} disabled={pdfProcessing} style={{ ...s.secondaryBtn, opacity: pdfProcessing ? 0.65 : 1, background: '#10b981', color: '#fff', border: 'none' }}>
             {pdfProcessing ? 'Preparing…' : '💾 Save & Email'}
           </button>
-          <button onClick={printPreview} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }} disabled={pdfProcessing}>
-            {pdfProcessing ? 'Generating PDF…' : 'Download PDF'}
+          <button
+            onClick={() => {
+              if (unresolvedNotes.length > 0 && !unresolvedOverridden) {
+                if (!window.confirm(`${unresolvedNotes.length} note(s) remain unresolved. Generate PDF anyway?`)) return;
+              }
+              printPreview();
+            }}
+            style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1, position: 'relative' }}
+            disabled={pdfProcessing}
+          >
+            {pdfProcessing ? 'Generating PDF…' : (unresolvedNotes.length > 0 && !unresolvedOverridden ? `⚠ Download PDF (${unresolvedNotes.length} unresolved)` : 'Download PDF')}
           </button>
         </div>
       </div>
@@ -654,21 +663,86 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
       </div>
 
-      {unresolvedNotes.length > 0 && (
+      {(unresolvedNotes.length > 0 || auditIssues.length > 0) && !unresolvedOverridden && (
         <div style={{ marginBottom: 12, padding: '12px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-            ⚠ Unresolved notes — review before finalising
+            ⚠ Review before finalising
           </div>
+
+          {/* Audit issues */}
+          {auditIssues.map((issue, i) => (
+            <div key={`ai-${i}`} style={{ marginBottom: 6, fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 6, padding: '4px 8px' }}>
+              {issue}
+            </div>
+          ))}
+
+          {/* Unresolved notes — interactive */}
           {unresolvedNotes.map((item, i) => (
-            <div key={i} style={{ marginBottom: 8, fontSize: 13 }}>
-              <div style={{ fontStyle: 'italic', color: 'var(--text2)' }}>"{item.note_text}"</div>
+            <div key={i} style={{ marginBottom: 10, padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #fcd34d' }}>
+              <div style={{ fontStyle: 'italic', fontSize: 13, color: 'var(--text)', marginBottom: 6 }}>
+                "{item.note_text}"
+              </div>
               {item.suggested_section && (
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>
                   Suggested: {item.suggested_section}{item.reason ? ` — ${item.reason}` : ''}
                 </div>
               )}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {/* Accept suggestion */}
+                {item.suggested_section && (
+                  <button
+                    onClick={() => {
+                      setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
+                      setStructuredData(prev => {
+                        if (!prev) return prev;
+                        const sections = [...(prev.sections || [])];
+                        const existing = sections.find(s => s.title === item.suggested_section);
+                        const row = { ref: `UN${String(i+1).padStart(2,'0')}`, observation: item.note_text, action: 'Record only', source_note_ids: [item.note_index] };
+                        if (existing) {
+                          existing.rows = [...(existing.rows || []), row];
+                        } else {
+                          sections.push({ title: item.suggested_section, number: sections.length + 2, rows: [row] });
+                        }
+                        return { ...prev, sections, unresolved_notes: prev.unresolved_notes?.filter((_, idx) => idx !== i) || [] };
+                      });
+                    }}
+                    style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                  >
+                    Add to {item.suggested_section}
+                  </button>
+                )}
+                {/* Contextual */}
+                <button
+                  onClick={() => setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolved: true, resolution: 'contextual' } : n).filter((n, idx) => idx !== i))}
+                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
+                >
+                  Contextual
+                </button>
+                {/* Site note */}
+                <button
+                  onClick={() => setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i))}
+                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', cursor: 'pointer' }}
+                >
+                  Site note
+                </button>
+                {/* Exclude */}
+                <button
+                  onClick={() => setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i))}
+                  style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: '#fee2e2', color: '#991b1b', border: 'none', cursor: 'pointer' }}
+                >
+                  Exclude
+                </button>
+              </div>
             </div>
           ))}
+
+          {/* Generate anyway option */}
+          <button
+            onClick={() => setUnresolvedOverridden(true)}
+            style={{ marginTop: 8, padding: '6px 14px', borderRadius: 99, fontSize: 12, background: 'transparent', border: '1px solid #f59e0b', color: '#b45309', cursor: 'pointer' }}
+          >
+            Generate anyway
+          </button>
         </div>
       )}
 
