@@ -687,6 +687,10 @@ Infer sections from subject matter:
 - patio, rear garden, garden fence, garden wall → Rear Garden
 Where a section first appears only as context and later receives condition observations, create it as an active section.
 
+CARRY-FORWARD RULE: Once a section is established — either explicitly declared or inferred from content — assign all subsequent notes to that same section until a clear break occurs. A break is only: (a) an explicit new room or area declaration; (b) content that is physically incompatible with the current section (e.g. external features such as patio, driveway, brickwork when currently recording an internal room); or (c) a surveyor instruction to reassign earlier notes (e.g. "the last two notes were in the bathroom"). Do NOT classify a note as unresolved or unallocated solely because it does not name a section — it must inherit the current active section context.
+
+RETROACTIVE REASSIGNMENT: Where the surveyor says "the last [N] notes were in [room]", "those last notes were [room]", or similar — reassign those notes to the named section retroactively before finalising all section assignments.
+
 Step 3: ASSIGN ALL OBSERVATIONS
 Every condition observation must be assigned to a section.
 Where assignment is genuinely uncertain, place in the most logical section and flag in unresolved_notes.
