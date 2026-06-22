@@ -1020,6 +1020,160 @@ function validateSocJson(parsed) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// STAGE 3: DRAFTING QUALITY AUDIT
+// Reviews every drafted row for wording quality issues.
+// Auto-fixes stylistic issues. Flags factual/ambiguous issues for review.
+// Uses gpt-4o.
+// ═══════════════════════════════════════════════════════════════════════════
+async function runQualityAudit(draftedResult, claims, projectMeta, apiKey) {
+  const rowsForReview = [];
+  for (const section of (draftedResult.sections || [])) {
+    for (const row of (section.rows || [])) {
+      if (row.observation) rowsForReview.push({ ref: row.ref, section: section.title, observation: row.observation });
+    }
+  }
+  if (rowsForReview.length === 0) return draftedResult;
+
+  const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing drafted Schedule of Conditions observations for quality.
+
+For each row, check:
+WORDING ISSUES (auto-fix if purely stylistic):
+- wording too close to raw dictation sentence structure
+- sentence fragments or missing verbs
+- poor grammar or missing articles
+- speech-to-text residue (e.g. "and and", "that that", garbled phrases)
+- vague expressions ("looks fine", "seems okay", "appears good")
+- repeated phrases across consecutive rows
+- "good condition" or "very good condition" (use "no visible defects noted")
+- unnecessary repetition of "no visible defects noted" without naming the element
+- informal language
+
+FACTUAL ISSUES (flag with flagged:true, do NOT auto-fix):
+- over-fragmented rows (separate claims that belong together)
+- over-compressed rows (multiple unrelated defects merged into one)
+- unsupported diagnosis or causation
+- invented measurements not in source claims
+
+PROHIBITED TERMS: "looks fine", "seems fine", "good condition", "very good condition", "appears okay", "no issues", "all fine"
+
+PREFERRED: "no visible defects were noted at the time of inspection", "appeared generally free from visible defects"
+
+Return the full rows array with corrections applied where stylistic, and flagged:true + flag_reason where factual.
+
+Return JSON only: { "rows": [ { "ref": "...", "observation": "corrected or original", "flagged": false, "flag_reason": null } ] }
+
+ROWS TO REVIEW:
+${JSON.stringify(rowsForReview, null, 2)}`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0.1,
+        max_tokens: 6000,
+        messages: [
+          { role: 'system', content: 'You are a quality reviewer for Schedule of Conditions drafts. Return valid JSON only.' },
+          { role: 'user', content: QUALITY_PROMPT.replace('${JSON.stringify(rowsForReview, null, 2)}', JSON.stringify(rowsForReview, null, 2)) },
+        ],
+      }),
+    });
+
+    if (!res.ok) { console.warn('[generate-soc] Stage 3 quality audit failed:', res.status); return draftedResult; }
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim();
+    let qualityResult;
+    try { qualityResult = parseJsonFromModel(raw); } catch { return draftedResult; }
+
+    if (!Array.isArray(qualityResult?.rows)) return draftedResult;
+
+    // Build lookup: ref → corrected row
+    const correctedByRef = {};
+    for (const r of qualityResult.rows) correctedByRef[r.ref] = r;
+
+    // Apply corrections to draftedResult
+    const improved = JSON.parse(JSON.stringify(draftedResult));
+    for (const section of (improved.sections || [])) {
+      for (const row of (section.rows || [])) {
+        const correction = correctedByRef[row.ref];
+        if (correction) {
+          if (correction.observation && correction.observation !== row.observation) {
+            row.observation = correction.observation;
+          }
+          if (correction.flagged) {
+            row.flagged = true;
+            row.flag_reason = correction.flag_reason || 'Quality review flagged';
+          }
+        }
+      }
+    }
+    console.log('[generate-soc] Stage 3 quality audit complete');
+    return improved;
+  } catch (e) {
+    console.warn('[generate-soc] Stage 3 quality audit error (non-fatal):', e.message);
+    return draftedResult;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STAGE 4: FACTUAL FIDELITY AUDIT
+// Compares each final row against its source claims.
+// Flags where facts changed, measurements differ, or superseded wording survived.
+// ═══════════════════════════════════════════════════════════════════════════
+function runFidelityAudit(draftedResult, claims) {
+  if (!claims?.length) return { issues: [], warnings: [] };
+
+  const issues = [];
+  const warnings = [];
+  const claimMap = {};
+  for (const c of claims) claimMap[c.claim_id] = c;
+
+  for (const section of (draftedResult.sections || [])) {
+    for (const row of (section.rows || [])) {
+      const sourceClaims = (row.source_claim_ids || []).map(id => claimMap[id]).filter(Boolean);
+      if (sourceClaims.length === 0 && (row.source_note_ids || []).length > 0) {
+        warnings.push(`Row ${row.ref}: has source_note_ids but no source_claim_ids — claim traceability incomplete.`);
+        continue;
+      }
+
+      const obs = (row.observation || '').toLowerCase();
+
+      // Check for superseded wording surviving
+      const supersededClaims = sourceClaims.filter(c => c.status === 'superseded');
+      for (const sc of supersededClaims) {
+        warnings.push(`Row ${row.ref}: includes superseded claim ${sc.claim_id} ("${sc.content?.slice(0, 60)}") — check it has been correctly replaced.`);
+      }
+
+      // Check measurements not altered
+      const activeClaims = sourceClaims.filter(c => c.status === 'active');
+      for (const c of activeClaims) {
+        // Extract numbers from claim content
+        const claimNums = (c.content || '').match(/\d+\s*mm|\d+\s*m\b|\d+00mm/gi) || [];
+        for (const num of claimNums) {
+          if (!obs.includes(num.toLowerCase())) {
+            issues.push(`Row ${row.ref}: measurement "${num}" from claim ${c.claim_id} may not appear in final observation.`);
+          }
+        }
+      }
+
+      // Check for unsupported causation/structural conclusions
+      if (/(caused by|due to|result of|structural|movement|settlement|subsidence|heave)/i.test(row.observation || '')) {
+        const hasCausation = activeClaims.some(c =>
+          /(caused|structural|movement|settlement|subsidence|heave)/i.test(c.content || '')
+        );
+        if (!hasCausation) {
+          issues.push(`Row ${row.ref}: contains potential unsupported causation or structural conclusion not in source claims.`);
+        }
+      }
+    }
+  }
+
+  return { issues, warnings };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STAGE 1: ATOMIC CLAIM EXTRACTION
 // Breaks every raw note into separate factual claims before drafting.
 // Uses gpt-4o-mini (fast extraction task).
@@ -1337,95 +1491,119 @@ async function persistClaimsToDb(claims, sessionId, projectId, aoId, reportId) {
 // MAIN EXTRACTION FUNCTION — now multi-stage pipeline
 // ═══════════════════════════════════════════════════════════════════════════
 async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId) {
-  console.log('[generate-soc] Stage 1: extracting atomic claims...');
+  // ── Try to load live persisted claims first ──────────────────────────────
   let claims = [];
-  let draftedResult;
+  let claimsFromLive = false;
 
-  try {
-    claims = await extractAtomicClaims(message, projectMeta, apiKey);
-    console.log(`[generate-soc] Stage 1 complete: ${claims.length} claims extracted`);
-  } catch (claimErr) {
-    console.warn('[generate-soc] Claim extraction failed, falling back to single-stage:', claimErr.message);
-  }
-
-  if (claims.length > 0) {
-    // Stage 2: Professional drafting from claims
-    console.log('[generate-soc] Stage 2: professional drafting from claims...');
+  if (sessionId) {
     try {
-      draftedResult = await draftFromClaims(claims, projectMeta, message, apiKey);
-      console.log('[generate-soc] Stage 2 complete');
-    } catch (draftErr) {
-      console.warn('[generate-soc] Claim-based drafting failed, falling back to single-stage:', draftErr.message);
-      claims = []; // force fallback
-    }
-  }
-
-  if (!draftedResult) {
-    // Fallback: original single-stage pipeline (safety net)
-    console.log('[generate-soc] Using fallback single-stage pipeline');
-    const systemMessage = GENERATOR_SYSTEM_PROMPT;
-    const userPrompt = SOC_GENERATOR_PROMPT
-      .replace('{{BO_ADDRESS}}', projectMeta.bo_address || 'Not provided')
-      .replace('{{AO_ADDRESS}}', projectMeta.ao_address || 'Not provided')
-      .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date || new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
-      .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || 'Not specified')
-      .replace('{{RAW_NOTES}}', message);
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        temperature: 0.1,
-        max_tokens: 8000,
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
-    }
-
-    const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content || '';
-    try {
-      draftedResult = parseJsonFromModel(raw);
+      const { data: liveClaims } = await supabase
+        .from('soc_claims')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('source_note_id', { ascending: true })
+        .order('sequence', { ascending: true });
+      if (liveClaims?.length > 0) {
+        claims = liveClaims;
+        claimsFromLive = true;
+        console.log(`[generate-soc] Loaded ${claims.length} persisted live claims`);
+      }
     } catch (e) {
-      const reason = data.choices?.[0]?.finish_reason === 'length'
-        ? 'GPT-4o returned invalid JSON (response truncated — increase max_tokens or reduce notes length)'
-        : 'GPT-4o returned invalid JSON';
-      throw new Error(reason);
+      console.warn('[generate-soc] Could not load live claims:', e.message);
     }
+  }
+
+  // Stage 1: Extract claims from raw notes if we don't have live ones
+  if (!claimsFromLive) {
+    console.log('[generate-soc] Stage 1: extracting atomic claims from raw notes...');
+    try {
+      claims = await extractAtomicClaims(message, projectMeta, apiKey);
+      console.log(`[generate-soc] Stage 1 complete: ${claims.length} claims extracted`);
+    } catch (claimErr) {
+      console.error('[generate-soc] Stage 1 FAILED:', claimErr.message);
+      throw new Error(`GENERATION_INCOMPLETE: Claim extraction failed — ${claimErr.message}. Raw notes preserved. Please retry.`);
+    }
+  }
+
+  if (claims.length === 0) {
+    throw new Error('GENERATION_INCOMPLETE: No claims could be extracted from the dictation. Please check notes and retry.');
+  }
+
+  // Stage 2: Professional drafting from claims
+  console.log('[generate-soc] Stage 2: professional drafting from claims...');
+  let draftedResult;
+  try {
+    draftedResult = await draftFromClaims(claims, projectMeta, message, apiKey);
+    console.log('[generate-soc] Stage 2 complete');
+  } catch (draftErr) {
+    console.error('[generate-soc] Stage 2 FAILED:', draftErr.message);
+    throw new Error(`GENERATION_INCOMPLETE: Professional drafting failed — ${draftErr.message}. Claims preserved. Please retry.`);
+  }
+
+  // Stage 3: Quality audit (auto-fixes stylistic issues, flags factual ones)
+  console.log('[generate-soc] Stage 3: quality audit...');
+  try {
+    draftedResult = await runQualityAudit(draftedResult, claims, projectMeta, apiKey);
+  } catch (qualErr) {
+    console.warn('[generate-soc] Stage 3 quality audit failed (non-fatal):', qualErr.message);
   }
 
   validateSocJson(draftedResult);
 
-  // Completeness audit — claim-level if claims available, note-level otherwise
-  const audit = runClaimCompletenessAudit(draftedResult, claims, message);
-  if (audit.issues.length > 0) console.warn('[generate-soc] Completeness audit issues:', audit.issues);
-  if (audit.warnings.length > 0) console.warn('[generate-soc] Completeness audit warnings:', audit.warnings);
+  // Assign stable row IDs
+  for (const section of (draftedResult.sections || [])) {
+    for (const row of (section.rows || [])) {
+      if (!row.row_id) row.row_id = crypto.randomUUID?.() || `row-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    }
+  }
 
-  // Persist claims (non-blocking — don't let DB issues stop the response)
-  if (claims.length > 0 && sessionId) {
+  // Stage 4: Factual fidelity audit
+  const fidelity = runFidelityAudit(draftedResult, claims);
+  if (fidelity.issues.length > 0) console.warn('[generate-soc] Fidelity issues:', fidelity.issues);
+
+  // Claim-level completeness audit
+  const audit = runClaimCompletenessAudit(draftedResult, claims, message);
+  if (audit.issues.length > 0) console.warn('[generate-soc] Completeness issues:', audit.issues);
+
+  // Persist new claims to DB if we freshly extracted them
+  if (!claimsFromLive && claims.length > 0 && sessionId) {
     persistClaimsToDb(claims, sessionId, projectId, aoId, null).catch(() => {});
   }
 
+  // Update claim destinations (non-blocking)
+  if (sessionId) updateClaimDestinations(draftedResult, sessionId).catch(() => {});
+
   return {
-    sections:         draftedResult.sections,
-    discussion:       draftedResult.discussion,
-    general_notes:    draftedResult.general_notes,
-    actions:          draftedResult.actions,
-    award_notes:      draftedResult.award_notes,
-    emails_required:  draftedResult.emails_required,
-    unresolved_notes: draftedResult.unresolved_notes || [],
-    audit_issues:     audit.issues,
-    audit_warnings:   audit.warnings,
-    claims_extracted: claims.length,
+    sections:          draftedResult.sections,
+    discussion:        draftedResult.discussion,
+    general_notes:     draftedResult.general_notes,
+    actions:           draftedResult.actions,
+    award_notes:       draftedResult.award_notes,
+    emails_required:   draftedResult.emails_required,
+    unresolved_notes:  draftedResult.unresolved_notes || [],
+    audit_issues:      [...audit.issues, ...fidelity.issues],
+    audit_warnings:    [...audit.warnings, ...fidelity.warnings],
+    claims_extracted:  claims.length,
+    claims_from_live:  claimsFromLive,
   };
+}
+
+// Update claim destination field after drafting
+async function updateClaimDestinations(draftedResult, sessionId) {
+  const updates = [];
+  for (const section of (draftedResult.sections || [])) {
+    for (const row of (section.rows || [])) {
+      for (const cid of (row.source_claim_ids || [])) {
+        updates.push({ claim_id: cid, destination_type: 'soc_row', destination_id: row.row_id || row.ref, represented: true });
+      }
+    }
+  }
+  for (const u of updates) {
+    await supabase.from('soc_claims')
+      .update({ destination_type: u.destination_type, destination_id: u.destination_id, represented: true })
+      .eq('session_id', sessionId)
+      .eq('claim_id', u.claim_id);
+  }
 }
 
 async function getSocDate(projectId, aoId, selectedAO) {
@@ -1563,7 +1741,23 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Missing OpenAI API key' });
       }
 
-      dataForRender = await extractStructuredData(notesText, projectMeta, apiKey, session_id, project_id, ao_id);
+      try {
+        dataForRender = await extractStructuredData(notesText, projectMeta, apiKey, session_id, project_id, ao_id);
+      } catch (genErr) {
+        if (genErr.message?.startsWith('GENERATION_INCOMPLETE')) {
+          // Return structured incomplete response — client shows warning + retry
+          return res.status(200).json({
+            generation_status: 'incomplete',
+            warning: genErr.message,
+            preview_html: null,
+            structured_data: null,
+            unresolved_notes: [],
+            audit_issues: [genErr.message],
+            audit_warnings: [],
+          });
+        }
+        throw genErr; // re-throw unexpected errors
+      }
     }
 
     dataForRender = {
