@@ -264,6 +264,11 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const cleanDraft = cleanSignOff((splitDraft || raw).trim());
 
       const newMsgs = [];
+      // Extract missing points from structured response
+      const draftMissingPoints = Array.isArray(result.missing_points) && result.missing_points.length > 0
+        ? result.missing_points
+        : null;
+
       // Only show the draft bubble — no brief commentary before or after
       if (cleanDraft) {
         newMsgs.push({
@@ -272,6 +277,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
           draft: cleanDraft,
           draftType: result.draftType || 'email',
           messageType: 'draft',
+          missingPoints: draftMissingPoints,
         });
       } else {
         // No draft detected — show as plain Ely response (discussion, analysis, question answer etc.)
@@ -386,12 +392,26 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
                 <SummaryCard text={msg.content} />
               </div>
             ) : (
-              <ChatMessage
-                key={msg.id}
-                msg={msg}
-                onUseDraft={applyDraftToComposer}
-                onOpenInComposer={applyDraftToComposer}
-              />
+              <div key={msg.id}>
+                <ChatMessage
+                  msg={msg}
+                  onUseDraft={applyDraftToComposer}
+                  onOpenInComposer={applyDraftToComposer}
+                />
+                {msg.missingPoints && msg.missingPoints.length > 0 && (
+                  <div style={{ margin: '6px 0 10px 0', padding: '10px 13px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                      Still to address
+                    </div>
+                    {msg.missingPoints.map((point, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+                        <span style={{ flexShrink: 0, color: 'var(--text3)' }}>•</span>
+                        <span>{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )
           ))}
 
