@@ -1019,83 +1019,415 @@ function validateSocJson(parsed) {
   }
 }
 
-async function extractStructuredData(message, projectMeta, apiKey) {
+// ═══════════════════════════════════════════════════════════════════════════
+// STAGE 1: ATOMIC CLAIM EXTRACTION
+// Breaks every raw note into separate factual claims before drafting.
+// Uses gpt-4o-mini (fast extraction task).
+// ═══════════════════════════════════════════════════════════════════════════
+async function extractAtomicClaims(rawNotes, projectMeta, apiKey) {
+  const CLAIM_EXTRACTION_PROMPT = `You are assisting a party wall surveyor preparing a Schedule of Conditions.
+
+Your task: extract every atomic factual claim from the raw dictated site notes below.
+One note may contain many separate claims. Do not force one note into one claim.
+One note may contain: section changes, construction, finish, general condition, specific defects, access limitations, operational tests, contextual info, corrections, site notes.
+
+SECTION CARRY-FORWARD: Once a section is established, all subsequent claims belong to it until: (a) explicit new room/area; (b) physically incompatible content (external vs internal); (c) surveyor reassigns. Claims with no room name inherit the current active section. Do NOT leave a claim unallocated merely because it has no room name.
+
+RETROACTIVE REASSIGNMENT: "The last N notes were in [room]" — apply retroactively.
+
+AMENDMENT HANDLING: Where a note corrects a measurement, direction or wording:
+- Mark the original claim status: "superseded", superseded_by: "[correcting claim_id]"
+- The correcting claim status: "active", claim_type: "amendment"
+- Final active claim must contain only the corrected version.
+- Example: "intermittent crack" then "correction: single hairline crack 500mm" → supersede first, active claim says "A hairline crack extends approximately 500mm".
+
+Claim types: section_declaration | construction_description | finish_description | general_condition | specific_defect | access_limitation | operational_test | contextual | amendment | site_note | award_note | excluded | unresolved
+
+IMPORTANT: content field should state the fact in clean English — not the raw dictation wording. But do NOT embellish: state only what the note says.
+
+Return valid JSON only. No markdown. No preamble.
+
+{
+  "claims": [
+    {
+      "claim_id": "claim-001",
+      "source_note_id": 1,
+      "sequence": 1,
+      "claim_type": "construction_description",
+      "section": "Ground Floor Front Elevation Room",
+      "element": "Party wall",
+      "location": null,
+      "content": "The party wall has a plastered and painted finish.",
+      "confidence": "high",
+      "status": "active",
+      "superseded_by": null,
+      "amendment_mode": null
+    }
+  ]
+}
+
+RAW NOTES:
+${rawNotes}`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      temperature: 0.05,
+      max_tokens: 8000,
+      messages: [
+        { role: 'system', content: 'You extract atomic factual claims from site notes. Return valid JSON only.' },
+        { role: 'user', content: CLAIM_EXTRACTION_PROMPT.replace('${rawNotes}', rawNotes) },
+      ],
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Claim extraction OpenAI error ${response.status}`);
+  const data = await response.json();
+  const raw = (data.choices?.[0]?.message?.content || '').trim();
+  try {
+    const parsed = parseJsonFromModel(raw);
+    return Array.isArray(parsed.claims) ? parsed.claims : [];
+  } catch (e) {
+    console.error('[generate-soc] claim extraction parse failed:', raw.slice(0, 300));
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STAGE 2: PROFESSIONAL DRAFTING FROM CLAIMS
+// Groups related claims into observations and writes professional SOC prose.
+// Uses gpt-4o (quality matters here).
+// ═══════════════════════════════════════════════════════════════════════════
+async function draftFromClaims(claims, projectMeta, rawNotes, apiKey) {
   const boAddress = projectMeta.bo_address || 'Not provided';
   const aoAddress = projectMeta.ao_address || 'Not provided';
   const inspectionDate = projectMeta.inspection_date ||
     new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const proposedWorks = projectMeta.proposed_works || 'Not specified';
 
-  const systemMessage = GENERATOR_SYSTEM_PROMPT;
+  // Group claims by section for easier reading
+  const claimsBySection = {};
+  const sectionOrder = [];
+  for (const c of claims) {
+    const sec = c.section || 'Unallocated';
+    if (!claimsBySection[sec]) { claimsBySection[sec] = []; sectionOrder.push(sec); }
+    claimsBySection[sec].push(c);
+  }
+  const claimsSummary = sectionOrder.map(sec =>
+    `SECTION: ${sec}\n` + claimsBySection[sec].map(c =>
+      `  [${c.claim_id}] type=${c.claim_type} status=${c.status}${c.element ? ' element=' + c.element : ''}${c.location ? ' location=' + c.location : ''}\n  content: ${c.content}`
+    ).join('\n')
+  ).join('\n\n');
 
-  const userPrompt = SOC_GENERATOR_PROMPT
-    .replace('{{BO_ADDRESS}}', boAddress)
-    .replace('{{AO_ADDRESS}}', aoAddress)
-    .replace('{{INSPECTION_DATE}}', inspectionDate)
-    .replace('{{PROPOSED_WORKS}}', proposedWorks)
-    .replace('{{RAW_NOTES}}', message);
+  const PROFESSIONAL_DRAFTER_PROMPT = `You are a Senior Chartered Party Wall Surveyor preparing a Schedule of Conditions report under the Party Wall etc. Act 1996, prepared by Itzik Darel ACIArb MIPWS of Square One Consulting.
+
+You have been given a set of reconciled atomic factual claims extracted from site notes.
+
+CRITICAL: You are NOT transcribing or lightly editing the surveyor's words. You are interpreting the reconciled factual record and writing a professional Schedule of Conditions observation from first principles. Preserve every supported fact. Do not preserve the surveyor's sentence structure.
+
+COMPLETENESS RULE: Every active claim must appear in the final output. Do not omit any claim with status "active". Contextual claims may be noted briefly. Site notes go in general_notes. Award notes go in award_notes. Unresolved claims go in unresolved_notes. No active claim may silently disappear.
+
+GROUPING RULES:
+- Combine claims about the same element (construction + finish + general condition) into ONE observation row.
+- Keep separate where: different elements, different specific defects, different locations, separate operational tests, separate access limitations.
+- Do not produce one mechanical row per claim.
+
+PROFESSIONAL WRITING STANDARD:
+- Past tense for condition observations: appeared, was noted, were observed.
+- Full sentences. No fragments.
+- No invented facts. No unsupported diagnosis. No unsupported causation.
+- Preserve measurements, directions, locations exactly.
+- "No visible defects" must name the element and include "at the time of inspection."
+- Window/door tests: state what was tested and the result.
+- Staining: note whether dry at time of inspection.
+- Access limitations: note what was not accessible and why.
+
+EXAMPLES (raw claim → professional wording):
+"Party wall plastered painted finish" + "No visible defects to party wall"
+→ "The party wall has a plastered and painted finish and appeared generally free from visible defects at the time of inspection."
+
+"Ceiling plasterboard" + "Painted finish" + "No defects ceiling"
+→ "The ceiling is formed in plasterboard with a painted finish and appeared free from visible defects at the time of inspection."
+
+"Crack left corner diagonal" + "Crack left corner vertical to ceiling"
+→ "Two hairline cracks were noted at the upper left-hand corner. One extends diagonally towards the ceiling junction, while the second extends vertically from the corner to the ceiling."
+
+"Window sticks on frame"
+→ "The window opener closest to the party wall was tested and opened partially but bound against the frame, preventing it from opening fully."
+
+"Door opens closes no sticking"
+→ "The door was tested and operated satisfactorily without sticking, binding or jamming."
+
+"No visible defects" only — if no construction/finish info: do NOT invent it.
+
+PROPERTY DETAILS:
+Building Owner: ${boAddress}
+Adjoining Owner: ${aoAddress}
+Inspection date: ${inspectionDate}
+Proposed works: ${proposedWorks}
+Prepared by: Itzik Darel ACIArb MIPWS – Square One Consulting
+
+Return valid JSON only. No markdown. No commentary. No code fences.
+
+Required JSON structure:
+{
+  "sections": [
+    {
+      "number": 1,
+      "title": "Section Title",
+      "rows": [
+        {
+          "ref": "XX01",
+          "element": "Party wall",
+          "observation": "Professional observation text.",
+          "action": "Record only",
+          "source_note_ids": [1, 2],
+          "source_claim_ids": ["claim-001", "claim-002"],
+          "flagged": false,
+          "flag_reason": null
+        }
+      ]
+    }
+  ],
+  "general_notes": [],
+  "discussion": "",
+  "actions": [],
+  "award_notes": [],
+  "emails_required": [],
+  "unresolved_notes": [
+    {
+      "note_index": 5,
+      "note_text": "Raw text",
+      "suggested_section": "Suggested section",
+      "reason": "Why unresolved"
+    }
+  ]
+}
+
+Flag a row (flagged: true) only where the claim was genuinely unresolved/uncertain.
+
+RECONCILED CLAIMS BY SECTION:
+${claimsSummary}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-4o',
       temperature: 0.1,
-      max_tokens: 7000,
+      max_tokens: 8000,
       messages: [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: userPrompt },
+        {
+          role: 'system',
+          content: 'You are a Senior Chartered Party Wall Surveyor writing a professional Schedule of Conditions. Return valid JSON only. No markdown. No commentary.',
+        },
+        {
+          role: 'user',
+          content: PROFESSIONAL_DRAFTER_PROMPT
+            .replace('${boAddress}', boAddress)
+            .replace('${aoAddress}', aoAddress)
+            .replace('${inspectionDate}', inspectionDate)
+            .replace('${proposedWorks}', proposedWorks)
+            .replace('${claimsSummary}', claimsSummary),
+        },
       ],
     }),
   });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
-  }
-
+  if (!response.ok) throw new Error(`Professional drafting OpenAI error ${response.status}`);
   const data = await response.json();
-  const raw = data.choices?.[0]?.message?.content || '';
-
-  let parsed;
+  const raw = (data.choices?.[0]?.message?.content || '').trim();
   try {
-    parsed = parseJsonFromModel(raw);
+    return parseJsonFromModel(raw);
   } catch (e) {
-    console.error('[generate-soc] JSON parse failed. finish_reason:', data.choices?.[0]?.finish_reason);
-    console.error('[generate-soc] Raw response start:', raw.slice(0, 500));
-    const reason = data.choices?.[0]?.finish_reason === 'length'
-      ? 'GPT-4o returned invalid JSON (response truncated — increase max_tokens or reduce notes length)'
-      : 'GPT-4o returned invalid JSON';
-    throw new Error(reason);
+    console.error('[generate-soc] professional drafting parse failed:', raw.slice(0, 500));
+    throw new Error('Professional drafting stage returned invalid JSON');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLAIM-LEVEL COMPLETENESS AUDIT
+// ═══════════════════════════════════════════════════════════════════════════
+function runClaimCompletenessAudit(draftedJSON, claims, rawNotes) {
+  const issues = [];
+  const warnings = [];
+
+  if (!claims || claims.length === 0) {
+    // Fallback to note-level audit if no claims available
+    return runCompletenessAudit(draftedJSON, rawNotes);
   }
 
-  // Validate structure — throws on fatal errors, auto-fixes missing action fields
-  validateSocJson(parsed);
-
-  // Run coded completeness audit
-  const audit = runCompletenessAudit(parsed, message);
-  if (audit.issues.length > 0) {
-    console.warn('[generate-soc] Completeness audit issues:', audit.issues);
+  // Build set of all claim_ids referenced in final rows
+  const referencedClaimIds = new Set();
+  for (const section of (draftedJSON.sections || [])) {
+    for (const row of (section.rows || [])) {
+      for (const cid of (row.source_claim_ids || [])) referencedClaimIds.add(cid);
+    }
   }
-  if (audit.warnings.length > 0) {
-    console.warn('[generate-soc] Completeness audit warnings:', audit.warnings);
+
+  // Check every active claim has a destination
+  const activeClaims = claims.filter(c => c.status === 'active');
+  const unaccountedClaims = activeClaims.filter(c => !referencedClaimIds.has(c.claim_id));
+
+  for (const c of unaccountedClaims) {
+    // Contextual/site_note/award_note may legitimately not appear in rows
+    if (['contextual', 'site_note', 'award_note', 'section_declaration'].includes(c.claim_type)) {
+      warnings.push(`Claim ${c.claim_id} (${c.claim_type}) not in any row — check contextual/note placement.`);
+    } else {
+      issues.push(`MISSING: claim ${c.claim_id} (${c.claim_type}, section "${c.section}") has no destination in the drafted SOC. Content: ${c.content?.slice(0, 80)}`);
+    }
+  }
+
+  // Check for no-defects + defect contradiction at same element level
+  for (const section of (draftedJSON.sections || [])) {
+    const sectionTitle = section.title || '';
+    const noDefectsRows = (section.rows || []).filter(r =>
+      /no visible defects/i.test(r.observation || '') && !/except|apart from|other than/i.test(r.observation || '')
+    );
+    const defectRows = (section.rows || []).filter(r =>
+      /crack|open joint|staining|spalling|deteriorat|displaced|damage/i.test(r.observation || '')
+    );
+
+    for (const nd of noDefectsRows) {
+      for (const df of defectRows) {
+        // Only flag if same element
+        if (nd.element && df.element && nd.element.toLowerCase() === df.element.toLowerCase()) {
+          warnings.push(`Section "${sectionTitle}": unqualified no-defects statement for "${nd.element}" alongside defect observation. Consider qualifying the no-defects row.`);
+        }
+      }
+    }
+  }
+
+  return { issues, warnings };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PERSIST CLAIMS TO soc_claims TABLE (non-blocking)
+// ═══════════════════════════════════════════════════════════════════════════
+async function persistClaimsToDb(claims, sessionId, projectId, aoId, reportId) {
+  if (!claims?.length || !sessionId) return;
+  try {
+    const rows = claims.map(c => ({
+      session_id: sessionId,
+      project_id: projectId || null,
+      ao_id: aoId || null,
+      report_id: reportId || null,
+      claim_id: c.claim_id,
+      source_note_id: c.source_note_id || 0,
+      sequence: c.sequence || 0,
+      claim_type: c.claim_type || 'unresolved',
+      section: c.section || null,
+      element: c.element || null,
+      location: c.location || null,
+      content: c.content || '',
+      confidence: c.confidence || 'high',
+      status: c.status || 'active',
+      superseded_by: c.superseded_by || null,
+      amendment_mode: c.amendment_mode || null,
+    }));
+    await supabase.from('soc_claims').insert(rows);
+  } catch (e) {
+    console.warn('[generate-soc] claim DB persist failed (non-fatal):', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN EXTRACTION FUNCTION — now multi-stage pipeline
+// ═══════════════════════════════════════════════════════════════════════════
+async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId) {
+  console.log('[generate-soc] Stage 1: extracting atomic claims...');
+  let claims = [];
+  let draftedResult;
+
+  try {
+    claims = await extractAtomicClaims(message, projectMeta, apiKey);
+    console.log(`[generate-soc] Stage 1 complete: ${claims.length} claims extracted`);
+  } catch (claimErr) {
+    console.warn('[generate-soc] Claim extraction failed, falling back to single-stage:', claimErr.message);
+  }
+
+  if (claims.length > 0) {
+    // Stage 2: Professional drafting from claims
+    console.log('[generate-soc] Stage 2: professional drafting from claims...');
+    try {
+      draftedResult = await draftFromClaims(claims, projectMeta, message, apiKey);
+      console.log('[generate-soc] Stage 2 complete');
+    } catch (draftErr) {
+      console.warn('[generate-soc] Claim-based drafting failed, falling back to single-stage:', draftErr.message);
+      claims = []; // force fallback
+    }
+  }
+
+  if (!draftedResult) {
+    // Fallback: original single-stage pipeline (safety net)
+    console.log('[generate-soc] Using fallback single-stage pipeline');
+    const systemMessage = GENERATOR_SYSTEM_PROMPT;
+    const userPrompt = SOC_GENERATOR_PROMPT
+      .replace('{{BO_ADDRESS}}', projectMeta.bo_address || 'Not provided')
+      .replace('{{AO_ADDRESS}}', projectMeta.ao_address || 'Not provided')
+      .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date || new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+      .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || 'Not specified')
+      .replace('{{RAW_NOTES}}', message);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0.1,
+        max_tokens: 8000,
+        messages: [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '';
+    try {
+      draftedResult = parseJsonFromModel(raw);
+    } catch (e) {
+      const reason = data.choices?.[0]?.finish_reason === 'length'
+        ? 'GPT-4o returned invalid JSON (response truncated — increase max_tokens or reduce notes length)'
+        : 'GPT-4o returned invalid JSON';
+      throw new Error(reason);
+    }
+  }
+
+  validateSocJson(draftedResult);
+
+  // Completeness audit — claim-level if claims available, note-level otherwise
+  const audit = runClaimCompletenessAudit(draftedResult, claims, message);
+  if (audit.issues.length > 0) console.warn('[generate-soc] Completeness audit issues:', audit.issues);
+  if (audit.warnings.length > 0) console.warn('[generate-soc] Completeness audit warnings:', audit.warnings);
+
+  // Persist claims (non-blocking — don't let DB issues stop the response)
+  if (claims.length > 0 && sessionId) {
+    persistClaimsToDb(claims, sessionId, projectId, aoId, null).catch(() => {});
   }
 
   return {
-    sections:          parsed.sections,
-    discussion:        parsed.discussion,
-    general_notes:     parsed.general_notes,
-    actions:           parsed.actions,
-    award_notes:       parsed.award_notes,
-    emails_required:   parsed.emails_required,
-    unresolved_notes:  parsed.unresolved_notes || [],
-    audit_issues:      audit.issues,
-    audit_warnings:    audit.warnings,
+    sections:         draftedResult.sections,
+    discussion:       draftedResult.discussion,
+    general_notes:    draftedResult.general_notes,
+    actions:          draftedResult.actions,
+    award_notes:      draftedResult.award_notes,
+    emails_required:  draftedResult.emails_required,
+    unresolved_notes: draftedResult.unresolved_notes || [],
+    audit_issues:     audit.issues,
+    audit_warnings:   audit.warnings,
+    claims_extracted: claims.length,
   };
 }
+
 async function getSocDate(projectId, aoId, selectedAO) {
   const aoDate =
     selectedAO?.soc_date ||
@@ -1231,7 +1563,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Missing OpenAI API key' });
       }
 
-      dataForRender = await extractStructuredData(notesText, projectMeta, apiKey);
+      dataForRender = await extractStructuredData(notesText, projectMeta, apiKey, session_id, project_id, ao_id);
     }
 
     dataForRender = {
