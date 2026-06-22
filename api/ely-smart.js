@@ -425,9 +425,9 @@ function hasDiscussionIntent(prompt = '') {
     /let'?s discuss/i.test(p) ||
     /chat through/i.test(p) ||
     /am i missing something/i.test(p) ||
-    /what'?s his angle/i.test(p) ||
-    /what'?s her angle/i.test(p) ||
-    /what'?s their angle/i.test(p) ||
+    /what('?s| is) his angle/i.test(p) ||
+    /what('?s| is) her angle/i.test(p) ||
+    /what('?s| is) their angle/i.test(p) ||
     /why is (he|she|they) saying this/i.test(p) ||
     /how would a judge view this/i.test(p) ||
     /how would a third surveyor view this/i.test(p) ||
@@ -549,12 +549,20 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
 function inferModeHint(surface, prompt = '', body = {}) {
   const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
 
-  // Draft With Ely surface — always draft when the user has supplied content
-  // The presence of an email thread must not override a drafting request
+  // Draft With Ely surface — intent order:
+  // 1. Explicit discussion/analysis request -> DISCUSS
+  // 2. Recipient-facing wording or drafting trigger -> DRAFT
+  // 3. No substantive prompt -> EMAIL_SUMMARY
   if (explicitMode.includes('draft_with_ely')) {
     const p = String(prompt || '').trim();
-    if (!p) return 'email_summary'; // No prompt = silent read or summary
-    return 'draft'; // Any prompt on this surface = draft intent
+    if (!p) return 'email_summary';
+    // Discussion wins if the user clearly asks for analysis
+    if (hasDiscussionIntent(p)) return 'discuss';
+    // Otherwise treat any content as a draft request — this surface exists for drafting
+    // looksLikeEmailDictation catches recipient-facing wording
+    // hasExplicitDraftRequest catches "respond saying", "reply saying" etc
+    // For anything else on this surface that isn't discussion, default to draft
+    return 'draft';
   }
 
   const intent = inferIntent({ surface, prompt, body });
@@ -2364,66 +2372,80 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     console.log('[ely-smart] responded with model:', modelUsed);
 
     // ── Draft With Ely: missing points analysis ───────────────────────────
-    // After producing the draft, identify any material questions or requests
-    // from the incoming email that the draft has not addressed.
-    // Return as structured data so the frontend can render them separately.
+    // Non-blocking: draft is always returned regardless of whether this succeeds
     const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
     let missingPoints = [];
 
-    if (isDraftWithEly && fullReply && suppliedEmailContext) {
+    if (isDraftWithEly && fullReply) {
       try {
-        const threadText = suppliedEmailContext?.body || suppliedEmailContext?.threadText || '';
-        if (threadText && threadText.length > 50) {
+        const fullThreadText = suppliedEmailContext?.threadText
+          || body.context?.threadContext
+          || body.threadContext
+          || suppliedEmailContext?.body
+          || '';
+
+        if (fullThreadText && fullThreadText.length > 50) {
           const mpMessages = [
             {
               role: 'system',
-              content: `You are analysing an email reply draft against the incoming email thread.
+              content: `You are reviewing a draft reply against the full email thread to identify material omissions.
 
-Your task: identify any material questions, requests or points from the incoming email that the draft reply has NOT addressed.
+Identify points from the LATEST incoming email that the draft has NOT addressed.
 
-Only include genuine omissions — points the sender specifically asked about or requested that the reply fails to address.
+Do NOT flag a point if:
+- The draft addresses it, even briefly or implicitly
+- An earlier message in the thread already provided that information
+- The point is a pleasantry, acknowledgement or does not require action
+- The point is clearly trivial or administrative
+- The user appears to have deliberately chosen not to address it
 
-Do not include:
-- Points that the draft has addressed, even briefly
-- Minor pleasantries or acknowledgements
-- Points the user may have intentionally chosen not to address
-- Generic observations about tone or length
+Only flag genuine material omissions — specific questions or requests the sender is waiting for.
 
-Return a JSON array of strings. Each string must be one clear sentence starting with the sender's name or "The sender".
-Return an empty array [] if nothing material is missing.
-Return ONLY valid JSON. No explanation. No markdown.
+Keep each item short. One plain sentence per point. Maximum 5 items. No repetition. No explanation.
+Start each item with the sender's first name or "The sender".
 
-Example: ["David asked for a copy of the signed Letter of Appointment.", "David requested copies of the notice and drawings."]`
+Return ONLY a valid JSON array. No markdown. Empty array [] if nothing material is missing.
+
+Example: ["David asked for a copy of the signed Letter of Appointment.", "David requested copies of the notice and drawings."]`,
             },
             {
               role: 'user',
-              content: `INCOMING EMAIL THREAD:
-${threadText.slice(0, 3000)}
+              content: \`FULL EMAIL THREAD:
+\${fullThreadText.slice(0, 4000)}
 
 DRAFT REPLY:
-${fullReply.slice(0, 2000)}`
-            }
+\${fullReply.slice(0, 2000)}\`,
+            },
           ];
 
-          const mpResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          const mpTimeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('mp-timeout')), 8000)
+          );
+
+          const mpFetch = fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 400, temperature: 0.1, messages: mpMessages }),
+            headers: { 'Content-Type': 'application/json', 'Authorization': \`Bearer \${process.env.OPENAI_API_KEY}\` },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 300, temperature: 0.1, messages: mpMessages }),
           });
 
-          if (mpResponse.ok) {
-            const mpData = await mpResponse.json();
-            const mpRaw = mpData.choices?.[0]?.message?.content?.trim() || '[]';
+          const mpResponse = await Promise.race([mpFetch, mpTimeout]).catch(() => null);
+
+          if (mpResponse && mpResponse.ok) {
+            const mpData = await mpResponse.json().catch(() => ({}));
+            const mpRaw = (mpData.choices?.[0]?.message?.content || '').trim()
+              .replace(/^```json\n?/, '').replace(/\n?```$/, '');
             try {
-              missingPoints = JSON.parse(mpRaw);
-              if (!Array.isArray(missingPoints)) missingPoints = [];
+              const parsed = JSON.parse(mpRaw);
+              missingPoints = Array.isArray(parsed)
+                ? [...new Set(parsed.filter(s => typeof s === 'string' && s.length > 5))].slice(0, 5)
+                : [];
             } catch {
               missingPoints = [];
             }
           }
         }
       } catch (mpErr) {
-        console.warn('[ely-smart] missing points analysis failed:', mpErr.message);
+        console.warn('[ely-smart] missing points analysis failed silently:', mpErr.message);
         missingPoints = [];
       }
     }
