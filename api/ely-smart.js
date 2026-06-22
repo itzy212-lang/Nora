@@ -422,9 +422,9 @@ function hasDiscussionIntent(prompt = '') {
     /is that correct/i.test(p) ||
     /is that a breach/i.test(p) ||
     /talk me through/i.test(p) ||
-    /let'?s discuss/i.test(p) ||
+    /(let'?s|let us) discuss/i.test(p) ||
     /chat through/i.test(p) ||
-    /am i missing something/i.test(p) ||
+    /am i missing/i.test(p) ||
     /what('?s| is) his angle/i.test(p) ||
     /what('?s| is) her angle/i.test(p) ||
     /what('?s| is) their angle/i.test(p) ||
