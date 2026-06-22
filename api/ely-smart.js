@@ -1922,6 +1922,7 @@ Never summarise. Never explain. Never ask questions.`,
 
     const modeHint = inferModeHint(body.surface, body.prompt, body);
     const prompt = String(body.prompt || '').trim();
+    const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
 
     // ── Case review confirmation ──────────────────────────────────────────
     // If user has already confirmed a case review (flagged by frontend)
@@ -2327,7 +2328,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_completion_tokens: 3500,
+        max_completion_tokens: isDraftWithEly ? 1200 : 3500,
         temperature,
         messages,
       }),
@@ -2373,7 +2374,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     // ── Draft With Ely: missing points analysis ───────────────────────────
     // Non-blocking: draft is always returned regardless of whether this succeeds
-    const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
+    // isDraftWithEly declared earlier
     let missingPoints = [];
 
     if (isDraftWithEly && fullReply) {
@@ -2419,7 +2420,7 @@ DRAFT REPLY:
           ];
 
           const mpTimeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('mp-timeout')), 8000)
+            setTimeout(() => reject(new Error('mp-timeout')), 5000)
           );
 
           const mpFetch = fetch('https://api.openai.com/v1/chat/completions', {
