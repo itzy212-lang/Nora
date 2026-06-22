@@ -1016,9 +1016,41 @@ export default async function handler(req, res) {
       const aoLabel = ao_name || ao_names || '';
       const chatTitle = `SOC Notes${aoLabel ? ' – ' + aoLabel : ''} – ${today}`;
 
-      const { data: sessionData } = await supabase
+      // Upsert the SOC session into project chat — one session per project+AO, not per generate
+      const aoKey = aoLabel || ao_id || 'default';
+      const { data: existingSessions } = await supabase
         .from('ai_sessions')
-        .insert([{
+        .select('id')
+        .eq('project_id', project_id)
+        .eq('session_type', 'soc_notes')
+        .eq('user_id', 'itzy212@gmail.com')
+        .like('auto_title', `%${aoKey}%`)
+        .limit(1);
+
+      let chatSessionId = existingSessions?.[0]?.id || null;
+
+      if (!chatSessionId) {
+        const { data: newSession } = await supabase
+          .from('ai_sessions')
+          .insert([{
+            user_id: 'itzy212@gmail.com',
+            project_id: project_id,
+            title: chatTitle,
+            auto_title: chatTitle,
+            surface: 'project_chat',
+            session_type: 'soc_notes',
+            context_scope: 'project',
+            metadata: { source: 'soc_generator', report_id: report_id || null, ao_name: aoLabel || null },
+          }])
+          .select('id')
+          .single();
+        chatSessionId = newSession?.id || null;
+      } else {
+        // Update title with latest date
+        await supabase.from('ai_sessions').update({ title: chatTitle, auto_title: chatTitle }).eq('id', chatSessionId);
+      }
+
+      const sessionData = chatSessionId ? { id: chatSessionId } : null        .insert([{
           user_id: 'itzy212@gmail.com',
           project_id: project_id,
           title: chatTitle,
