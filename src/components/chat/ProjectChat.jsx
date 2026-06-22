@@ -334,6 +334,106 @@ function extractSubjectFromDraft(draftText = '') {
   return { subject: '', draft: draftText };
 }
 
+// ── Invoice Preview Card ──────────────────────────────────────────────────
+function InvoicePreviewCard({ msg, projectId, boEmail, onSent }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(msg.invoiceSent || false);
+  const inv = msg.invoiceData;
+  if (!inv) return null;
+
+  const handleDownload = () => {
+    if (!msg.invoicePdfBase64) return;
+    const a = document.createElement('a');
+    a.href = msg.invoicePdfBase64;
+    a.download = msg.invoiceFileName || `Invoice-${inv.invoice_number}.pdf`;
+    a.click();
+  };
+
+  const handleSendToBO = async () => {
+    if (sending || sent) return;
+    setSending(true);
+    try {
+      const toEmail = boEmail || inv.bill_to_email || '';
+      if (!toEmail) { alert('No Building Owner email found for this project.'); setSending(false); return; }
+      if (!msg.invoicePdfBase64) { alert('PDF not available.'); setSending(false); return; }
+
+      // Convert base64 data URI to raw base64
+      const base64Data = msg.invoicePdfBase64.replace(/^data:application\/pdf;base64,/, '');
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toEmail,
+          subject: `Invoice ${inv.invoice_number} — ${inv.property_address || ''}`,
+          body: `Hi ${inv.bill_to_name?.split(' ')[0] || ''},\n\nPlease find attached invoice ${inv.invoice_number} for the works at ${inv.property_address || 'the above property'}.\n\nKind regards,`,
+          attachments: [{
+            name: msg.invoiceFileName || `Invoice-${inv.invoice_number}.pdf`,
+            contentType: 'application/pdf',
+            contentBytes: base64Data,
+          }],
+        }),
+      });
+
+      if (res.ok) {
+        setSent(true);
+        onSent?.();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to send email. Please send manually from the invoice screen.');
+      }
+    } catch (e) {
+      alert('Error sending: ' + e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const total = inv.total || inv.subtotal || inv.items?.reduce((s, i) => s + parseFloat(i.total || i.amount || 0), 0) || 0;
+
+  return (
+    <div style={{ margin: '8px 0', borderRadius: 12, border: '1px solid var(--blue)', overflow: 'hidden', background: 'var(--blue-bg)' }}>
+      {/* Header */}
+      <div style={{ padding: '8px 12px', background: 'rgba(79,127,255,0.12)', borderBottom: '1px solid var(--blue)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoice {inv.invoice_number}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>£{parseFloat(total).toFixed(2)}</span>
+      </div>
+
+      {/* Line items */}
+      <div style={{ padding: '10px 12px' }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>{inv.bill_to_name} · {inv.property_address}</div>
+        {(inv.items || []).map((item, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text)', marginBottom: 4, lineHeight: 1.4 }}>
+            <span style={{ flex: 1, paddingRight: 8 }}>{item.description}</span>
+            <span style={{ fontWeight: 600, flexShrink: 0 }}>£{parseFloat(item.total || item.amount || 0).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <button
+          onClick={handleDownload}
+          style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer' }}
+        >
+          ⬇️ Download PDF
+        </button>
+        {sent ? (
+          <span style={{ padding: '5px 12px', fontSize: 12, color: 'var(--green, #22c55e)', fontWeight: 600 }}>✅ Sent to Building Owner</span>
+        ) : (
+          <button
+            onClick={handleSendToBO}
+            disabled={sending}
+            style={{ padding: '5px 14px', borderRadius: 99, fontSize: 12, border: 'none', background: 'var(--blue)', color: '#fff', cursor: sending ? 'default' : 'pointer', fontWeight: 600, opacity: sending ? 0.7 : 1 }}
+          >
+            {sending ? 'Sending…' : '↩ Send to Building Owner'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const { state } = useApp();
 
@@ -356,6 +456,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const [lastDraft, setLastDraft] = useState('');
   const [caseReviewPending, setCaseReviewPending] = useState(false);
   const [caseReviewTopic, setCaseReviewTopic] = useState('');
+  const [pendingInvoice, setPendingInvoice] = useState(null);
+  const [pendingInvoiceConfirm, setPendingInvoiceConfirm] = useState(false);
+  const [invoiceGenerating, setInvoiceGenerating] = useState(false);
   const textareaRef = useRef(null);
   const voiceBaseRef = useRef('');
   const voiceTriggerRef = useRef(null);
@@ -629,11 +732,16 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   }, []);
 
   const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
+    // Skip appending if this is an invoice_generated result — handled separately
+    if (result.invoice_generated) return;
+    // Strip <invoice_data> JSON blocks from display text
+    const cleanReply = (s) => String(s || '').replace(/<invoice_data>[\s\S]*?<\/invoice_data>/g, '').trim();
+
     if (!wantsDraft) {
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
-        content: result.reply || 'Done.',
+        content: cleanReply(result.reply || 'Done.',
         suggestedActions: result.suggestedActions,
         createdAt: new Date().toISOString(),
       }]);
@@ -796,6 +904,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
           case_review_confirmed: true,
           case_review_topic: caseReviewTopic || messageText,
         } : {}),
+        // Pass invoice state if active
+        ...(pendingInvoice ? { pending_invoice: pendingInvoice } : {}),
+        ...(pendingInvoiceConfirm ? { pending_invoice_confirm: true } : {}),
         context: {
           previousDraft: lastDraft || null,
           uploadedFiles: readyAttachments,
@@ -822,6 +933,49 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       } else if (result.case_review) {
         setCaseReviewPending(false);
         setCaseReviewTopic('');
+      }
+
+      // Handle invoice flow — parse <invoice_data> from Ely's reply if present
+      const replyTextForInvoice = result.reply || '';
+      const invoiceDataMatch = replyTextForInvoice.match(/<invoice_data>([\s\S]*?)<\/invoice_data>/);
+      if (invoiceDataMatch && !result.invoice_generated) {
+        try {
+          const parsed = JSON.parse(invoiceDataMatch[1].trim());
+          // Merge with project BO data if missing
+          const boName = parsed.bill_to_name || project?.bo_name || '';
+          const boAddress = parsed.bill_to_address || project?.bo_address || '';
+          const boEmail = parsed.bo_email || project?.aos?.[0]?.email || project?.bo_email || '';
+          const propertyAddress = parsed.property_address || project?.bo_premise_address || '';
+          const mergedInvoice = { ...parsed, bill_to_name: boName, bill_to_address: boAddress, bo_email: boEmail, property_address: propertyAddress };
+          setPendingInvoice(mergedInvoice);
+          if (result.pending_invoice_confirm) setPendingInvoiceConfirm(true);
+        } catch {}
+      }
+
+      if (result.invoice_generated && result.invoice) {
+        // Invoice PDF generated — show preview with Send/Edit buttons
+        setPendingInvoice(null);
+        setPendingInvoiceConfirm(false);
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: 'ely',
+          messageType: 'invoice_preview',
+          invoiceData: result.invoice,
+          invoicePdfBase64: result.invoice_pdf_base64,
+          invoiceFileName: result.invoice_file_name,
+          content: result.reply || `Invoice ${result.invoice.invoice_number} ready.`,
+          createdAt: new Date().toISOString(),
+        }]);
+      } else if (result.pending_invoice) {
+        // Parse invoice_data JSON block from Ely's reply if present
+        const replyText = result.reply || '';
+        const invoiceDataMatch = replyText.match(/<invoice_data>([\s\S]*?)<\/invoice_data>/);
+        let parsedInvoice = result.pending_invoice;
+        if (invoiceDataMatch) {
+          try { parsedInvoice = { ...parsedInvoice, ...JSON.parse(invoiceDataMatch[1].trim()) }; } catch {}
+        }
+        setPendingInvoice(parsedInvoice);
+        setPendingInvoiceConfirm(result.pending_invoice_confirm || false);
       }
 
       // Save Ely's reply to project brain
@@ -1085,6 +1239,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
             {messages.map(msg => (
               <div key={msg.id}>
+                {msg.messageType === 'invoice_preview' ? (
+                  <InvoicePreviewCard
+                    msg={msg}
+                    projectId={projectId}
+                    boEmail={project?.aos?.[0]?.email || project?.bo_email || ''}
+                    onSent={() => {
+                      setMessages(prev => prev.map(m =>
+                        m.id === msg.id ? { ...m, invoiceSent: true } : m
+                      ));
+                    }}
+                  />
+                ) : (
                 <ChatMessage
                   msg={msg}
                   onUseDraft={(draft) => {
@@ -1123,6 +1289,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                       </span>
                     ))}
                   </div>
+                )}
+              </div>
                 )}
               </div>
             ))}
