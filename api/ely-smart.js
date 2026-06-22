@@ -547,6 +547,16 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
 }
 
 function inferModeHint(surface, prompt = '', body = {}) {
+  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
+
+  // Draft With Ely surface — always draft when the user has supplied content
+  // The presence of an email thread must not override a drafting request
+  if (explicitMode.includes('draft_with_ely')) {
+    const p = String(prompt || '').trim();
+    if (!p) return 'email_summary'; // No prompt = silent read or summary
+    return 'draft'; // Any prompt on this surface = draft intent
+  }
+
   const intent = inferIntent({ surface, prompt, body });
 
   if (intent === 'execute') return 'execute';
@@ -557,7 +567,6 @@ function inferModeHint(surface, prompt = '', body = {}) {
     return 'email_summary';
   }
 
-  const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
   if (explicitMode.includes('email_thread_summary') || explicitMode.includes('summary')) {
     return 'email_summary';
   }
@@ -2354,8 +2363,74 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const modelUsed = data.model || 'gpt-5.4-mini';
     console.log('[ely-smart] responded with model:', modelUsed);
 
+    // ── Draft With Ely: missing points analysis ───────────────────────────
+    // After producing the draft, identify any material questions or requests
+    // from the incoming email that the draft has not addressed.
+    // Return as structured data so the frontend can render them separately.
+    const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
+    let missingPoints = [];
+
+    if (isDraftWithEly && fullReply && suppliedEmailContext) {
+      try {
+        const threadText = suppliedEmailContext?.body || suppliedEmailContext?.threadText || '';
+        if (threadText && threadText.length > 50) {
+          const mpMessages = [
+            {
+              role: 'system',
+              content: `You are analysing an email reply draft against the incoming email thread.
+
+Your task: identify any material questions, requests or points from the incoming email that the draft reply has NOT addressed.
+
+Only include genuine omissions — points the sender specifically asked about or requested that the reply fails to address.
+
+Do not include:
+- Points that the draft has addressed, even briefly
+- Minor pleasantries or acknowledgements
+- Points the user may have intentionally chosen not to address
+- Generic observations about tone or length
+
+Return a JSON array of strings. Each string must be one clear sentence starting with the sender's name or "The sender".
+Return an empty array [] if nothing material is missing.
+Return ONLY valid JSON. No explanation. No markdown.
+
+Example: ["David asked for a copy of the signed Letter of Appointment.", "David requested copies of the notice and drawings."]`
+            },
+            {
+              role: 'user',
+              content: `INCOMING EMAIL THREAD:
+${threadText.slice(0, 3000)}
+
+DRAFT REPLY:
+${fullReply.slice(0, 2000)}`
+            }
+          ];
+
+          const mpResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 400, temperature: 0.1, messages: mpMessages }),
+          });
+
+          if (mpResponse.ok) {
+            const mpData = await mpResponse.json();
+            const mpRaw = mpData.choices?.[0]?.message?.content?.trim() || '[]';
+            try {
+              missingPoints = JSON.parse(mpRaw);
+              if (!Array.isArray(missingPoints)) missingPoints = [];
+            } catch {
+              missingPoints = [];
+            }
+          }
+        }
+      } catch (mpErr) {
+        console.warn('[ely-smart] missing points analysis failed:', mpErr.message);
+        missingPoints = [];
+      }
+    }
+
     return res.status(200).json({
       reply: fullReply,
+      ...(isDraftWithEly && missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
       model: modelUsed,
       resolvedProject,
       scopedEmailCount: scopedEmailContext?.length || 0,
