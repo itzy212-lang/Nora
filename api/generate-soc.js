@@ -1520,8 +1520,8 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       claims = await extractAtomicClaims(message, projectMeta, apiKey);
       console.log(`[generate-soc] Stage 1 complete: ${claims.length} claims extracted`);
     } catch (claimErr) {
-      console.error('[generate-soc] Stage 1 FAILED:', claimErr.message);
-      throw new Error(`GENERATION_INCOMPLETE: Claim extraction failed — ${claimErr.message}. Raw notes preserved. Please retry.`);
+      console.warn('[generate-soc] Stage 1 failed — will use emergency fallback:', claimErr.message);
+      claims = []; // proceed to emergency fallback below
     }
   }
 
@@ -1536,8 +1536,40 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     draftedResult = await draftFromClaims(claims, projectMeta, message, apiKey);
     console.log('[generate-soc] Stage 2 complete');
   } catch (draftErr) {
-    console.error('[generate-soc] Stage 2 FAILED:', draftErr.message);
-    throw new Error(`GENERATION_INCOMPLETE: Professional drafting failed — ${draftErr.message}. Claims preserved. Please retry.`);
+    console.warn('[generate-soc] Stage 2 failed — will use emergency fallback:', draftErr.message);
+    // draftedResult remains null — emergency fallback below
+  }
+
+  // Emergency fallback if Stage 2 failed (draftedResult is still null)
+  if (!draftedResult) {
+    console.warn('[generate-soc] Stages 1+2 failed — running emergency single-stage pipeline');
+    try {
+      const fbUserPrompt = SOC_GENERATOR_PROMPT
+        .replace('{{BO_ADDRESS}}', projectMeta.bo_address || 'Not provided')
+        .replace('{{AO_ADDRESS}}', projectMeta.ao_address || 'Not provided')
+        .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date ||
+          new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+        .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || 'Not specified')
+        .replace('{{RAW_NOTES}}', message);
+      const fbRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 8000,
+          messages: [{ role: 'system', content: GENERATOR_SYSTEM_PROMPT }, { role: 'user', content: fbUserPrompt }] }),
+      });
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        const fbRaw = fbData.choices?.[0]?.message?.content || '';
+        draftedResult = parseJsonFromModel(fbRaw);
+        draftedResult._emergency_draft = true;
+        draftedResult._generation_note = 'EMERGENCY DRAFT: Generated without claim extraction. May be missing content. Retry generation for a complete SOC.';
+      }
+    } catch (fbErr) {
+      console.error('[generate-soc] Emergency fallback also failed:', fbErr.message);
+    }
+    if (!draftedResult) {
+      throw new Error('GENERATION_INCOMPLETE: All generation stages failed. Raw notes preserved. Please retry.');
+    }
   }
 
   // Stage 3: Quality audit (auto-fixes stylistic issues, flags factual ones)
