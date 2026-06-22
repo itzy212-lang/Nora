@@ -29,8 +29,16 @@ function inferSectionFromContent(note) {
 }
 
 // ── Build session state summary for the GPT prompt ───────────────────────
-function buildSessionState(previousNotes, observations) {
+function buildSessionState(previousNotes, observations, keywordHint = null, inheritedSection = null) {
   if (!previousNotes?.length) return 'No notes recorded yet. This is the first note.';
+
+  const hintText = keywordHint
+    ? `\n\nKEYWORD HINT (supporting only — verify with full context): Subject matter may suggest "${keywordHint}". Use only if consistent with context and physical location. Generic terms (wall, floor, window, door) in many sections must not override context.`
+    : '';
+
+  const currentSectionText = inheritedSection
+    ? `CURRENT ACTIVE SECTION: ${inheritedSection}`
+    : 'CURRENT ACTIVE SECTION: Not yet established.';
 
   const sections = [...new Set(previousNotes
     .map(n => n.current_section || n.inferred_section)
@@ -46,13 +54,14 @@ function buildSessionState(previousNotes, observations) {
     `  ${o.id} | ${o.section} | ${o.element || 'element unspecified'} | ${o.observation.slice(0, 100)}`
   ).join('\n');
 
-  return `SECTIONS VISITED: ${sections.join(', ') || 'None yet'}
+  return `${currentSectionText}
+SECTIONS VISITED: ${sections.join(', ') || 'None yet'}
 
 RECENT NOTES (last 8):
 ${recentNotes}
 
 ACTIVE OBSERVATIONS (for amendment lookup):
-${obsState || '  None yet.'}`;
+${obsState || '  None yet.'}${hintText}`;
 }
 
 // ── Generate a stable observation ID ─────────────────────────────────────
@@ -94,12 +103,15 @@ export default async function handler(req, res) {
 
     const sequence = (previousNotes?.length || 0) + 1;
     const isCorrection = CORRECTION_SIGNALS.some(s => note.toLowerCase().includes(s));
-    const inferredSection = inferSectionFromContent(note);
+    // Keyword inference provides a HINT only — GPT is the primary classifier
+    // Generic terms (window, floor, wall, door) must not cause incorrect allocation
+    const keywordHint = inferSectionFromContent(note);
     const inheritedSection = previousNotes?.length
       ? [...previousNotes].reverse().find(n => n.current_section || n.inferred_section)
         ?.current_section || null
       : null;
-    const currentSection = inferredSection || inheritedSection;
+    // currentSection starts as inherited; GPT will confirm, override or create new section
+    const currentSection = inheritedSection;
 
     // ── 2. Save raw note immediately ──────────────────────────────────────
     const { error: insertError } = await supabase.from('soc_notes').insert({
@@ -118,7 +130,7 @@ export default async function handler(req, res) {
     if (insertError) throw insertError;
 
     // ── 3. Call GPT-4o for intelligent classification ─────────────────────
-    const sessionState = buildSessionState(previousNotes, observations);
+    const sessionState = buildSessionState(previousNotes, observations, keywordHint, inheritedSection);
     const systemPrompt = LIVE_NOTE_SYSTEM_PROMPT.replace('{{SESSION_STATE}}', sessionState);
 
     let aiResult = null;
@@ -180,52 +192,88 @@ export default async function handler(req, res) {
       console.error('[process-soc-note] OpenAI failed — note saved with Noted.:', aiErr.message);
     }
 
-    // ── 4. Update soc_observations (reconciled record) ────────────────────
+    // ── 4. Update soc_observations — mode-specific correction behaviour ────
     try {
-      if (noteType === 'amendment' && targetObsId && aiResult?.final_observation) {
-        // Mark target as superseded, create updated observation
-        await supabase.from('soc_observations')
-          .update({ status: 'superseded' })
-          .eq('id', targetObsId)
-          .eq('session_id', session_id);
+      const existing = targetObsId ? observations?.find(o => o.id === targetObsId) : null;
 
-        const newObsId = makeObsId(finalSection || 'unknown', sequence);
-        await supabase.from('soc_observations').insert({
-          id: newObsId,
-          session_id,
-          project_id: project_id || null,
-          ao_id: safeAoId,
-          section: finalSection || 'Unknown',
-          element: aiResult.element || null,
-          observation: aiResult.final_observation,
-          status: 'active',
-          supersedes: [targetObsId],
-          source_note_ids: [sequence],
-        });
-        observationId = newObsId;
+      if ((noteType === 'amendment' || noteType === 'addition') && targetObsId) {
+        const mode = correctionMode || 'replace';
 
-      } else if (noteType === 'addition' && targetObsId) {
-        // Supplement an existing observation
-        const existing = observations?.find(o => o.id === targetObsId);
-        if (existing) {
-          const supplemented = existing.observation.trimEnd() +
-            (aiResult?.final_observation ? ' ' + aiResult.final_observation : '');
+        if (mode === 'replace' && aiResult?.final_observation) {
+          // REPLACE: supersede earlier, create corrected observation
           await supabase.from('soc_observations')
-            .update({
-              observation: supplemented,
-              source_note_ids: [...(existing.source_note_ids || []), sequence],
-            })
-            .eq('id', targetObsId)
-            .eq('session_id', session_id);
+            .update({ status: 'superseded' })
+            .eq('id', targetObsId).eq('session_id', session_id);
+          const newObsId = makeObsId(finalSection || 'unknown', sequence);
+          await supabase.from('soc_observations').insert({
+            id: newObsId, session_id,
+            project_id: project_id || null, ao_id: safeAoId,
+            section: finalSection || existing?.section || 'Unknown',
+            element: aiResult.element || existing?.element || null,
+            observation: aiResult.final_observation,
+            status: 'active', supersedes: [targetObsId],
+            source_note_ids: [sequence],
+          });
+          observationId = newObsId;
+
+        } else if (mode === 'supplement') {
+          // SUPPLEMENT: add detail, retain earlier substance, no supersession
+          if (existing) {
+            const newText = aiResult?.final_observation
+              ? existing.observation.trimEnd() + ' ' + aiResult.final_observation
+              : existing.observation;
+            await supabase.from('soc_observations')
+              .update({ observation: newText, source_note_ids: [...(existing.source_note_ids || []), sequence] })
+              .eq('id', targetObsId).eq('session_id', session_id);
+            observationId = targetObsId;
+          }
+
+        } else if (mode === 'qualify' && aiResult?.final_observation) {
+          // QUALIFY: update in place with reconciled qualified observation (not superseded)
+          if (existing) {
+            await supabase.from('soc_observations')
+              .update({ observation: aiResult.final_observation, source_note_ids: [...(existing.source_note_ids || []), sequence] })
+              .eq('id', targetObsId).eq('session_id', session_id);
+            observationId = targetObsId;
+          }
+
+        } else if (mode === 'withdraw') {
+          // WITHDRAW: mark inactive, no replacement
+          await supabase.from('soc_observations')
+            .update({ status: 'withdrawn' })
+            .eq('id', targetObsId).eq('session_id', session_id);
+          observationId = null;
+
+        } else if ((mode === 'correct_measurement' || mode === 'correct_location') && aiResult?.final_observation && existing) {
+          // CORRECT DETAIL: update only affected detail, preserve rest
+          await supabase.from('soc_observations')
+            .update({ observation: aiResult.final_observation, source_note_ids: [...(existing.source_note_ids || []), sequence] })
+            .eq('id', targetObsId).eq('session_id', session_id);
+          observationId = targetObsId;
+
+        } else if (aiResult?.final_observation) {
+          // Fallback replace
+          await supabase.from('soc_observations')
+            .update({ status: 'superseded' })
+            .eq('id', targetObsId).eq('session_id', session_id);
+          const newObsId = makeObsId(finalSection || 'unknown', sequence);
+          await supabase.from('soc_observations').insert({
+            id: newObsId, session_id,
+            project_id: project_id || null, ao_id: safeAoId,
+            section: finalSection || existing?.section || 'Unknown',
+            element: aiResult.element || existing?.element || null,
+            observation: aiResult.final_observation,
+            status: 'active', supersedes: [targetObsId],
+            source_note_ids: [sequence],
+          });
+          observationId = newObsId;
         }
 
       } else if (observationId && noteType === 'observation' && finalSection) {
         // New observation
         await supabase.from('soc_observations').insert({
-          id: observationId,
-          session_id,
-          project_id: project_id || null,
-          ao_id: safeAoId,
+          id: observationId, session_id,
+          project_id: project_id || null, ao_id: safeAoId,
           section: finalSection,
           element: aiResult?.element || null,
           observation: aiResult?.final_observation || note.trim(),
@@ -236,7 +284,6 @@ export default async function handler(req, res) {
     } catch (obsUpdateErr) {
       console.warn('[process-soc-note] observation update failed:', obsUpdateErr.message);
     }
-
     // ── 5. Determine note_status ──────────────────────────────────────────
     let noteStatus = 'allocated';
     if (noteType === 'unresolved') noteStatus = 'unresolved';
