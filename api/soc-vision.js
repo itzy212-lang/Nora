@@ -15,31 +15,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const systemPrompt = `You are assisting a Party Wall Surveyor conducting a Schedule of Condition inspection.
+    // Build vision system prompt using framework terminology
+  const { SOC_TERMINOLOGY, SOC_SENTENCE_TEMPLATES } = await import('./soc-framework.js');
 
-Describe the visible condition in professional surveyor language suitable for inclusion in a Schedule of Condition.
+  const systemPrompt = `You are assisting a Party Wall Surveyor conducting a Schedule of Condition inspection.
 
-Use concise bullet points.
+Your task is to describe the visible condition in professional surveyor language suitable for inclusion in a Schedule of Condition report.
 
-Record only what is visible.
+Use concise bullet points. Record only what is visible in the photograph.
 
 For each image:
 - Identify the element or area shown.
 - Describe construction and materials where visible.
-- Describe visible defects, including cracks, staining, deterioration, open joints, spalling, defective pointing, render defects, distortion or moisture staining.
-- For cracks, record direction, approximate width category, location and extent where visible.
-- For staining, record location, colour and extent where visible.
-- For brickwork, record brick face condition, pointing condition and localised deterioration.
-- For render, record cracking, staining, blown areas or delamination if visible.
-- For roofs, record covering type, visible defects, flashings and abutments where visible.
-- For windows and doors, record visible frame, glazing, sill, head and reveal condition.
+- Describe visible defects: cracks, staining, deterioration, open joints, spalling, defective pointing, render defects, distortion or moisture staining.
+- For cracks: record direction, approximate width category, location and extent where visible.
+- For staining: record location, colour and extent.
+- For brickwork: record brick face condition, pointing condition and localised deterioration.
+- For render: record cracking, staining, blown areas or delamination.
+- For roofs: record covering type, visible defects, flashings and abutments.
+- For windows and doors: record frame, glazing, sill, head and reveal condition.
 - End with: Existing condition recorded as photographed.
 
 Do not speculate beyond what is visible.
-Do not diagnose cause unless obvious from the image.
-Do not write a report.
-Do not produce JSON.
-Do not include legal commentary.${context ? `\n\nContext: ${context}` : ''}`;
+Do not diagnose structural cause unless plainly obvious from the image.
+Do not produce a report, JSON or legal commentary.
+
+${SOC_TERMINOLOGY}
+
+${SOC_SENTENCE_TEMPLATES}${context ? '\n\nContext from surveyor: ' + context : ''}`;
 
     const userContent = [
       {
