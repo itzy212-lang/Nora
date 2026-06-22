@@ -576,6 +576,93 @@ Do not include the introduction.
 Do not omit source_note_ids.`;
 
 
+// ── Coded completeness audit ────────────────────────────────────────────
+// Runs after GPT returns JSON. Compares raw notes against output.
+// Returns { issues: string[], warnings: string[] }
+function runCompletenessAudit(parsed, rawNotesText = '') {
+  const issues = [];
+  const warnings = [];
+
+  const rawNotes = rawNotesText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  // Count all rows across all sections
+  const allRows = (parsed.sections || []).flatMap(s => s.rows || []);
+  const allSourceIds = new Set(allRows.flatMap(r => r.source_note_ids || []));
+  const unresolvedNotes = parsed.unresolved_notes || [];
+
+  // 1. Raw notes with no destination
+  const totalNotes = rawNotes.length;
+  const coveredCount = allSourceIds.size + unresolvedNotes.length;
+  if (totalNotes > 0 && coveredCount < totalNotes * 0.7) {
+    issues.push(
+      `Coverage warning: ${coveredCount} of ${totalNotes} raw notes have a destination. ` +
+      `${totalNotes - coveredCount} may be missing from the output.`
+    );
+  }
+
+  // 2. Final rows with no source note
+  const rowsWithoutSource = allRows.filter(r => !r.source_note_ids || r.source_note_ids.length === 0);
+  if (rowsWithoutSource.length > 0) {
+    warnings.push(
+      `${rowsWithoutSource.length} row(s) have no source_note_ids: ` +
+      rowsWithoutSource.map(r => r.ref).join(', ')
+    );
+  }
+
+  // 3. Contradictory observations — same section has both no-defects and defect rows
+  for (const section of (parsed.sections || [])) {
+    const rows = section.rows || [];
+    const hasNoDefects = rows.some(r =>
+      /no visible defects/i.test(r.observation) ||
+      /free from visible defects/i.test(r.observation)
+    );
+    const hasDefects = rows.some(r =>
+      /crack|stain|spall|deteriorat|displace|bulgе|damp|mould|missing|defect|fractur|damaged/i.test(r.observation) &&
+      !/no visible/i.test(r.observation)
+    );
+    if (hasNoDefects && hasDefects) {
+      // Check if the no-defects statement is properly qualified
+      const unqualifiedNoDefects = rows.filter(r =>
+        (/no visible defects/i.test(r.observation) || /free from visible defects/i.test(r.observation)) &&
+        !/except/i.test(r.observation) && !/apart from/i.test(r.observation)
+      );
+      if (unqualifiedNoDefects.length > 0) {
+        warnings.push(
+          `Section "${section.title}": has both a general no-defects statement and specific defect rows. ` +
+          `The no-defects statement should be qualified (e.g. "...except that...").`
+        );
+      }
+    }
+  }
+
+  // 4. Unresolved notes remaining
+  if (unresolvedNotes.length > 0) {
+    issues.push(
+      `${unresolvedNotes.length} note(s) could not be allocated: ` +
+      unresolvedNotes.map(n => `"${String(n.note_text || '').slice(0, 60)}..."`).join('; ')
+    );
+  }
+
+  // 5. Sections with only one row that appears generic
+  for (const section of (parsed.sections || [])) {
+    if ((section.rows || []).length === 1) {
+      const obs = section.rows[0].observation || '';
+      if (/photographically only|not accessible|access restricted/i.test(obs)) {
+        // Fine — intentional photo-only section
+      } else if (obs.length < 40) {
+        warnings.push(
+          `Section "${section.title}" has only one very short observation — may be incomplete.`
+        );
+      }
+    }
+  }
+
+  return { issues, warnings };
+}
+
 function validateSocJson(parsed) {
   // Fatal: missing or malformed top-level arrays
   const requiredArrays = ['sections', 'discussion', 'general_notes', 'actions', 'award_notes', 'emails_required'];
@@ -702,6 +789,15 @@ async function extractStructuredData(message, projectMeta, apiKey) {
   // Validate structure — throws on fatal errors, auto-fixes missing action fields
   validateSocJson(parsed);
 
+  // Run coded completeness audit
+  const audit = runCompletenessAudit(parsed, message);
+  if (audit.issues.length > 0) {
+    console.warn('[generate-soc] Completeness audit issues:', audit.issues);
+  }
+  if (audit.warnings.length > 0) {
+    console.warn('[generate-soc] Completeness audit warnings:', audit.warnings);
+  }
+
   return {
     sections:          parsed.sections,
     discussion:        parsed.discussion,
@@ -710,6 +806,8 @@ async function extractStructuredData(message, projectMeta, apiKey) {
     award_notes:       parsed.award_notes,
     emails_required:   parsed.emails_required,
     unresolved_notes:  parsed.unresolved_notes || [],
+    audit_issues:      audit.issues,
+    audit_warnings:    audit.warnings,
   };
 }
 async function getSocDate(projectId, aoId, selectedAO) {
