@@ -27,6 +27,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [auditIssues, setAuditIssues] = useState([]);
   const [auditWarnings, setAuditWarnings] = useState([]);
   const [unresolvedOverridden, setUnresolvedOverridden] = useState(false);
+  const [editableSections, setEditableSections] = useState([]);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
 
   // ── Sidebar state ────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -99,6 +102,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   useEffect(() => {
     if (sidebarOpen) loadSessionHistory();
   }, [sidebarOpen, loadSessionHistory]);
+
+  // ── Sync editable sections when structured data arrives ──────────────────
+  useEffect(() => {
+    if (structuredData?.sections) {
+      setEditableSections(JSON.parse(JSON.stringify(structuredData.sections)));
+    }
+  }, [structuredData]);
 
   // Open a historical session from the sidebar
   const openSession = useCallback(async (session) => {
@@ -241,17 +251,53 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     }
   }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, stopRecording, textInput]);
 
+  // ── Get re-rendered HTML from current edited sections ───────────────────
+  const getRenderedHtml = useCallback(async () => {
+    const editedData = { ...structuredData, sections: editableSections };
+    const res = await fetch('/api/generate-soc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        final_soc_data: editedData,
+        project_id: projectId,
+        ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
+        ao_name: aoName(selectedAO),
+        ao_address: selectedAOAddress,
+        ao_premise_address: selectedAOAddress,
+      }),
+    });
+    if (!res.ok) throw new Error('Could not re-render SOC');
+    const data = await res.json();
+    if (data.preview_html) setPreviewHtml(data.preview_html);
+    return data.preview_html;
+  }, [structuredData, editableSections, projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
+
+  // ── Save draft ────────────────────────────────────────────────────────────
+  const handleSaveDraft = useCallback(async () => {
+    setSavingDraft(true);
+    try {
+      await getRenderedHtml();
+      setDraftSaved(true);
+      setTimeout(() => setDraftSaved(false), 3000);
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSavingDraft(false);
+    }
+  }, [getRenderedHtml]);
+
   // ── Print / PDF ──────────────────────────────────────────────────────────
   const printPreview = useCallback(async () => {
-    if (!previewHtml) return;
     setPdfProcessing(true);
     try {
       const filenameBase = selectedAOAddress || projectAddress || 'Schedule of Condition';
       const safeFilename = `Schedule of Condition - ${filenameBase}`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const htmlToExport = editableSections.length > 0 ? await getRenderedHtml() : previewHtml;
+      if (!htmlToExport) { setPdfProcessing(false); return; }
       const res = await fetch('/api/export-soc-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: previewHtml, filename: safeFilename }),
+        body: JSON.stringify({ html: htmlToExport, filename: safeFilename }),
       });
       if (!res.ok) throw new Error('PDF export failed');
       const { base64, filename } = await res.json();
@@ -267,15 +313,16 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   }, [previewHtml, projectAddress, selectedAOAddress]);
 
   const handleSaveAndEmail = useCallback(async () => {
-    if (!previewHtml) return;
     setPdfProcessing(true);
     try {
       const filenameBase = selectedAOAddress || projectAddress || 'Schedule of Condition';
       const safeFilename = `Schedule of Condition - ${filenameBase}`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const htmlToExport = editableSections.length > 0 ? await getRenderedHtml() : previewHtml;
+      if (!htmlToExport) { setPdfProcessing(false); return; }
       const res = await fetch('/api/export-soc-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: previewHtml, filename: safeFilename }),
+        body: JSON.stringify({ html: htmlToExport, filename: safeFilename }),
       });
       if (!res.ok) throw new Error('PDF export failed');
       const { base64, filename: fn } = await res.json();
@@ -286,6 +333,50 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       setPdfProcessing(false);
     }
   }, [onOpenComposer, previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
+
+  // ── Section list + review-phase helpers ─────────────────────────────────
+  const STANDARD_SECTIONS = [
+    'Front Elevation','Rear Elevation','Side Flank Wall','Entrance Hall','Lounge',
+    'Dining Room','Kitchen','Utility Room','Ground Floor WC','Landing and Stairs',
+    'Front Bedroom','Rear Bedroom','Bathroom','Loft Space','Rear Garden',
+    'Garage','Shared Driveway','Outbuilding','External Areas',
+  ];
+
+  const flaggedNoteIds = new Set((unresolvedNotes || []).map(n => n.note_index));
+  const flaggedSectionTitles = new Set(
+    (auditIssues || [])
+      .filter(i => /^Section "/.test(i))
+      .map(i => { const m = i.match(/^Section "([^"]+)"/); return m ? m[1] : null; })
+      .filter(Boolean)
+  );
+
+  function isRowFlagged(row, sectionTitle) {
+    if ((row.source_note_ids || []).some(id => flaggedNoteIds.has(id))) return true;
+    if (
+      flaggedSectionTitles.has(sectionTitle) &&
+      /no visible defects/i.test(row.observation || '') &&
+      !/except|apart from|other than/i.test(row.observation || '')
+    ) return true;
+    return false;
+  }
+
+  function moveRow(fromSectionIdx, rowIdx, toSectionTitle) {
+    setEditableSections(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const [row] = next[fromSectionIdx].rows.splice(rowIdx, 1);
+      const toIdx = next.findIndex(s => s.title === toSectionTitle);
+      if (toIdx >= 0) next[toIdx].rows.push(row);
+      return next.filter(s => s.rows.length > 0);
+    });
+  }
+
+  function updateRowField(sectionIdx, rowIdx, field, value) {
+    setEditableSections(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      next[sectionIdx].rows[rowIdx][field] = value;
+      return next;
+    });
+  }
 
   // ── Styles ───────────────────────────────────────────────────────────────
   const s = {
@@ -374,109 +465,85 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // ── Review phase ─────────────────────────────────────────────────────────
   if (phase === 'review') {
+    const allSectionTitles = [
+      ...new Set([...editableSections.map(s => s.title), ...STANDARD_SECTIONS]),
+    ];
+    const flaggedCount = editableSections.reduce(
+      (n, sec) => n + sec.rows.filter(r => isRowFlagged(r, sec.title)).length, 0
+    );
+
     return (
       <div style={s.reviewPage}>
         {/* Header */}
         <div style={s.reviewHeader}>
-          <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>← Back to notes</button>
+          <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>← Back</button>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
-              onClick={() => {
-                if (unresolvedNotes.length > 0 && !unresolvedOverridden) {
-                  if (!window.confirm(`${unresolvedNotes.length} note(s) unresolved. Download PDF anyway?`)) return;
-                }
-                printPreview();
-              }}
-              disabled={pdfProcessing}
-              style={{ ...s.primaryBtn, background: unresolvedNotes.length > 0 && !unresolvedOverridden ? '#f59e0b' : 'var(--blue)', opacity: pdfProcessing ? 0.65 : 1 }}
+              onClick={handleSaveDraft}
+              disabled={savingDraft}
+              style={{ ...s.secondaryBtn, ...(draftSaved ? { background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' } : {}) }}
             >
-              {pdfProcessing ? 'Generating…' : unresolvedNotes.length > 0 && !unresolvedOverridden ? `⚠ Download PDF (${unresolvedNotes.length} unresolved)` : 'Download PDF'}
+              {savingDraft ? 'Saving…' : draftSaved ? '✓ Saved' : '💾 Save draft'}
             </button>
             <button onClick={handleSaveAndEmail} disabled={pdfProcessing} style={{ ...s.primaryBtn, background: '#10b981', opacity: pdfProcessing ? 0.65 : 1 }}>
-              {pdfProcessing ? 'Saving…' : '💾 Save & Email'}
+              {pdfProcessing ? '…' : '📧 Email'}
+            </button>
+            <button onClick={printPreview} disabled={pdfProcessing} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }}>
+              {pdfProcessing ? '…' : '⬇ Download'}
             </button>
           </div>
         </div>
 
         <div style={s.reviewContent}>
-          {/* Metadata */}
-          <div style={s.card}>
-            <div style={s.row2}>
-              <div style={s.field}>
-                <label style={s.label}>Adjoining Owner Property</label>
-                <input style={s.input} value={selectedAOAddress} readOnly />
-              </div>
-              <div style={s.field}>
-                <label style={s.label}>Report ID</label>
-                <input style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text3)' }} value={reportId || 'Not saved yet'} readOnly />
-              </div>
+          {/* Flagged summary */}
+          {flaggedCount > 0 && (
+            <div style={{ padding: '10px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10, fontSize: 13, color: '#92400e' }}>
+              ⚠ {flaggedCount} item{flaggedCount !== 1 ? 's' : ''} highlighted — review and reassign if needed
             </div>
-          </div>
+          )}
 
-          {/* Audit / unresolved panel */}
-          {((unresolvedNotes || []).length > 0 || (auditIssues || []).length > 0) && (
-            <div style={{ padding: '12px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-                {unresolvedOverridden ? '⚠ Draft generated with unresolved items' : '⚠ Review before finalising'}
+          {/* Editable sections */}
+          {editableSections.map((section, sIdx) => (
+            <div key={sIdx} style={{ marginBottom: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
+                {section.number || sIdx + 2}. {section.title}
               </div>
-              {(auditIssues || []).map((issue, i) => (
-                <div key={i} style={{ marginBottom: 6, fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 6, padding: '4px 8px' }}>{issue}</div>
-              ))}
-              {(unresolvedNotes || []).map((item, i) => (
-                <div key={i} style={{ marginBottom: 10, padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #fcd34d' }}>
-                  <div style={{ fontStyle: 'italic', fontSize: 13, color: 'var(--text)', marginBottom: 6 }}>"{item.note_text}"</div>
-                  {item.suggested_section && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Suggested: {item.suggested_section}{item.reason ? ` — ${item.reason}` : ''}</div>}
-                  {!unresolvedOverridden && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {item.suggested_section && (
-                        <button disabled={item.resolving} onClick={async () => {
-                          setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
-                          try {
-                            const res = await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: socSessionId, project_id: projectId || null, resolution: 'allocated', force_section: item.suggested_section, source_note_index: item.note_index }) });
-                            if (res.ok) setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
-                            else setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n));
-                          } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
-                        }} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}>
-                          {item.resolving ? 'Processing…' : `Add to ${item.suggested_section}`}
-                        </button>
-                      )}
-                      {['Contextual', 'Site note', 'Exclude'].map(label => (
-                        <button key={label} disabled={item.resolving} onClick={async () => {
-                          setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: true } : n));
-                          try {
-                            await fetch('/api/process-soc-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: item.note_text, session_id: socSessionId, project_id: projectId || null, resolution: label.toLowerCase().replace(' ', '_'), source_note_index: item.note_index }) });
-                            setUnresolvedNotes(prev => prev.filter((_, idx) => idx !== i));
-                          } catch { setUnresolvedNotes(prev => prev.map((n, idx) => idx === i ? { ...n, resolving: false } : n)); }
-                        }} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, background: label === 'Exclude' ? '#fee2e2' : 'var(--bg3)', color: label === 'Exclude' ? '#991b1b' : 'var(--text2)', border: label === 'Exclude' ? 'none' : '1px solid var(--border)', cursor: 'pointer' }}>
-                          {label}
-                        </button>
-                      ))}
+              {(section.rows || []).map((row, rIdx) => {
+                const flagged = isRowFlagged(row, section.title);
+                return (
+                  <div key={rIdx} style={{
+                    background: flagged ? '#fffbeb' : 'var(--bg2)',
+                    border: `1px solid ${flagged ? '#fcd34d' : 'var(--border)'}`,
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    marginBottom: 6,
+                  }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <input
+                        value={row.ref || ''}
+                        onChange={e => updateRowField(sIdx, rIdx, 'ref', e.target.value)}
+                        style={{ ...s.input, width: 64, fontWeight: 700, fontSize: 12, padding: '4px 6px', textAlign: 'center' }}
+                      />
+                      <select
+                        value={section.title}
+                        onChange={e => { if (e.target.value !== section.title) moveRow(sIdx, rIdx, e.target.value); }}
+                        style={{ ...s.aoSelect, flex: 1, fontSize: 12, padding: '4px 8px' }}
+                      >
+                        {allSectionTitles.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
                     </div>
-                  )}
-                </div>
-              ))}
-              {!unresolvedOverridden && unresolvedNotes.length > 0 && (
-                <button onClick={() => setUnresolvedOverridden(true)} style={{ marginTop: 8, padding: '6px 14px', borderRadius: 99, fontSize: 12, background: 'transparent', border: '1px solid #f59e0b', color: '#b45309', cursor: 'pointer' }}>
-                  Generate draft with unresolved items
-                </button>
-              )}
+                    <textarea
+                      value={row.observation || ''}
+                      onChange={e => updateRowField(sIdx, rIdx, 'observation', e.target.value)}
+                      rows={3}
+                      style={{ ...s.input, width: '100%', resize: 'vertical', fontSize: 13, lineHeight: 1.5, boxSizing: 'border-box', display: 'block' }}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{row.action || 'Record only'}</div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-
-          {/* Preview iframe */}
-          <div style={{ ...s.card, padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text3)' }}>
-              Rendered from the server SOC template
-            </div>
-            <iframe title="Schedule of Condition Preview" srcDoc={previewHtml} style={{ width: '100%', minHeight: '75vh', border: 'none', background: '#fff' }} />
-          </div>
-
-          {structuredData && (
-            <details style={s.card}>
-              <summary style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', cursor: 'pointer' }}>Structured data (JSON)</summary>
-              <pre style={{ fontSize: 11, marginTop: 8, overflow: 'auto', maxHeight: 300, color: 'var(--text3)' }}>{JSON.stringify(structuredData, null, 2)}</pre>
-            </details>
-          )}
+          ))}
         </div>
 
         {oneDriveOverlay && (
