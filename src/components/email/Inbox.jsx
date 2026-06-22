@@ -405,8 +405,13 @@ ${threadText}`;
               .trim())
         : reply;
 
+      // Extract missing points from structured response
+      const missingPoints = Array.isArray(data.missing_points) && data.missing_points.length > 0
+        ? data.missing_points
+        : null;
+
       const msgId = Date.now() + 1;
-      const newMsg = { id: msgId, role: 'ely', explanation: explanation?.trim(), draft };
+      const newMsg = { id: msgId, role: 'ely', explanation: explanation?.trim(), draft, missingPoints };
 
       if (isAuto) {
         setMessages([newMsg]);
@@ -610,6 +615,21 @@ ${threadText}`;
                             ↩ Send this
                           </button>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Still to address — missing points from incoming email */}
+                    {msg.missingPoints && msg.missingPoints.length > 0 && (
+                      <div style={{ marginTop: 8, padding: '10px 13px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                          Still to address
+                        </div>
+                        {msg.missingPoints.map((point, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+                            <span style={{ flexShrink: 0, color: 'var(--text3)' }}>•</span>
+                            <span>{point}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
