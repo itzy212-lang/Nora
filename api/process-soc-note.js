@@ -78,7 +78,80 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return res.status(200).json({ status: 'ok', endpoint: 'process-soc-note' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { note, session_id, project_id, ao_id } = req.body;
+  const { note, session_id, project_id, ao_id, resolution, force_section, source_note_index } = req.body;
+
+  // ── Direct resolution path — when user resolves an unresolved note from the UI ─
+  // This bypasses normal GPT classification and persists the resolution directly.
+  if (resolution && session_id && note) {
+    const UUID_RE_local = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safeAoIdLocal = ao_id && UUID_RE_local.test(String(ao_id)) ? ao_id : null;
+
+    const validResolutions = ['allocated', 'contextual', 'site_note', 'award_note', 'excluded'];
+    if (!validResolutions.includes(resolution)) {
+      return res.status(400).json({ error: 'Invalid resolution type' });
+    }
+
+    try {
+      // Update the existing note status if source_note_index is provided
+      if (source_note_index != null) {
+        await supabase.from('soc_notes')
+          .update({ note_status: resolution === 'allocated' ? 'allocated' : resolution })
+          .eq('session_id', session_id)
+          .eq('sequence', source_note_index);
+      }
+
+      // For 'allocated' resolution, send through professional SOC processing
+      if (resolution === 'allocated' && force_section) {
+        // Call GPT to produce professional observation wording
+        const obsId = makeObsId(force_section, source_note_index || Date.now());
+        const processPrompt = `You are a party wall surveyor writing a Schedule of Condition.
+Convert this raw dictated note into a single professional Schedule of Condition observation row.
+Section: ${force_section}
+Raw note: "${note}"
+
+Return JSON only: {"element": "...", "observation": "Professional SOC wording.", "action": "Record only"}`;
+
+        let professionalObs = note;
+        try {
+          const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: \`Bearer \${process.env.OPENAI_API_KEY}\`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-4o-mini', temperature: 0.1, max_tokens: 200,
+              messages: [{ role: 'user', content: processPrompt }] }),
+          });
+          const gptData = await gptRes.json();
+          const raw = (gptData.choices?.[0]?.message?.content || '').trim()
+            .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+          const parsed = JSON.parse(raw);
+          professionalObs = parsed.observation || note;
+
+          // Create observation in soc_observations
+          await supabase.from('soc_observations').insert({
+            id: obsId, session_id,
+            project_id: project_id || null, ao_id: safeAoIdLocal,
+            section: force_section,
+            element: parsed.element || null,
+            observation: professionalObs,
+            status: 'active',
+            source_note_ids: source_note_index != null ? [source_note_index] : [],
+          });
+        } catch (gptErr) {
+          // If GPT fails, insert raw note — still persists
+          await supabase.from('soc_observations').insert({
+            id: obsId, session_id,
+            project_id: project_id || null, ao_id: safeAoIdLocal,
+            section: force_section, element: null,
+            observation: note, status: 'active',
+            source_note_ids: source_note_index != null ? [source_note_index] : [],
+          }).catch(() => {});
+        }
+      }
+
+      return res.status(200).json({ ok: true, resolution, section: force_section || null });
+    } catch (resErr) {
+      return res.status(500).json({ error: resErr.message || 'Resolution failed' });
+    }
+  }
 
   const safeAoId = ao_id && UUID_RE.test(String(ao_id)) ? ao_id : null;
 
