@@ -50,6 +50,9 @@
     },
     "api/invoice-polish.js": {
       "maxDuration": 30
+    },
+    "api/soc-regression-test.js": {
+      "maxDuration": 300
     }
   }
 }
