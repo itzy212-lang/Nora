@@ -27,7 +27,15 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [auditIssues, setAuditIssues] = useState([]);
   const [auditWarnings, setAuditWarnings] = useState([]);
   const [unresolvedOverridden, setUnresolvedOverridden] = useState(false);
-  const [sessionId] = useState(() => uid()); // stable for the lifetime of this inspection
+  // sessionId is stable per project+AO — persists across page reloads
+  const [sessionId] = useState(() => {
+    const key = `soc_session_${projectId}_${selectedAO?.id || 'default'}`;
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const fresh = uid();
+    localStorage.setItem(key, fresh);
+    return fresh;
+  });
 
   const recognitionRef = useRef(null);
   const accumulatedRef = useRef(''); // all finalised speech across restarts since last Send
@@ -43,7 +51,27 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const selectedAO = aoOptions[Number(selectedAOIndex)] || aoOptions[0] || null;
   const selectedAOAddress = selectedAO?.premise || selectedAO?.reg_addr || selectedAO?.address || selectedAO?.ao_premise_address || '';
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  // Restore notes from Supabase on mount if session already exists
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`/api/soc-session?session_id=${sessionId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.notes?.length) {
+          setMessages(data.notes.map(n => ({
+            id: `note-${n.sequence}`,
+            role: 'user',
+            content: n.raw_note,
+            aiResponse: n.ai_response,
+            section: n.current_section,
+          })));
+          setPhase('recording');
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+    useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   useEffect(() => {
     if (!defaultProjectId) return;
@@ -60,6 +88,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   useEffect(() => {
     setPreviewHtml(''); setStructuredData(null); setReportId(null); setPartyDrafts([]);
+    // Don't reset messages — they're restored from the new session
   }, [selectedAOIndex]);
 
   // ── Guard against accidental navigation when SOC is generated ─────────────
