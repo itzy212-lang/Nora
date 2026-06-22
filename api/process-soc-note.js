@@ -354,6 +354,120 @@ function makeObsId(section, sequence) {
   return `obs-${prefix}-${String(sequence).padStart(2, '0')}`;
 }
 
+
+// ── Live atomic claim extraction + persistence ────────────────────────────
+// Called non-blocking after every dictated note.
+// Uses gpt-4o-mini (fast, low latency for on-site use).
+async function extractAndPersistClaims({
+  note, sequence, session_id, project_id, ao_id,
+  aiResult, finalSection, noteType, correctionMode, previousNotes,
+}) {
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) return;
+
+  // Build minimal context from recent notes
+  const recentContext = (previousNotes || []).slice(-5).map(n =>
+    `[${n.sequence}] (${n.current_section || 'unknown'}) ${n.raw_note}`
+  ).join('\n');
+
+  const prompt = `You are extracting atomic factual claims from a single dictated site note.
+
+CURRENT SECTION: ${finalSection || 'Not yet established'}
+NOTE TYPE: ${noteType || 'observation'}
+NOTE SEQUENCE: ${sequence}
+
+RECENT CONTEXT (last 5 notes):
+${recentContext || 'None — this is an early note.'}
+
+CURRENT RAW NOTE: "${note}"
+
+Extract every separate fact from this note as atomic claims.
+One note may contain: construction description, finish, general condition, specific defect, access limitation, operational test, section change, correction, context.
+
+If this note is an amendment/correction, set amendment_mode and mark the corrected claim type.
+
+For each claim:
+- claim_id: "claim-${sequence}-N" (N = 1,2,3...)
+- source_note_id: ${sequence}
+- sequence: N
+- claim_type: section_declaration|construction_description|finish_description|general_condition|specific_defect|access_limitation|operational_test|contextual|amendment|site_note|award_note|unresolved
+- section: section name (carry forward if not explicitly changed)
+- element: building element (party wall, ceiling, floor, window, door, etc.) or null
+- location: specific location description or null
+- content: the fact stated cleanly in plain English (not the raw dictation)
+- confidence: high|medium|low
+- status: active|superseded|contextual|unresolved
+- amendment_mode: replace|supplement|qualify|correct_measurement|correct_location|withdraw|null
+
+Return JSON only: { "claims": [...] }`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer \${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.05,
+        max_tokens: 1200,
+        messages: [
+          { role: 'system', content: 'Extract atomic claims from a single site note. Return valid JSON only.' },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+
+    if (!res.ok) return;
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim()
+      .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+
+    let claims;
+    try { claims = JSON.parse(raw).claims; } catch { return; }
+    if (!Array.isArray(claims) || claims.length === 0) return;
+
+    // Persist claims to soc_claims
+    const rows = claims.map(c => ({
+      session_id,
+      project_id: project_id || null,
+      ao_id: ao_id || null,
+      claim_id: c.claim_id || `claim-\${sequence}-\${c.sequence || 1}`,
+      source_note_id: sequence,
+      sequence: c.sequence || 1,
+      claim_type: c.claim_type || 'unresolved',
+      section: c.section || finalSection || null,
+      element: c.element || null,
+      location: c.location || null,
+      content: c.content || note,
+      confidence: c.confidence || 'high',
+      status: c.status || 'active',
+      amendment_mode: c.amendment_mode || null,
+    }));
+
+    await supabase.from('soc_claims').insert(rows);
+
+    // If this is an amendment, mark prior claims as superseded
+    if (noteType === 'amendment' && correctionMode === 'replace') {
+      const amendedClaims = claims.filter(c => c.amendment_mode === 'replace');
+      if (amendedClaims.length > 0 && finalSection) {
+        // Supersede active claims for the same element in the same section from earlier notes
+        const affectedElements = [...new Set(amendedClaims.map(c => c.element).filter(Boolean))];
+        for (const el of affectedElements) {
+          await supabase
+            .from('soc_claims')
+            .update({ status: 'superseded' })
+            .eq('session_id', session_id)
+            .eq('element', el)
+            .eq('section', finalSection)
+            .eq('status', 'active')
+            .lt('source_note_id', sequence);
+        }
+      }
+    }
+  } catch (e) {
+    // Non-blocking — never throw
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') return res.status(200).json({ status: 'ok', endpoint: 'process-soc-note' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -395,7 +509,7 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
         try {
           const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
-            headers: { Authorization: \`Bearer \${process.env.OPENAI_API_KEY}\`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer \${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: 'gpt-4o-mini', temperature: 0.1, max_tokens: 200,
               messages: [{ role: 'user', content: processPrompt }] }),
           });
@@ -659,6 +773,21 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
       })
       .eq('session_id', session_id)
       .eq('sequence', sequence);
+
+
+    // ── 7. Extract atomic claims for this note (non-blocking, persists to soc_claims) ─────
+    extractAndPersistClaims({
+      note: note.trim(),
+      sequence,
+      session_id,
+      project_id: project_id || null,
+      ao_id: safeAoId,
+      aiResult,
+      finalSection,
+      noteType,
+      correctionMode,
+      previousNotes,
+    }).catch(e => console.warn('[process-soc-note] live claim persist failed (non-fatal):', e.message));
 
     return res.status(200).json({
       response: aiResponse,
