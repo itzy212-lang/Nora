@@ -654,6 +654,24 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         </div>
       </div>
 
+      {unresolvedNotes.length > 0 && (
+        <div style={{ marginBottom: 12, padding: '12px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+            ⚠ Unresolved notes — review before finalising
+          </div>
+          {unresolvedNotes.map((item, i) => (
+            <div key={i} style={{ marginBottom: 8, fontSize: 13 }}>
+              <div style={{ fontStyle: 'italic', color: 'var(--text2)' }}>"{item.note_text}"</div>
+              {item.suggested_section && (
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                  Suggested: {item.suggested_section}{item.reason ? ` — ${item.reason}` : ''}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ ...s.card, padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text3)' }}>
           Rendered from the server SOC template
