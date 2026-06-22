@@ -398,6 +398,30 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     });
   }
 
+  function deleteRow(sectionIdx, rowIdx) {
+    setEditableSections(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const [removed] = next[sectionIdx].rows.splice(rowIdx, 1);
+      // Mark source claims as excluded in DB (non-blocking)
+      if (removed?.source_claim_ids?.length && reportId) {
+        fetch('/api/soc-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'mark_claims_excluded',
+            report_id: reportId,
+            session_id: socSessionId,
+            claim_ids: removed.source_claim_ids,
+            row_ref: removed.ref,
+          }),
+        }).catch(e => console.warn('[SOC] claim exclusion update failed:', e.message));
+      }
+      const filtered = next.filter(s => s.rows.length > 0);
+      schedulePersistEdits(filtered);
+      return filtered;
+    });
+  }
+
   function updateRowField(sectionIdx, rowIdx, field, value) {
     setEditableSections(prev => {
       const next = JSON.parse(JSON.stringify(prev));
@@ -614,10 +638,17 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                       style={{ ...s.input, width: '100%', resize: 'vertical', fontSize: 13, lineHeight: 1.5, boxSizing: 'border-box', display: 'block' }}
                     />
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{row.action || 'Record only'}</div>
-                      {flagged && row.flag_reason && (
-                        <div style={{ fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>{row.flag_reason}</div>
-                      )}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{row.action || 'Record only'}</div>
+                        {flagged && row.flag_reason && (
+                          <div style={{ fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>{row.flag_reason}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => { if (window.confirm('Remove this row? Source claims will be marked excluded.')) deleteRow(sIdx, rIdx); }}
+                        style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                        title="Remove row and mark source claims as excluded"
+                      >✕ Remove</button>
                     </div>
                   </div>
                 );
