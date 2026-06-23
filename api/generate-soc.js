@@ -1207,7 +1207,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       content: cl.content || '', confidence: cl.confidence || 'high',
       status: cl.status || 'active', amendment_mode: cl.amendment_mode || null,
     }));
-    supabase.from('soc_claims').insert(claimRows).catch(() => {});
+    (async () => { try { await supabase.from('soc_claims').insert(claimRows); } catch {} })();
   }
 
   // Update claim destinations (inline)
@@ -1219,7 +1219,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
           updates.push({ claim_id: cid, destination_type: 'soc_row', destination_id: r.row_id || r.ref });
     for (const u of updates)
       supabase.from('soc_claims').update({ destination_type: u.destination_type, destination_id: u.destination_id, represented: true })
-        .eq('session_id', sessionId).eq('claim_id', u.claim_id).catch(() => {});
+        .eq('session_id', sessionId).eq('claim_id', u.claim_id).then(null, () => {});
   }
 
   const status = draftedResult._emergency_draft ? 'emergency_draft'
