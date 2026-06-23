@@ -705,26 +705,20 @@ Every condition observation must be assigned to a section.
 Where assignment is genuinely uncertain, place in the most logical section and flag in unresolved_notes.
 
 Step 4: RECONCILE ALL AMENDMENTS
-Every note in the transcript must appear in the final output in some form — as a condition observation, a site note, or an additional note. No note may be silently discarded.
-
-Amendment and revision signals include: actually, correction, scratch that, ignore the last note, minor amendment, just to amend, going back to, just to clarify, I have just noticed, amend that to, change that to, revise that, update that, slight amendment, just to note on that last one, just to note, on that last one, to clarify that last, going back to that last note.
-
-When you detect a revision signal, determine what type it is:
-- FULL REPLACEMENT ("strike that", "scratch that", "ignore that") — discard the earlier version, use only the revised version.
-- SCOPE REFINEMENT ("just to note on that last one", "just to clarify", "to note on that") — the surveyor is adding precision to an earlier note, not replacing it. Merge both pieces of information. Example: surveyor says "both chimney breasts front and rear have been removed" then says "just to note on that last one, we are talking about the ground floor" — correct output is "The ground floor front and rear elevation chimney breasts have been removed." Both "ground floor" AND "front and rear" must survive.
-- ADDITION ("just to add", "also worth noting") — append to the existing observation, do not replace it.
-
-Identify the target of any revision by section, element, location and meaning — not only the immediately preceding note.
-Where a note corrects a measurement: use the corrected value only.
+Detect correction phrases: actually, correction, scratch that, ignore the last note, minor amendment, just to amend, amendment to my previous note, going back to, just to clarify, I have just noticed, amend that to, change that to, revise that, update that, in contrast to, slight amendment.
+Identify the correct target by section, element, location and meaning — not only the immediately preceding note.
+Where a note corrects a measurement: use the corrected value, do not retain the original.
+Where a later note identifies a defect in an element previously described as defect-free: reconcile both in the final observation. Example: "The precast concrete panels appeared generally free from visible defects, except that the second panel from the front and second panel above floor level was displaced inward."
 Do not retain contradictory statements in the same observation.
 
 Step 5: COMPLETENESS AND CONTRADICTION AUDIT
-Before producing the final JSON, verify:
-- Every dictated note is accounted for — as a condition row, site note, or additional note.
-- No section is missing despite content existing for it.
-- No measurements, locations, directions or dimensions have been dropped.
-- All revisions have been correctly applied — scope refinements have merged both pieces of information, full replacements have discarded the earlier version.
-- No contradictory statements remain in the same observation.
+Before producing the final JSON, check:
+- Are all notes accounted for?
+- Are there contradictory no-defects statements alongside defect observations for the same element?
+- Have any measurements been lost during reconciliation?
+- Have any locations, directions or dimensions been dropped?
+- Have any unresolved amendments been left inconsistent?
+- Are any sections missing despite content existing for them?
 Resolve all issues before producing the final JSON.
 
 Step 6: WRITE PROFESSIONAL OBSERVATIONS
