@@ -1173,14 +1173,10 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     if (!draftedResult) throw new Error('GENERATION_INCOMPLETE: All stages failed.');
   }
 
-  // Stage 3: Quality audit (batched)
-  let qualityResult = draftedResult;
-  try {
-    const audited = await runQualityAudit(draftedResult, apiKey);
-    if (audited && Array.isArray(audited.sections) && audited.sections.length > 0) {
-      qualityResult = audited;
-    }
-  } catch (e) { console.warn('[generate-soc] Stage 3 failed (non-fatal):', e.message); }
+  // Stage 3 (quality audit) and Stage 4 (fidelity) removed from synchronous path —
+  // they add 30-40s latency and belong in a background/async process.
+  // The editable preview allows manual review and correction.
+  const qualityResult = draftedResult;
 
   try {
     validateSocJson(qualityResult);
@@ -1194,11 +1190,9 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     for (const r of (s.rows || []))
       if (!r.row_id) r.row_id = `row-${s.number || 0}-${r.ref}-${Date.now()}`;
 
-  // Stage 4: Fidelity audit
-  const fidelity = await runFidelityAudit(qualityResult, claims, apiKey).catch(() => ({ issues: [], warnings: [] }));
-
-  // Completeness audit
+  // Lightweight coded-only completeness audit (no GPT call)
   const audit = runCompletenessAudit(qualityResult, claims);
+  const fidelity = { issues: [], warnings: [] };
 
   // Persist extracted claims (inline — persistClaimsToDb moved to lib)
   if (!claimsFromLive && claims.length && sessionId) {
