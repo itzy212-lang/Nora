@@ -1200,13 +1200,33 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   // Completeness audit
   const audit = runCompletenessAudit(qualityResult, claims);
 
-  // Persist extracted claims
+  // Persist extracted claims (inline — persistClaimsToDb moved to lib)
   if (!claimsFromLive && claims.length && sessionId) {
-    persistClaimsToDb(claims, sessionId, projectId, aoId, null).catch(() => {});
+    const claimRows = claims.map(cl => ({
+      session_id: sessionId, project_id: projectId || null, ao_id: aoId || null,
+      claim_id: cl.claim_id, source_note_id: cl.source_note_id || cl.note_sequence || 0,
+      note_sequence: cl.note_sequence || cl.source_note_id || 0,
+      sequence: cl.claim_sequence || cl.sequence || 1,
+      claim_sequence: cl.claim_sequence || cl.sequence || 1,
+      claim_type: cl.claim_type || 'unresolved', section: cl.section || null,
+      element: cl.element || null, location: cl.location || null,
+      content: cl.content || '', confidence: cl.confidence || 'high',
+      status: cl.status || 'active', amendment_mode: cl.amendment_mode || null,
+    }));
+    supabase.from('soc_claims').insert(claimRows).catch(() => {});
   }
 
-  // Update claim destinations
-  if (sessionId) updateClaimDestinations(qualityResult, sessionId).catch(() => {});
+  // Update claim destinations (inline)
+  if (sessionId && qualityResult?.sections) {
+    const updates = [];
+    for (const s of qualityResult.sections)
+      for (const r of (s.rows || []))
+        for (const cid of (r.source_claim_ids || []))
+          updates.push({ claim_id: cid, destination_type: 'soc_row', destination_id: r.row_id || r.ref });
+    for (const u of updates)
+      supabase.from('soc_claims').update({ destination_type: u.destination_type, destination_id: u.destination_id, represented: true })
+        .eq('session_id', sessionId).eq('claim_id', u.claim_id).catch(() => {});
+  }
 
   const status = draftedResult._emergency_draft ? 'emergency_draft'
     : (audit.issues.length || fidelity.issues.length) ? 'quality_flagged' : 'complete';
