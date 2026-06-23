@@ -404,8 +404,8 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
               : 'gpt-4o';
   const isGpt5Family = ['gpt55','gpt54','gpt5'].includes(resolvedMode);
   const params = isGpt5Family
-    ? { max_completion_tokens: 16000, reasoning_effort: 'medium' }
-    : { temperature: 0.15, max_tokens: 16000 };
+    ? { max_completion_tokens: 32000, reasoning_effort: 'medium' }
+    : { temperature: 0.15, max_tokens: 16383 };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
   const aoAddress     = projectMeta.ao_address    || 'Not provided';
@@ -465,7 +465,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'Read the complete transcript above exactly as a surveyor reading rough site notes.\n' +
     'Understand the full inspection sequence, all room transitions and all amendments.\n' +
     'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
-    'Draft the complete Schedule of Conditions section by section.\n' +
+    'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
     'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
     'Return valid JSON only:\n' +
     '{\n' +
