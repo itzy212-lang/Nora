@@ -485,7 +485,9 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
   const discussion = (data.discussion || data.discussion_items || []).filter(
     (item) => item && (item.item || item.title || item.body || item.description || (typeof item === 'string' && item.trim()))
   );
-  const generalNotes = (data.general_notes || []).filter(Boolean);
+  const generalNotes = (data.general_notes || [])
+    .map(n => typeof n === 'string' ? n : (n?.note || n?.text || n?.description || n?.content || JSON.stringify(n)))
+    .filter(Boolean);
   const crackClass = data.crack_classification || config.crack_classification || [
     { width: 'Up to 0.1mm', expression: 'Hairline' },
     { width: '0.1mm to 1.0mm', expression: 'Very Slight' },
