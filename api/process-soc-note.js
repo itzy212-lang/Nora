@@ -11,7 +11,7 @@ import {
   SECTION_KEYWORDS,
   LIVE_NOTE_SYSTEM_PROMPT,
 } from './soc-framework.js';
-import { noteComplexity, modelForComplexity } from './lib/soc-pipeline.js';
+import { noteComplexity, modelForComplexity, applySttCorrections, canonicalSection } from './lib/soc-pipeline.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -431,8 +431,12 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
           temperature: 0.05,
           max_tokens: maxTokens,
           messages: [
-            { role: 'system', content: 'Extract atomic claims from a single site note. Return valid JSON only.' },
-            { role: 'user', content: `${currentSectionCtx}Extract every atomic factual claim from this note. Return JSON: { "claims": [{ "claim_id": "c-${sequence}-N", "source_note_id": ${sequence}, "note_sequence": ${sequence}, "claim_sequence": N, "claim_type": "...", "section": "...", "element": "...", "location": "...", "content": "...", "confidence": "high|medium|low", "status": "active|superseded|contextual|unresolved", "superseded_by": null, "amendment_mode": null }] }\n\nNOTE: ${note.trim()}` },
+            { role: 'system', content: `You are extracting structured factual claims from a single Party Wall site inspection note.
+Apply speech-to-text corrections: "bugatti wall"→"party wall", "plank wall"→"flank wall", "blank wall"→"flank wall", "v-locks"→"VELUX", "sealing"(ceiling context)→"ceiling", "real evasion wall"→"rear elevation wall", "kitched roof"→"pitched roof", "tarps floor"→"tiled floor", "UPBC"→"UPVC".
+Navigation phrases (continuing the schedule, standing in the room, etc.) become section_transition or contextual — never observations.
+For each factual claim store structured fields, NOT finished prose sentences.
+Return JSON only: { "claims": [{ "claim_id":"c-N-M", "source_note_id":N, "note_sequence":N, "claim_sequence":M, "claim_type":"...", "section":"...", "element":"...", "construction":null, "finish":null, "condition":null, "defect_type":null, "location":null, "direction":null, "measurement":null, "extent":null, "operational_result":null, "access_limitation":null, "raw_fragment":"...", "status":"active|superseded|contextual", "amendment_mode":null, "superseded_by":null, "confidence":"high|medium|low" }] }` },
+            { role: 'user', content: `${currentSectionCtx}Extract structured factual claims from this note. Use canonical section names (Ground Floor Front Elevation Room / Ground Floor Rear Elevation Room / Ground Floor / Rear Extension / First Floor Rear Bedroom / First Floor Front Elevation Room / External Areas). Return JSON: { "claims": [{ "claim_id": "c-${sequence}-N", "source_note_id": ${sequence}, "note_sequence": ${sequence}, "claim_sequence": N, "claim_type": "...", "section": "...", "element": "...", "location": "...", "content": "...", "confidence": "high|medium|low", "status": "active|superseded|contextual|unresolved", "superseded_by": null, "amendment_mode": null }] }\n\nNOTE: ${note.trim()}` },
           ],
         }),
       });
