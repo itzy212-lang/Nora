@@ -871,10 +871,13 @@ Do not omit source_note_ids.`;
 // Every source note must have a classification. 100% accounting required.
 // A note may be contextual/site/award/excluded/unresolved — but it must not disappear.
 function validateSocJson(parsed) {
-  // Fatal: missing or malformed top-level arrays
-  const requiredArrays = ['sections', 'discussion', 'general_notes', 'actions', 'award_notes', 'emails_required'];
-  // unresolved_notes is optional — auto-create if missing
-  if (!parsed.unresolved_notes) parsed.unresolved_notes = [];
+  // Auto-populate optional fields that the new pipeline may omit
+  const optionalArrays = ['discussion', 'general_notes', 'actions', 'award_notes', 'emails_required', 'unresolved_notes'];
+  for (const key of optionalArrays) {
+    if (!(key in parsed) || !Array.isArray(parsed[key])) parsed[key] = [];
+  }
+  // Only sections is truly required
+  const requiredArrays = ['sections'];
   for (const key of requiredArrays) {
     if (!(key in parsed)) {
       throw new Error(`SOC validation failed: missing required field "${key}"`);
