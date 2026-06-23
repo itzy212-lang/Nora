@@ -408,140 +408,118 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     || new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const proposedWorks = projectMeta.proposed_works || 'Not specified';
 
-  // Group ALL claims by section (active and superseded)
-  const sectionOrder = [], claimsBySection = {};
-  for (const c of claims) {
-    const sec = c.section || 'Unallocated';
-    if (!claimsBySection[sec]) { claimsBySection[sec] = []; sectionOrder.push(sec); }
-    claimsBySection[sec].push(c);
-  }
-  const uniqueSections = [...new Set(sectionOrder)];
+  // Build full raw transcript in sequence
+  const fullTranscript = rawNotes
+    ? Object.entries(rawNotes)
+        .sort(([a],[b]) => Number(a) - Number(b))
+        .map(([seq, text]) => '[' + seq + '] ' + text)
+        .join('\n\n')
+    : '';
 
-  // Build claim-count-aware batches (max 25 active claims per batch)
-  const activeCounts = {};
-  for (const sec of uniqueSections) {
-    activeCounts[sec] = (claimsBySection[sec] || []).filter(c => c.status === 'active').length;
+  // Build active claims checklist (structured facts, not prose)
+  const contextualTypes = new Set(['contextual', 'section_transition', 'award_note']);
+  const activeClaims = claims.filter(c => c.status === 'active' && !contextualTypes.has(c.claim_type));
+  const supersededClaims = claims.filter(c => c.status === 'superseded');
+
+  const checklistLines = activeClaims.map(c => {
+    const facts = [];
+    if (c.element)            facts.push('Element: ' + c.element);
+    if (c.construction && c.finish) facts.push('Construction/finish: ' + c.construction + ', ' + c.finish);
+    else if (c.construction)  facts.push('Construction: ' + c.construction);
+    else if (c.finish)        facts.push('Finish: ' + c.finish);
+    if (c.condition)          facts.push('Condition: ' + c.condition);
+    if (c.defect_type)        facts.push('Defect: ' + c.defect_type);
+    if (c.location)           facts.push('Location: ' + c.location);
+    if (c.direction)          facts.push('Direction: ' + c.direction);
+    if (c.measurement)        facts.push('Measurement: ' + c.measurement);
+    if (c.extent)             facts.push('Extent: ' + c.extent);
+    if (c.operational_result) facts.push('Test result: ' + c.operational_result);
+    if (c.access_limitation)  facts.push('Access: ' + c.access_limitation);
+    if (c.amendment_mode)     facts.push('Amendment: ' + c.amendment_mode);
+    const raw = c.raw_fragment ? '  raw: "' + c.raw_fragment + '"' : '';
+    return '[' + c.claim_id + '] section=' + (c.section||'?') + ' type=' + c.claim_type + '\n' +
+      facts.map(f => '  ' + f).join('\n') + (raw ? '\n' + raw : '');
+  }).join('\n\n');
+
+  const supersededNote = supersededClaims.length
+    ? '\n--- SUPERSEDED — DO NOT USE IN ANY ROW ---\n' +
+      supersededClaims.map(c => c.claim_id + ': ' + (c.raw_fragment || c.content || '')).join('\n')
+    : '';
+
+  console.log('[soc-pipeline] Single-call draft: model=' + model + ' notes=' + Object.keys(rawNotes||{}).length + ' claims=' + activeClaims.length);
+
+  const userPrompt = 'PROPERTY: Adjoining Owner: ' + aoAddress + ' | Building Owner: ' + boAddress + ' | Date: ' + inspDate + '\n\n' +
+    '══════════════════════════════════\n' +
+    'COMPLETE RAW TRANSCRIPT (read this as your primary source):\n' +
+    '══════════════════════════════════\n' +
+    (fullTranscript || '(no transcript available)') + '\n\n' +
+    '══════════════════════════════════\n' +
+    'ACTIVE CLAIMS — completeness checklist (every claim must appear in a row):\n' +
+    '══════════════════════════════════\n' +
+    checklistLines + supersededNote + '\n\n' +
+    'Read the complete transcript above exactly as a surveyor reading rough site notes.\n' +
+    'Understand the full inspection sequence, all room transitions and all amendments.\n' +
+    'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
+    'Draft the complete Schedule of Conditions section by section.\n' +
+    'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
+    'Return valid JSON only:\n' +
+    '{\n' +
+    '  "sections": [{"number": 1, "title": "...", "rows": [{"ref": "XX01", "row_id": "uid", "element": "...", "observation": "Professional observation.", "action": "Record only", "source_note_ids": [1], "source_claim_ids": ["c-1-1"]}]}],\n' +
+    '  "site_notes": [],\n' +
+    '  "general_notes": []\n' +
+    '}';
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, ...params, messages: [
+      { role: 'system', content: DRAFTING_SYSTEM },
+      { role: 'user', content: userPrompt },
+    ]}),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error('Drafting API ' + res.status + ': ' + errText.slice(0, 200));
   }
 
-  const batches = [];
-  let currentBatch = [], currentCount = 0;
-  for (const sec of uniqueSections) {
-    const cnt = activeCounts[sec] || 0;
-    if (cnt > MAX_CLAIMS_PER_BATCH) {
-      if (currentBatch.length) { batches.push(currentBatch); currentBatch = []; currentCount = 0; }
-      const secClaims = (claimsBySection[sec] || []).filter(c => c.status === 'active');
-      for (let j = 0; j < secClaims.length; j += MAX_CLAIMS_PER_BATCH) {
-        const partNum = Math.floor(j / MAX_CLAIMS_PER_BATCH) + 1;
-        const pseudoSec = partNum === 1 ? sec : `${sec} (Part ${partNum})`;
-        batches.push([pseudoSec]);
-        claimsBySection[pseudoSec] = [
-          ...secClaims.slice(j, j + MAX_CLAIMS_PER_BATCH),
-          ...(claimsBySection[sec] || []).filter(c => c.status === 'superseded'),
-        ];
-      }
-    } else if (currentCount + cnt > MAX_CLAIMS_PER_BATCH && currentBatch.length) {
-      batches.push(currentBatch); currentBatch = [sec]; currentCount = cnt;
-    } else {
-      currentBatch.push(sec); currentCount += cnt;
-    }
-  }
-  if (currentBatch.length) batches.push(currentBatch);
+  const d = await res.json();
+  const raw = (d.choices?.[0]?.message?.content || '')
+    .replace(/^[`]{3}(?:json)?[\s]*/m, '').replace(/[\s]*[`]{3}$/m, '').trim();
 
-  const allSections = [], allAwardNotes = [], allGeneralNotes = [];
+  let result;
+  try { result = JSON.parse(raw); }
+  catch { throw new Error('Drafting returned invalid JSON'); }
+
+  if (!Array.isArray(result.sections) || !result.sections.length) {
+    throw new Error('Drafting returned no sections');
+  }
+
+  // Assign stable row IDs
   let sectionNumber = 1;
-
-  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-    const batchSections = batches[batchIdx];
-    const claimCount = batchSections.reduce((s, sec) => s + (activeCounts[sec] || 0), 0);
-    console.log(`[soc-pipeline] Drafting batch ${batchIdx+1}/${batches.length}: ${batchSections.join(', ')} (${claimCount} active claims) model=${model}`);
-
-    // Build factual checklist for this batch
-    const batchClaimsAll = batchSections.flatMap(sec => claimsBySection[sec] || []);
-    const checklist = buildFactualChecklist(batchClaimsAll, null);
-
-    // Build raw notes text for this batch's sections
-    const batchNoteSeqs = new Set(batchClaimsAll.map(c => c.source_note_id || c.note_sequence).filter(Boolean));
-    const rawNotesForBatch = rawNotes
-      ? Object.entries(rawNotes)
-          .filter(([seq]) => batchNoteSeqs.has(Number(seq)))
-          .sort(([a],[b]) => Number(a)-Number(b))
-          .map(([seq, text]) => `[${seq}] ${text}`)
-          .join('\n\n')
-      : '';
-
-    const userPrompt = `SECTIONS TO DRAFT (starting at section number ${sectionNumber}):
-${batchSections.map(s => '  - ' + s).join('\n')}
-
-PROPERTY: Adjoining Owner: ${aoAddress} | Building Owner: ${boAddress} | Date: ${inspDate}
-
-══════════════════════════════════════════════════
-RAW DICTATION — read this first, this is your primary source:
-══════════════════════════════════════════════════
-${rawNotesForBatch || '(see structured claims below)'}
-
-══════════════════════════════════════════════════
-ACTIVE CLAIMS — completeness checklist, every claim must appear in a row:
-══════════════════════════════════════════════════
-${checklist}
-
-Read the raw dictation above as an experienced Party Wall Surveyor reading rough field notes.
-Use the active claims only as a completeness checklist — not as sentence templates.
-For any self-correction in the notes (Actually..., scratch that), use ONLY the corrected meaning.
-NEVER use 'intermittently' for the 500mm crack — that word was corrected out by the surveyor.
-Draft professional SOC rows from first principles. Every row must have source_claim_ids.
-
-Return valid JSON only:
-{
-  "sections": [{"number": N, "title": "...", "rows": [{"ref": "XX01", "row_id": "uid", "element": "...", "observation": "Professional multi-sentence observation.", "action": "Record only", "source_note_ids": [1], "source_claim_ids": ["c-1-1"]}]}],
-  "site_notes": [],
-  "general_notes": []
-}`;
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model, ...params,
-          messages: [
-            { role: 'system', content: DRAFTING_SYSTEM },
-            { role: 'user', content: userPrompt },
-          ],
-        }),
-      });
-      if (!res.ok) throw new Error(`Drafting API ${res.status}`);
-      const d = await res.json();
-      const raw = (d.choices?.[0]?.message?.content || '')
-        .replace(/^[`]{3}(?:json)?\s*/m, '').replace(/\s*[`]{3}$/m, '').trim();
-      const batchResult = JSON.parse(raw);
-
-      for (const sec of (batchResult.sections || [])) {
-        sec.number = sectionNumber++;
-        for (const row of (sec.rows || []))
-          if (!row.row_id) row.row_id = `row-${sec.number}-${row.ref}-${Date.now()}`;
-        allSections.push(sec);
-      }
-      for (const n of (batchResult.site_notes || [])) {
-        const text = typeof n === 'string' ? n : (n.note || n.text || n.description || '');
-        if (text) allAwardNotes.push({ description: text });
-      }
-      for (const n of (batchResult.general_notes || [])) {
-        const text = typeof n === 'string' ? n : (n.note || n.text || '');
-        if (text) allGeneralNotes.push(text);
-      }
-    } catch (e) {
-      console.warn(`[soc-pipeline] Drafting batch ${batchIdx+1} failed:`, e.message);
-    }
+  for (const sec of result.sections) {
+    sec.number = sectionNumber++;
+    for (const row of (sec.rows || []))
+      if (!row.row_id) row.row_id = 'row-' + sec.number + '-' + row.ref + '-' + Date.now();
   }
 
-  if (!allSections.length) throw new Error('Drafting returned no sections');
+  // Normalise site_notes / general_notes to strings
+  const siteNotes = (result.site_notes || []).map(n =>
+    typeof n === 'string' ? n : (n.note || n.text || n.description || JSON.stringify(n))
+  ).filter(Boolean);
+
+  const generalNotes = (result.general_notes || []).map(n =>
+    typeof n === 'string' ? n : (n.note || n.text || '')
+  ).filter(Boolean);
 
   return {
-    sections: allSections,
+    sections: result.sections,
     unresolved_notes: [],
-    award_notes: allAwardNotes,
-    general_notes: allGeneralNotes,
+    award_notes: siteNotes.map(t => ({ description: t })),
+    general_notes: generalNotes,
   };
 }
+
 
 // ─── Completeness audit ────────────────────────────────────────────────────────
 export function runCompletenessAudit(draftedResult, claims) {
