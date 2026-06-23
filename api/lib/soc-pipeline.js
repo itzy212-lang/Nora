@@ -524,7 +524,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
 
   // Normalise site_notes / general_notes to strings
   const siteNotes = (result.site_notes || []).map(n =>
-    typeof n === 'string' ? n : (n.note || n.text || n.description || JSON.stringify(n))
+    typeof n === 'string' ? n : (n.observation || n.note || n.text || n.description || n.content || '')
   ).filter(Boolean);
 
   const generalNotes = (result.general_notes || []).map(n =>
