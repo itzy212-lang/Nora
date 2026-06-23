@@ -386,6 +386,9 @@ GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
 - Separate: different elements, different defects, different locations, different tests
 - Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
+- Include ALL rooms the surveyor entered and recorded, even where no notifiable works are currently proposed — record them with a note that the area was included for completeness
+- Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
+- Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
 
 AMENDMENT RULE — CRITICAL:
 If the raw notes contain any correction ("Actually...", "scratch that", "just to amend"), use ONLY the corrected meaning. The superseded wording must NEVER appear in any row.
