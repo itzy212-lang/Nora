@@ -122,7 +122,7 @@ Mark the relevant previous claim as status="superseded" with superseded_by point
 The corrected claim is status="active".
 NEVER leave two active claims covering the same element where one corrects the other.
 For the 500mm crack: "intermittently" was corrected out — active claim must NOT contain it.
-For the chimney breast: note 2 says "just to note on that last one, we're talking about the ground floor front" — this supersedes the "both chimney breasts" claim from note 1. Only the ground floor front chimney breast removal should be active.
+For the chimney breast: note 2 says "just to note on that last one, we're talking about the ground floor" — this is a SCOPE REFINEMENT, not a full replacement. It narrows the floor level to ground floor only, but does NOT remove "front and rear". Both chimney breasts (front and rear) on the ground floor were removed. The active claim must read: ground floor front and rear chimney breasts removed.
 
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
@@ -237,17 +237,18 @@ Required row:
 
 ---
 
-EXAMPLE 2 — Section introduction with layout context
+EXAMPLE 2 — Section introduction with layout context and scope refinement amendment
 
 Raw dictation: "front elevation is an open plan that extends into the extension, both chimney breasts on the front and rear removed. just to note on that last one talking about ground floor front chimney breast"
 Facts:
   • claim_type: contextual/construction_description
   • Layout: open-plan arrangement extending to rear
-  • Element: Chimney breast
-  • Condition: Ground-floor front chimney breast removed
+  • Element: Chimney breasts (front and rear)
+  • Amendment type: SCOPE REFINEMENT — "just to note on that last one" narrows to ground floor only, does NOT remove "front and rear"
+  • Condition: Ground-floor front AND rear chimney breasts removed
 
 Required row:
-"The ground floor front reception room forms part of an open-plan arrangement extending through to the rear of the property and into the later rear extension. The original ground-floor front chimney breast has been removed."
+"The ground floor front reception room forms part of an open-plan arrangement extending through to the rear of the property and into the later rear extension. The original ground-floor front and rear elevation chimney breasts have been removed."
 
 ---
 
