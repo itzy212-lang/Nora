@@ -539,6 +539,10 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     unresolved_notes: [],
     award_notes: siteNotes.map(t => ({ description: t })),
     general_notes: generalNotes,
+    _drafting_metadata: {
+      drafting_model: model,
+      model_key: resolvedMode,
+    },
   };
 }
 
