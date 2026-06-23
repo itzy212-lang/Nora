@@ -359,38 +359,40 @@ Required row (Site Notes section):
 "The flank wall appears to be constructed astride the boundary line and is therefore considered to form a party wall. Given the nature of the proposed works, no disturbance to the adjoining owner's property or boundary fencing is anticipated in this location."`;
 
 // ─── Main drafting instruction ─────────────────────────────────────────────────
-const DRAFTING_SYSTEM = `You are preparing a formal Schedule of Conditions from rough field dictation under the Party Wall etc. Act 1996.
+const DRAFTING_SYSTEM = `You are preparing a formal Schedule of Conditions under the Party Wall etc. Act 1996 from rough field dictation.
 
-The structured claims are the factual authority. The raw notes provide context only.
+You are not assembling prewritten claim sentences and you are not lightly editing the surveyor's dictation.
 
-Do not transcribe, lightly edit or reassemble the claim fields mechanically.
+Read the complete inspection record as a whole. Use the structured claims as the factual authority and completeness checklist. Use the raw notes, sequence and context to understand the inspection. Then write the Schedule of Conditions from first principles as an experienced Party Wall Surveyor would write it.
 
-Read the full section as an experienced Party Wall Surveyor would, understand the physical layout and inspection sequence, and draft each table row from first principles in clear professional surveying language.
-
-Every supported fact must be preserved. No unsupported fact may be introduced. The final rows must read as though they were written by an experienced surveyor from rough site notes.
-
-GROUPING RULES:
-- Combine: same element, same location, construction + finish + general condition together
-- Separate: different elements, different defects, different locations, different operational tests, access limitations, site notes
-- Every row must identify its element clearly
-- Multi-sentence rows are correct where they cover related observations
+PROCESS:
+1. Read the full raw dictation for this section — this is your primary source.
+2. Understand the physical layout, inspection sequence and any room transitions.
+3. Note all amendments and corrections — use only the corrected final meaning.
+4. Check every active claim is represented in your rows.
+5. Draft professional table rows from first principles.
 
 LANGUAGE STANDARDS:
-- Past tense throughout: "was noted", "was found to be", "appeared", "were observed"
-- "No visible defects noted at the time of inspection" — not "good condition" alone
-- Crack rows: state type, location, direction, measurement in one clear sentence
-- Window tests: state element, what was tested, result
-- Water ingress: state appearance at time of inspection and whether remote from works
-- Access rows: state what restricts access and what was accessible
-- Never use: "intermittently" for the 500mm crack (corrected by surveyor), "Bugatti wall", "plank wall", "v-locks", "sealing" for ceiling
-- Precise legal language: "at the time of inspection", "for scheduling purposes only", "remote from the proposed notifiable works"
+- Past tense: "was noted", "was found to be", "appeared", "were observed"
+- Every row identifies its element clearly
+- Never "good condition" alone — use "no visible defects noted at the time of inspection"
+- Crack rows: type, location, direction, measurement in one clear sentence
+- Window tests: element name, what was tested, explicit result
+- Water ingress: dry/wet status at time of inspection, whether remote from works
+- Access limitations: what restricts access, what was accessible
+- Multi-sentence rows are correct for related observations on the same element
 
-COMPLETENESS:
-Every active claim must be represented in a row with its source_claim_ids recorded.
-After drafting the section, verify no active claim is missing.
-Return rows in logical inspection sequence.
+GROUPING:
+- Combine: construction + finish + general condition of the same element; related observations at same location
+- Separate: different elements, different defects, different locations, different tests
+- Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
+
+AMENDMENT RULE — CRITICAL:
+If the raw notes contain any correction ("Actually...", "scratch that", "just to amend"), use ONLY the corrected meaning. The superseded wording must NEVER appear in any row.
+The 500mm crack specifically: use "a hairline crack extending approximately 500mm" — NEVER use "intermittently" or "intermittent".
 
 ${FEW_SHOT_EXAMPLES}`;
+
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
@@ -468,47 +470,29 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
       : '';
 
     const userPrompt = `SECTIONS TO DRAFT (starting at section number ${sectionNumber}):
-${batchSections.map(s => `  • ${s}`).join('\n')}
+${batchSections.map(s => '  - ' + s).join('\n')}
 
-PROPERTY CONTEXT:
-  Adjoining Owner: ${aoAddress}
-  Building Owner: ${boAddress}
-  Date of Inspection: ${inspDate}
-  Proposed Works: ${proposedWorks}
+PROPERTY: Adjoining Owner: ${aoAddress} | Building Owner: ${boAddress} | Date: ${inspDate}
 
-RAW DICTATION (primary source — read and interpret this):
-${rawNotesForBatch || '(use structured claims below as source)'}
+══════════════════════════════════════════════════
+RAW DICTATION — read this first, this is your primary source:
+══════════════════════════════════════════════════
+${rawNotesForBatch || '(see structured claims below)'}
 
-ACTIVE CLAIMS — every claim below must appear in at least one row:
+══════════════════════════════════════════════════
+ACTIVE CLAIMS — completeness checklist, every claim must appear in a row:
+══════════════════════════════════════════════════
 ${checklist}
 
-Instructions:
-Read the raw dictation above as an experienced Party Wall Surveyor reading rough site notes.
-Use the active claims as your completeness checklist — every claim must be covered.
-Write professional SOC table rows from first principles, not by reformatting the claim fields.
-The raw dictation provides context, construction, sequence and professional interpretation.
-The claims ensure nothing is missed and no superseded wording is used.
+Read the raw dictation above as an experienced Party Wall Surveyor reading rough field notes.
+Use the active claims only as a completeness checklist — not as sentence templates.
+For any self-correction in the notes (Actually..., scratch that), use ONLY the corrected meaning.
+NEVER use 'intermittently' for the 500mm crack — that word was corrected out by the surveyor.
+Draft professional SOC rows from first principles. Every row must have source_claim_ids.
 
-
-Return JSON only:
+Return valid JSON only:
 {
-  "sections": [
-    {
-      "number": N,
-      "title": "exact section name",
-      "rows": [
-        {
-          "ref": "GFF01",
-          "row_id": "unique-stable-id",
-          "element": "party wall",
-          "observation": "Multi-sentence professional observation written from first principles. Not a reformatting of field labels.",
-          "action": "Record only",
-          "source_note_ids": [1, 2],
-          "source_claim_ids": ["c-1-1", "c-1-2"]
-        }
-      ]
-    }
-  ],
+  "sections": [{"number": N, "title": "...", "rows": [{"ref": "XX01", "row_id": "uid", "element": "...", "observation": "Professional multi-sentence observation.", "action": "Record only", "source_note_ids": [1], "source_claim_ids": ["c-1-1"]}]}],
   "site_notes": [],
   "general_notes": []
 }`;
