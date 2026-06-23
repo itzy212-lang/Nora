@@ -29,6 +29,11 @@ const CORRECTION_SIGNALS = [
   'slight amendment', 'i have just noticed', 'amend that to', 'change that to',
   'revise that', 'update that', 'in contrast to', 'if i did not say it before',
   'to clarify my earlier', 'going back to the', 'actually to correct',
+  // Scope refinement signals — these MODIFY rather than replace the previous observation
+  'just to note on that last one', 'just to note on that', 'just to note',
+  'to note on that', 'just so we are clear on that', 'just to be clear on that',
+  'to clarify that last', 'just to clarify that last', 'on that last note',
+  'on that last one', 'regarding that last', 'in relation to that last',
 ];
 
 // ── Section inference keywords ────────────────────────────────────────────
@@ -705,8 +710,13 @@ Every condition observation must be assigned to a section.
 Where assignment is genuinely uncertain, place in the most logical section and flag in unresolved_notes.
 
 Step 4: RECONCILE ALL AMENDMENTS
-Detect correction phrases: actually, correction, scratch that, ignore the last note, minor amendment, just to amend, amendment to my previous note, going back to, just to clarify, I have just noticed, amend that to, change that to, revise that, update that, in contrast to, slight amendment.
+Detect correction phrases: actually, correction, scratch that, ignore the last note, minor amendment, just to amend, amendment to my previous note, going back to, just to clarify, I have just noticed, amend that to, change that to, revise that, update that, in contrast to, slight amendment, just to note on that last one, just to note, on that last one, to clarify that last.
 Identify the correct target by section, element, location and meaning — not only the immediately preceding note.
+
+CRITICAL — DISTINGUISH BETWEEN TWO TYPES OF AMENDMENT:
+1. FULL REPLACEMENT ("strike that", "scratch that", "ignore that") — discard the previous observation entirely and use only the new one.
+2. SCOPE REFINEMENT ("just to note on that last one", "just to clarify", "to note on that") — the surveyor is narrowing, qualifying or adding precision to the previous observation, NOT replacing it. Merge both pieces of information into one accurate observation. Example: if the surveyor first says "both chimney breasts front and rear have been removed" and then says "just to note on that last one, we are talking about the ground floor" — the correct output is "The ground floor front and rear elevation chimney breasts have been removed." Do NOT drop "front and rear" and do NOT drop "ground floor" — both pieces of information must survive in the final observation.
+
 Where a note corrects a measurement: use the corrected value, do not retain the original.
 Where a later note identifies a defect in an element previously described as defect-free: reconcile both in the final observation. Example: "The precast concrete panels appeared generally free from visible defects, except that the second panel from the front and second panel above floor level was displaced inward."
 Do not retain contradictory statements in the same observation.
