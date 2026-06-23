@@ -368,7 +368,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // ── Section list + review-phase helpers ─────────────────────────────────
   const STANDARD_SECTIONS = [
     'Ground Floor Front Elevation Room','Ground Floor Rear Elevation Room',
-    'Ground Floor Rear Extension','Ground Floor General',
+    'Ground Floor Rear Extension',
     'First Floor Rear Bedroom','First Floor Front Elevation Room',
     'External Areas','Site Notes',
     'Front Elevation','Rear Elevation','Side Flank Wall','Entrance Hall','Lounge',
