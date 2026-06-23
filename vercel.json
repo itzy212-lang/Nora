@@ -40,7 +40,7 @@
       "maxDuration": 60
     },
     "api/generate-soc.js": {
-      "maxDuration": 120
+      "maxDuration": 300
     },
     "api/process-soc-note.js": {
       "maxDuration": 60
@@ -53,6 +53,9 @@
     },
     "api/soc-regression-test.js": {
       "maxDuration": 300
+    },
+    "api/soc-save.js": {
+      "maxDuration": 60
     }
   }
 }
