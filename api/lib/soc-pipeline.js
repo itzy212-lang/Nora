@@ -105,11 +105,37 @@ export async function draftFromClaims(claims, projectMeta, apiKey) {
   const allGeneralNotes = [];
   let sectionNumber = 1;
 
-  for (let i = 0; i < uniqueSections.length; i += DRAFT_SECTION_BATCH) {
-    const batchSections = uniqueSections.slice(i, i + DRAFT_SECTION_BATCH);
-    const batchNum = Math.floor(i / DRAFT_SECTION_BATCH) + 1;
-    const totalBatches = Math.ceil(uniqueSections.length / DRAFT_SECTION_BATCH);
-    console.log(`[soc-pipeline] Drafting batch ${batchNum}/${totalBatches}: ${batchSections.join(', ')}`);
+  // Build claim-count-aware batches — cap at 25 claims per batch regardless of section count
+  const MAX_CLAIMS_PER_BATCH = 25;
+  const batches = [];
+  let currentBatch = [], currentCount = 0;
+  for (const sec of uniqueSections) {
+    const secClaims = (claimsBySection[sec] || []).filter(cl => cl.status === 'active' || !cl.status);
+    // Oversized single section: split by element groups
+    if (secClaims.length > MAX_CLAIMS_PER_BATCH) {
+      if (currentBatch.length) { batches.push(currentBatch); currentBatch = []; currentCount = 0; }
+      // Chunk within the section by element
+      for (let j = 0; j < secClaims.length; j += MAX_CLAIMS_PER_BATCH) {
+        const chunk = secClaims.slice(j, j + MAX_CLAIMS_PER_BATCH);
+        const pseudoSec = j === 0 ? sec : sec + ` (continued ${j+1})`;
+        batches.push([pseudoSec]);
+        // Store chunked claims under pseudo-section key
+        claimsBySection[pseudoSec] = chunk;
+      }
+    } else if (currentCount + secClaims.length > MAX_CLAIMS_PER_BATCH && currentBatch.length) {
+      batches.push(currentBatch); currentBatch = [sec]; currentCount = secClaims.length;
+    } else {
+      currentBatch.push(sec); currentCount += secClaims.length;
+    }
+  }
+  if (currentBatch.length) batches.push(currentBatch);
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batchSections = batches[batchIdx];
+    const batchNum = batchIdx + 1;
+    const totalBatches = batches.length;
+    const claimCount = batchSections.reduce((s, sec) => s + (claimsBySection[sec] || []).length, 0);
+    console.log(`[soc-pipeline] Drafting batch ${batchNum}/${totalBatches}: ${batchSections.join(', ')} (${claimCount} claims)`);
 
     const batchClaims = batchSections.flatMap(sec => claimsBySection[sec] || []);
     const claimsSummary = batchSections.map(sec =>
