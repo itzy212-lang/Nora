@@ -1137,7 +1137,13 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   console.log('[generate-soc] Stage 2: drafting...');
   let draftedResult;
   try {
-    draftedResult = await draftFromClaims(claims, projectMeta, apiKey);
+    const draft = await draftFromClaims(claims, projectMeta, apiKey);
+    // Validate the draft has usable sections before accepting it
+    if (draft && Array.isArray(draft.sections) && draft.sections.length > 0) {
+      draftedResult = draft;
+    } else {
+      console.warn('[generate-soc] Stage 2 returned no sections — treating as failure');
+    }
   } catch (e) {
     console.warn('[generate-soc] Stage 2 failed:', e.message);
   }
@@ -1170,10 +1176,18 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   // Stage 3: Quality audit (batched)
   let qualityResult = draftedResult;
   try {
-    qualityResult = await runQualityAudit(draftedResult, apiKey);
+    const audited = await runQualityAudit(draftedResult, apiKey);
+    if (audited && Array.isArray(audited.sections) && audited.sections.length > 0) {
+      qualityResult = audited;
+    }
   } catch (e) { console.warn('[generate-soc] Stage 3 failed (non-fatal):', e.message); }
 
-  validateSocJson(qualityResult);
+  try {
+    validateSocJson(qualityResult);
+  } catch (validErr) {
+    console.warn('[generate-soc] Validation failed:', validErr.message);
+    throw new Error('GENERATION_INCOMPLETE: ' + validErr.message + ' — please retry generation.');
+  }
 
   // Assign stable row IDs
   for (const s of (qualityResult.sections || []))
