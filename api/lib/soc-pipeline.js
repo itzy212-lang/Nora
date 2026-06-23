@@ -469,21 +469,35 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     '  "general_notes": []\n' +
     '}';
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, ...params, messages: [
-      { role: 'system', content: DRAFTING_SYSTEM },
-      { role: 'user', content: userPrompt },
-    ]}),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error('Drafting API ' + res.status + ': ' + errText.slice(0, 200));
+  // Try primary model, fall back to gpt-4o if it fails
+  async function callModel(m, p) {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: m, ...p, messages: [
+        { role: 'system', content: DRAFTING_SYSTEM },
+        { role: 'user', content: userPrompt },
+      ]}),
+    });
+    if (!r.ok) {
+      const errText = await r.text().catch(() => '');
+      throw new Error('Drafting API ' + r.status + ' (model=' + m + '): ' + errText.slice(0, 200));
+    }
+    return r.json();
   }
 
-  const d = await res.json();
+  let d;
+  try {
+    d = await callModel(model, params);
+  } catch (primaryErr) {
+    console.warn('[soc-pipeline] Primary model failed (' + model + '):', primaryErr.message, '— falling back to gpt-4o');
+    if (model !== 'gpt-4o') {
+      d = await callModel('gpt-4o', { temperature: 0.15, max_tokens: 16000 });
+    } else {
+      throw primaryErr;
+    }
+  }
+
   const raw = (d.choices?.[0]?.message?.content || '')
     .replace(/^[`]{3}(?:json)?[\s]*/m, '').replace(/[\s]*[`]{3}$/m, '').trim();
 
