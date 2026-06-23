@@ -1136,8 +1136,14 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   // Stage 2: Professional drafting (section-batched)
   console.log('[generate-soc] Stage 2: drafting...');
   let draftedResult;
+  let draftMeta = {};
   try {
-    const draft = await draftFromClaims(claims, projectMeta, apiKey);
+    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt4o';
+    const draft = await draftFromClaims(claims, projectMeta, apiKey, socDraftModel);
+    if (draft?._drafting_metadata) {
+      draftMeta = draft._drafting_metadata;
+      delete draft._drafting_metadata;
+    }
     // Validate the draft has usable sections before accepting it
     if (draft && Array.isArray(draft.sections) && draft.sections.length > 0) {
       draftedResult = draft;
@@ -1238,6 +1244,10 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     claims_extracted: claims.length,
     claims_from_live: claimsFromLive,
     generation_status: status,
+    drafting_model: draftMeta.drafting_model || 'gpt-4o',
+    drafting_model_key: draftMeta.model_key || 'gpt4o',
+    drafting_latency_ms: draftMeta.total_latency_ms || 0,
+    drafting_tokens: { input: draftMeta.total_input_tokens || 0, output: draftMeta.total_output_tokens || 0, reasoning: draftMeta.total_reasoning_tokens || 0 },
     generation_stages: {
       claim_source:    claimsFromLive ? 'live_session' : 'extracted_at_generate',
       claim_count:     claims.length,
