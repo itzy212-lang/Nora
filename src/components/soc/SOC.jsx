@@ -367,10 +367,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
 
   // ── Section list + review-phase helpers ─────────────────────────────────
   const STANDARD_SECTIONS = [
+    'Ground Floor Front Elevation Room','Ground Floor Rear Elevation Room',
+    'Ground Floor Rear Extension','Ground Floor General',
+    'First Floor Rear Bedroom','First Floor Front Elevation Room',
+    'External Areas','Site Notes',
     'Front Elevation','Rear Elevation','Side Flank Wall','Entrance Hall','Lounge',
     'Dining Room','Kitchen','Utility Room','Ground Floor WC','Landing and Stairs',
     'Front Bedroom','Rear Bedroom','Bathroom','Loft Space','Rear Garden',
-    'Garage','Shared Driveway','Outbuilding','External Areas',
+    'Garage','Shared Driveway','Outbuilding',
   ];
 
   const flaggedNoteIds = new Set((unresolvedNotes || []).map(n => n.note_index));
