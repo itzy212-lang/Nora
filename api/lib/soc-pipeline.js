@@ -81,89 +81,201 @@ ${notes}`;
 }
 
 // ─── Stage 2: Professional drafting with section batching ──────────────────
-export async function draftFromClaims(claims, projectMeta, apiKey) {
+// ─── Model configurations for professional drafting ───────────────────────
+const DRAFTING_MODELS = {
+  gpt4o: {
+    model: 'gpt-4o',
+    params: { temperature: 0.1, max_tokens: 8000 },
+    api: 'chat_completions',
+  },
+  gpt55: {
+    model: 'gpt-5.5',
+    params: { max_completion_tokens: 8000, reasoning_effort: 'medium' },
+    api: 'chat_completions',
+    // temperature REMOVED — unsupported on gpt-5.5 reasoning models
+    // max_tokens REMOVED — replaced by max_completion_tokens
+  },
+};
+
+// Call the OpenAI Chat Completions API with model-appropriate parameters
+async function callDraftingAPI(messages, modelKey, apiKey) {
+  const config = DRAFTING_MODELS[modelKey] || DRAFTING_MODELS.gpt4o;
+  const started = Date.now();
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.model,
+      ...config.params,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Drafting API error ${res.status} (model=${config.model}): ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const latency_ms = Date.now() - started;
+  const usage = data.usage || {};
+
+  return {
+    content: (data.choices?.[0]?.message?.content || '').replace(/^```(?:json)?[\n]?/m, '').replace(/[\n]?```$/m, '').trim(),
+    model_used: config.model,
+    model_key: modelKey,
+    latency_ms,
+    input_tokens: usage.prompt_tokens || usage.input_tokens || 0,
+    output_tokens: usage.completion_tokens || usage.output_tokens || 0,
+    reasoning_tokens: usage.completion_tokens_details?.reasoning_tokens || 0,
+  };
+}
+
+// Build the structured claim summary for the drafting prompt.
+// Claims are presented as structured FACTS + raw fragments — NOT as polished prose.
+// This prevents the model from simply copying the claim content.
+function buildClaimsSummary(sections, claimsBySection) {
+  return sections.map(sec =>
+    `SECTION: ${sec}
+` +
+    (claimsBySection[sec] || [])
+      .filter(cl => cl.status === 'active' || cl.status === 'amendment_applied')
+      .map(cl => {
+        const parts = [
+          `  [${cl.claim_id}] ${cl.claim_type}`,
+          cl.element    ? `element: ${cl.element}` : null,
+          cl.location   ? `location: ${cl.location}` : null,
+        ].filter(Boolean).join(' | ');
+        // Structured fact fields (if present — from newer claim format)
+        const facts = [
+          cl.construction ? `construction: ${cl.construction}` : null,
+          cl.finish       ? `finish: ${cl.finish}` : null,
+          cl.condition    ? `condition: ${cl.condition}` : null,
+          cl.defect_type  ? `defect: ${cl.defect_type}` : null,
+          cl.measurement  ? `measurement: ${cl.measurement}` : null,
+          cl.direction    ? `direction: ${cl.direction}` : null,
+        ].filter(Boolean).join(', ');
+        // Fall back to content if no structured fields
+        const factLine = facts || cl.content || '';
+        const rawLine = cl.raw_fragment ? `    raw: "${cl.raw_fragment}"` : '';
+        return `${parts}\n    facts: ${factLine}${rawLine ? '\n' + rawLine : ''}`;
+      })
+      .join('\n')
+  ).join('\n\n');
+}
+
+
+
+
+
+
+// ─── Stage 2: Professional drafting with section batching ──────────────────
+// modelMode: 'gpt4o' | 'gpt55' | 'compare'
+// Returns { result, metadata } where metadata includes model, latency, tokens
+export async function draftFromClaims(claims, projectMeta, apiKey, modelMode) {
+  const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o';
   const boAddress    = projectMeta.bo_address    || 'Not provided';
   const aoAddress    = projectMeta.ao_address    || 'Not provided';
   const inspDate     = projectMeta.inspection_date
     || new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const proposedWorks = projectMeta.proposed_works || 'Not specified';
 
-  // Group claims by section, preserving order
+  // Group claims by section
   const sectionOrder = [];
   const claimsBySection = {};
-  for (const c of claims) {
-    const sec = c.section || 'Unallocated';
+  for (const cl of claims) {
+    const sec = cl.section || 'Unallocated';
     if (!claimsBySection[sec]) { claimsBySection[sec] = []; sectionOrder.push(sec); }
-    claimsBySection[sec].push(c);
+    claimsBySection[sec].push(cl);
   }
   const uniqueSections = [...new Set(sectionOrder)];
 
-  // Draft in section batches
-  const allSections = [];
-  const allUnresolved = [];
-  const allAwardNotes = [];
-  const allGeneralNotes = [];
+  // Compare mode: run both models and return both results
+  if (resolvedMode === 'compare') {
+    const [gpt4oResult, gpt55Result] = await Promise.all([
+      _runDraftingBatches(uniqueSections, claimsBySection, boAddress, aoAddress, inspDate, proposedWorks, 'gpt4o', apiKey),
+      _runDraftingBatches(uniqueSections, claimsBySection, boAddress, aoAddress, inspDate, proposedWorks, 'gpt55', apiKey),
+    ]);
+    return {
+      ...gpt4oResult.result,
+      _comparison: {
+        gpt4o: gpt4oResult,
+        gpt55: gpt55Result,
+      },
+      _model_mode: 'compare',
+      _drafting_metadata: gpt4oResult.metadata,
+    };
+  }
+
+  const { result, metadata } = await _runDraftingBatches(
+    uniqueSections, claimsBySection, boAddress, aoAddress, inspDate, proposedWorks, resolvedMode, apiKey
+  );
+  return { ...result, _drafting_metadata: metadata };
+}
+
+async function _runDraftingBatches(uniqueSections, claimsBySection, boAddress, aoAddress, inspDate, proposedWorks, modelKey, apiKey) {
+  const allSections = [], allUnresolved = [], allAwardNotes = [], allGeneralNotes = [];
   let sectionNumber = 1;
+  const batchMetas = [];
 
   for (let i = 0; i < uniqueSections.length; i += DRAFT_SECTION_BATCH) {
     const batchSections = uniqueSections.slice(i, i + DRAFT_SECTION_BATCH);
     const batchNum = Math.floor(i / DRAFT_SECTION_BATCH) + 1;
     const totalBatches = Math.ceil(uniqueSections.length / DRAFT_SECTION_BATCH);
-    console.log(`[soc-pipeline] Drafting batch ${batchNum}/${totalBatches}: ${batchSections.join(', ')}`);
+    console.log(`[soc-pipeline] Drafting batch ${batchNum}/${totalBatches} model=${modelKey}: ${batchSections.join(', ')}`);
 
-    const batchClaims = batchSections.flatMap(sec => claimsBySection[sec] || []);
-    const claimsSummary = batchSections.map(sec =>
-      `SECTION: ${sec}\n` +
-      (claimsBySection[sec] || [])
-        .map(c => `  [${c.claim_id}] ${c.claim_type} status=${c.status}${c.element ? ' element='+c.element : ''}${c.location ? ' location='+c.location : ''}\n  content: ${c.content}`)
-        .join('\n')
-    ).join('\n\n');
-
+    const claimsSummary = buildClaimsSummary(batchSections, claimsBySection);
     const startNum = sectionNumber;
-    const prompt = `You are a Senior Chartered Party Wall Surveyor writing a Schedule of Conditions.
 
-CRITICAL: You are NOT transcribing. Write every observation from first principles.
-Preserve every measurement, direction and location exactly as stated in claims.
-Every active claim must appear. Group related claims (construction+finish+general_condition → one row). Keep separate defects as separate rows.
-The 500mm crack correction must NOT contain "intermittently" — the surveyor explicitly removed that word.
+    const systemPrompt = `You are a Senior Chartered Party Wall Surveyor preparing a Schedule of Conditions report under the Party Wall etc. Act 1996, prepared by Square One Consulting.
 
-SECTIONS TO DRAFT (starting at number ${startNum}):
+You are NOT transcribing or lightly editing the surveyor's wording. You are interpreting the reconciled factual record and writing a professional Schedule of Conditions observation from first principles.
+
+Use the structured claims as the factual authority. Use the raw dictation fragments only for context.
+Preserve every supported fact, but do not preserve the surveyor's grammar, sentence structure or phrasing.
+The final wording must read as though it was written by an experienced Party Wall Surveyor from rough field notes.
+
+WRITING STANDARD:
+- Complete sentences. Past tense for condition observations (appeared, was noted, were observed).
+- Correct surveying terminology. Identify every element clearly.
+- Preserve construction, finish, condition, location, direction and measurement exactly.
+- Distinguish general condition from specific defects. Keep separate defects as separate rows.
+- No vague expressions. No unsupported causation. No invented facts.
+- "No visible defects" must name the element and time of inspection.
+- Window/door test rows must state what was tested and the result.
+- Water staining must note whether dry at time of inspection.
+
+Return valid JSON only. No markdown. No commentary.`;
+
+    const userPrompt = `SECTIONS TO DRAFT (starting at number ${startNum}):
 ${claimsSummary}
 
 PROPERTY: Building Owner: ${boAddress} | Adjoining Owner: ${aoAddress} | Date: ${inspDate} | Works: ${proposedWorks}
 
-Return JSON only: {
-  "sections": [{ "number": N, "title": "...", "rows": [{ "ref": "XX01", "row_id": "stable-uuid", "element": "...", "observation": "Professional wording.", "action": "Record only", "source_note_ids": [1,2], "source_claim_ids": ["c-1-1"] }] }],
-  "unresolved_notes": [{ "note_index": N, "note_text": "...", "suggested_section": "...", "reason": "..." }],
+Return JSON:
+{
+  "sections": [{ "number": N, "title": "...", "rows": [{ "ref": "XX01", "row_id": "uuid", "element": "...", "observation": "Professional wording.", "action": "Record only", "source_note_ids": [], "source_claim_ids": ["c-1-1"] }] }],
+  "unresolved_notes": [],
   "award_notes": [],
   "general_notes": []
 }`;
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        temperature: 0.1,
-        max_tokens: 8000,
-        messages: [
-          { role: 'system', content: 'Senior Party Wall Surveyor. Return valid JSON only. No markdown.' },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error(`Drafting API error ${res.status}`);
-    const data = await res.json();
-    const raw = (data.choices?.[0]?.message?.content || '').replace(/```json\n?|\n?```/g, '').trim();
-    let batchResult;
-    try { batchResult = JSON.parse(raw); } catch { throw new Error('Drafting returned invalid JSON in batch ' + batchNum); }
+    const { content, model_used, latency_ms, input_tokens, output_tokens, reasoning_tokens } =
+      await callDraftingAPI(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        modelKey, apiKey
+      );
 
-    // Assign stable row IDs if missing, track section counter
+    batchMetas.push({ batch: batchNum, model_used, latency_ms, input_tokens, output_tokens, reasoning_tokens });
+
+    let batchResult;
+    try { batchResult = JSON.parse(content); } catch { throw new Error(`Drafting returned invalid JSON in batch ${batchNum} (model=${modelKey})`); }
+
     for (const sec of (batchResult.sections || [])) {
       sec.number = sectionNumber++;
-      for (const row of (sec.rows || [])) {
+      for (const row of (sec.rows || []))
         if (!row.row_id) row.row_id = `row-${sec.number}-${row.ref}-${Date.now()}`;
-      }
       allSections.push(sec);
     }
     allUnresolved.push(...(batchResult.unresolved_notes || []));
@@ -171,15 +283,26 @@ Return JSON only: {
     allGeneralNotes.push(...(batchResult.general_notes || []));
   }
 
+  const totalMeta = {
+    drafting_model: batchMetas[0]?.model_used || modelKey,
+    model_key: modelKey,
+    drafting_api: 'chat_completions',
+    prompt_version: 'v2-structured-facts',
+    total_latency_ms: batchMetas.reduce((s, m) => s + m.latency_ms, 0),
+    total_input_tokens: batchMetas.reduce((s, m) => s + m.input_tokens, 0),
+    total_output_tokens: batchMetas.reduce((s, m) => s + m.output_tokens, 0),
+    total_reasoning_tokens: batchMetas.reduce((s, m) => s + m.reasoning_tokens, 0),
+    batches: batchMetas,
+    fallback_used: false,
+  };
+
   return {
-    sections: allSections,
-    unresolved_notes: allUnresolved,
-    award_notes: allAwardNotes,
-    general_notes: allGeneralNotes,
+    result: { sections: allSections, unresolved_notes: allUnresolved, award_notes: allAwardNotes, general_notes: allGeneralNotes },
+    metadata: totalMeta,
   };
 }
 
-// ─── Stage 3: Quality audit with batching ─────────────────────────────────
+
 export async function runQualityAudit(draftedResult, apiKey) {
   const rows = [];
   for (const s of (draftedResult.sections || []))
