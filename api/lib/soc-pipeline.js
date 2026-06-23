@@ -112,7 +112,17 @@ Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Fl
 
 NAVIGATION PHRASES → section_transition or contextual, never observations.
 
-AMENDMENT: If surveyor self-corrects ("Actually...", "scratch that", "correction"), mark original claim as superseded. Active claim must never contain the corrected-out wording. For the 500mm crack: the active claim must NOT contain "intermittent" or "intermittently".
+AMENDMENT DETECTION — these phrases signal a correction to a PREVIOUS note:
+- "Actually..." / "scratch that" / "correction" / "just to amend"
+- "just to note on that last one" / "just to note on the last one"
+- "going back to" / "to clarify the last" / "to correct the last"
+
+When you detect any of these, the current note is correcting a claim from a previous note.
+Mark the relevant previous claim as status="superseded" with superseded_by pointing to the new claim_id.
+The corrected claim is status="active".
+NEVER leave two active claims covering the same element where one corrects the other.
+For the 500mm crack: "intermittently" was corrected out — active claim must NOT contain it.
+For the chimney breast: note 2 says "just to note on that last one, we're talking about the ground floor front" — this supersedes the "both chimney breasts" claim from note 1. Only the ground floor front chimney breast removal should be active.
 
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
