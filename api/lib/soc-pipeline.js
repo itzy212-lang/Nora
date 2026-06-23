@@ -56,7 +56,7 @@ const SECTION_ALIASES = {
   'existing rear room':           'Ground Floor Rear Elevation Room',
   'rear elevation room':          'Ground Floor Rear Elevation Room',
   'existing rear elevation':      'Ground Floor Rear Elevation Room',
-  'ground floor':                 'Ground Floor',
+  'ground floor':                 'Ground Floor Rear Extension',
   'extended area':                'Rear Extension',
   'rear extension':               'Rear Extension',
   'first floor rear bedroom':     'First Floor Rear Bedroom',
@@ -108,8 +108,7 @@ SPEECH-TO-TEXT CORRECTIONS (apply automatically):
 "kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC"
 
 SECTION NAMES — use exactly:
-Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor
-Rear Extension | First Floor Rear Bedroom | First Floor Front Elevation Room | External Areas
+Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | First Floor Rear Bedroom | First Floor Front Elevation Room | External Areas
 
 NAVIGATION PHRASES → section_transition or contextual, never observations.
 
