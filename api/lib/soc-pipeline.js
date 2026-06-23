@@ -399,10 +399,10 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o';
   // Model selection — gpt55=gpt-5.5, gpt5=gpt-5, anything else=gpt-4o
   const model = resolvedMode === 'gpt55' ? 'gpt-5.5'
+              : resolvedMode === 'gpt54' ? 'gpt-5.4'
               : resolvedMode === 'gpt5'  ? 'gpt-5'
               : 'gpt-4o';
-  // GPT-5 family uses max_completion_tokens + reasoning_effort, not temperature+max_tokens
-  const isGpt5Family = resolvedMode === 'gpt55' || resolvedMode === 'gpt5';
+  const isGpt5Family = ['gpt55','gpt54','gpt5'].includes(resolvedMode);
   const params = isGpt5Family
     ? { max_completion_tokens: 16000, reasoning_effort: 'medium' }
     : { temperature: 0.15, max_tokens: 16000 };
