@@ -117,7 +117,8 @@ export async function draftFromClaims(claims, projectMeta, apiKey) {
       // Chunk within the section by element
       for (let j = 0; j < secClaims.length; j += MAX_CLAIMS_PER_BATCH) {
         const chunk = secClaims.slice(j, j + MAX_CLAIMS_PER_BATCH);
-        const pseudoSec = j === 0 ? sec : sec + ` (continued ${j+1})`;
+        const partNum = Math.floor(j / MAX_CLAIMS_PER_BATCH) + 1;
+        const pseudoSec = partNum === 1 ? sec : sec + ` (Part ${partNum})`;
         batches.push([pseudoSec]);
         // Store chunked claims under pseudo-section key
         claimsBySection[pseudoSec] = chunk;
