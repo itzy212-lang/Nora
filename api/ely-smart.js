@@ -1788,7 +1788,7 @@ ${brainText}`;
     },
     body: JSON.stringify({
       model: 'claude-opus-4-6',
-      max_completion_tokens: 8000,
+      max_tokens: 8000,
       system: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.',
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -1824,7 +1824,7 @@ async function callClaude(messages = []) {
     },
     body: JSON.stringify({
       model: 'claude-opus-4-6',
-      max_completion_tokens: 3500,
+      max_tokens: 3500,
       system: systemWithHandoff,
       messages: userMessages.length ? userMessages : [{ role: 'user', content: 'Please help.' }],
     }),
