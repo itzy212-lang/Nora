@@ -149,7 +149,7 @@ ${notesText}`;
   })
   .then(r => r.json())
   .then(d => {
-    const raw = (d.choices?.[0]?.message?.content || '').replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
+    const raw = (d.choices?.[0]?.message?.content || '').replace(/^[`]{3}(?:json)?\s*/m, '').replace(/\s*[`]{3}$/m, '').trim();
     try { return JSON.parse(raw).claims || []; } catch { return []; }
   })
   .catch(() => []);
@@ -393,7 +393,7 @@ Return rows in logical inspection sequence.
 ${FEW_SHOT_EXAMPLES}`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
-export async function draftFromClaims(claims, projectMeta, apiKey, modelMode) {
+export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
   const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o';
   const model  = resolvedMode === 'gpt55' ? 'gpt-5.5' : 'gpt-4o';
   const params = resolvedMode === 'gpt55'
@@ -457,6 +457,16 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode) {
     const batchClaimsAll = batchSections.flatMap(sec => claimsBySection[sec] || []);
     const checklist = buildFactualChecklist(batchClaimsAll, null);
 
+    // Build raw notes text for this batch's sections
+    const batchNoteSeqs = new Set(batchClaimsAll.map(c => c.source_note_id || c.note_sequence).filter(Boolean));
+    const rawNotesForBatch = rawNotes
+      ? Object.entries(rawNotes)
+          .filter(([seq]) => batchNoteSeqs.has(Number(seq)))
+          .sort(([a],[b]) => Number(a)-Number(b))
+          .map(([seq, text]) => `[${seq}] ${text}`)
+          .join('\n\n')
+      : '';
+
     const userPrompt = `SECTIONS TO DRAFT (starting at section number ${sectionNumber}):
 ${batchSections.map(s => `  • ${s}`).join('\n')}
 
@@ -466,23 +476,32 @@ PROPERTY CONTEXT:
   Date of Inspection: ${inspDate}
   Proposed Works: ${proposedWorks}
 
-FACTUAL CHECKLIST — every active claim below must appear in a row:
+RAW DICTATION (primary source — read and interpret this):
+${rawNotesForBatch || '(use structured claims below as source)'}
+
+ACTIVE CLAIMS — every claim below must appear in at least one row:
 ${checklist}
 
-Draft the complete set of professional SOC table rows for these sections.
+Instructions:
+Read the raw dictation above as an experienced Party Wall Surveyor reading rough site notes.
+Use the active claims as your completeness checklist — every claim must be covered.
+Write professional SOC table rows from first principles, not by reformatting the claim fields.
+The raw dictation provides context, construction, sequence and professional interpretation.
+The claims ensure nothing is missed and no superseded wording is used.
+
 
 Return JSON only:
 {
   "sections": [
     {
-      "number": ${sectionNumber},
+      "number": N,
       "title": "exact section name",
       "rows": [
         {
           "ref": "GFF01",
           "row_id": "unique-stable-id",
           "element": "party wall",
-          "observation": "Complete professional sentences. Multi-sentence rows are correct for related observations. No row should read like reassembled field labels.",
+          "observation": "Multi-sentence professional observation written from first principles. Not a reformatting of field labels.",
           "action": "Record only",
           "source_note_ids": [1, 2],
           "source_claim_ids": ["c-1-1", "c-1-2"]
@@ -493,7 +512,6 @@ Return JSON only:
   "site_notes": [],
   "general_notes": []
 }`;
-
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -509,7 +527,7 @@ Return JSON only:
       if (!res.ok) throw new Error(`Drafting API ${res.status}`);
       const d = await res.json();
       const raw = (d.choices?.[0]?.message?.content || '')
-        .replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
+        .replace(/^[`]{3}(?:json)?\s*/m, '').replace(/\s*[`]{3}$/m, '').trim();
       const batchResult = JSON.parse(raw);
 
       for (const sec of (batchResult.sections || [])) {
