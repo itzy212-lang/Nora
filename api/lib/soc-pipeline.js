@@ -5,7 +5,7 @@
 
 // ─── Section batching constants ────────────────────────────────────────────
 export const CLAIM_BATCH_NOTES  = 20;  // notes per claim-extraction batch
-export const DRAFT_SECTION_BATCH = 5;  // sections per drafting batch
+export const DRAFT_SECTION_BATCH = 3;  // sections per drafting batch
 export const QUALITY_ROW_BATCH   = 15; // rows per quality-audit batch
 export const FIDELITY_ROW_BATCH  = 10; // rows per semantic fidelity batch
 
@@ -145,7 +145,7 @@ Return JSON only: {
       body: JSON.stringify({
         model: 'gpt-4o',
         temperature: 0.1,
-        max_tokens: 8000,
+        max_tokens: 16000,
         messages: [
           { role: 'system', content: 'Senior Party Wall Surveyor. Return valid JSON only. No markdown.' },
           { role: 'user', content: prompt },
