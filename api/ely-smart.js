@@ -1554,11 +1554,9 @@ function parseInvoiceItems(prompt = '') {
   // Pattern: description + £amount or amount + description
   const linePatterns = [
     // "description £amount" or "description £amount each"
-    /([a-z][^,
-£]{3,40}?)\s+£\s*(\d+(?:\.\d{2})?)/gi,
+    /([a-z][^,\n£]{3,40}?)\s+£\s*(\d+(?:\.\d{2})?)/gi,
     // "description - £amount"
-    /([a-z][^,
-£]{3,40}?)\s*[-–]\s*£\s*(\d+(?:\.\d{2})?)/gi,
+    /([a-z][^,\n£]{3,40}?)\s*[-–]\s*£\s*(\d+(?:\.\d{2})?)/gi,
   ];
 
   for (const pattern of linePatterns) {
