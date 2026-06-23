@@ -1141,7 +1141,14 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   let draftMeta = {};
   try {
     const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt4o';
-    const draft = await draftFromClaims(claims, projectMeta, apiKey, socDraftModel);
+    // Build rawNotesBySeq map so drafting model can read original context
+    const rawNoteLines = (message || '').split(/\n+/).filter(l => l.trim());
+    const rawNotesBySeq = {};
+    for (const line of rawNoteLines) {
+      const m = line.match(/^\[(\d+)\]\s*(.*)/s);
+      if (m) rawNotesBySeq[parseInt(m[1])] = m[2].trim();
+    }
+    const draft = await draftFromClaims(claims, projectMeta, apiKey, socDraftModel, rawNotesBySeq);
     if (draft?._drafting_metadata) {
       draftMeta = draft._drafting_metadata;
       delete draft._drafting_metadata;
