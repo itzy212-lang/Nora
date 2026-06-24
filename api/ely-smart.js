@@ -2473,7 +2473,11 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: isDraftWithEly ? (process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini') : 'gpt-4o',
+        model: isDraftWithEly
+          ? (process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini')
+          : isMainChat
+            ? (process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini')
+            : 'gpt-4o',
         max_completion_tokens: isDraftWithEly ? 1200 : 3500,
         temperature,
         messages,
