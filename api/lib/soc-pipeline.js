@@ -122,7 +122,11 @@ Mark the relevant previous claim as status="superseded" with superseded_by point
 The corrected claim is status="active".
 NEVER leave two active claims covering the same element where one corrects the other.
 For the 500mm crack: "intermittently" was corrected out — active claim must NOT contain it.
-For the chimney breast: note 2 says "just to note on that last one, we're talking about the ground floor" — this is a SCOPE REFINEMENT, not a full replacement. It narrows the floor level to ground floor only, but does NOT remove "front and rear". Both chimney breasts (front and rear) on the ground floor were removed. The active claim must read: ground floor front and rear chimney breasts removed.
+SCOPE REFINEMENT vs FULL REPLACEMENT — CRITICAL:
+When an amendment narrows one attribute of a previous claim (e.g. "just to note on that last one, we're talking about the ground floor" narrows the floor level), it is a SCOPE REFINEMENT — update only the narrowed attribute and preserve all other attributes of the original claim.
+A scope refinement must NEVER remove elements that were not part of the correction.
+Example: "both chimney breasts on the front and rear removed" followed by "just to note on that last one, talking about the ground floor" — the correction narrows to ground floor only. It does NOT remove "front and rear". Active claim must retain both: ground floor front AND rear chimney breasts removed.
+Only mark a claim as fully superseded when the amendment explicitly replaces the entire substance.
 
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
