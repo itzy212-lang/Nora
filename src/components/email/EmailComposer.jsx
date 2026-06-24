@@ -69,40 +69,25 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const signatureHtml = includeSig && firmSettings ? buildFirmSignatureHTML(firmSettings) : '';
 
-  const handleToInput = (val) => {
+  const handleToInput = async (val) => {
     setTo(val);
     setDirty(true);
-    const q = val.toLowerCase();
-    const seen = {};
-    const candidates = [];
-
-    // Project contacts first
-    projectContacts.forEach(c => {
-      if (!c.email || seen[c.email]) return;
-      if (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
-        seen[c.email] = true;
-        candidates.push(c);
-      }
-    });
-
-    // Then email history (only when typing)
-    if (q.length >= 2) {
-      emails.slice(0, 200).forEach(e => {
-        const addr = e.from_email || '';
-        const name = e.from || '';
-        if (!addr || seen[addr]) return;
-        if (name.toLowerCase().includes(q) || addr.toLowerCase().includes(q)) {
-          seen[addr] = true;
-          candidates.push({ name, email: addr });
-        }
-      });
+    const q = val.trim();
+    if (!q) {
+      setToSuggestions(projectContacts.slice(0, 8));
+      return;
     }
-
-    setToSuggestions(candidates.slice(0, 6));
+    if (q.length < 2) { setToSuggestions([]); return; }
+    const { data } = await sb.rpc('search_email_contacts', {
+      search_query: q,
+      p_project_id: projectId || null,
+      p_user_id: null,
+    });
+    setToSuggestions((data || []).slice(0, 8).map(r => ({ name: r.name, email: r.email })));
   };
 
   const handleToFocus = () => {
-    if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 6));
+    if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 8));
   };
 
   const bodyEditorRef = useRef(null);
@@ -186,26 +171,14 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const project = projects.find(p => p.id === projectId);
 
-  const projectContacts = useMemo(() => {
-    if (!project) return [];
-    const contacts = [];
-    const seen = new Set();
-    const add = (name, email) => {
-      if (!email || seen.has(email.toLowerCase())) return;
-      seen.add(email.toLowerCase());
-      contacts.push({ name: name || email, email });
-    };
-    const boName = [project.bo_1_name, project.bo_2_name, project.bo_name, project.bo_company].filter(Boolean).join(' & ');
-    add(boName, project.bo_email || project.bo_1_email);
-    if (project.bo_2_email) add(project.bo_2_name || boName, project.bo_2_email);
-    const aos = Array.isArray(project.aos) ? project.aos : [];
-    aos.forEach(ao => {
-      add(ao.name || ao.ao_name_1, ao.email || ao.ao_email);
-      if (ao.name2 || ao.ao_name_2) add(ao.name2 || ao.ao_name_2, ao.email2 || ao.ao_email_2);
-      add(ao.surveyor_name || ao.ao_surveyor_name, ao.surveyor_email || ao.ao_surveyor_email);
-    });
-    return contacts.filter(c => c.email);
-  }, [project]);
+  const [projectContacts, setProjectContacts] = useState([]);
+  useEffect(() => {
+    if (!projectId) return;
+    sb.rpc('get_project_recipients', { p_project_id: projectId })
+      .then(({ data }) => {
+        if (data) setProjectContacts(data.map(r => ({ name: r.name, email: r.email, role: r.role })));
+      });
+  }, [projectId]);
 
   return (
     <div className="email-composer-overlay open">
@@ -241,7 +214,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                       onMouseDown={(e) => { e.preventDefault(); setTo(c.email); setToSuggestions([]); }}
                     >
                       <strong>{c.name || c.email}</strong>
-                      {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}</div>}
+                      {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` · ${c.role}` : ''}</div>}
                     </div>
                   ))}
                 </div>
