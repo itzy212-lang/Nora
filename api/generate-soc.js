@@ -1170,7 +1170,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       const userPrompt = SOC_GENERATOR_PROMPT
         .replace('{{BO_ADDRESS}}', projectMeta.bo_address || '')
         .replace('{{AO_ADDRESS}}', projectMeta.ao_address || '')
-        .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date || new Date().toLocaleDateString('en-GB'))
+        .replace('{{INSPECTION_DATE}}', projectMeta.inspection_date || 'DATE OF INSPECTION NOT RECORDED — PLEASE CONFIRM')
         .replace('{{PROPOSED_WORKS}}', projectMeta.proposed_works || '')
         .replace('{{RAW_NOTES}}', message);
       const fbRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1297,7 +1297,7 @@ async function getSocDate(projectId, aoId, selectedAO) {
     console.warn('[generate-soc] task date lookup warning:', err.message);
   }
 
-  return formatLongDate(new Date());
+  return 'DATE OF INSPECTION NOT RECORDED — PLEASE CONFIRM';
 }
 
 export default async function handler(req, res) {
