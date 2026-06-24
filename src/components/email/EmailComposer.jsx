@@ -52,7 +52,11 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   useEffect(() => {
     if (!opts) return;
     setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
-    setSubject(opts.subject || (opts.originalEmail ? `RE: ${opts.originalEmail.subject || ''}` : ''));
+    const proj = (projects || []).find(p => p.id === opts.projectId);
+    const defaultSubject = proj
+      ? `Party Wall etc. Act 1996 — ${proj.bo_premise_address || proj.name || ''}`
+      : '';
+    setSubject(opts.subject || (opts.originalEmail ? `RE: ${opts.originalEmail.subject || ''}` : defaultSubject));
     setBody(toHtml(opts.body) || (opts.originalEmail && opts.prefillGreeting !== false ? `<p>Hi ${opts.originalEmail.from || ''},</p><p></p>` : ''));
     setProjectId(opts.projectId || '');
     setCreateFollowUp(!!opts.followUp);
