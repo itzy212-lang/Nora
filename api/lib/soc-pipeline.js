@@ -328,21 +328,38 @@ Required row:
 
 ---
 
-EXAMPLE 8 — Roof and guttering
+EXAMPLE 8 — Roof and guttering (External Areas — must be included)
 
 Raw dictation: "pitch roof over extension appears to be in good condition no visible defects noted to roof tiles with a gutter overhanging the bottom of the pitch roof leading to a flat roof again no visible defects noted on the flat roof itself or surrounding upstand of the skylight over the extension"
 Facts:
-  • Element: Pitched roof
-  • Condition: No visible defects to roof tiles
-  • Element: Gutter
-  • Location: Base of pitched roof slope
-  • Element: Flat roof
+  • Element: Pitched roof tiles
   • Condition: No visible defects
-  • Element: Rooflight upstand
+  • Element: Gutter at base of pitched roof
   • Condition: No visible defects
+  • Element: Flat roof covering
+  • Condition: No visible defects
+  • Element: Rooflight/skylight upstand
+  • Condition: No visible defects
+  • CRITICAL: These are External Area observations and must appear in External Areas section, not Ground Floor Rear Extension
 
-Required row:
-"The rear roof slope above the extension was visually inspected externally. No visible defects were noted to the roof tiles. The guttering arrangement at the base of the roof slope appeared serviceable. The flat roof covering over the extension together with the surrounding rooflight upstands appeared to be in good condition with no visible defects noted."
+Required rows (External Areas):
+"No visible defects were noted to the pitched roof tiles above the rear extension."
+"The guttering at the base of the pitched roof appeared free from visible defects."
+"No visible defects were noted to the flat roof covering over the extension or to the surrounding rooflight upstand."
+
+---
+
+EXAMPLE 8b — Engineering bricks and external open joint
+
+Raw dictation: "two courses of engineering bricks above the patio with cement residue on the floor. open joint at junction of cement fillet and rear elevation, extends toward building owner side, continues to edge of downpipe gully"
+Facts:
+  • Element: Engineering bricks (NOT "engineered bricks")
+  • Element: Open joint at cement fillet
+  • Route: From base of brickwork → towards Building Owner → to edge of rainwater downpipe gully
+
+Required rows:
+"Two courses of engineering bricks sit above the patio level. Signs of cement residue were noted on the patio surface at this location."
+"An open joint was noted at the junction between the cement fillet and rear elevation wall to the right-hand side of the French doors. The joint extends from the base of the brickwork towards the Building Owner's side and continues to the edge of the rainwater downpipe gully."
 
 ---
 
@@ -355,7 +372,7 @@ Facts:
   • Scope: Vicinity of notifiable works
 
 Required row:
-"The rear patio comprises laid paving slabs and was found to be in very good condition. No cracked paving slabs, open joints, settlement or raised sections were noted within the vicinity of the proposed notifiable works."
+"The rear patio comprises laid paving slabs. No visible cracking, open joints, settlement or raised paving slabs were noted within the vicinity of the proposed notifiable works."
 
 ---
 
@@ -389,12 +406,18 @@ PROCESS:
 LANGUAGE STANDARDS:
 - Past tense: "was noted", "was found to be", "appeared", "were observed"
 - Every row identifies its element clearly
-- Never "good condition" alone — use "no visible defects noted at the time of inspection"
+- Never "good condition" or "very good condition" alone — use objective wording: "no visible defects noted at the time of inspection" or "appeared generally free from visible defects at the time of inspection"
+- Paving/patio: use "No visible cracking, open joints, settlement or raised paving slabs were noted within the vicinity of the proposed notifiable works" rather than "very good condition"
 - Crack rows: type, location, direction, measurement in one clear sentence
-- Window tests: element name, what was tested, explicit result
+- Do not introduce a crack-width classification (hairline, slight, moderate etc) unless the source dictation explicitly states it or a measurement supports it
+- Window tests: element name, what was tested, explicit result. Use "bound against the frame" not "stuck". Use "operated satisfactorily without sticking, binding or jamming" for passing tests
 - Water ingress: dry/wet status at time of inspection, whether remote from works
 - Access limitations: what restricts access, what was accessible
 - Multi-sentence rows are correct for related observations on the same element
+- Tile dimensions: use "approximately 600mm x 600mm" not "60 by 60"
+- Roof: always "pitched ceiling" not "pitch ceiling"
+- Bricks: always "engineering bricks" not "engineered bricks"
+- Window context note for first floor front: "Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes."
 
 GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
@@ -403,6 +426,11 @@ GROUPING:
 - Include ALL rooms and areas the surveyor entered and recorded, without exception — do not omit any room on the basis that it is remote from the proposed notifiable works or unlikely to be affected. Where a room or element is remote from the works, include it with the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only."
 - Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
 - Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
+- External pitched roof, guttering, flat roof and rooflight observations must appear in External Areas — do not omit them
+- All window tests must be recorded individually — where three openers were tested, all three must appear as separate rows
+- General ceiling condition (no visible defects noted) must always appear as its own row even if brief
+- Crack locations must be precise: state the junction, corner or surface explicitly (e.g. "at the junction between the pitched ceiling and flat roof ceiling")
+- Skirting joint defects: preserve distinctions between upper abutment joints and lower floor junction joints, and record the start and end points of the run
 
 AMENDMENT RULE — CRITICAL:
 If the raw notes contain any correction ("Actually...", "scratch that", "just to amend"), use ONLY the corrected meaning. The superseded wording must NEVER appear in any row.
