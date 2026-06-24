@@ -396,7 +396,7 @@ GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
 - Separate: different elements, different defects, different locations, different tests
 - Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
-- Include ALL rooms the surveyor entered and recorded, even where no notifiable works are currently proposed — record them with a note that the area was included for completeness
+- Include ALL rooms and areas the surveyor entered and recorded, without exception — do not omit any room on the basis that it is remote from the proposed notifiable works or unlikely to be affected. Where a room or element is remote from the works, include it with the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only."
 - Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
 - Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
 
@@ -479,6 +479,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'Understand the full inspection sequence, all room transitions and all amendments.\n' +
     'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
     'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
+    'ROOM INCLUSION RULE — CRITICAL: Every room and area inspected must appear in the schedule. Do not omit any room because it appears remote from the proposed notifiable works. If a room is remote from the works, include it and append the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only." This applies to every inspected room without exception.\n' +
     'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
     'Return valid JSON only:\n' +
     '{\n' +
