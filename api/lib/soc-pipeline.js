@@ -424,6 +424,8 @@ GROUPING:
 - Separate: different elements, different defects, different locations, different tests
 - Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
 - Include ALL rooms and areas the surveyor entered and recorded, without exception — do not omit any room on the basis that it is remote from the proposed notifiable works or unlikely to be affected. Where a room or element is remote from the works, include it with the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only."
+- Where a room was recorded by photograph only, or where access was restricted, it must still appear as its own named section with a row stating the method of recording and the reason. Example: "The loft bedroom was recorded by photographic record only. The area is remote from the proposed notifiable works and no physical inspection was carried out. The photographs are retained on file." Do NOT omit photograph-only rooms — omission implies the room was never visited.
+- Where a surveyor notes that a room was scheduled using photographs only because it is remote from notifiable works, that note must produce a named section for that room, not a site note entry, unless the dictation explicitly directs it to site notes.
 - Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
 - Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
 - External pitched roof, guttering, flat roof and rooflight observations must appear in External Areas — do not omit them
