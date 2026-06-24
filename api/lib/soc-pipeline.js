@@ -618,12 +618,14 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     checklistLines + supersededNote + '\n\n' +
     'Read the complete transcript above exactly as a surveyor reading rough site notes.\n' +
     'Understand the full inspection sequence, all room transitions and all amendments.\n' +
+    (projectMeta?.soc_type === 'dispute' ? 'DISPUTE SOC — IMPORTANT: This is NOT a standard pre-works baseline schedule. The surveyor has provided context notes explaining the specific circumstances (works already commenced, damage reported, no award in place, private agreement etc). Read those context notes carefully and use them to draft the introduction field in the JSON. The introduction must reflect the actual situation described, not the standard pre-works baseline wording. The observations sections should be drafted as normal.\n' : '') +
     'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
     'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
     'ROOM INCLUSION RULE — CRITICAL: Every room and area inspected must appear in the schedule. Do not omit any room because it appears remote from the proposed notifiable works. If a room is remote from the works, include it and append the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only." This applies to every inspected room without exception.\n' +
     'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
     'Return valid JSON only:\n' +
     '{\n' +
+    (projectMeta?.soc_type === 'dispute' ? '  "introduction": "AI-drafted introduction paragraph based on the surveyor\'s context notes. Must reflect that works have already taken place, explain the specific circumstances (e.g. no award in place, damage reported, private agreement reached), and set out the purpose of this schedule accordingly. Professional British English. Do not use the standard pre-works baseline wording.",\n' : '') +
     '  "sections": [{"number": 1, "title": "...", "rows": [{"ref": "XX01", "row_id": "uid", "element": "...", "observation": "Professional observation.", "action": "Record only", "source_note_ids": [1], "source_claim_ids": ["c-1-1"]}]}],\n' +
     '  "site_notes": [],\n' +
     '  "general_notes": []\n' +
