@@ -19,6 +19,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   const [pdfProcessing, setPdfProcessing] = useState(false);
   const [oneDriveOverlay, setOneDriveOverlay] = useState(null);
   const [selectedAOIndex, setSelectedAOIndex] = useState(defaultAOIndex != null ? String(defaultAOIndex) : '0');
+  const [socType, setSocType] = useState('general');
   const [previewHtml, setPreviewHtml] = useState('');
   const [structuredData, setStructuredData] = useState(null);
   const [reportId, setReportId] = useState(null);
@@ -240,6 +241,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
           message: text,
           project_id: projectId,
           session_id: socSessionId,
+          soc_type: socType,
           ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
           ao_name: aoName(selectedAO),
           ao_names: aoName(selectedAO),
@@ -534,6 +536,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
               </select>
             </div>
           )}
+          <div style={s.field}>
+            <label style={s.label}>Schedule Type</label>
+            <select style={s.aoSelect} value={socType} onChange={e => setSocType(e.target.value)}>
+              <option value="general">General SOC</option>
+              <option value="dispute">Dispute SOC</option>
+            </select>
+          </div>
           <button
             disabled={!projectId}
             onClick={() => setPhase('recording')}
