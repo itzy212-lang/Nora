@@ -472,7 +472,22 @@ Facts:
   • Condition: No cracking to tile faces, no cracking to grout joints, no lifting
 
 Required row (in Ground Floor Rear Elevation Room):
-"The floor finish throughout the original front and rear reception areas comprises approximately 600mm x 600mm porcelain tiles. No visible cracking was noted to the tile faces or grout joints, and there were no visible signs of lifting or loose sections at the time of inspection."`;
+"The floor finish throughout the original front and rear reception areas comprises approximately 600mm x 600mm porcelain tiles. No visible cracking was noted to the tile faces or grout joints, and there were no visible signs of lifting or loose sections at the time of inspection."
+
+---
+
+EXAMPLE 17 — Out-of-sequence notes (must go to correct room, not current position)
+
+Raw dictation: "[after external notes] The top opener on the UPVC window on the rear elevation wall, first floor bedroom, closest to the building owner, open and closes, no issues, no sticking or jamming. [then] I'm just moving temporarily back to the first floor rear bedroom, condition of the ceiling, no visible defects noted."
+Facts:
+  • Both notes are for First Floor Rear Bedroom despite appearing after external/other notes
+  • Window test: third opener, upper section, nearest Building Owner, satisfactory
+  • Ceiling condition: no visible defects — general ceiling row for rear bedroom
+  • Both must appear in First Floor Rear Bedroom section
+
+Required rows (First Floor Rear Bedroom):
+"The upper opening section of the rear elevation UPVC window nearest the Building Owner was tested and operated satisfactorily without sticking, binding or jamming."
+"No visible defects were noted in the ceiling."`;
 
 // ─── Main drafting instruction ─────────────────────────────────────────────────
 const DRAFTING_SYSTEM = `You are preparing a formal Schedule of Conditions under the Party Wall etc. Act 1996 from rough field dictation.
@@ -487,6 +502,7 @@ PROCESS:
 3. Note all amendments and corrections — use only the corrected final meaning.
 4. Check every active claim is represented in your rows.
 5. Draft professional table rows from first principles.
+6. OUT-OF-SEQUENCE NOTES — CRITICAL: Surveyors sometimes dictate a note for a room they have already left (e.g. "I'm just moving temporarily back to the first floor rear bedroom" or "continuing in the front elevation room"). These out-of-sequence notes must be assigned to the correct room regardless of where they appear in the transcript. Do not drop them because they appear after a section transition. Example: a window test dictated after external notes still belongs in the First Floor Rear Bedroom section. A ceiling condition noted after returning to a room still belongs in that room. Always place the observation in the section it describes, not the section currently active when the note was dictated.
 
 LANGUAGE STANDARDS:
 - Past tense: "was noted", "was found to be", "appeared", "were observed"
@@ -518,8 +534,10 @@ GROUPING:
 - Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
 - Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
 - External pitched roof, guttering, flat roof and rooflight observations must appear in External Areas — do not omit them
-- All window tests must be recorded individually — where three openers were tested, all three must appear as separate rows
-- General ceiling condition (no visible defects noted) must always appear as its own row even if brief
+- All window tests must be recorded individually — where three openers were tested, all three must appear as separate rows. The third opener may be dictated out of sequence (after external notes or after moving to another room) — it must still appear in the correct bedroom section
+- General ceiling condition (no visible defects noted) must always appear as its own row even if brief — including where the surveyor returns to a room to add a ceiling note out of sequence
+- Where the surveyor records "no other defects noted in the ceiling" for a specific cupboard or compartment, that must appear as a separate row for that compartment
+- Where the surveyor records a general "no visible defects noted in the ceiling" after returning to a room, that must appear as a row in that room
 - Crack locations must be precise: state the junction, corner or surface explicitly (e.g. "at the junction between the pitched ceiling and flat roof ceiling")
 - Skirting joint defects: preserve distinctions between upper abutment joints and lower floor junction joints, and record the start and end points of the run
 
