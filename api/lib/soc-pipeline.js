@@ -237,7 +237,7 @@ Facts:
   • General condition: No visible defects
 
 Required row:
-"The party wall is finished in plaster and paint and was found to be in good condition with no visible defects noted at the time of inspection."
+"The party wall is finished in plaster and paint and appeared generally free from visible defects at the time of inspection."
 
 ---
 
@@ -387,7 +387,92 @@ Facts:
   • Assessment: No disruption anticipated given extent of works
 
 Required row (Site Notes section):
-"The flank wall appears to be constructed astride the boundary line and is therefore considered to form a party wall. Given the nature of the proposed works, no disturbance to the adjoining owner's property or boundary fencing is anticipated in this location."`;
+"The flank wall appears to be constructed astride the boundary line and is therefore considered to form a party wall. Given the nature of the proposed works, no disturbance to the adjoining owner's property or boundary fencing is anticipated in this location."
+
+---
+
+EXAMPLE 11 — Three window tests (all must appear as separate rows)
+
+Raw dictation: "window nearest party wall opens slightly sticks on frame can't open it fully. second window on opposite side opens and closes fine. upper opening section of rear elevation UPVC window nearest building owner tested operated satisfactorily no sticking no jamming"
+Facts:
+  • Three separate window openers tested — three separate rows required
+  • Window 1: bound against frame, cannot open fully
+  • Window 2: satisfactory, no issues
+  • Window 3: upper section, nearest Building Owner, satisfactory
+
+Required rows:
+"The window opener closest to the party wall was tested and opened partially but bound against the frame, preventing it from opening fully."
+"The second window opener was tested and operated satisfactorily without sticking, binding or jamming."
+"The upper opening section of the rear elevation UPVC window nearest the Building Owner was tested and operated satisfactorily without sticking, binding or jamming."
+
+---
+
+EXAMPLE 12 — Bay window cracking at two separate locations (both must appear)
+
+Raw dictation: "two to three hairline cracks between party wall and right-hand corner of bay window extending towards bay. further cracking to right-hand bay reveal"
+Facts:
+  • Location 1: Between party wall and right-hand corner of bay window
+  • Location 2: Right-hand bay reveal (separate surface)
+  • Both locations must be retained — do not merge into one location
+
+Required row (may be combined if both locations remain explicit):
+"Two to three hairline cracks were noted on the front elevation wall between the party wall and the right-hand corner of the bay window, extending towards the bay window. Further cracking was noted to the right-hand bay window reveal."
+
+---
+
+EXAMPLE 13 — Skirting joint defects with upper/lower distinction and route
+
+Raw dictation: "intermittent open joints along upper abutment of skirting and flank wall, open joints at lower junction of skirting and tiled floor, starts right-hand side of fitted cabinet runs to rear elevation wall"
+Facts:
+  • Two distinct defect locations: upper skirting abutment AND lower skirting/floor junction
+  • Start point: right-hand side of fitted cabinet
+  • End point: rear elevation wall
+  • Do NOT compress into a single generic "skirting and tiled floor" observation
+
+Required row:
+"Intermittent open joints were noted along the upper abutment between the skirting and flank wall, together with open joints at the lower junction between the skirting and tiled floor. The defects commence to the right-hand side of the fitted cabinet and continue to the rear elevation wall of the extension."
+
+---
+
+EXAMPLE 14 — First floor front elevation room context row (always required)
+
+Raw dictation: "first floor front bedroom, no notifiable works proposed here, inspected in case scope changes, chimney breasts still intact"
+Facts:
+  • Room: First Floor Front Elevation Room
+  • Context: No notifiable works currently proposed
+  • Reason inspected: In case scope changes
+  • Chimney breasts: Remain intact
+
+Required row (always first row of this section):
+"Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes. The chimney breasts remain intact."
+
+---
+
+EXAMPLE 15 — Ceiling crack with explicit element identification
+
+Raw dictation: "hairline crack from party wall runs parallel to wall abutting rear bedroom finishes against inside of wardrobe frame"
+Facts:
+  • Element: CEILING (must be stated explicitly)
+  • Location: Within wardrobe compartment
+  • Direction: Parallel to wall abutting rear bedroom
+  • Terminus: Internal face of fitted wardrobe frame
+
+Required row:
+"A hairline crack was noted to the ceiling within the right-hand wardrobe compartment, extending from the party wall and running parallel with the wall abutting the rear bedroom before terminating at the internal face of the fitted wardrobe frame."
+
+---
+
+EXAMPLE 16 — Tiled floor in correct section
+
+Raw dictation: "ground floor covered in 600 x 600 porcelain tiles throughout front and rear reception rooms, no cracking no lifting"
+Facts:
+  • Element: Floor finish
+  • Location: Original front and rear reception rooms (NOT the rear extension)
+  • Section: Ground Floor Rear Elevation Room — NOT Ground Floor Rear Extension
+  • Condition: No cracking to tile faces, no cracking to grout joints, no lifting
+
+Required row (in Ground Floor Rear Elevation Room):
+"The floor finish throughout the original front and rear reception areas comprises approximately 600mm x 600mm porcelain tiles. No visible cracking was noted to the tile faces or grout joints, and there were no visible signs of lifting or loose sections at the time of inspection."`;
 
 // ─── Main drafting instruction ─────────────────────────────────────────────────
 const DRAFTING_SYSTEM = `You are preparing a formal Schedule of Conditions under the Party Wall etc. Act 1996 from rough field dictation.
@@ -406,18 +491,20 @@ PROCESS:
 LANGUAGE STANDARDS:
 - Past tense: "was noted", "was found to be", "appeared", "were observed"
 - Every row identifies its element clearly
-- Never "good condition" or "very good condition" alone — use objective wording: "no visible defects noted at the time of inspection" or "appeared generally free from visible defects at the time of inspection"
-- Paving/patio: use "No visible cracking, open joints, settlement or raised paving slabs were noted within the vicinity of the proposed notifiable works" rather than "very good condition"
+- NEVER "good condition" or "very good condition" — always use objective wording: "appeared generally free from visible defects at the time of inspection" or "no visible defects were noted at the time of inspection"
+- Paving/patio: "No visible cracking, open joints, settlement or raised paving slabs were noted within the vicinity of the proposed notifiable works" — never "very good condition"
 - Crack rows: type, location, direction, measurement in one clear sentence
-- Do not introduce a crack-width classification (hairline, slight, moderate etc) unless the source dictation explicitly states it or a measurement supports it
-- Window tests: element name, what was tested, explicit result. Use "bound against the frame" not "stuck". Use "operated satisfactorily without sticking, binding or jamming" for passing tests
+- NEVER introduce a crack-width classification (hairline, slight, moderate etc) unless the source dictation explicitly states the classification or a measurement supports it. If the source says "a crack" without a width, write "a crack", not "a slight crack" or "a hairline crack"
+- Window tests: element name, what was tested, explicit result. NEVER "stuck" — use "bound against the frame". NEVER "without any issues" — use "operated satisfactorily without sticking, binding or jamming". For French doors use the same: "were tested and operated satisfactorily without sticking, binding or jamming"
+- Window opener wording: "opened partially but bound against the frame, preventing it from opening fully" — NOT "opened slightly"
 - Water ingress: dry/wet status at time of inspection, whether remote from works
 - Access limitations: what restricts access, what was accessible
 - Multi-sentence rows are correct for related observations on the same element
 - Tile dimensions: use "approximately 600mm x 600mm" not "60 by 60"
-- Roof: always "pitched ceiling" not "pitch ceiling"
+- ALWAYS "pitched ceiling" — NEVER "pitch ceiling" — check every row
 - Bricks: always "engineering bricks" not "engineered bricks"
-- Window context note for first floor front: "Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes."
+- First floor front context row must always read: "Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes. The chimney breasts remain intact."
+- Tiled floor observations covering the original front and rear reception rooms belong in Ground Floor Rear Elevation Room, not Ground Floor Rear Extension
 
 GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
