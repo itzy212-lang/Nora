@@ -136,7 +136,7 @@ async function createAiSession({ userId, projectId, surface, mode = 'discuss', t
   return data || null;
 }
 
-async function saveAiMessage({ sessionId, userId, projectId, surface, role, content }) {
+async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model }) {
   if (!sb || !sessionId || !content) return null;
 
   const dbRole = role === 'ely' ? 'assistant' : role;
@@ -151,6 +151,7 @@ async function saveAiMessage({ sessionId, userId, projectId, surface, role, cont
       project_id: projectId || null,
       surface: projectId ? 'project_chat' : surface,
       source_type: 'chat',
+      ...(model ? { model } : {}),
     }])
     .select('id, role, content, created_at')
     .single();
@@ -528,6 +529,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           surface,
           role: 'assistant',
           content: assistantText,
+          model: result.model || null,
         });
       }
 
