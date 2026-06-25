@@ -299,6 +299,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [pendingBooking, setPendingBooking] = useState(null);
+  const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
   const [voicePhase, setVoicePhase] = useState('idle');
   const [liveTop, setLiveTop] = useState('');
   const [liveBottom, setLiveBottom] = useState('');
@@ -737,6 +738,27 @@ export default function MainChat({ onOpenComposer, onClose }) {
       const isConfirm = /^(yes|yeah|yep|confirm|book it|go ahead|do it|correct|that's right|confirmed|sure|ok|okay)\b/i.test(text.trim());
       const isCancel = /^(no|nope|cancel|don't|stop|actually no)\b/i.test(text.trim());
 
+      // Case review confirmation — user replied with a topic after case_review_prompt
+      if (pendingCaseReview) {
+        if (isCancel) {
+          setPendingCaseReview(null);
+          setMessages(prev => [...prev, { id: uid(), role: 'user', content: text, createdAt: new Date().toISOString() }]);
+          setInput('');
+          setMessages(prev => [...prev, { id: uid(), role: 'ely', content: 'No problem — let me know what you need.' }]);
+          return;
+        }
+        setPendingCaseReview(null);
+        setMessages(prev => [...prev, { id: uid(), role: 'user', content: text, createdAt: new Date().toISOString() }]);
+        setInput('');
+        const result = await send(text, {
+          case_review_confirmed: true,
+          case_review_topic: text,
+          projectId: pendingCaseReview.project_id || selectedProjectId,
+        });
+        appendAssistantMessagesFromResult(result, false);
+        return;
+      }
+
       if (pendingBooking && isConfirm) {
         setPendingBooking(null);
         setMessages(prev => [...prev, { id: uid(), role: 'user', content: text, createdAt: new Date().toISOString() }]);
@@ -791,6 +813,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
         setPendingBooking(result.pending_booking);
       } else if (result.booking_created) {
         setPendingBooking(null);
+      }
+
+      // ── Case review prompt flow ──────────────────────────────────────────
+      if (result.case_review_prompt) {
+        setPendingCaseReview({ project_id: result.project_id || selectedProjectId });
       }
 
       if (selectedProjectId) {
