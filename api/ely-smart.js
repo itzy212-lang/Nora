@@ -1779,12 +1779,29 @@ async function runCaseReview({ projectId, topic, projectBundle }) {
     }
   }
 
-  const emailsText = allEmails.length
-    ? allEmails.map(e => `[${e.date}] ${e.direction} — From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
+  // Filter emails by topic keywords to reduce payload — keep most relevant
+  const topicWords = (topic || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const filterRelevant = (items, contentKey) => {
+    if (!topicWords.length) return items;
+    const scored = items.map(item => {
+      const text = (item[contentKey] || item.subject || item.content || '').toLowerCase();
+      const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
+      return { ...item, _score: score };
+    });
+    const relevant = scored.filter(i => i._score > 0).sort((a, b) => b._score - a._score);
+    const rest = scored.filter(i => i._score === 0);
+    return [...relevant, ...rest];
+  };
+
+  const filteredEmails = filterRelevant(allEmails, 'body').slice(0, 40);
+  const filteredBrain = filterRelevant(allBrain, 'content').slice(0, 80);
+
+  const emailsText = filteredEmails.length
+    ? filteredEmails.map(e => `[${e.date}] ${e.direction} — From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
     : 'No emails found.';
 
-  const brainText = allBrain.length
-    ? allBrain.map(m => `[${m.date}] ${m.type}: ${m.content}`).join('\n\n')
+  const brainText = filteredBrain.length
+    ? filteredBrain.map(m => `[${m.date}] ${m.type}: ${m.content}`).join('\n\n')
     : 'No notes or chat history found.';
 
   const projectAddress = projectBundle?.project_raw?.bo_premise_address || projectBundle?.project_raw?.address || '';
