@@ -490,15 +490,27 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         },
 
         chatHistory: (() => {
-          const history = currentHistory.slice(-16);
+          // For project chat use more history — notes pasted earlier must stay in context
+          const isProjectChat = extraOpts.surface === 'project_chat' || surface === 'project_chat';
+          const limit = isProjectChat ? 40 : 16;
+          const history = currentHistory.slice(-limit);
+
+          // Always include long user notes regardless of position — these are pasted project notes
+          const longUserNotes = currentHistory.filter(m =>
+            m.role === 'user' && m.content && m.content.length > 500 &&
+            !history.includes(m)
+          ).slice(-5); // up to 5 earlier long notes
+
+          const combined = [...longUserNotes, ...history];
+
           // Find the index of the last assistant message with a substantial draft
           let lastDraftIdx = -1;
-          history.forEach((msg, i) => {
+          combined.forEach((msg, i) => {
             if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
               lastDraftIdx = i;
             }
           });
-          return history.map((msg, i) => {
+          return combined.map((msg, i) => {
             // Keep the most recent draft in full so Ely knows exactly what's on screen
             if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
               if (i === lastDraftIdx) return msg; // keep latest draft intact
