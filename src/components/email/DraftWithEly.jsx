@@ -267,24 +267,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
       const result = await send(text, extraOpts);
 
-    setMessages(prev => [...prev, userMsg]);
-    setLoading(true);
-
-    try {
-      const result = await send(text, {
-        mode: 'draft_with_ely',
-        workflowStage: 'draft_with_ely',
-        sessionId,
-        emailId: email?.id || email?.external_id,
-        threadId: threadId || email?.thread_id,
-        projectId,
-        emailContext: {
-          from: email?.from || email?.from_email || '',
-          subject: email?.subject || '',
-          body: (email?.body || email?.preview || '').slice(0, 6000),
-        },
-      });
-
       if (result.sessionId) setSessionId(result.sessionId);
 
       // Case review prompt — store pending state, show the question
