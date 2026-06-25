@@ -813,11 +813,23 @@ function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, s
   // Append output rules if present
   if (brain?.instruction_set?.output_rules) {
     prompt += `\n\n${brain.instruction_set.output_rules}`;
+
   }
 
   // Append behaviour rules if present
   if (brain?.instruction_set?.behaviour_rules) {
     prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
+  }
+
+  // ── DOMAIN LAYER — injected when a specific mode is active ────────────
+  // This is the second instruction set loaded from the layered brain loader.
+  // It adds mode-specific rules on top of the global layer without replacing it.
+  if (brain?.domain_layer) {
+    const dl = brain.domain_layer;
+    const parts = [dl.system_prompt, dl.output_rules, dl.behaviour_rules].filter(Boolean);
+    if (parts.length) {
+      prompt += `\n\n--- DOMAIN LAYER: ${dl.name || dl.layer_type || 'specialist'} ---\n\n${parts.join('\n\n')}`;
+    }
   }
 
   prompt += `\n\n${GLOBAL_AI_STANDARD}\n`;
