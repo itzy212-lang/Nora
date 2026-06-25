@@ -1543,7 +1543,23 @@ async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
 // ── Case review detection ─────────────────────────────────────────────────
 function detectsCaseReview(prompt = '') {
   const lower = prompt.toLowerCase();
-  return lower.includes('case review') || lower.includes('full review') || lower.includes('full case');
+  return lower.includes('case review') ||
+    lower.includes('full review') ||
+    lower.includes('full case') ||
+    lower.includes('read the project chat') ||
+    lower.includes('check the project chat') ||
+    lower.includes('look at the project chat') ||
+    lower.includes('project chat') ||
+    lower.includes('check the project notes') ||
+    lower.includes('read the project notes') ||
+    lower.includes('project notes') ||
+    lower.includes('what does the project') ||
+    lower.includes('pull the project') ||
+    lower.includes('get the project context') ||
+    lower.includes('check the notes on this') ||
+    lower.includes('what\'s in the project') ||
+    lower.includes('whats in the project') ||
+    lower.includes('what is in the project');
 }
 
 // ── Invoice intent detection ──────────────────────────────────────────────
@@ -2054,9 +2070,15 @@ Never summarise. Never explain. Never ask questions.`,
     // ── Case review detection — ask clarifying question ───────────────────
     if (detectsCaseReview(prompt) && projectId) {
       return res.status(200).json({
-        reply: `Ooh, a case review — now we're talking. 🕵️\n\nBefore I get the research department involved: are you looking to review a specific email or document, or do you want a full case file review across all correspondence, emails, notes and chat history on this project?\n\nIf it's the full works, tell me what you want me to focus on and I'll get them on it straight away.`,
+        reply: `On it. Before I pull the project notes — what do you want me to focus on? For example: the boundary dispute, correspondence history, schedule of conditions, or the full picture?\n\nTell me the topic and I'll go through everything on this project and come back with what's relevant.`,
         case_review_prompt: true,
         project_id: projectId,
+      });
+    }
+
+    if (detectsCaseReview(prompt) && !projectId) {
+      return res.status(200).json({
+        reply: `I can pull the project notes but I need to know which project you're working on. Can you give me the project reference or address?`,
       });
     }
 
