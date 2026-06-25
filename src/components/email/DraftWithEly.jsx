@@ -291,7 +291,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       if (result.case_review_prompt) {
         setPendingCaseReview({ project_id: result.project_id || projectId });
         setMessages(prev => [...prev, { id: uid(), role: 'ely', content: result.reply || '' }]);
-        setLoading(false);
         return;
       }
 
@@ -328,7 +327,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     } finally {
       setLoading(false);
     }
-  }, [input, loading, send, sessionId, email, threadId, projectId, stopVoice]);
+  }, [input, loading, send, sessionId, email, threadId, projectId, stopVoice, pendingCaseReview]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
