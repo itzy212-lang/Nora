@@ -223,6 +223,8 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
   // autoSummarise removed — user requests summary manually if needed
 
+  const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
+
   const handleSend = useCallback(async (overrideText) => {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim();
 
@@ -236,6 +238,34 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     }
 
     const userMsg = { id: uid(), role: 'user', content: text };
+
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+
+    try {
+      const extraOpts = {
+        mode: 'draft_with_ely',
+        workflowStage: 'draft_with_ely',
+        sessionId,
+        emailId: email?.id || email?.external_id,
+        threadId: threadId || email?.thread_id,
+        projectId,
+        emailContext: {
+          from: email?.from || email?.from_email || '',
+          subject: email?.subject || '',
+          body: (email?.body || email?.preview || '').slice(0, 6000),
+        },
+      };
+
+      // If we're in a pending case review flow, send confirmation
+      if (pendingCaseReview) {
+        extraOpts.case_review_confirmed = true;
+        extraOpts.case_review_topic = text;
+        extraOpts.projectId = pendingCaseReview.project_id || projectId;
+        setPendingCaseReview(null);
+      }
+
+      const result = await send(text, extraOpts);
 
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
@@ -256,6 +286,14 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       });
 
       if (result.sessionId) setSessionId(result.sessionId);
+
+      // Case review prompt — store pending state, show the question
+      if (result.case_review_prompt) {
+        setPendingCaseReview({ project_id: result.project_id || projectId });
+        setMessages(prev => [...prev, { id: uid(), role: 'ely', content: result.reply || '' }]);
+        setLoading(false);
+        return;
+      }
 
       const raw = result.reply || result.draft || '';
       const { brief, draft: splitDraft, after } = splitAssistantResponseLocal(raw);
