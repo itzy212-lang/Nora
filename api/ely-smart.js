@@ -278,6 +278,16 @@ async function loadProjectBundle(projectId) {
     q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
   );
 
+  // Load emails linked to this project — no need to search the full inbox
+  const projectEmails = await safeSelect(
+    'emails',
+    'id, subject, sender_name, sender_email, to_email, sent_at, body, is_sent',
+    q => q
+      .eq('project_id', projectId)
+      .order('sent_at', { ascending: true })
+      .limit(100)
+  );
+
   // Load ALL project chat messages across all sessions — no session boundary
   const projectChatMessages = await safeSelect(
     'ai_messages',
@@ -299,6 +309,7 @@ async function loadProjectBundle(projectId) {
     project_memory: projectMemory,
     soc_reports: socReports,
     project_chat_notes: projectChatMessages,
+    project_emails: projectEmails,
   };
 }
 
@@ -1225,6 +1236,19 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
+  // Inject project emails linked to this project
+  if (projectBundle?.project_emails?.length) {
+    const emailsText = projectBundle.project_emails
+      .map(e => {
+        const date = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB') : '';
+        const direction = e.is_sent ? 'Sent' : 'Received';
+        const from = e.sender_name || e.sender_email || '';
+        return `[${date}] ${direction} — ${from}\nSubject: ${e.subject || ''}\n${(e.body || '').slice(0, 2000)}`;
+      })
+      .join('\n\n---\n\n');
+    prompt += `\n\nPROJECT EMAILS (all emails linked to this project):\n${emailsText.slice(0, 30000)}\n`;
+  }
+
   // Inject ALL project chat notes across all sessions — no session boundary
   if (projectBundle?.project_chat_notes?.length) {
     const notesText = projectBundle.project_chat_notes
@@ -1234,7 +1258,7 @@ ${projectFacts}
   }
 
   if (projectBundle) {
-    const { project_chat_notes: _notes, ...bundleWithoutNotes } = projectBundle;
+    const { project_chat_notes: _notes, project_emails: _emails, ...bundleWithoutNotes } = projectBundle;
     prompt += `\n\nPROJECT BUNDLE:\n${compactJson(bundleWithoutNotes, 14000)}\n`;
   } else if (resolvedProject) {
     prompt += `
