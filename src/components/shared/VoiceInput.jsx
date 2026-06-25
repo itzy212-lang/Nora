@@ -441,7 +441,19 @@ export default function VoiceInput({
       }, 180);
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      const errorType = event?.error || '';
+      console.warn('[VoiceInput] Web Speech error:', errorType);
+
+      // Permission denied or service unavailable — fall back to Whisper
+      if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
+        shouldKeepRecordingRef.current = false;
+        setRecording(false);
+        console.log('[VoiceInput] Microphone permission denied or service unavailable — falling back to Whisper');
+        startMobileRecording();
+        return;
+      }
+
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -474,8 +486,16 @@ export default function VoiceInput({
     sessionResultsRef.current = {};
     lastEmittedRef.current = '';
 
+    // Check if Web Speech API is available — if not, fall back to Whisper (same as mobile)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.log('[VoiceInput] Web Speech API not available on desktop — falling back to Whisper');
+      startMobileRecording();
+      return;
+    }
+
     startRecognitionSession();
-  }, [disabled, startRecognitionSession]);
+  }, [disabled, startMobileRecording, startRecognitionSession]);
 
   const toggleRecording = useCallback(() => {
     if (disabled || transcribing) return;
