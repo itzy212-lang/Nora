@@ -1597,23 +1597,17 @@ async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
 // ── Case review detection ─────────────────────────────────────────────────
 function detectsCaseReview(prompt = '') {
   const lower = prompt.toLowerCase();
+  // Only trigger for explicit full case review requests
+  // Simple "read my notes" or "check the project notes" no longer needs case review
+  // because project notes and emails are now loaded automatically into every project chat
   return lower.includes('case review') ||
     lower.includes('full review') ||
     lower.includes('full case') ||
-    lower.includes('read the project chat') ||
-    lower.includes('check the project chat') ||
-    lower.includes('look at the project chat') ||
-    lower.includes('project chat') ||
-    lower.includes('check the project notes') ||
-    lower.includes('read the project notes') ||
-    lower.includes('project notes') ||
-    lower.includes('what does the project') ||
-    lower.includes('pull the project') ||
-    lower.includes('get the project context') ||
-    lower.includes('check the notes on this') ||
-    lower.includes('what\'s in the project') ||
-    lower.includes('whats in the project') ||
-    lower.includes('what is in the project');
+    lower.includes('full case file') ||
+    lower.includes('go through everything') ||
+    lower.includes('review everything on this project') ||
+    lower.includes('review all the correspondence') ||
+    lower.includes('review all correspondence');
 }
 
 // ── Invoice intent detection ──────────────────────────────────────────────
