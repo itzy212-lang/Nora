@@ -278,6 +278,18 @@ async function loadProjectBundle(projectId) {
     q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
   );
 
+  // Load ALL project chat messages across all sessions — no session boundary
+  const projectChatMessages = await safeSelect(
+    'ai_messages',
+    'id, role, content, created_at, session_id',
+    q => q
+      .eq('project_id', projectId)
+      .eq('surface', 'project_chat')
+      .eq('role', 'user')
+      .order('created_at', { ascending: true })
+      .limit(200)
+  );
+
   return {
     project_raw: project || null,
     project: normaliseProject(project || {}),
@@ -286,6 +298,7 @@ async function loadProjectBundle(projectId) {
     documents,
     project_memory: projectMemory,
     soc_reports: socReports,
+    project_chat_notes: projectChatMessages,
   };
 }
 
@@ -1212,12 +1225,17 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
-  if (projectBundle) {
-    prompt += `
+  // Inject ALL project chat notes across all sessions — no session boundary
+  if (projectBundle?.project_chat_notes?.length) {
+    const notesText = projectBundle.project_chat_notes
+      .map(m => `[${new Date(m.created_at).toLocaleDateString('en-GB')}] ${m.content}`)
+      .join('\n\n---\n\n');
+    prompt += `\n\nALL PROJECT NOTES & CHAT (every message from this project across all sessions):\n${notesText.slice(0, 20000)}\n`;
+  }
 
-PROJECT BUNDLE:
-${compactJson(projectBundle, 14000)}
-`;
+  if (projectBundle) {
+    const { project_chat_notes: _notes, ...bundleWithoutNotes } = projectBundle;
+    prompt += `\n\nPROJECT BUNDLE:\n${compactJson(bundleWithoutNotes, 14000)}\n`;
   } else if (resolvedProject) {
     prompt += `
 
