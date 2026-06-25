@@ -85,9 +85,11 @@ function isDraftRequest(text = '', hasPreviousDraft = false) {
 
   const draftWords = ['draft', 'write', 'email', 'letter', 'compose', 'covering', 'respond', 'reply', 'wording', 'whatsapp', 'text message'];
   const editWords = ['change', 'amend', 'revise', 'rewrite', 'update', 'make it', 'add', 'remove', 'replace', 'shorter', 'firmer', 'softer', 'more formal', 'less formal'];
+  const recipientChangeWords = ['address it to', 'address this to', "let's address it to", "let's address this to", 'change the recipient to', 'rewrite it for', 'send it to', 'send this to', 'send the letter to', 'send the email to'];
 
   if (draftWords.some(word => s.includes(word))) return true;
   if (hasPreviousDraft && editWords.some(word => s.includes(word))) return true;
+  if (hasPreviousDraft && recipientChangeWords.some(phrase => s.includes(phrase))) return true;
 
   return false;
 }
