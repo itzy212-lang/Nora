@@ -18,7 +18,24 @@ export default async function handler(req, res) {
 
   // ── GET — load session list or notes ────────────────────────────────────
   if (req.method === 'GET') {
-    const { project_id, session_id } = req.query;
+    const { project_id, session_id, action } = req.query;
+
+    // Load existing SOC report for a session
+    if (action === 'load_report' && session_id) {
+      const { data, error } = await supabase
+        .from('soc_reports')
+        .select('id, preview_html, structured_data')
+        .eq('session_id', session_id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) return res.status(500).json({ error: error.message });
+      if (!data?.length) return res.status(404).json({ error: 'No report found' });
+      return res.status(200).json({
+        report_id: data[0].id,
+        preview_html: data[0].preview_html,
+        structured_data: data[0].structured_data,
+      });
+    }
 
     // Load notes for a session
     if (session_id) {
