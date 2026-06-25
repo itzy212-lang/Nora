@@ -248,6 +248,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
+  const [pendingCaseReview, setPendingCaseReview] = useState(false);
   const voiceBaseRef  = useRef('');
   const endRef        = useRef(null);
   const hasAutoRun    = useRef(null);
@@ -382,6 +383,8 @@ ${threadText}`;
           surface: 'inbox_draft',
           mode: 'draft_with_ely',
           workflowStage: 'draft_with_ely',
+          projectId: email?.project_id || null,
+          project_id: email?.project_id || null,
           chatHistory: isAuto ? [] : history,
           emailContext: {
             from: email.sender_name || email.sender_email,
@@ -390,10 +393,25 @@ ${threadText}`;
             body: fullThread,
           },
           threadContext: fullThread,
+          ...(pendingCaseReview ? {
+            case_review_confirmed: true,
+            case_review_topic: text,
+          } : {}),
         }),
       });
 
       const data = await res.json();
+
+      // Case review prompt — store pending state, show the question as plain message
+      if (data.case_review_prompt) {
+        setPendingCaseReview(true);
+        setMessages(prev => [...prev, { id: Date.now(), role: 'ely', explanation: data.reply || '', draft: null }]);
+        return;
+      }
+
+      // Clear case review pending state after confirmed
+      if (pendingCaseReview) setPendingCaseReview(false);
+
       const reply = data.reply || data.replyText || 'Could not generate a draft.';
       const draft = data.documentText || extractDraft(reply);
       const explanation = draft
