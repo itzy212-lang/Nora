@@ -86,6 +86,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
         if (phase === 'setup') setPhase('recording');
       }
+
+      // Load existing SOC report for this session if one exists
+      const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
+      if (reportRes.ok) {
+        const reportData = await reportRes.json();
+        if (reportData.preview_html && reportData.structured_data) {
+          setPreviewHtml(reportData.preview_html);
+          setStructuredData(reportData.structured_data);
+          setReportId(reportData.report_id || null);
+          setEditableSections(JSON.parse(JSON.stringify(
+            reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
+          )));
+          setPhase('preview');
+        }
+      }
     }
 
     initSession().catch(console.error);
