@@ -2070,7 +2070,7 @@ Never summarise. Never explain. Never ask questions.`,
     // ── Case review detection — ask clarifying question ───────────────────
     if (detectsCaseReview(prompt) && projectId) {
       return res.status(200).json({
-        reply: `On it. Before I pull the project notes — what do you want me to focus on? For example: the boundary dispute, correspondence history, schedule of conditions, or the full picture?\n\nTell me the topic and I'll go through everything on this project and come back with what's relevant.`,
+        reply: `Ooh, a case review — now we're talking. 🕵️\n\nBefore I get the research department involved: are you looking to review a specific email or document, or do you want a full case file review across all correspondence, emails, notes and chat history on this project?\n\nIf it's the full works, tell me what you want me to focus on and I'll get them on it straight away.`,
         case_review_prompt: true,
         project_id: projectId,
       });
