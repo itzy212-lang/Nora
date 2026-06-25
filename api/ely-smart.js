@@ -1744,37 +1744,38 @@ async function runCaseReview({ projectId, topic, projectBundle }) {
     try {
       const { data } = await sb
         .from('emails')
-        .select('subject, from_address, from_name, received_at, body_text, folder')
+        .select('subject, sender_email, sender_name, sent_at, body, folder, is_sent')
         .eq('project_id', projectId)
-        .order('received_at', { ascending: true });
+        .order('sent_at', { ascending: true });
       allEmails = (data || []).map(e => ({
-        date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
-        direction: (e.folder || '').toLowerCase().includes('sent') ? 'Sent' : 'Received',
-        from: e.from_name || e.from_address || '',
+        date: e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
+        direction: e.is_sent ? 'Sent' : 'Received',
+        from: e.sender_name || e.sender_email || '',
         subject: e.subject || '',
-        body: (e.body_text || '').slice(0, 3000), // generous per-email cap for Claude
+        body: (e.body || '').slice(0, 3000),
       }));
     } catch (err) {
       console.warn('[ely-smart] case review email load error:', err.message);
     }
   }
 
-  // Load all brain entries — no limit
+  // Load project chat messages from ai_messages — this is where project chat lives
   let allBrain = [];
   if (sb && projectId) {
     try {
       const { data } = await sb
-        .from('project_brain')
-        .select('role, content, content_type, created_at, file_name')
+        .from('ai_messages')
+        .select('role, content, created_at, surface')
         .eq('project_id', projectId)
+        .eq('surface', 'project_chat')
         .order('created_at', { ascending: true });
       allBrain = (data || []).map(m => ({
         date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
-        type: m.content_type || m.role || 'note',
+        type: m.role === 'user' ? 'Surveyor note' : 'Ely response',
         content: (m.content || '').slice(0, 2000),
       }));
     } catch (err) {
-      console.warn('[ely-smart] case review brain load error:', err.message);
+      console.warn('[ely-smart] case review chat load error:', err.message);
     }
   }
 
