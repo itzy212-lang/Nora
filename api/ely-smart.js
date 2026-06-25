@@ -2045,17 +2045,23 @@ Never summarise. Never explain. Never ask questions.`,
     const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
 
     // ── Case review confirmation ──────────────────────────────────────────
-    // If user has already confirmed a case review (flagged by frontend)
     if (body.case_review_confirmed && body.case_review_topic && projectId) {
-      const projectBundle = await loadProjectBundle(projectId);
 
-      // Tell GPT-4o to acknowledge the handoff first
-      const handoffMsg = `Perfect — leave it with me. I'm passing this to our research department now. They're very thorough and will go through everything on this project. Back with you shortly. 🔍`;
-
-      // Run Claude case review
-      let findings;
+      // Call dedicated case-review endpoint — has maxDuration: 300, no timeout risk
+      const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+      let findings = '';
       try {
-        findings = await runCaseReview({ projectId, topic: body.case_review_topic, projectBundle });
+        const crRes = await fetch(`${baseUrl}/api/case-review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'start',
+            project_id: projectId,
+            topic: body.case_review_topic,
+          }),
+        });
+        const crData = await crRes.json();
+        findings = crData.result || `Case review encountered an error: ${crData.error || 'Unknown error'}`;
       } catch (err) {
         findings = `Case review encountered an error: ${err.message}`;
       }
