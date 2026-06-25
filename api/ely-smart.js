@@ -490,6 +490,22 @@ function hasExplicitDraftRequest(prompt = '') {
     /\bproduce (a |the )?(draft|email|letter)\b/i.test(p);
 
   if (expressDraft) return true;
+
+  // Recipient-change patterns — treat as draft amendment when user redirects an existing draft
+  // "address it to", "send it to", "rewrite it for" etc
+  // Carefully scoped to avoid catching "how should we address this issue?" style discussion
+  const recipientChange =
+    /\baddress (it|this|the (letter|email|draft)) to\b/i.test(p) ||
+    /\blet'?s address (it|this) to\b/i.test(p) ||
+    /\bchange the recipient to\b/i.test(p) ||
+    /\bmake it to\b/i.test(p) ||
+    /\brewrite it for\b/i.test(p) ||
+    /\brewrite (the )?(letter|email|draft) for\b/i.test(p) ||
+    /\bsend (it|this) to\b(?!.*\b(actually|please|can you|go ahead|now)\b)/i.test(p) ||
+    /\bsend (the )?(letter|email|draft) to\b/i.test(p);
+
+  if (recipientChange) return true;
+
   if (looksLikeEmailDictation(prompt)) return true;
 
   return false;
@@ -2407,6 +2423,33 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     });
 
     const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
+
+    // Recipient-change override — inject targeted instruction immediately before user message
+    // when the prompt is a recipient redirect and there is an existing draft in history
+    const isRecipientChange =
+      /\baddress (it|this|the (letter|email|draft)) to\b/i.test(prompt) ||
+      /\blet'?s address (it|this) to\b/i.test(prompt) ||
+      /\bchange the recipient to\b/i.test(prompt) ||
+      /\brewrite (it|the (letter|email|draft)) for\b/i.test(prompt) ||
+      /\bsend (it|this|the (letter|email|draft)) to\b/i.test(prompt);
+
+    const hasPriorDraft = (body.chatHistory || []).some(m =>
+      m.role === 'assistant' && m.content && m.content.length > 200
+    );
+
+    if (isRecipientChange && hasPriorDraft && modeHint === 'draft') {
+      // Insert override just before the final user message
+      const lastUserIdx = messages.map(m => m.role).lastIndexOf('user');
+      if (lastUserIdx !== -1) {
+        messages.splice(lastUserIdx, 0, {
+          role: 'user',
+          content: 'RECIPIENT CHANGE — FULL REDRAFT REQUIRED\n\nThe recipient has now been identified or changed. Do not simply update the salutation or closing. Reassess the entire draft for this recipient: their role, what they already know, what background is now redundant, and how directly you can open. Remove any introductory wording that would only be needed for a new or uninvolved recipient. The revised letter must read as though it was originally written for this person. Apply the RECIPIENT-AWARE REDRAFTING and ONGOING PROFESSIONAL CORRESPONDENCE rules in full.'
+        }, {
+          role: 'assistant',
+          content: 'Understood. I will fully reassess the draft for this recipient, removing redundant background and rewriting the opening and structure accordingly.'
+        });
+      }
+    }
 
     // ── Knowledge base lookup for statutory questions ─────────────────────
     if (isStatutoryQuestion(prompt)) {
