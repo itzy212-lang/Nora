@@ -285,7 +285,7 @@ async function loadProjectBundle(projectId) {
     q => q
       .eq('project_id', projectId)
       .order('sent_at', { ascending: true })
-      .limit(100)
+      .limit(50)
   );
 
   // Load ALL project chat messages across all sessions — no session boundary
@@ -297,7 +297,7 @@ async function loadProjectBundle(projectId) {
       .eq('surface', 'project_chat')
       .eq('role', 'user')
       .order('created_at', { ascending: true })
-      .limit(200)
+      .limit(50)
   );
 
   return {
@@ -1236,17 +1236,30 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
-  // Inject project emails linked to this project
+  // Inject project emails — filter by relevance to current prompt if possible
   if (projectBundle?.project_emails?.length) {
-    const emailsText = projectBundle.project_emails
+    const promptLower = (userPrompt || '').toLowerCase();
+    const topicWords = promptLower.split(/\s+/).filter(w => w.length > 3);
+    let relevantEmails = projectBundle.project_emails;
+    if (topicWords.length > 0) {
+      const scored = relevantEmails.map(e => {
+        const text = ((e.subject || '') + ' ' + (e.body || '') + ' ' + (e.sender_name || '')).toLowerCase();
+        const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
+        return { ...e, _score: score };
+      }).sort((a, b) => b._score - a._score);
+      // Take top 20 most relevant, always include sent emails
+      const topRelevant = scored.slice(0, 20);
+      relevantEmails = topRelevant;
+    }
+    const emailsText = relevantEmails
       .map(e => {
         const date = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB') : '';
         const direction = e.is_sent ? 'Sent' : 'Received';
         const from = e.sender_name || e.sender_email || '';
-        return `[${date}] ${direction} — ${from}\nSubject: ${e.subject || ''}\n${(e.body || '').slice(0, 2000)}`;
+        return `[${date}] ${direction} — ${from}\nSubject: ${e.subject || ''}\n${(e.body || '').slice(0, 1500)}`;
       })
       .join('\n\n---\n\n');
-    prompt += `\n\nPROJECT EMAILS (all emails linked to this project):\n${emailsText.slice(0, 30000)}\n`;
+    prompt += `\n\nPROJECT EMAILS (most relevant to current request):\n${emailsText.slice(0, 12000)}\n`;
   }
 
   // Inject ALL project chat notes across all sessions — no session boundary
@@ -1254,7 +1267,7 @@ ${projectFacts}
     const notesText = projectBundle.project_chat_notes
       .map(m => `[${new Date(m.created_at).toLocaleDateString('en-GB')}] ${m.content}`)
       .join('\n\n---\n\n');
-    prompt += `\n\nALL PROJECT NOTES & CHAT (every message from this project across all sessions):\n${notesText.slice(0, 20000)}\n`;
+    prompt += `\n\nALL PROJECT NOTES & CHAT (every message from this project across all sessions):\n${notesText.slice(0, 8000)}\n`;
   }
 
   if (projectBundle) {
