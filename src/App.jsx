@@ -276,16 +276,14 @@ export default function App() {
       setSocDefaultAOIndex(null);
     }
 
-    setCurrentView('soc');
-    setProjectView(null);
-    setPendingProjectId('');
-    clearCurrentProject();
+    // SOC lives within the project — set projectView to 'soc' so back returns to project
+    setProjectView('soc');
+    setCurrentView('projects');
 
     try {
-      sessionStorage.setItem('ely_current_view', 'soc');
-      sessionStorage.removeItem('ely_current_project_id');
+      sessionStorage.setItem('ely_current_view', 'projects');
     } catch {}
-  }, [clearCurrentProject]);
+  }, []);
 
   const handleOpenDisputeAgreement = useCallback((project = null) => {
     setDisputeProjectId(project?.id || null);
@@ -355,6 +353,26 @@ export default function App() {
   }
 
   const renderContent = () => {
+    if (currentView === 'projects' && projectView === 'soc') {
+      return (
+        <SOC
+          onOpenComposer={openComposer}
+          defaultProjectId={socProjectId}
+          defaultAOIndex={socDefaultAOIndex}
+          key={`${socProjectId}-${socDefaultAOIndex}`}
+          onBack={() => {
+            // Return to the project detail — reload the project
+            setPendingProjectId(socProjectId);
+            setProjectView(null);
+            try {
+              sessionStorage.setItem('ely_current_view', 'projects');
+              if (socProjectId) sessionStorage.setItem('ely_current_project_id', socProjectId);
+            } catch {}
+          }}
+        />
+      );
+    }
+
     if (currentView === 'projects' && projectView && projectView !== 'list' && projectView !== 'new') {
       return (
         <ProjectDetail
