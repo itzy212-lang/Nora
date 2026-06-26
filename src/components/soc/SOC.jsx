@@ -5,7 +5,7 @@ import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
-export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }) {
+export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, onBack }) {
   const { state } = useApp();
   const projects = state.projects || [];
 
@@ -572,7 +572,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
     return (
       <div style={{ ...s.page, flexDirection: 'column', padding: '20px 16px', gap: 16 }}>
         <div style={s.header}>
-          <div style={s.titleMain}>SOC Dictation</div>
+          <div style={s.headerLeft}>
+            {onBack && <button onClick={onBack} style={s.secondaryBtn}>← Back to Project</button>}
+            <div style={s.titleMain}>SOC Dictation</div>
+          </div>
         </div>
         <div style={s.card}>
           <div style={s.field}>
@@ -832,6 +835,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
         {/* Header */}
         <div style={s.header}>
           <div style={s.headerLeft}>
+            {onBack && <button onClick={onBack} style={s.secondaryBtn}>← Project</button>}
             <button style={s.hamburger} onClick={() => setSidebarOpen(true)}>☰</button>
             <div style={s.titleBlock}>
               <span style={s.titleMain}>SOC Dictation</span>
