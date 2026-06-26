@@ -739,7 +739,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                   Site Notes
                 </div>
                 <button
-                  onClick={() => setStructuredData(prev => ({ ...prev, site_notes: [{ description: '' }], award_notes: [{ description: '' }] }))}
+                  onClick={() => setStructuredData(prev => ({ ...prev, site_notes: [{ description: '' }] }))}
                   style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
                 >+ Add site note</button>
               </div>
@@ -760,13 +760,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                         onChange={e => {
                           const updated = [...siteNotes];
                           updated[nIdx] = { description: e.target.value };
-                          setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                          setStructuredData(prev => ({ ...prev, site_notes: updated }));
                         }}
                       />
                       <button
                         onClick={() => {
                           const updated = siteNotes.filter((_, i) => i !== nIdx);
-                          setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                          setStructuredData(prev => ({ ...prev, site_notes: updated }));
                         }}
                         style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start', padding: '4px' }}
                       >✕</button>
@@ -776,7 +776,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
                 <button
                   onClick={() => {
                     const updated = [...siteNotes, { description: '' }];
-                    setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                    setStructuredData(prev => ({ ...prev, site_notes: updated }));
                   }}
                   style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', marginTop: 4 }}
                 >+ Add site note</button>
