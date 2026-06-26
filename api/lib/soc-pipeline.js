@@ -559,7 +559,7 @@ GROUPING:
 - Where NO ACCESS was available to a room at the time of inspection (access refused, locked, not granted), that room must appear as its own named section with a row stating: "No access was available to [room] at the time of inspection. [Reason if given.] This has been recorded accordingly." Do not omit it — failure to document no-access implies the room was never attempted.
 - Where access was RESTRICTED (partial access only, elements obscured by furniture, fixed finishes or fittings), this is a site note entry, not a named section row. Example site note: "Access to [element] was restricted at the time of inspection due to [reason]. Only accessible sections were inspected and recorded."
 - Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
-- Flank wall / party fence wall legal status observations must be recorded as observation rows in the relevant section
+- Flank wall / party fence wall legal status notes belong in site_notes, not as observation rows
 - External pitched roof, guttering, flat roof and rooflight observations must appear in External Areas — do not omit them
 - All window tests must be recorded individually — where three openers were tested, all three must appear as separate rows. The third opener may be dictated out of sequence (after external notes or after moving to another room) — it must still appear in the correct bedroom section
 - General ceiling condition (no visible defects noted) must always appear as its own row even if brief — including where the surveyor returns to a room to add a ceiling note out of sequence
@@ -650,12 +650,14 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
     'SECTION ORDER — MANDATORY: Sections must appear in this exact physical sequence: (1) Ground floor rooms, (2) First floor rooms, (3) Second floor rooms if present, (4) Loft or roof space LAST among internal rooms, (5) External areas, (6) Site notes. Never place loft or roof space before ground floor or first floor rooms.\n' +
     'REF LABELING: Use short two-letter prefixes describing the room only. Examples: CR = Cloakroom/Bathroom, FR = Front Room, FB = Front Bedroom, RB = Rear Bedroom, LF = Loft, EA = External Areas. Do not use long prefixes like FFFB, GFCR or FFRB.\n' +
+    'SITE NOTES — MANDATORY: Populate the site_notes array with ALL of the following found in the transcript: (1) access restrictions or refusals, (2) photographic schedule statements, (3) remote-from-works statements for whole rooms, (4) structural engineer or contractor notes, (5) legal status observations (party wall, party fence wall), (6) health and safety or asbestos notes, (7) cleanup requirements. Do NOT return an empty site_notes array if any of these are present in the transcript.\n' +
     'ROOM INCLUSION RULE — CRITICAL: Every room and area inspected must appear in the schedule. Do not omit any room because it appears remote from the proposed notifiable works. If a room is remote from the works, include it and append the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only." This applies to every inspected room without exception.\n' +
     'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
     'Return valid JSON only:\n' +
     '{\n' +
     (projectMeta?.soc_type === 'dispute' ? '  "introduction": "AI-drafted introduction paragraph based on the surveyor\'s context notes. Must reflect that works have already taken place, explain the specific circumstances (e.g. no award in place, damage reported, private agreement reached), and set out the purpose of this schedule accordingly. Professional British English. Do not use the standard pre-works baseline wording.",\n' : '') +
     '  "sections": [{"number": 1, "title": "...", "rows": [{"ref": "XX01", "row_id": "uid", "element": "...", "observation": "Professional observation.", "action": "Record only", "source_note_ids": [1], "source_claim_ids": ["c-1-1"]}]}],\n' +
+    '  "site_notes": [],\n' +
     '  "general_notes": []\n' +
     '}';
 
@@ -707,7 +709,11 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
       if (!row.row_id) row.row_id = 'row-' + sec.number + '-' + row.ref + '-' + Date.now();
   }
 
-  // Normalise general_notes to strings
+  // Normalise site_notes / general_notes to strings
+  const siteNotes = (result.site_notes || []).map(n =>
+    typeof n === 'string' ? n : (n.observation || n.note || n.text || n.description || n.content || '')
+  ).filter(Boolean);
+
   const generalNotes = (result.general_notes || []).map(n =>
     typeof n === 'string' ? n : (n.note || n.text || '')
   ).filter(Boolean);
@@ -715,6 +721,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   return {
     sections: result.sections,
     unresolved_notes: [],
+    site_notes: siteNotes.map(t => ({ description: t })),
     general_notes: generalNotes,
     _drafting_metadata: {
       drafting_model: model,
