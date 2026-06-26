@@ -170,7 +170,7 @@ ${notesText}`;
 
 // ─── Build factual checklist for drafting (not database labels) ────────────────
 function buildFactualChecklist(claims, rawNotesBySeq) {
-  const contextualTypes = new Set(['contextual', 'section_transition']);
+  const contextualTypes = new Set(['contextual', 'section_transition', 'award_note']);
   const activeClaims = claims.filter(c => c.status === 'active' && !contextualTypes.has(c.claim_type));
   const supersededClaims = claims.filter(c => c.status === 'superseded');
 
@@ -522,26 +522,7 @@ LANGUAGE STANDARDS:
 - First floor front context row must always read: "Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes. The chimney breasts remain intact."
 - Tiled floor observations covering the original front and rear reception rooms belong in Ground Floor Rear Elevation Room, not Ground Floor Rear Extension
 
-ABSOLUTE INCLUSION RULE — CRITICAL
-
-If the surveyor dictated it, it must appear in the schedule. The AI must never omit an observation, defect, condition note or site note on the basis that:
-- it appears remote from the proposed notifiable works
-- it appears minor or insignificant
-- it appears to have been resolved or is historic
-- it does not appear to be caused by the notifiable works
-- it is on the building owner's side rather than the adjoining owner's side
-- it appears to duplicate another observation
-- it appears in a room or area unlikely to be affected by the works
-
-The AI decides WHERE to place the observation and HOW to frame it. The AI does not decide WHETHER to include it.
-
-Where an observation is remote from the notifiable works, include it with the appropriate caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only."
-
-Where an observation relates to an existing or historic issue that has been resolved, include it with appropriate wording: "Signs of a previous [defect] were noted. The area appeared [condition] at the time of inspection and has been recorded for scheduling purposes."
-
-Where an observation is on the building owner's side, include it with the attribution: "It is noted, for reference only, that [observation] on the building owner's side."
-
-If it was dictated, it must be in the schedule.
+GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
 - Separate: different elements, different defects, different locations, different tests
 - Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
@@ -550,10 +531,7 @@ If it was dictated, it must be in the schedule.
 - Where a surveyor notes that a room was scheduled using photographs only because it is remote from notifiable works, that note must produce a named section for that room, not a site note entry, unless the dictation explicitly directs it to site notes.
 - Where NO ACCESS was available to a room at the time of inspection (access refused, locked, not granted), that room must appear as its own named section with a row stating: "No access was available to [room] at the time of inspection. [Reason if given.] This has been recorded accordingly." Do not omit it — failure to document no-access implies the room was never attempted.
 - Where access was RESTRICTED (partial access only, elements obscured by furniture, fixed finishes or fittings), this is a site note entry, not a named section row. Example site note: "Access to [element] was restricted at the time of inspection due to [reason]. Only accessible sections were inspected and recorded."
-- Sections must be ordered to follow the physical inspection sequence: basement (if present), ground floor rooms, first floor rooms, second floor rooms, loft or roof space last, then external areas, then site notes. Loft and roof space always appear after all habitable floor levels — never before ground floor rooms.
-- Where the surveyor states that a room or area is remote from the notifiable works AND was recorded by photographic schedule only, this must generate BOTH: (1) a named section for that room with its observations, AND (2) a site note entry recording that the area is remote from the proposed notifiable works and was recorded by photographic schedule only, with the photographs retained on file. Example site note: "The loft was inspected and found to be remote from the proposed notifiable works. The inspection was carried out by photographic schedule only. The photographs are retained on file."
-- Where the surveyor explicitly instructs that a note should be added to a different room ("also add to the front bedroom", "add that note to the front bedroom", "same applies to the front bedroom"), that observation must be duplicated into the named room regardless of where it appears in the transcript. Do not drop cross-room carry-forward instructions.
-- Where the surveyor identifies a plasterboard pop, that must be recorded as a plasterboard pop — not compressed into a generic crack description. Example: "evidence of a prior plasterboard pop that has been decorated over" must appear in the row, not be replaced with "small crack."
+- Water ingress rows must always state whether the area appeared dry and whether it is remote from the proposed notifiable works
 - Flank wall / party fence wall legal status notes belong in site_notes array, not as observation rows
 - External pitched roof, guttering, flat roof and rooflight observations must appear in External Areas — do not omit them
 - All window tests must be recorded individually — where three openers were tested, all three must appear as separate rows. The third opener may be dictated out of sequence (after external notes or after moving to another room) — it must still appear in the correct bedroom section
@@ -598,7 +576,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     : '';
 
   // Build active claims checklist (structured facts, not prose)
-  const contextualTypes = new Set(['contextual', 'section_transition']);
+  const contextualTypes = new Set(['contextual', 'section_transition', 'award_note']);
   const activeClaims = claims.filter(c => c.status === 'active' && !contextualTypes.has(c.claim_type));
   const supersededClaims = claims.filter(c => c.status === 'superseded');
 
@@ -643,10 +621,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     (projectMeta?.soc_type === 'dispute' ? 'DISPUTE SOC — IMPORTANT: This is NOT a standard pre-works baseline schedule. The surveyor has provided context notes explaining the specific circumstances (works already commenced, damage reported, no award in place, private agreement etc). Read those context notes carefully and use them to draft the introduction field in the JSON. The introduction must reflect the actual situation described, not the standard pre-works baseline wording. The observations sections should be drafted as normal.\n' : '') +
     'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
     'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
-    'SECTION ORDER — MANDATORY: Sections must appear in this exact sequence: (1) Ground floor rooms in inspection order, (2) First floor rooms in inspection order, (3) Second floor rooms if present, (4) Loft or roof space LAST among internal rooms, (5) External areas, (6) Site notes. Never place loft or roof space before ground floor or first floor rooms. Never reverse this order.\n' +
     'ROOM INCLUSION RULE — CRITICAL: Every room and area inspected must appear in the schedule. Do not omit any room because it appears remote from the proposed notifiable works. If a room is remote from the works, include it and append the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only." This applies to every inspected room without exception.\n' +
-    'REF LABELING: Use short two-letter prefixes describing the room only. Examples: CR = Cloakroom/Bathroom, FR = Front Room, FB = Front Bedroom, RB = Rear Bedroom, LF = Loft, EA = External Areas. Do not use long prefixes like FFFB, GFCR or FFRB.\n' +
-    'SITE NOTES — MANDATORY: Populate the site_notes array with ALL of the following found in the transcript: (1) access restrictions or refusals, (2) photographic schedule statements (e.g. loft recorded by photograph only), (3) remote-from-works statements for whole rooms or areas, (4) structural engineer or contractor notes, (5) legal status observations (party wall, party fence wall), (6) health and safety or access notes. Do NOT return an empty site_notes array if any of these are present in the transcript. Example: if the surveyor says the loft is remote from notifiable works and recorded by photographic schedule only, that must appear as a site note.\n' +
     'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
     'Return valid JSON only:\n' +
     '{\n' +
@@ -716,7 +691,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   return {
     sections: result.sections,
     unresolved_notes: [],
-    site_notes: siteNotes.map(t => ({ description: t })),
+    award_notes: siteNotes.map(t => ({ description: t })),
     general_notes: generalNotes,
     _drafting_metadata: {
       drafting_model: model,
@@ -733,7 +708,7 @@ export function runCompletenessAudit(draftedResult, claims) {
     for (const r of (s.rows || []))
       for (const cid of (r.source_claim_ids || [])) claimIdsInRows.add(cid);
 
-  const skipTypes = new Set(['contextual', 'section_transition']);
+  const skipTypes = new Set(['contextual', 'section_transition', 'award_note']);
   const activeClaims = (claims || []).filter(c => c.status === 'active');
   const missing = activeClaims.filter(c => !claimIdsInRows.has(c.claim_id));
   const substantive = missing.filter(c => !skipTypes.has(c.claim_type));
