@@ -2628,6 +2628,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [tab, setTab] = useState('details');
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  const [selectedEmailId, setSelectedEmailId] = useState(null);
   const [loaLoading, setLoaLoading] = useState(null);
   const [awardLoading, setAwardLoading] = useState(null);
   const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(
@@ -3972,38 +3973,89 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 No emails linked to this project.
               </div>
             ) : (
-              emails.map((e, i) => (
-                <div key={e.id} style={{
-                  padding: '12px 16px',
-                  borderBottom: i < emails.length - 1 ? '1px solid var(--border)' : 'none',
-                  background: e.is_read ? 'transparent' : 'var(--blue-bg)',
-                  cursor: 'pointer',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: e.is_read ? 400 : 600, color: 'var(--text)' }}>
-                      {e.sender_name || e.sender_email}
-                    </span>
-
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      {e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: 12.5, fontWeight: e.is_read ? 400 : 600, color: 'var(--text2)', marginBottom: 2 }}>
-                    {e.subject}
-                  </div>
-
-                  <div style={{
-                    fontSize: 12,
-                    color: 'var(--text3)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+              emails.map((e, i) => {
+                const isOpen = selectedEmailId === e.id;
+                const replyTo = e.sender_email || (e.raw_recipients?.from?.email) || '';
+                const replyName = e.sender_name || (e.raw_recipients?.from?.name) || replyTo;
+                return (
+                  <div key={e.id} style={{
+                    borderBottom: i < emails.length - 1 ? '1px solid var(--border)' : 'none',
+                    background: isOpen ? 'var(--bg2)' : e.is_read ? 'transparent' : 'var(--blue-bg)',
                   }}>
-                    {e.body_preview}
+                    {/* Row header — always visible, click to expand */}
+                    <div
+                      onClick={() => setSelectedEmailId(isOpen ? null : e.id)}
+                      style={{ padding: '12px 16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2 }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13, fontWeight: e.is_read ? 400 : 600, color: 'var(--text)' }}>
+                          {e.sender_name || e.raw_recipients?.from?.name || e.sender_email}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                            {e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{isOpen ? '▲' : '▼'}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: e.is_read ? 400 : 600, color: 'var(--text2)' }}>
+                        {e.subject}
+                      </div>
+                      {!isOpen && (
+                        <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {e.body_preview}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Expanded body */}
+                    {isOpen && (
+                      <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, paddingTop: 10 }}>
+                          From: <strong>{replyName}</strong>{replyTo && replyTo !== replyName ? ` <${replyTo}>` : ''}
+                          {e.to_email && <span style={{ marginLeft: 12 }}>To: {e.to_email}</span>}
+                          {e.received_at && <span style={{ marginLeft: 12 }}>{new Date(e.received_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+                        </div>
+                        <div
+                          style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, maxHeight: 400, overflowY: 'auto', background: 'var(--bg)', borderRadius: 6, padding: '12px 14px', border: '1px solid var(--border)' }}
+                          dangerouslySetInnerHTML={{ __html: e.body || `<p style="color:var(--text3);font-style:italic">${e.body_preview || 'No content available.'}</p>` }}
+                        />
+                        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                          {replyTo && (
+                            <button
+                              className="btn btn-sm btn-primary"
+                              style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                              onClick={() => onOpenComposer?.({
+                                mode: 'reply',
+                                projectId: project.id,
+                                to: replyTo,
+                                subject: e.subject?.startsWith('Re:') ? e.subject : `Re: ${e.subject || ''}`,
+                                replyToEmailId: e.id,
+                                threadId: e.thread_id,
+                                originalEmail: { from: replyName, subject: e.subject, sender_email: replyTo },
+                              })}
+                            >
+                              ↩ Reply
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                            onClick={() => onOpenComposer?.({
+                              mode: 'compose',
+                              projectId: project.id,
+                              to: replyTo,
+                              subject: `Re: ${e.subject || ''}`,
+                            })}
+                          >
+                            Forward / New
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
