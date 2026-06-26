@@ -170,7 +170,7 @@ ${notesText}`;
 
 // ─── Build factual checklist for drafting (not database labels) ────────────────
 function buildFactualChecklist(claims, rawNotesBySeq) {
-  const contextualTypes = new Set(['contextual', 'section_transition', 'award_note']);
+  const contextualTypes = new Set(['contextual', 'section_transition']);
   const activeClaims = claims.filter(c => c.status === 'active' && !contextualTypes.has(c.claim_type));
   const supersededClaims = claims.filter(c => c.status === 'superseded');
 
@@ -598,7 +598,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     : '';
 
   // Build active claims checklist (structured facts, not prose)
-  const contextualTypes = new Set(['contextual', 'section_transition', 'award_note']);
+  const contextualTypes = new Set(['contextual', 'section_transition']);
   const activeClaims = claims.filter(c => c.status === 'active' && !contextualTypes.has(c.claim_type));
   const supersededClaims = claims.filter(c => c.status === 'superseded');
 
@@ -716,7 +716,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   return {
     sections: result.sections,
     unresolved_notes: [],
-    award_notes: siteNotes.map(t => ({ description: t })),
+    site_notes: siteNotes.map(t => ({ description: t })),
     general_notes: generalNotes,
     _drafting_metadata: {
       drafting_model: model,
@@ -733,7 +733,7 @@ export function runCompletenessAudit(draftedResult, claims) {
     for (const r of (s.rows || []))
       for (const cid of (r.source_claim_ids || [])) claimIdsInRows.add(cid);
 
-  const skipTypes = new Set(['contextual', 'section_transition', 'award_note']);
+  const skipTypes = new Set(['contextual', 'section_transition']);
   const activeClaims = (claims || []).filter(c => c.status === 'active');
   const missing = activeClaims.filter(c => !claimIdsInRows.has(c.claim_id));
   const substantive = missing.filter(c => !skipTypes.has(c.claim_type));
