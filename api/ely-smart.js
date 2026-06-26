@@ -2528,7 +2528,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const isProjectChatDraft = body.surface === 'project_chat' && (modeHint === 'draft' || modeHint === 'discuss');
     const promptNeedsContext = hasProjectEmails || hasProjectNotes;
 
-    if (isProjectChatDraft && promptNeedsContext && ANTHROPIC_KEY) {
+    if (isProjectChatDraft && promptNeedsContext && ANTHROPIC_KEY && projectId) {
       try {
         const isCaseFile = /case file|allocation|dispute|tribunal|timeline|chronolog/i.test(prompt);
         const researchPrompt = isCaseFile
@@ -2594,6 +2594,7 @@ ${notesForClaude}` }],
         console.log('[ely-smart] Claude research brief generated:', claudeResearchBrief?.length, 'chars');
       } catch (err) {
         console.warn('[ely-smart] Claude research brief failed:', err.message);
+        claudeResearchBrief = null; // ensure we fall through to normal GPT-4o call
       }
     }
 
@@ -2601,7 +2602,7 @@ ${notesForClaude}` }],
       brain,
       projectId,
       resolvedProject,
-      projectBundle: claudeResearchBrief ? null : projectBundle, // if we have a brief, don't also dump the full bundle
+      projectBundle, // always pass full bundle — Claude brief is injected separately after
       scopedEmailContext,
       modeHint,
       draftingExamples,
