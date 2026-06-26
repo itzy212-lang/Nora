@@ -2519,86 +2519,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
 
-    // ── Claude research brief — when project has emails/notes, Claude summarises first ──
-    // Claude reads the project context and produces a structured brief for GPT-4o to draft from.
-    // Claude never writes the final output — it only hands over organised research.
-    let claudeResearchBrief = null;
-    const hasProjectEmails = projectBundle?.project_emails?.length > 0;
-    const hasProjectNotes = projectBundle?.project_chat_notes?.length > 0;
-    const isProjectChatDraft = body.surface === 'project_chat' && (modeHint === 'draft' || modeHint === 'discuss');
-    const promptNeedsContext = hasProjectEmails || hasProjectNotes;
-
-    if (isProjectChatDraft && promptNeedsContext && ANTHROPIC_KEY && projectId) {
-      try {
-        const isCaseFile = /case file|allocation|dispute|tribunal|timeline|chronolog/i.test(prompt);
-        const researchPrompt = isCaseFile
-          ? `You are a research assistant for a party wall surveyor. Read all the project emails and notes below and produce a structured chronological timeline of events relevant to the following request:
-
-"${prompt}"
-
-For each relevant item include: date, who sent/said it, what was said or decided, and why it matters. Return ONLY the research brief — no draft letter, no commentary.`
-          : `You are a research assistant for a party wall surveyor. Read all the project emails and notes below and produce a concise structured brief to help draft a response to the following request:
-
-"${prompt}"
-
-The brief should include:
-1. What the incoming email/document says (key points only)
-2. The surveyor's position from the project notes (key arguments)
-3. The tone and approach required
-4. Any important facts, dates or references to include
-
-Return ONLY the research brief — no draft letter, no preamble.`;
-
-        // Build context for Claude — emails and notes
-        const emailsForClaude = (projectBundle?.project_emails || []).slice(0, 30)
-          .map(e => `[${e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB') : ''}] ${e.is_sent ? 'Sent' : 'Received'} — ${e.sender_name || e.sender_email || ''}
-Subject: ${e.subject || ''}
-${(e.body || '').slice(0, 1500)}`)
-          .join('
-
----
-
-');
-
-        const notesForClaude = (projectBundle?.project_chat_notes || []).slice(0, 30)
-          .map(m => (m.content || '').slice(0, 1500))
-          .join('
-
----
-
-');
-
-        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': ANTHROPIC_KEY,
-            'anthropic-version': '2023-06-01',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'claude-opus-4-6',
-            max_tokens: 3000,
-            system: 'You are a research assistant. Read the project material and produce a structured brief only. Do not write any draft letters or correspondence. Return only organised facts and analysis.',
-            messages: [{ role: 'user', content: `${researchPrompt}
-
---- PROJECT EMAILS ---
-${emailsForClaude}
-
---- PROJECT NOTES ---
-${notesForClaude}` }],
-          }),
-        });
-
-        const claudeData = await claudeRes.json();
-        claudeResearchBrief = claudeData.content?.[0]?.text || null;
-        console.log('[ely-smart] Claude research brief generated:', claudeResearchBrief?.length, 'chars');
-      } catch (err) {
-        console.warn('[ely-smart] Claude research brief failed:', err.message);
-        claudeResearchBrief = null; // ensure we fall through to normal GPT-4o call
-      }
-    }
-
-    const systemPrompt = buildSystemPrompt({
+        const systemPrompt = buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
@@ -2619,7 +2540,7 @@ ${claudeResearchBrief}
 Your job is to draft the correspondence based on this brief, in Itzik's voice. Do not mention the research brief in your output.`
       : systemPrompt;
 
-    const messages = buildMessages({ body, systemPrompt: finalSystemPrompt || systemPrompt, scopedEmailContext, modeHint });
+    const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
 
     // Recipient-change override — inject targeted instruction immediately before user message
     // when the prompt is a recipient redirect and there is an existing draft in history
