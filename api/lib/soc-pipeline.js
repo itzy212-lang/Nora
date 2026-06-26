@@ -153,7 +153,7 @@ ${notesText}`;
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gpt-4o', temperature: 0.05, max_tokens: 8000,
+      model: 'gpt-4o', temperature: 0.05, max_tokens: 16000,
       messages: [
         { role: 'system', content: EXTRACTION_SYSTEM },
         { role: 'user', content: prompt },
