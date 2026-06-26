@@ -2629,6 +2629,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [selectedEmailId, setSelectedEmailId] = useState(null);
+  const [oneDriveFiles, setOneDriveFiles] = useState([]);
+  const [oneDriveLoading, setOneDriveLoading] = useState(false);
+  const [oneDriveError, setOneDriveError] = useState(null);
   const [loaLoading, setLoaLoading] = useState(null);
   const [awardLoading, setAwardLoading] = useState(null);
   const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(
@@ -2744,6 +2747,31 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         setEmailsLoading(false);
       });
   }, [tab, project.id]);
+
+  // Load OneDrive files when Documents tab opens
+  useEffect(() => {
+    if (tab !== 'documents') return;
+    const folderId = project?.onedrive_folder_id;
+    if (!folderId) { setOneDriveFiles([]); return; }
+    setOneDriveLoading(true);
+    setOneDriveError(null);
+    fetch('/api/onedrive-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: 'help@sq1consulting.co.uk',
+        action: 'get_folder_contents',
+        project_folder_id: folderId,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setOneDriveFiles(data.items || []);
+        else setOneDriveError(data.error || 'Failed to load files');
+      })
+      .catch(err => setOneDriveError(err.message))
+      .finally(() => setOneDriveLoading(false));
+  }, [tab, project?.onedrive_folder_id]);
 
   const handleGenerateBOLOA = useCallback(async () => {
     if (!boEmail) {
@@ -4063,74 +4091,118 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       {tab === 'documents' && (
         <div>
-          <div style={{ ...card() }}>
-            {docs.length === 0 ? (
-              <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
-                No documents yet. Documents will appear here automatically when notices, SOCs, awards and invoices are generated.
+          <div style={{ ...card(), padding: 0 }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Project Files</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {project?.onedrive_folder_url && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                    onClick={() => window.open(project.onedrive_folder_url, '_blank')}
+                  >
+                    Open in OneDrive ↗
+                  </button>
+                )}
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                  onClick={() => {
+                    setOneDriveFiles([]);
+                    setOneDriveError(null);
+                    const folderId = project?.onedrive_folder_id;
+                    if (!folderId) return;
+                    setOneDriveLoading(true);
+                    fetch('/api/onedrive-folder', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ user_id: 'help@sq1consulting.co.uk', action: 'get_folder_contents', project_folder_id: folderId }),
+                    })
+                      .then(r => r.json())
+                      .then(data => { if (data.success) setOneDriveFiles(data.items || []); else setOneDriveError(data.error || 'Failed'); })
+                      .catch(err => setOneDriveError(err.message))
+                      .finally(() => setOneDriveLoading(false));
+                  }}
+                >
+                  ↻ Refresh
+                </button>
               </div>
-            ) : (
-              docs.map((d, i) => {
-                const oneDriveUrl = d.metadata?.onedrive_url || null;
-                const oneDriveItemId = d.metadata?.onedrive_item_id || null;
-                const categoryLabel = {
-                  notice: '📋 Notice', soc: '🏠 SOC', award: '⚖️ Award',
-                  invoice: '💷 Invoice', loa: '✉️ LOA', document: '📄 Document',
-                }[d.category || d.section_type] || '📄 Document';
+            </div>
 
-                const handleEmail = () => {
-                  if (!oneDriveUrl) { alert('No OneDrive link for this document.'); return; }
-                  onOpenComposer?.({
-                    mode: 'compose',
-                    projectId: project.id,
-                    subject: d.file_name?.replace(/\.pdf$/i, '') || 'Document',
-                    body: `Dear [Recipient],
+            {/* No OneDrive folder linked */}
+            {!project?.onedrive_folder_id && (
+              <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+                No OneDrive folder linked to this project yet. One will be created automatically when the first document is generated.
+              </div>
+            )}
 
-Please find attached ${d.file_name || 'the document'}.
+            {/* Loading */}
+            {project?.onedrive_folder_id && oneDriveLoading && (
+              <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading files from OneDrive…</div>
+            )}
 
-Kind regards,
-Itzik`,
-                    oneDriveAttachment: { name: d.file_name, url: oneDriveUrl, item_id: oneDriveItemId },
-                  });
-                };
+            {/* Error */}
+            {oneDriveError && (
+              <div style={{ padding: 16, color: 'var(--error, #c0392b)', fontSize: 13 }}>
+                Could not load files: {oneDriveError}
+              </div>
+            )}
 
-                return (
-                  <div key={d.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    borderBottom: i < docs.length - 1 ? '1px solid var(--border)' : 'none',
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-                        {categoryLabel} {d.file_name}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                        {fmtDate(d.created_at)}
-                        {oneDriveUrl ? ' · OneDrive' : ' · Supabase'}
-                      </div>
+            {/* File list */}
+            {!oneDriveLoading && !oneDriveError && project?.onedrive_folder_id && oneDriveFiles.length === 0 && (
+              <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+                No files in this project folder yet. Files you generate or upload to OneDrive will appear here.
+              </div>
+            )}
+
+            {oneDriveFiles.map((f, i) => {
+              const isFolder = !!f.folder;
+              const ext = (f.name || '').split('.').pop().toLowerCase();
+              const icon = isFolder ? '📁' : { pdf: '📄', docx: '📝', doc: '📝', xlsx: '📊', xls: '📊', jpg: '🖼️', jpeg: '🖼️', png: '🖼️' }[ext] || '📄';
+              const sizeKb = f.size ? Math.round(f.size / 1024) : null;
+              const modified = f.lastModifiedDateTime ? new Date(f.lastModifiedDateTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+              return (
+                <div key={f.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '11px 16px',
+                  borderBottom: i < oneDriveFiles.length - 1 ? '1px solid var(--border)' : 'none',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {icon} {f.name}
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      {oneDriveUrl && (
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          style={{ cursor: 'pointer', borderRadius: 99 }}
-                          onClick={() => window.open(oneDriveUrl, '_blank')}
-                        >
-                          Open
-                        </button>
-                      )}
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
+                      {modified}{sizeKb ? ` · ${sizeKb}kb` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                      onClick={() => window.open(f.webUrl, '_blank')}
+                    >
+                      Open
+                    </button>
+                    {!isFolder && f.webUrl && (
                       <button
                         className="btn btn-sm btn-ghost"
-                        style={{ cursor: 'pointer', borderRadius: 99 }}
-                        onClick={handleEmail}
-                        title="Email this document"
+                        style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
+                        onClick={() => onOpenComposer?.({
+                          mode: 'compose',
+                          projectId: project.id,
+                          subject: f.name?.replace(/\.[^.]+$/, '') || 'Document',
+                          oneDriveAttachment: { name: f.name, url: f.webUrl, item_id: f.id },
+                        })}
                       >
                         Email
                       </button>
-                    </div>
+                    )}
                   </div>
-                );
-              })
-            )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
