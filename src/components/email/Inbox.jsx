@@ -1745,7 +1745,14 @@ if (syncErr) throw syncErr;
   const filtered = (state.emails || []).filter(e => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return (e.sender_name || '').toLowerCase().includes(q) || (e.sender_email || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q);
+    const rawName = e.raw_recipients?.from?.name || '';
+    const toNames = (e.raw_recipients?.to || []).map(r => r.name || '').join(' ');
+    return (
+      (e.sender_name || rawName).toLowerCase().includes(q) ||
+      (e.sender_email || '').toLowerCase().includes(q) ||
+      (e.subject || '').toLowerCase().includes(q) ||
+      toNames.toLowerCase().includes(q)
+    );
   });
 
   const unreadCount = (state.emails || []).filter(e => !e.is_read).length;
