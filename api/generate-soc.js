@@ -588,7 +588,7 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     nextSectionNumber += 1;
   }
 
-  const awardNotes = (data.award_notes || []).filter(n => n && (n.description || n.topic));
+  const awardNotes = (data.site_notes || data.award_notes || []).filter(n => n && (n.description || n.topic));
   if (awardNotes.length > 0) {
     html +=
       `<div class="soc-section-heading">${nextSectionNumber}. Site Notes</div>` +
@@ -851,7 +851,7 @@ Return exactly this structure. No other keys at the top level.
   "discussion": [],
   "general_notes": [],
   "actions": [],
-  "award_notes": [
+  "site_notes": [
     {
       "topic": "structural",
       "description": "Matter requiring follow-up."
@@ -882,7 +882,7 @@ Do not omit source_note_ids.`;
 // A note may be contextual/site/award/excluded/unresolved — but it must not disappear.
 function validateSocJson(parsed) {
   // Auto-populate optional fields that the new pipeline may omit
-  const optionalArrays = ['discussion', 'general_notes', 'actions', 'award_notes', 'emails_required', 'unresolved_notes'];
+  const optionalArrays = ['discussion', 'general_notes', 'actions', 'site_notes', 'award_notes', 'emails_required', 'unresolved_notes'];
   for (const key of optionalArrays) {
     if (!(key in parsed) || !Array.isArray(parsed[key])) parsed[key] = [];
   }
@@ -1253,7 +1253,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     discussion:       qualityResult.discussion,
     general_notes:    qualityResult.general_notes,
     actions:          qualityResult.actions,
-    award_notes:      qualityResult.award_notes,
+    site_notes:       qualityResult.site_notes || qualityResult.award_notes,
     emails_required:  qualityResult.emails_required,
     unresolved_notes: qualityResult.unresolved_notes || [],
     audit_issues:     [...audit.issues, ...fidelity.issues],
@@ -1444,7 +1444,7 @@ export default async function handler(req, res) {
       prepared_by: projectMeta.prepared_by || dataForRender.prepared_by || '',
       sections: normaliseSections(dataForRender.sections || []),
       actions: Array.isArray(dataForRender.actions) ? dataForRender.actions : [],
-      award_notes: Array.isArray(dataForRender.award_notes) ? dataForRender.award_notes : [],
+      site_notes: Array.isArray(dataForRender.site_notes) ? dataForRender.site_notes : [],
       emails_required: Array.isArray(dataForRender.emails_required) ? dataForRender.emails_required : [],
     };
 
@@ -1578,7 +1578,7 @@ export default async function handler(req, res) {
       project_meta: projectMeta,
       partyDrafts,
       actions: dataForRender.actions,
-      award_notes: dataForRender.award_notes,
+      site_notes: dataForRender.site_notes || dataForRender.award_notes,
       emails_required: dataForRender.emails_required,
     });
   } catch (err) {
