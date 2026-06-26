@@ -267,7 +267,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       });
 
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || payload.details || 'Could not generate Schedule of Condition.');
+      if (!response.ok) throw new Error(payload.error || payload.details || payload.message || `Could not generate Schedule of Condition. (${response.status})`)
       if (!payload.preview_html) throw new Error('The SOC API did not return preview_html.');
 
       setPreviewHtml(payload.preview_html);
