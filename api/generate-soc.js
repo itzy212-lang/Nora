@@ -1,4 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+export const config = { maxDuration: 300 };
+
+
 import {
   extractAtomicClaims,
   draftFromClaims,
