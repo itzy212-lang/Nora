@@ -2530,16 +2530,6 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       userPrompt: prompt,
     });
 
-    // Inject Claude's research brief into the system prompt if available
-    const finalSystemPrompt = claudeResearchBrief
-      ? systemPrompt + `
-
-RESEARCH BRIEF (prepared by research assistant — use this as your source material):
-${claudeResearchBrief}
-
-Your job is to draft the correspondence based on this brief, in Itzik's voice. Do not mention the research brief in your output.`
-      : systemPrompt;
-
     const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
 
     // Recipient-change override — inject targeted instruction immediately before user message
