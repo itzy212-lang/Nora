@@ -62,49 +62,43 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // ── SOC session — one ai_session per project+AO, stored in Supabase ────────
   const [socSessionId, setSocSessionId] = useState(null); // ai_sessions.id (UUID)
 
-  // ── Find or create SOC session in ai_sessions, then load notes ─────────────
-  useEffect(() => {
-    if (!projectId) return;
-    const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+  // ── Find or create SOC session — called only when user clicks Start SOC ──────
+  const initSession = useCallback(async (aoId, aoAddr) => {
+    // Find or create SOC session via API (service-role key)
+    const initRes = await fetch('/api/soc-save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr }),
+    });
+    const initData = await initRes.json();
+    if (!initData.session_id) { console.error('[SOC] init_session failed:', initData); return null; }
+    setSocSessionId(initData.session_id);
 
-    async function initSession() {
-      const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
-      // Find or create SOC session via API (service-role key)
-      const initRes = await fetch('/api/soc-save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr }),
-      });
-      const initData = await initRes.json();
-      if (!initData.session_id) { console.error('[SOC] init_session failed:', initData); return; }
-      setSocSessionId(initData.session_id);
+    // Load existing notes for this session
+    const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
+    const notesData = await notesRes.json();
+    if (notesData.notes?.length) {
+      setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    }
 
-      // Load existing notes for this session
-      const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
-      const notesData = await notesRes.json();
-      if (notesData.notes?.length) {
-        setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
-        if (phase === 'setup') setPhase('recording');
-      }
-
-      // Load existing SOC report for this session if one exists
-      const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
-      if (reportRes.ok) {
-        const reportData = await reportRes.json();
-        if (reportData.preview_html && reportData.structured_data) {
-          setPreviewHtml(reportData.preview_html);
-          setStructuredData(reportData.structured_data);
-          setReportId(reportData.report_id || null);
-          setEditableSections(JSON.parse(JSON.stringify(
-            reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
-          )));
-          setPhase('preview');
-        }
+    // Load existing SOC report for this session if one exists
+    const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
+    if (reportRes.ok) {
+      const reportData = await reportRes.json();
+      if (reportData.preview_html && reportData.structured_data) {
+        setPreviewHtml(reportData.preview_html);
+        setStructuredData(reportData.structured_data);
+        setReportId(reportData.report_id || null);
+        setEditableSections(JSON.parse(JSON.stringify(
+          reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
+        )));
+        setPhase('preview');
+        return initData.session_id;
       }
     }
 
-    initSession().catch(console.error);
-  }, [projectId, selectedAOIndex]);
+    return initData.session_id;
+  }, [projectId]);
 
   // ── Load session history for sidebar ────────────────────────────────────
   const loadSessionHistory = useCallback(async () => {
@@ -571,7 +565,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
           </div>
           <button
             disabled={!projectId}
-            onClick={() => setPhase('recording')}
+            onClick={async () => {
+              const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+              const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+              await initSession(aoId, aoAddr).catch(console.error);
+              setPhase('recording');
+            }}
             style={{ ...s.generateBtn, opacity: !projectId ? 0.5 : 1, alignSelf: 'flex-start' }}
           >
             Start SOC
