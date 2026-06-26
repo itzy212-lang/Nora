@@ -267,8 +267,19 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
       });
 
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || payload.details || payload.message || `Could not generate Schedule of Condition. (${response.status})`)
-      if (!payload.preview_html) throw new Error('The SOC API did not return preview_html.');
+      if (!response.ok) throw new Error(payload.error || payload.details || payload.message || `Could not generate Schedule of Condition. (${response.status})`);
+      
+      // GENERATION_INCOMPLETE — show warning and allow retry rather than hard error
+      if (!payload.preview_html && payload.generation_status === 'incomplete') {
+        setGenerationWarning(payload.warning || 'Generation incomplete — please retry.');
+        setGenerationIncomplete(true);
+        return;
+      }
+      
+      if (!payload.preview_html) {
+        const reason = payload.warning || payload.error || payload.details || 'The SOC API did not return preview_html.';
+        throw new Error(reason);
+      }
 
       setPreviewHtml(payload.preview_html);
       setStructuredData(payload.structured_data || null);
