@@ -683,6 +683,60 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
               })}
             </div>
           ))}
+
+          {/* Editable site notes */}
+          {(() => {
+            const siteNotes = structuredData?.site_notes || structuredData?.award_notes || [];
+            if (!siteNotes.length) return (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
+                  Site Notes
+                </div>
+                <button
+                  onClick={() => setStructuredData(prev => ({ ...prev, site_notes: [{ description: '' }], award_notes: [{ description: '' }] }))}
+                  style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                >+ Add site note</button>
+              </div>
+            );
+            return (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
+                  Site Notes
+                </div>
+                {siteNotes.map((note, nIdx) => {
+                  const text = typeof note === 'string' ? note : (note.description || note.topic || '');
+                  return (
+                    <div key={nIdx} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 6, display: 'flex', gap: 8 }}>
+                      <textarea
+                        defaultValue={text}
+                        rows={2}
+                        style={{ ...s.input, flex: 1, resize: 'vertical', fontSize: 13, lineHeight: 1.5, boxSizing: 'border-box', display: 'block' }}
+                        onChange={e => {
+                          const updated = [...siteNotes];
+                          updated[nIdx] = { description: e.target.value };
+                          setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const updated = siteNotes.filter((_, i) => i !== nIdx);
+                          setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                        }}
+                        style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start', padding: '4px' }}
+                      >✕</button>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => {
+                    const updated = [...siteNotes, { description: '' }];
+                    setStructuredData(prev => ({ ...prev, site_notes: updated, award_notes: updated }));
+                  }}
+                  style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', marginTop: 4 }}
+                >+ Add site note</button>
+              </div>
+            );
+          })()}
         </div>
 
         {oneDriveOverlay && (
