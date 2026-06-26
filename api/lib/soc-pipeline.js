@@ -162,10 +162,12 @@ ${notesText}`;
   })
   .then(r => r.json())
   .then(d => {
+    if (d.error) { console.error('[soc-pipeline] OpenAI error:', JSON.stringify(d.error)); return []; }
     const raw = (d.choices?.[0]?.message?.content || '').replace(/^[`]{3}(?:json)?\s*/m, '').replace(/\s*[`]{3}$/m, '').trim();
-    try { return JSON.parse(raw).claims || []; } catch { return []; }
+    if (!raw) { console.error('[soc-pipeline] Empty response from OpenAI'); return []; }
+    try { return JSON.parse(raw).claims || []; } catch(e) { console.error('[soc-pipeline] JSON parse failed:', e.message, 'raw:', raw.slice(0, 200)); return []; }
   })
-  .catch(() => []);
+  .catch(e => { console.error('[soc-pipeline] fetch error:', e.message); return []; });
 }
 
 // ─── Build factual checklist for drafting (not database labels) ────────────────
