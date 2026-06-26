@@ -62,7 +62,43 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex }
   // ── SOC session — one ai_session per project+AO, stored in Supabase ────────
   const [socSessionId, setSocSessionId] = useState(null); // ai_sessions.id (UUID)
 
-  // ── Find or create SOC session — called only when user clicks Start SOC ──────
+  // ── Auto-load existing session on mount if one exists for this project ───────
+  useEffect(() => {
+    if (!projectId) return;
+    async function autoLoadSession() {
+      const res = await fetch(`/api/soc-save?project_id=${projectId}`);
+      const data = await res.json();
+      if (!data.sessions?.length) return;
+      // Find session matching current AO if possible, otherwise take most recent
+      const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+      const match = data.sessions.find(s => s.aoId === String(aoId)) || data.sessions[0];
+      if (!match) return;
+      setSocSessionId(match.sessionId);
+      // Load notes
+      const notesRes = await fetch(`/api/soc-save?session_id=${match.sessionId}`);
+      const notesData = await notesRes.json();
+      if (notesData.notes?.length) {
+        setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+        if (phase === 'setup') setPhase('recording');
+      }
+      // Load existing report if one exists
+      const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${match.sessionId}`);
+      if (reportRes.ok) {
+        const reportData = await reportRes.json();
+        if (reportData.preview_html && reportData.structured_data) {
+          setPreviewHtml(reportData.preview_html);
+          setStructuredData(reportData.structured_data);
+          setReportId(reportData.report_id || null);
+          setEditableSections(JSON.parse(JSON.stringify(
+            reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
+          )));
+          setPhase('preview');
+        }
+      }
+    }
+    autoLoadSession().catch(console.error);
+  }, [projectId, selectedAOIndex]);
+
   const initSession = useCallback(async (aoId, aoAddr) => {
     // Find or create SOC session via API (service-role key)
     const initRes = await fetch('/api/soc-save', {
