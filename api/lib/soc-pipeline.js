@@ -522,7 +522,26 @@ LANGUAGE STANDARDS:
 - First floor front context row must always read: "Although no notifiable works are currently proposed to the first-floor front section of the property, the area was inspected and recorded in the event that the scope of works changes. The chimney breasts remain intact."
 - Tiled floor observations covering the original front and rear reception rooms belong in Ground Floor Rear Elevation Room, not Ground Floor Rear Extension
 
-GROUPING:
+ABSOLUTE INCLUSION RULE — CRITICAL
+
+If the surveyor dictated it, it must appear in the schedule. The AI must never omit an observation, defect, condition note or site note on the basis that:
+- it appears remote from the proposed notifiable works
+- it appears minor or insignificant
+- it appears to have been resolved or is historic
+- it does not appear to be caused by the notifiable works
+- it is on the building owner's side rather than the adjoining owner's side
+- it appears to duplicate another observation
+- it appears in a room or area unlikely to be affected by the works
+
+The AI decides WHERE to place the observation and HOW to frame it. The AI does not decide WHETHER to include it.
+
+Where an observation is remote from the notifiable works, include it with the appropriate caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only."
+
+Where an observation relates to an existing or historic issue that has been resolved, include it with appropriate wording: "Signs of a previous [defect] were noted. The area appeared [condition] at the time of inspection and has been recorded for scheduling purposes."
+
+Where an observation is on the building owner's side, include it with the attribution: "It is noted, for reference only, that [observation] on the building owner's side."
+
+If it was dictated, it must be in the schedule.
 - Combine: construction + finish + general condition of the same element; related observations at same location
 - Separate: different elements, different defects, different locations, different tests
 - Include layout context rows (open-plan arrangement, removed chimney breasts, transitions)
