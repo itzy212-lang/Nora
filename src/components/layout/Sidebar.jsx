@@ -23,7 +23,6 @@ const NAV = [
   {
     section: 'PARTY WALL',
     items: [
-      { id: 'soc',     icon: '🎙️', label: 'SOC Dictation' },
       { id: 'notices', icon: '📋', label: 'Notices' },
       { id: 'awards',  icon: '🏆', label: 'Awards' },
     ],
