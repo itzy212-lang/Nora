@@ -68,6 +68,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
     property_address: invoice?.property_address || initialData?.property_address || '',
     project_id: invoice?.project_id || initialData?.project_id || '',
     project_ref: invoice?.project_ref || initialData?.project_ref || '',
+    count_against_fee: invoice?.count_against_fee !== false,
     role,
     acting_for_name: invoice?.acting_for_name || initialData?.acting_for_name || '',
     acting_for_address: invoice?.acting_for_address || initialData?.acting_for_address || '',
@@ -147,14 +148,11 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
         ...invoicePayload
       } = form;
 
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
       const originalProjectId = form.project_id || initialData?.project_id || '';
       const safeInvoicePayload = {
         ...invoicePayload,
-        project_id: uuidPattern.test(String(invoicePayload.project_id || ''))
-          ? invoicePayload.project_id
-          : null,
+        project_id: originalProjectId || null,
+        count_against_fee: form.count_against_fee !== false, // default true
       };
 
       const savedInvoice = await onSave({
@@ -294,6 +292,23 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                   ))}
                 </select>
               </div>
+              {form.project_id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                  <input
+                    type="checkbox"
+                    id="count_against_fee"
+                    checked={form.count_against_fee !== false}
+                    onChange={e => setField('count_against_fee', e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                  <label htmlFor="count_against_fee" style={{ fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
+                    Count against project fee total
+                  </label>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                    (uncheck for additional charges not included in the agreed fee)
+                  </span>
+                </div>
+              )}
             )}
           </div>
 
