@@ -78,6 +78,9 @@ export default async function handler(req, res) {
 
     // ── Batch backfill ─────────────────────────────────────────────────────
     if (action === 'backfill') {
+      if (!OPENAI_KEY) {
+        return res.status(500).json({ error: 'OPENAI_API_KEY not set in Vercel environment variables' });
+      }
       const results = { emails: 0, messages: 0, memory: 0, errors: 0 };
 
       // Emails without embeddings
@@ -95,7 +98,11 @@ export default async function handler(req, res) {
           const embedding = await generateEmbedding(text);
           await sb.from('emails').update({ embedding }).eq('id', email.id);
           results.emails++;
-        } catch { results.errors++; }
+        } catch (e) {
+          console.error('[embed] email error:', e.message);
+          results.errors++;
+          results.last_error = e.message;
+        }
       }
 
       // Chat messages without embeddings
