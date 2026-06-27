@@ -1,6 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { createClient } from '@supabase/supabase-js';
+import { uploadToOneDrive } from './onedrive-helper.js';
 
 function getServerClient() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -252,20 +253,14 @@ export default async function handler(req, res) {
           const { data: proj } = await sb.from('projects').select('onedrive_folder_id').eq('id', projectId).maybeSingle();
           const folderId = proj?.onedrive_folder_id;
           if (folderId) {
-            const baseUrl = process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://nora-d9wy.vercel.app';
-            const odRes = await fetch(baseUrl + '/api/onedrive-upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_id: merge_data?.user_id || 'help@sq1consulting.co.uk',
-                folder_id: folderId,
-                filename: fileName,
-                content_base64: rendered.buffer.toString('base64'),
-                content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              }),
+            const odResult = await uploadToOneDrive({
+              userId: merge_data?.user_id || 'help@sq1consulting.co.uk',
+              folderId,
+              fileName,
+              buffer: rendered.buffer,
+              mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             });
-            const odData = await odRes.json();
-            if (odData.success) oneDriveUrl = odData.web_url || null;
+            if (odResult) oneDriveUrl = odResult.web_url || null;
           }
         }
       } catch (odErr) {
