@@ -986,7 +986,7 @@ function ProjectEditModal({ project, onSave, onClose }) {
 }
 
 function AOEditModal({ ao, mode, onSave, onClose }) {
-  const isNew = mode === 'add';
+  const isNew = mode === 'add' || ao?._mode === 'add' || ao?.isNew === true;
   const ip = aoAddress(ao || {});
   const is = aoServiceAddress(ao || {}) || ip;
 
@@ -1787,6 +1787,7 @@ function ProjectChat({ project, onOpenComposer }) {
   const [showHistory, setShowHistory] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [landRegistryAO, setLandRegistryAO] = useState(null); // proposed AO from LR doc
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [dictationPreview, setDictationPreview] = useState('');
   const [voicePhase, setVoicePhase] = useState('idle'); // idle | recording | transcribing
@@ -2026,6 +2027,10 @@ function ProjectChat({ project, onOpenComposer }) {
           uploadedExtractedText: attachmentContext.filter(f => f.extracted_text),
         },
       });
+
+      if (result.land_registry_ao) {
+        setLandRegistryAO(result.land_registry_ao);
+      }
 
       setMessages(prev => [
         ...prev,
@@ -2577,6 +2582,48 @@ function ProjectChat({ project, onOpenComposer }) {
             <input ref={fileInputRef} type="file" multiple
               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
               onChange={handleFilesSelected} style={{ display: 'none' }} />
+
+            {/* Land Registry AO suggestion banner */}
+            {landRegistryAO && (
+              <div style={{
+                margin: '8px 0', padding: '12px 16px', borderRadius: 10,
+                background: 'var(--blue-bg)', border: '1px solid var(--accent)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>
+                    🏠 Add as Adjoining Owner?
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
+                    <strong>{landRegistryAO.name}</strong> — {landRegistryAO.premise}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    onClick={() => {
+                      setLandRegistryAO(null);
+                      setEditingAO({ ...landRegistryAO, isNew: true, _mode: 'add' });
+                    }}
+                    style={{
+                      padding: '6px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none',
+                    }}
+                  >
+                    + Add AO
+                  </button>
+                  <button
+                    onClick={() => setLandRegistryAO(null)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 99, fontSize: 12,
+                      cursor: 'pointer', background: 'transparent', color: 'var(--text3)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Input bar — shared ChatInputBar */}
             <ChatInputBar
