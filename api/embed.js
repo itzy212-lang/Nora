@@ -153,6 +153,21 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── Debug — show what would be indexed without calling OpenAI ──────────
+    if (action === 'debug') {
+      const { data: emails, error: e1 } = await sb.rpc('get_unindexed_emails', { batch_size: 3 });
+      const { data: messages, error: e2 } = await sb.rpc('get_unindexed_messages', { batch_size: 3 });
+      const { data: memory, error: e3 } = await sb.rpc('get_unindexed_memory', { batch_size: 3 });
+      return res.status(200).json({
+        openai_key_set: !!OPENAI_KEY,
+        openai_key_prefix: OPENAI_KEY ? OPENAI_KEY.slice(0, 7) + '...' : null,
+        supabase_url_set: !!SUPABASE_URL,
+        emails: { count: emails?.length || 0, error: e1?.message, sample: emails?.[0]?.id },
+        messages: { count: messages?.length || 0, error: e2?.message },
+        memory: { count: memory?.length || 0, error: e3?.message },
+      });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
 
   } catch (err) {
