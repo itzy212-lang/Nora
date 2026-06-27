@@ -314,6 +314,38 @@ async function loadProjectBundle(projectId) {
   };
 }
 
+// ── Semantic search across all project content ───────────────────────────
+async function semanticSearchProject(projectId, userPrompt, limit = 20) {
+  if (!sb || !projectId || !userPrompt) return null;
+  try {
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_KEY) return null;
+
+    // Generate embedding for the user's question
+    const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({ model: 'text-embedding-3-small', input: userPrompt.slice(0, 8000), dimensions: 1536 }),
+    });
+    if (!embedRes.ok) return null;
+    const embedData = await embedRes.json();
+    const queryEmbedding = embedData.data[0].embedding;
+
+    // Search across all project content
+    const { data: results, error } = await sb.rpc('search_project_content', {
+      p_project_id: projectId,
+      query_embedding: queryEmbedding,
+      match_limit: limit,
+    });
+
+    if (error || !results?.length) return null;
+    return results;
+  } catch (err) {
+    console.warn('[ely-smart] semantic search failed:', err.message);
+    return null;
+  }
+}
+
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
   if (suppliedEmailContext || threadId || emailId) return true;
 
@@ -1237,8 +1269,49 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
-  // Inject project emails — filter by relevance to current prompt if possible
-  if (projectBundle?.project_emails?.length) {
+  // ── Semantic search across ALL project content ───────────────────────────
+  // Uses vector embeddings — no limit, finds relevant content regardless of volume
+  const semanticResults = projectBundle?.project?.id
+    ? await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25)
+    : null;
+
+  if (semanticResults?.length) {
+    // Semantic search succeeded — use it for emails, chat, memory
+    const byType = { email: [], chat: [], memory: [] };
+    for (const r of semanticResults) {
+      if (byType[r.content_type]) byType[r.content_type].push(r);
+    }
+
+    if (byType.email.length) {
+      const emailsText = byType.email.map(r => {
+        const m = r.metadata || {};
+        const date = new Date(m.received_at || m.sent_at || '').toLocaleDateString('en-GB');
+        const dirLabel = m.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
+        const fromTo = m.direction === 'outgoing'
+          ? `To: ${m.to_email || 'unknown'}`
+          : `From: ${m.sender_name || m.sender_email || 'unknown'}`;
+        return `[${date}] ${dirLabel} — ${fromTo}\nSubject: ${r.subject || '(no subject)'}\n${r.content}`;
+      }).join('\n\n---\n\n');
+      prompt += `\n\nPROJECT EMAILS — SEMANTICALLY RELEVANT (searched all correspondence):\n${emailsText}\n`;
+    }
+
+    if (byType.chat.length) {
+      const chatText = byType.chat.map(r => {
+        const date = new Date(r.metadata?.created_at || '').toLocaleDateString('en-GB');
+        return `[${date}] ${r.content}`;
+      }).join('\n');
+      prompt += `\n\nRELEVANT PROJECT CHAT NOTES:\n${chatText}\n`;
+    }
+
+    if (byType.memory.length) {
+      const memText = byType.memory.map(r =>
+        `[${r.subject || 'Note'}] ${r.content}`
+      ).join('\n\n---\n\n');
+      prompt += `\n\nRELEVANT PROJECT DOCUMENTS & NOTES:\n${memText}\n`;
+    }
+
+  } else if (projectBundle?.project_emails?.length) {
+    // Fallback — embeddings not yet generated, use keyword-scored emails
     const promptLower = (userPrompt || '').toLowerCase();
     const topicWords = promptLower.split(/\s+/).filter(w => w.length > 3);
     let relevantEmails = projectBundle.project_emails;
@@ -1248,9 +1321,7 @@ ${projectFacts}
         const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
         return { ...e, _score: score };
       }).sort((a, b) => b._score - a._score);
-      // Take top 30 most relevant across both directions
-      const topRelevant = scored.slice(0, 30);
-      relevantEmails = topRelevant;
+      relevantEmails = scored.slice(0, 30);
     }
     const emailsText = relevantEmails
       .map(e => {
@@ -1871,6 +1942,19 @@ async function lookupKnowledgeBase(prompt = '') {
     console.warn('[ely-smart] knowledge base lookup failed:', err.message);
     return null;
   }
+}
+
+// ── Background embed trigger — non-blocking ─────────────────────────────
+async function triggerEmbed(table, recordId) {
+  try {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nora-d9wy.vercel.app';
+    // Fire and forget — don't await
+    fetch(`${baseUrl}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'embed_record', table, record_id: recordId }),
+    }).catch(() => {}); // silent fail
+  } catch {}
 }
 
 // ── Claude case review ────────────────────────────────────────────────────
