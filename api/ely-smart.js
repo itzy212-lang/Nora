@@ -1271,9 +1271,15 @@ ${projectFacts}
 
   // ── Semantic search across ALL project content ───────────────────────────
   // Uses vector embeddings — no limit, finds relevant content regardless of volume
-  const semanticResults = projectBundle?.project?.id
-    ? await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25)
-    : null;
+  let semanticResults = null;
+  try {
+    if (projectBundle?.project?.id) {
+      semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
+    }
+  } catch (semErr) {
+    console.warn('[ely-smart] semantic search failed silently:', semErr.message);
+    semanticResults = null;
+  }
 
   if (semanticResults?.length) {
     // Semantic search succeeded — use it for emails, chat, memory
