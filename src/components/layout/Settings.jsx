@@ -504,7 +504,7 @@ function AITab() {
   const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
   const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0 });
   const [counts, setCounts] = useState(null);
-  const runningRef = useRef(false);
+  const runningRef = React.useRef(false);
 
   const checkCounts = async () => {
     try {
@@ -518,7 +518,7 @@ function AITab() {
     } catch {}
   };
 
-  useEffect(() => { checkCounts(); }, []);
+  React.useEffect(() => { checkCounts(); }, []);
 
   const runBackfill = async () => {
     if (runningRef.current) return;
@@ -619,25 +619,25 @@ function AITab() {
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           {status !== 'running' ? (
             <button
               onClick={runBackfill}
-              style={{ width: '100%', padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none' }}
+              style={{ padding: '8px 18px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none' }}
             >
-              {status === 'done' ? '↻ Re-index everything' : '▶ Start Indexing'}
+              {status === 'done' ? '↻ Re-index' : '▶ Start Indexing'}
             </button>
           ) : (
             <button
               onClick={stopBackfill}
-              style={{ width: '100%', padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}
+              style={{ padding: '8px 18px', borderRadius: 99, fontSize: 13, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}
             >
               ⏹ Stop
             </button>
           )}
           <button
             onClick={checkCounts}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 10, fontSize: 13, cursor: 'pointer', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)' }}
+            style={{ padding: '8px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)' }}
           >
             ↻ Refresh counts
           </button>
@@ -654,7 +654,7 @@ export default function Settings() {
     <div style={{ padding: '24px 28px', maxWidth: 700 }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Settings</div>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, gap: 2 }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, gap: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: '8px 18px', fontSize: 13, border: 'none', cursor: 'pointer',
