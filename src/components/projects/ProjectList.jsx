@@ -249,8 +249,8 @@ export default function ProjectList({ onOpenProject }) {
     return matchesFilter && matchesSearch;
   }).sort((a, b) => compareAddresses(getAppointmentAddress(a), getAppointmentAddress(b)));
 
-  const handleCreated = (newProject) => {
-    loadProjects();
+  const handleCreated = async (newProject) => {
+    await loadProjects();
     if (newProject) onOpenProject(newProject);
   };
 
