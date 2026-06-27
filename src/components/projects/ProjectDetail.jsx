@@ -2853,7 +2853,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     setEmailsLoading(true);
 
     sb.from('emails')
-      .select('id,subject,sender_name,sender_email,received_at,is_read,body_preview')
+      .select('id,subject,sender_name,sender_email,to_email,direction,received_at,sent_at,is_read,body_preview,body,raw_recipients')
       .eq('project_id', project.id)
       .order('received_at', { ascending: false })
       .limit(50)
@@ -4141,12 +4141,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             ) : (
               emails.map((e, i) => {
                 const isOpen = selectedEmailId === e.id;
-                const replyTo = e.sender_email || (e.raw_recipients?.from?.email) || '';
-                const replyName = e.sender_name || (e.raw_recipients?.from?.name) || replyTo;
+                const isOutgoing = e.direction === 'outgoing';
+                const replyTo = isOutgoing ? e.to_email : (e.sender_email || e.raw_recipients?.from?.email || '');
+                const replyName = isOutgoing
+                  ? (e.to_email || 'Recipient')
+                  : (e.sender_name || e.raw_recipients?.from?.name || e.sender_email || '');
+                const displayName = isOutgoing
+                  ? `→ ${e.to_email || 'Sent'}`
+                  : (e.sender_name || e.raw_recipients?.from?.name || e.sender_email);
+                const emailDate = e.sent_at || e.received_at;
+                const bodyContent = e.body || e.body_preview || '';
                 return (
                   <div key={e.id} style={{
                     borderBottom: i < emails.length - 1 ? '1px solid var(--border)' : 'none',
-                    background: isOpen ? 'var(--bg2)' : e.is_read ? 'transparent' : 'var(--blue-bg)',
+                    background: isOpen ? 'var(--bg2)' : !e.is_read && !isOutgoing ? 'var(--blue-bg)' : 'transparent',
                   }}>
                     {/* Row header — always visible, click to expand */}
                     <div
@@ -4154,12 +4162,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       style={{ padding: '12px 16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2 }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, fontWeight: e.is_read ? 400 : 600, color: 'var(--text)' }}>
-                          {e.sender_name || e.raw_recipients?.from?.name || e.sender_email}
+                        <span style={{ fontSize: 13, fontWeight: !e.is_read && !isOutgoing ? 600 : 400, color: isOutgoing ? 'var(--text3)' : 'var(--text)' }}>
+                          {displayName}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                            {e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
+                            {emailDate ? new Date(emailDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
                           </span>
                           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{isOpen ? '▲' : '▼'}</span>
                         </div>
@@ -4169,7 +4177,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       </div>
                       {!isOpen && (
                         <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {e.body_preview}
+                          {e.body_preview || (e.body ? e.body.replace(/<[^>]+>/g, ' ').slice(0, 120) : '')}
                         </div>
                       )}
                     </div>
@@ -4178,13 +4186,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                     {isOpen && (
                       <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
                         <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, paddingTop: 10 }}>
-                          From: <strong>{replyName}</strong>{replyTo && replyTo !== replyName ? ` <${replyTo}>` : ''}
-                          {e.to_email && <span style={{ marginLeft: 12 }}>To: {e.to_email}</span>}
-                          {e.received_at && <span style={{ marginLeft: 12 }}>{new Date(e.received_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+                          {isOutgoing ? (
+                            <><strong>Sent</strong> to: {e.to_email}</>
+                          ) : (
+                            <>From: <strong>{replyName}</strong>{replyTo && replyTo !== replyName ? ` <${replyTo}>` : ''}</>
+                          )}
+                          {emailDate && <span style={{ marginLeft: 12 }}>{new Date(emailDate).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                         </div>
                         <div
                           style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, maxHeight: 400, overflowY: 'auto', background: 'var(--bg)', borderRadius: 6, padding: '12px 14px', border: '1px solid var(--border)' }}
-                          dangerouslySetInnerHTML={{ __html: e.body || `<p style="color:var(--text3);font-style:italic">${e.body_preview || 'No content available.'}</p>` }}
+                          dangerouslySetInnerHTML={{ __html: bodyContent || '<p style="color:var(--text3);font-style:italic">No content available.</p>' }}
                         />
                         <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                           {replyTo && (
