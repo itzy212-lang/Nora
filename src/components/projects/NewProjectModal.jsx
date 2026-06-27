@@ -605,9 +605,9 @@ export default function NewProjectModal({ onClose, onCreated }) {
                 </div>
               </div>
             </>
-          )}
+          ))}
 
-          <div style={mSection}>
+          {!isConstruction && <div style={mSection}>
             <div style={{
               fontSize: 12,
               fontWeight: 700,
@@ -641,8 +641,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
                 </Field>
               </div>
             </div>
-          </div>
-          ))}
+          </div>}
 
           {error && (
             <div style={{
