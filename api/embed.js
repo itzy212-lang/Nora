@@ -137,6 +137,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, results });
     }
 
+    // ── Count unindexed records ───────────────────────────────────────────
+    if (action === 'count') {
+      const [emailsTotal, emailsDone, msgsTotal, msgsDone, memTotal, memDone] = await Promise.all([
+        sb.from('emails').select('id', { count: 'exact', head: true }).not('project_id', 'is', null),
+        sb.from('emails').select('id', { count: 'exact', head: true }).not('project_id', 'is', null).not('embedding', 'is', null),
+        sb.from('ai_messages').select('id', { count: 'exact', head: true }).not('project_id', 'is', null).eq('role', 'user'),
+        sb.from('ai_messages').select('id', { count: 'exact', head: true }).not('project_id', 'is', null).eq('role', 'user').not('embedding', 'is', null),
+        sb.from('project_memory').select('id', { count: 'exact', head: true }).not('project_id', 'is', null),
+        sb.from('project_memory').select('id', { count: 'exact', head: true }).not('project_id', 'is', null).not('embedding', 'is', null),
+      ]);
+      return res.status(200).json({
+        counts: {
+          emails_total: emailsTotal.count || 0,
+          emails_done: emailsDone.count || 0,
+          messages_total: msgsTotal.count || 0,
+          messages_done: msgsDone.count || 0,
+          memory_total: memTotal.count || 0,
+          memory_done: memDone.count || 0,
+        }
+      });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
 
   } catch (err) {
