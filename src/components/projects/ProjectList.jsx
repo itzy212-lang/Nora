@@ -136,6 +136,15 @@ function ProjectCard({ project, onClick }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {project.project_type === 'construction' && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 99,
+                background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa',
+              }}>
+                🏗️ PM
+              </span>
+            )}
+            {(!project.project_type || project.project_type === 'party_wall') && (
             <span style={{
               fontSize: 10.5,
               fontWeight: 600,
@@ -147,6 +156,7 @@ function ProjectCard({ project, onClick }) {
             }}>
               {role === 'AO' ? 'AO' : 'BO'}
             </span>
+            )}
 
             <span style={{
               fontSize: 10.5,
