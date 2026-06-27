@@ -83,13 +83,9 @@ export default async function handler(req, res) {
       }
       const results = { emails: 0, messages: 0, memory: 0, errors: 0 };
 
-      // Emails without embeddings
-      const emailQuery = sb.from('emails')
-        .select('id, subject, direction, sender_name, sender_email, to_email, body, body_preview, received_at')
-        .is('embedding', null)
-        .not('project_id', 'is', null);
-      if (project_id) emailQuery.eq('project_id', project_id);
-      const { data: emails } = await emailQuery.limit(BATCH_SIZE);
+      // Emails without embeddings — use RPC to bypass query builder vector column issue
+      const { data: emails, error: emailErr } = await sb.rpc('get_unindexed_emails', { batch_size: BATCH_SIZE });
+      if (emailErr) { console.error('[embed] get_unindexed_emails error:', emailErr.message); results.last_error = emailErr.message; }
 
       for (const email of emails || []) {
         try {
@@ -106,13 +102,8 @@ export default async function handler(req, res) {
       }
 
       // Chat messages without embeddings
-      const msgQuery = sb.from('ai_messages')
-        .select('id, content')
-        .is('embedding', null)
-        .eq('role', 'user')
-        .not('project_id', 'is', null);
-      if (project_id) msgQuery.eq('project_id', project_id);
-      const { data: messages } = await msgQuery.limit(BATCH_SIZE);
+      const { data: messages, error: msgErr } = await sb.rpc('get_unindexed_messages', { batch_size: BATCH_SIZE });
+      if (msgErr) { console.error('[embed] get_unindexed_messages error:', msgErr.message); results.last_error = msgErr.message; }
 
       for (const msg of messages || []) {
         try {
@@ -124,12 +115,8 @@ export default async function handler(req, res) {
       }
 
       // Project memory without embeddings
-      const memQuery = sb.from('project_memory')
-        .select('id, title, summary, content')
-        .is('embedding', null)
-        .not('project_id', 'is', null);
-      if (project_id) memQuery.eq('project_id', project_id);
-      const { data: memory } = await memQuery.limit(BATCH_SIZE);
+      const { data: memory, error: memErr } = await sb.rpc('get_unindexed_memory', { batch_size: BATCH_SIZE });
+      if (memErr) { console.error('[embed] get_unindexed_memory error:', memErr.message); results.last_error = memErr.message; }
 
       for (const mem of memory || []) {
         try {
