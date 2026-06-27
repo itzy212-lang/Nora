@@ -1423,6 +1423,82 @@ function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint =
     }
   }
 
+  // ── Land Registry document detection ────────────────────────────────────
+  // If an uploaded file looks like a Land Registry title register, extract
+  // proprietor details and return an AO creation offer to the frontend.
+  if (uploadedFiles?.length && body.surface === 'project_chat') {
+    for (const f of uploadedFiles) {
+      const text = String(f.extracted_text || '').trim();
+      const isLandReg = (
+        /title (number|register|absolute)/i.test(text) ||
+        /HM Land Registry/i.test(text) ||
+        /registered (proprietor|owner)/i.test(text) ||
+        /proprietorship register/i.test(text) ||
+        /(title plan|official copy)/i.test(text)
+      );
+
+      if (isLandReg && ANTHROPIC_KEY) {
+        try {
+          const lrRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_KEY,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: 'claude-opus-4-6',
+              max_tokens: 800,
+              messages: [{
+                role: 'user',
+                content: `Extract the registered proprietor details from this Land Registry title register. Return ONLY a JSON object with no markdown, no preamble:
+{
+  "proprietor_name": "full name(s) of registered proprietor(s)",
+  "property_address": "full registered address of the property",
+  "title_number": "title number if visible",
+  "proprietor_address": "correspondence address if different from property address, otherwise null"
+}
+
+If multiple proprietors, put all names in proprietor_name separated by " and ".
+
+TITLE REGISTER TEXT:
+${text.slice(0, 8000)}`,
+              }],
+            }),
+          });
+
+          if (lrRes.ok) {
+            const lrData = await lrRes.json();
+            const rawText = lrData?.content?.[0]?.text || '';
+            try {
+              const extracted = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+              if (extracted.proprietor_name && extracted.property_address) {
+                return res.status(200).json({
+                  reply: `I can see this is a Land Registry title register for **${extracted.property_address}**.
+
+The registered proprietor is **${extracted.proprietor_name}**${extracted.title_number ? ` (Title No. ${extracted.title_number})` : ''}.
+
+Would you like me to add them as an Adjoining Owner on this project?`,
+                  land_registry_ao: {
+                    name: extracted.proprietor_name,
+                    premise: extracted.property_address,
+                    service_address: extracted.proprietor_address || extracted.property_address,
+                    title_number: extracted.title_number || null,
+                    source: 'land_registry',
+                  },
+                  sessionId: \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`,
+                });
+              }
+            } catch { /* JSON parse failed — fall through to normal Ely response */ }
+          }
+        } catch (lrErr) {
+          console.warn('[ely-smart] Land Registry extraction failed:', lrErr.message);
+        }
+        break; // Only process first LR doc
+      }
+    }
+  }
+
   // Inject documents previously uploaded to this project (from project_memory chat_upload records)
   const memoryUploads = (body.context?.projectMemoryUploads || []);
   if (memoryUploads.length > 0) {
