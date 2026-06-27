@@ -253,32 +253,65 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
   const st = (ao?.status || '').toLowerCase();
   const noticed = !!aoNotice(ao);
   const s10Served = hasS10BeenServed(ao);
+  const s104bServed = !!ao104BServed(ao);
+  const awardServed = !!(ao?.award_served_date || ao?.awardServedDate);
+  const awardGenerated = !!(ao?.award_generated_at || ao?.awardGeneratedAt || st === 'award');
+  const surveyorAppointed = !!(aoSurvName(ao) && (st === 'dissent' || s104bServed));
   const overdue = consentPeriodExpired(ao);
+  const s10Deadline = daysUntil(aoS10(ao));
 
   if (projectRole === 'AO' && ao?.appointed_by_me) {
     return { label: 'Your AO client', colour: '#a855f7', action: null };
   }
 
+  // Award served — final state
+  if (awardServed || st === 'complete') {
+    return { label: 'Award served', colour: '#22c55e', action: null };
+  }
+
+  // Award generated — needs serving
+  if (awardGenerated) {
+    return { label: 'Award drafted — serve award', colour: '#f59e0b', action: 'serve_award' };
+  }
+
+  // Consent
   if (st === 'consent') {
     return { label: 'Consent received', colour: '#22c55e', action: null };
   }
 
+  // Dissent — surveyor appointed
+  if (st === 'dissent' && surveyorAppointed) {
+    return { label: 'Surveyor appointed', colour: '#22c55e', action: null };
+  }
+
+  // Dissent — no surveyor yet
   if (st === 'dissent') {
+    return { label: 'Dissent received', colour: '#ef4444', action: null };
+  }
+
+  // 104b served — awaiting surveyor appointment
+  if (s104bServed) {
+    return { label: surveyorAppointed ? 'Surveyor appointed' : '10(4)(b) served', colour: '#22c55e', action: null };
+  }
+
+  // S10 served — countdown to 104b
+  if (s10Served) {
+    if (s10Deadline !== null && s10Deadline <= 0) {
+      return { label: 'Serve 10(4)(b)', colour: '#ef4444', action: 'serve_104b' };
+    }
     return {
-      label: ao?.agreed_surveyor ? 'Dissent - agreed surveyor' : 'Dissent received',
-      colour: ao?.agreed_surveyor || aoSurvName(ao) ? '#22c55e' : '#ef4444',
+      label: s10Deadline === null ? 'S.10 served' : s10Deadline === 0 ? 'S.10 expires today' : `S.10 — ${s10Deadline}d left`,
+      colour: s10Deadline !== null && s10Deadline <= 3 ? '#f59e0b' : '#22c55e',
       action: null,
     };
   }
 
-  if (s10Served) {
-    return { label: 'Section 10 served', colour: '#22c55e', action: null };
-  }
-
-  if (overdue) {
+  // Notice served — overdue, serve S10
+  if (noticed && overdue) {
     return { label: 'Serve Section 10', colour: '#ef4444', action: 'serve_s10' };
   }
 
+  // Notice served — within deadline
   if (noticed) {
     return { label: 'Notice served', colour: '#22c55e', action: null };
   }
@@ -1134,6 +1167,8 @@ function AOCard({
   onEditAO,
   onServeNotice,
   onServeS10,
+  onServe104b,
+  onServeAward,
   onSetAOStatus,
   onToggleAgreedSurveyor,
   onNoteIntention,
@@ -1196,7 +1231,12 @@ function AOCard({
               {statusLabel && (
                 statusMeta.action ? (
                 <button
-                  onClick={() => statusMeta.action === 'serve_s10' ? onServeS10?.(ao) : onServeNotice?.(ao)}
+                  onClick={() => {
+                    if (statusMeta.action === 'serve_s10') onServeS10?.(ao);
+                    else if (statusMeta.action === 'serve_notice') onServeNotice?.(ao);
+                    else if (statusMeta.action === 'serve_104b') onServe104b?.(ao);
+                    else if (statusMeta.action === 'serve_award') onServeAward?.(ao);
+                  }}
                   style={{
                     padding: '4px 12px',
                     borderRadius: 99,
@@ -1204,7 +1244,8 @@ function AOCard({
                     fontWeight: 700,
                     cursor: 'pointer',
                     border: `1px solid ${statusColour}`,
-                    background: statusMeta.action === 'serve_s10' ? 'var(--red-bg)' : 'var(--blue-bg)',
+                    background: statusMeta.action === 'serve_s10' || statusMeta.action === 'serve_104b' ? 'var(--red-bg)'
+                      : statusMeta.action === 'serve_award' ? 'var(--amber-bg)' : 'var(--blue-bg)',
                     color: statusColour,
                     marginLeft: 8,
                   }}
@@ -1250,22 +1291,46 @@ function AOCard({
             </div>
           )}
 
-          {!isAOAppointment && noticed && cd && (
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              margin: '6px 0',
-              padding: '4px 12px',
-              borderRadius: 99,
-              fontSize: 12,
-              fontWeight: 600,
-              background: days !== null && days <= 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
-              color: days !== null && days <= 0 ? 'var(--red)' : days !== null && days <= 7 ? 'var(--amber)' : 'var(--green)',
-            }}>
-              ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline - ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline - ${days}d`}
-            </div>
-          )}
+          {(() => {
+            const st2 = (ao.status || '').toLowerCase();
+            const actionTaken = ['consent','dissent','s10','s104b','complete'].includes(st2)
+              || !!aoS10Served(ao) || !!ao104BServed(ao)
+              || !!(ao?.award_served_date || ao?.awardServedDate);
+
+            // Consent deadline badge — only show if no action taken yet
+            if (!isAOAppointment && noticed && cd && !actionTaken) {
+              return (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  margin: '6px 0', padding: '4px 12px', borderRadius: 99,
+                  fontSize: 12, fontWeight: 600,
+                  background: days !== null && days <= 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
+                  color: days !== null && days <= 0 ? 'var(--red)' : days !== null && days <= 7 ? 'var(--amber)' : 'var(--green)',
+                }}>
+                  ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline — ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline — ${days}d`}
+                </div>
+              );
+            }
+
+            // S10 countdown — show while S10 served but 104b not yet served
+            const s10Dd = aoS10(ao);
+            const s10Days = daysUntil(s10Dd);
+            if (!isAOAppointment && !!aoS10Served(ao) && !ao104BServed(ao) && s10Dd) {
+              return (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  margin: '6px 0', padding: '4px 12px', borderRadius: 99,
+                  fontSize: 12, fontWeight: 600,
+                  background: s10Days !== null && s10Days <= 0 ? 'var(--red-bg)' : s10Days !== null && s10Days <= 3 ? 'var(--amber-bg)' : 'var(--green-bg)',
+                  color: s10Days !== null && s10Days <= 0 ? 'var(--red)' : s10Days !== null && s10Days <= 3 ? 'var(--amber)' : 'var(--green)',
+                }}>
+                  ⏱ {s10Days === null ? fmtDate(s10Dd) : s10Days < 0 ? `S.10 expired — ${Math.abs(s10Days)}d overdue` : s10Days === 0 ? 'S.10 expires TODAY' : `S.10 expires — ${s10Days}d`}
+                </div>
+              );
+            }
+
+            return null;
+          })()}
 
           {!isAOAppointment && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
@@ -3184,6 +3249,26 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     handleOpenNoticeModal(ao, []);
   }, [handleOpenNoticeModal]);
 
+  const handleServe104b = useCallback(async (ao) => {
+    if (!window.confirm('Confirm 10(4)(b) papers have been served?')) return;
+    const date = new Date().toISOString().slice(0, 10);
+    const updatedAOs = (project.aos || []).map(a =>
+      a.id === ao.id ? { ...a, s104b_served_date: date, s104bServedDate: date, status: 's104b' } : a
+    );
+    await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+    setProject(p => ({ ...p, aos: updatedAOs }));
+  }, [project, sb]);
+
+  const handleServeAward = useCallback(async (ao) => {
+    if (!window.confirm('Confirm the award has been served?')) return;
+    const date = new Date().toISOString().slice(0, 10);
+    const updatedAOs = (project.aos || []).map(a =>
+      a.id === ao.id ? { ...a, award_served_date: date, awardServedDate: date, status: 'complete' } : a
+    );
+    await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+    setProject(p => ({ ...p, aos: updatedAOs }));
+  }, [project, sb]);
+
   const handleServeS10 = useCallback((ao) => {
     handleOpenNoticeModal(ao, ['s10']);
   }, [handleOpenNoticeModal]);
@@ -3760,25 +3845,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 )}
               </div>
 
-              <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                {STAGES.map((s, i) => (
-                  <div
-                    key={s}
-                    style={{
-                      flex: 1,
-                      textAlign: 'center',
-                      padding: '8px 0',
-                      fontSize: 11.5,
-                      fontWeight: i === stageIndex ? 600 : 400,
-                      background: i === stageIndex ? projColour : i < stageIndex ? `${projColour}33` : 'transparent',
-                      color: i === stageIndex ? '#fff' : i < stageIndex ? projColour : 'var(--text3)',
-                      borderRight: i < STAGES.length - 1 ? '1px solid var(--border)' : 'none',
-                    }}
-                  >
-                    {s}
-                  </div>
-                ))}
-              </div>
+
             </div>
 
             <div>
@@ -3815,6 +3882,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onEditAO={setEditingAO}
                       onServeNotice={handleServeNotice}
                       onServeS10={handleServeS10}
+                      onServe104b={handleServe104b}
+                      onServeAward={handleServeAward}
                       onSetAOStatus={handleSetAOStatus}
                       onToggleAgreedSurveyor={handleToggleAgreedSurveyor}
                       onNoteIntention={handleNoteIntention}
