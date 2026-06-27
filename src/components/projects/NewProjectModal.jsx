@@ -250,6 +250,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
   const [error, setError] = useState('');
 
   const isAO = form.role === 'AO';
+  const isConstruction = form.project_type === 'construction';
 
   const setBo1 = (k, v) => setForm(f => ({ ...f, bo1: { ...f.bo1, [k]: v } }));
   const setBo2 = (k, v) => setForm(f => ({ ...f, bo2: { ...f.bo2, [k]: v } }));
@@ -387,7 +388,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>New project</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-              {isAO ? 'AO appointment setup' : 'BO appointment setup'}
+              {isConstruction ? 'Construction / PM project' : isAO ? 'AO appointment setup' : 'BO appointment setup'}
             </div>
           </div>
 
@@ -432,6 +433,66 @@ export default function NewProjectModal({ onClose, onCreated }) {
             </div>
           </div>
 
+          {isConstruction ? (
+            /* ── Construction / PM form ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Site address *</div>
+                <input
+                  value={form.boPremise}
+                  onChange={e => setForm(f => ({ ...f, boPremise: e.target.value }))}
+                  placeholder="Full site address including postcode"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client name</div>
+                <input
+                  value={form.bo1.name}
+                  onChange={e => setBo1('name', e.target.value)}
+                  placeholder="Client full name"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client email</div>
+                <input
+                  value={form.bo1.email}
+                  onChange={e => setBo1('email', e.target.value)}
+                  placeholder="client@email.com"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client phone</div>
+                <input
+                  value={form.bo1.phone}
+                  onChange={e => setBo1('phone', e.target.value)}
+                  placeholder="Phone number"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Works description</div>
+                <input
+                  value={form.works}
+                  onChange={e => setForm(f => ({ ...f, works: e.target.value }))}
+                  placeholder="e.g. Rear extension, loft conversion, bathroom refit"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Contract value (£)</div>
+                <input
+                  type="number"
+                  value={form.fee}
+                  onChange={e => setForm(f => ({ ...f, fee: e.target.value }))}
+                  placeholder="0.00"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+            </div>
+          ) : (
           <div>
             <div style={{
               fontSize: 11,
@@ -607,6 +668,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               </div>
             </div>
           </div>
+          )} {/* end party wall form */}
 
           {error && (
             <div style={{
