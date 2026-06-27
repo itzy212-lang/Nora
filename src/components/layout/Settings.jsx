@@ -502,7 +502,7 @@ function EmailTab() {
 
 function AITab() {
   const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
-  const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0 });
+  const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0, last_error: null });
   const [counts, setCounts] = useState(null);
   const runningRef = React.useRef(false);
 
@@ -537,7 +537,7 @@ function AITab() {
           body: JSON.stringify({ action: 'backfill' }),
         });
         const data = await res.json();
-        if (!data.success) { setStatus('error'); break; }
+        if (!data.success) { setStatus('error'); setProgress(p => ({ ...p, last_error: data.error || 'Unknown error' })); break; }
 
         const r = data.results || {};
         totalEmails += r.emails || 0;
@@ -615,7 +615,7 @@ function AITab() {
 
         {status === 'error' && (
           <div style={{ padding: '10px 12px', background: 'var(--red-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12.5, color: 'var(--red)' }}>
-            ⚠️ Something went wrong. Check that OpenAI API key is set in Vercel env vars.
+            ⚠️ Something went wrong — {progress.last_error || 'Check that OPENAI_API_KEY is set in Vercel env vars.'}
           </div>
         )}
 
@@ -654,14 +654,14 @@ export default function Settings() {
     <div style={{ padding: '24px 28px', maxWidth: 700 }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Settings</div>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, gap: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, gap: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
         {TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: '8px 18px', fontSize: 13, border: 'none', cursor: 'pointer',
             background: 'none', fontWeight: activeTab === tab ? 600 : 400,
             color: activeTab === tab ? 'var(--blue)' : 'var(--text2)',
             borderBottom: activeTab === tab ? '2px solid var(--blue)' : '2px solid transparent',
-            marginBottom: -1,
+            marginBottom: 0,
           }}>{tab}</button>
         ))}
       </div>
