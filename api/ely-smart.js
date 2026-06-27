@@ -279,14 +279,14 @@ async function loadProjectBundle(projectId) {
     q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
   );
 
-  // Load emails linked to this project — no need to search the full inbox
+  // Load ALL emails linked to this project — both incoming and outgoing
   const projectEmails = await safeSelect(
     'emails',
-    'id, subject, sender_name, sender_email, to_email, sent_at, body, is_sent',
+    'id, subject, sender_name, sender_email, to_email, direction, received_at, sent_at, body, body_preview, raw_recipients',
     q => q
       .eq('project_id', projectId)
-      .order('sent_at', { ascending: true })
-      .limit(50)
+      .order('received_at', { ascending: true })
+      .limit(100)
   );
 
   // Load ALL project chat messages across all sessions — no session boundary
@@ -1248,19 +1248,23 @@ ${projectFacts}
         const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
         return { ...e, _score: score };
       }).sort((a, b) => b._score - a._score);
-      // Take top 20 most relevant, always include sent emails
-      const topRelevant = scored.slice(0, 20);
+      // Take top 30 most relevant across both directions
+      const topRelevant = scored.slice(0, 30);
       relevantEmails = topRelevant;
     }
     const emailsText = relevantEmails
       .map(e => {
-        const date = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB') : '';
-        const direction = e.is_sent ? 'Sent' : 'Received';
-        const from = e.sender_name || e.sender_email || '';
-        return `[${date}] ${direction} — ${from}\nSubject: ${e.subject || ''}\n${(e.body || '').slice(0, 1500)}`;
+        const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
+        const isOutgoing = e.direction === 'outgoing';
+        const dirLabel = isOutgoing ? 'SENT' : 'RECEIVED';
+        const fromTo = isOutgoing
+          ? `To: ${e.to_email || 'unknown'}`
+          : `From: ${e.sender_name || e.raw_recipients?.from?.name || e.sender_email || 'unknown'}`;
+        const bodyText = (e.body || e.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return `[${date}] ${dirLabel} — ${fromTo}\nSubject: ${e.subject || '(no subject)'}\n${bodyText.slice(0, 1500)}`;
       })
       .join('\n\n---\n\n');
-    prompt += `\n\nPROJECT EMAILS (most relevant to current request):\n${emailsText.slice(0, 12000)}\n`;
+    prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailsText.slice(0, 15000)}\n`;
   }
 
   // Inject ALL project chat notes across all sessions — no session boundary
