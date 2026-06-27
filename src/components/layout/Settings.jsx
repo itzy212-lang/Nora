@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
 
-const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account'];
+const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account', 'AI'];
 
 const TEMPLATE_LABELS = {
   loa_bo: 'LoA - Building Owner',
@@ -500,6 +500,153 @@ function EmailTab() {
   );
 }
 
+function AITab() {
+  const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
+  const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0 });
+  const [counts, setCounts] = useState(null);
+  const runningRef = React.useRef(false);
+
+  const checkCounts = async () => {
+    try {
+      const res = await fetch('/api/embed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'count' }),
+      });
+      const data = await res.json();
+      if (data.counts) setCounts(data.counts);
+    } catch {}
+  };
+
+  React.useEffect(() => { checkCounts(); }, []);
+
+  const runBackfill = async () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    setStatus('running');
+    setProgress({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0 });
+
+    let totalEmails = 0, totalMessages = 0, totalMemory = 0, totalErrors = 0, batches = 0;
+    let hasMore = true;
+
+    while (hasMore && runningRef.current) {
+      try {
+        const res = await fetch('/api/embed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'backfill' }),
+        });
+        const data = await res.json();
+        if (!data.success) { setStatus('error'); break; }
+
+        const r = data.results || {};
+        totalEmails += r.emails || 0;
+        totalMessages += r.messages || 0;
+        totalMemory += r.memory || 0;
+        totalErrors += r.errors || 0;
+        batches++;
+
+        setProgress({ emails: totalEmails, messages: totalMessages, memory: totalMemory, errors: totalErrors, batches });
+
+        // If this batch processed nothing, we're done
+        const batchTotal = (r.emails || 0) + (r.messages || 0) + (r.memory || 0);
+        if (batchTotal === 0) {
+          hasMore = false;
+        } else {
+          // Small delay between batches to avoid rate limits
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (err) {
+        setStatus('error');
+        break;
+      }
+    }
+
+    if (hasMore === false) setStatus('done');
+    runningRef.current = false;
+    checkCounts();
+  };
+
+  const stopBackfill = () => { runningRef.current = false; setStatus(null); };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>🔍 Semantic Search Index</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 12 }}>
+          Indexes all project emails, chat messages and documents so Ely can search across everything instantly — no limits.
+          Run this once to index existing content. New content is indexed automatically going forward.
+        </div>
+
+        {counts && (
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Emails indexed', done: counts.emails_done, total: counts.emails_total },
+              { label: 'Chat messages', done: counts.messages_done, total: counts.messages_total },
+              { label: 'Documents & notes', done: counts.memory_done, total: counts.memory_total },
+            ].map(({ label, done, total }) => (
+              <div key={label} style={{ flex: 1, minWidth: 120, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: done === total && total > 0 ? 'var(--green)' : 'var(--text)' }}>
+                  {done} / {total}
+                </div>
+                {total > 0 && (
+                  <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 6 }}>
+                    <div style={{ height: '100%', background: 'var(--accent)', borderRadius: 2, width: `${Math.round((done/total)*100)}%` }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {status === 'running' && (
+          <div style={{ padding: '10px 12px', background: 'var(--blue-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12.5 }}>
+            ⚙️ Indexing... Batch {progress.batches} — {progress.emails} emails, {progress.messages} messages, {progress.memory} documents indexed
+            {progress.errors > 0 && <span style={{ color: 'var(--red)', marginLeft: 8 }}>{progress.errors} errors</span>}
+          </div>
+        )}
+
+        {status === 'done' && (
+          <div style={{ padding: '10px 12px', background: 'var(--green-bg, #f0fdf4)', borderRadius: 8, marginBottom: 12, fontSize: 12.5, color: 'var(--green)' }}>
+            ✅ All done — {progress.emails} emails, {progress.messages} messages, {progress.memory} documents indexed across {progress.batches} batches.
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div style={{ padding: '10px 12px', background: 'var(--red-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12.5, color: 'var(--red)' }}>
+            ⚠️ Something went wrong. Check that OpenAI API key is set in Vercel env vars.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          {status !== 'running' ? (
+            <button
+              onClick={runBackfill}
+              style={{ padding: '8px 18px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              {status === 'done' ? '↻ Re-index' : '▶ Start Indexing'}
+            </button>
+          ) : (
+            <button
+              onClick={stopBackfill}
+              style={{ padding: '8px 18px', borderRadius: 99, fontSize: 13, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}
+            >
+              ⏹ Stop
+            </button>
+          )}
+          <button
+            onClick={checkCounts}
+            style={{ padding: '8px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)' }}
+          >
+            ↻ Refresh counts
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('Firm');
 
@@ -524,6 +671,7 @@ export default function Settings() {
       {activeTab === 'Email' && <EmailTab />}
       {activeTab === 'Invoice' && <InvoiceSettings />}
       {activeTab === 'Account' && <AccountTab />}
+      {activeTab === 'AI' && <AITab />}
     </div>
   );
 }
