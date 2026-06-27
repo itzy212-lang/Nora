@@ -114,7 +114,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
   const feePipeline = projects
     .filter(p => p.status !== 'complete')
-    .reduce((s, p) => s + parseFloat(p.fee || 0), 0);
+    .reduce((s, p) => s + Math.max(0, parseFloat(p.fee || 0) - parseFloat(p.fee_invoiced || 0)), 0);
 
   const leadPipeline = freshLeads
     .filter(l => (l.lead_stage || l.status) !== 'lost')
@@ -302,7 +302,7 @@ Give Itzik a concise morning briefing in 2-3 sentences. UK English. No bullet po
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0 0', fontSize: isMobile ? 16 : 13 }}>
-            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Fee pipeline</span>
+            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Remaining to invoice</span>
             <span style={{ fontWeight: 700, color: 'var(--blue)', fontSize: isMobile ? 22 : 15 }}>{fmt(feePipeline)}</span>
           </div>
         </div>
