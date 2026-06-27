@@ -64,14 +64,25 @@ export function useProjects() {
 
   const saveProject = useCallback(async (projectData) => {
     if (!sb) return;
+
+    // Build upsert payload — never overwrite aos unless explicitly provided
+    // This prevents the upsert from wiping existing AO data on project edits
+    const upsertPayload = {
+      ...projectData,
+      bo_premise_address: projectData.address  || projectData.bo_premise_address || '',
+      bo_1_name:          projectData.bo       || projectData.bo_1_name          || '',
+      bo_1_email:         projectData.bo_email || projectData.bo_1_email         || '',
+    };
+
+    // If aos not explicitly provided in projectData, remove it from payload
+    // so existing aos in DB is preserved
+    if (!Object.prototype.hasOwnProperty.call(projectData, 'aos')) {
+      delete upsertPayload.aos;
+    }
+
     const { data, error } = await sb
       .from('projects')
-      .upsert({
-        ...projectData,
-        bo_premise_address: projectData.address  || projectData.bo_premise_address || '',
-        bo_1_name:          projectData.bo       || projectData.bo_1_name          || '',
-        bo_1_email:         projectData.bo_email || projectData.bo_1_email         || '',
-      }, { onConflict: 'id' })
+      .upsert(upsertPayload, { onConflict: 'id' })
       .select()
       .single();
     if (error) throw error;
