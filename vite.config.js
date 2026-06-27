@@ -4,7 +4,6 @@ import react from '@vitejs/plugin-react';
 // build: force rebuild 2026-05-29
 export default defineConfig({
   plugins: [react()],
-  base: './',  // Required for Capacitor — assets use relative paths
   build: {
     outDir: 'dist',
   },
