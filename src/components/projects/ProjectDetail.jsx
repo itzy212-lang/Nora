@@ -2632,6 +2632,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [oneDriveFiles, setOneDriveFiles] = useState([]);
   const [oneDriveLoading, setOneDriveLoading] = useState(false);
   const [oneDriveError, setOneDriveError] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(null); // null = project root
+  const [subFolders, setSubFolders] = useState([]); // AO subfolders discovered in root
+  const [oneDriveRefresh, setOneDriveRefresh] = useState(0); // increment to force reload
   const [loaLoading, setLoaLoading] = useState(null);
   const [awardLoading, setAwardLoading] = useState(null);
   const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(
@@ -2748,11 +2751,22 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       });
   }, [tab, project.id]);
 
-  // Load OneDrive files when Documents tab opens
+  // Reset folder selection when leaving documents tab
+  useEffect(() => {
+    if (tab !== 'documents') {
+      setSelectedFolderId(null);
+      setSubFolders([]);
+      setOneDriveFiles([]);
+    }
+  }, [tab]);
+
+  // Load OneDrive files when Documents tab opens or folder selection changes
   useEffect(() => {
     if (tab !== 'documents') return;
-    const folderId = project?.onedrive_folder_id;
-    if (!folderId) { setOneDriveFiles([]); return; }
+    const rootFolderId = project?.onedrive_folder_id;
+    if (!rootFolderId) { setOneDriveFiles([]); setSubFolders([]); return; }
+    // Which folder to load — selected subfolder or project root
+    const folderId = selectedFolderId || rootFolderId;
     setOneDriveLoading(true);
     setOneDriveError(null);
     fetch('/api/onedrive-folder', {
@@ -2766,12 +2780,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     })
       .then(r => r.json())
       .then(data => {
-        if (data.success) setOneDriveFiles(data.items || []);
-        else setOneDriveError(data.error || 'Failed to load files');
+        if (data.success) {
+          const items = data.items || [];
+          setOneDriveFiles(items);
+          // When loading root, extract subfolders for pills
+          if (!selectedFolderId) {
+            setSubFolders(items.filter(i => !!i.folder));
+          }
+        } else {
+          setOneDriveError(data.error || 'Failed to load files');
+        }
       })
       .catch(err => setOneDriveError(err.message))
       .finally(() => setOneDriveLoading(false));
-  }, [tab, project?.onedrive_folder_id]);
+  }, [tab, project?.onedrive_folder_id, selectedFolderId, oneDriveRefresh]);
 
   const handleGenerateBOLOA = useCallback(async () => {
     if (!boEmail) {
@@ -4102,33 +4124,50 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                     style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
                     onClick={() => window.open(project.onedrive_folder_url, '_blank')}
                   >
-                    Open in OneDrive ↗
+                    OneDrive ↗
                   </button>
                 )}
                 <button
                   className="btn btn-sm btn-ghost"
                   style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
-                  onClick={() => {
-                    setOneDriveFiles([]);
-                    setOneDriveError(null);
-                    const folderId = project?.onedrive_folder_id;
-                    if (!folderId) return;
-                    setOneDriveLoading(true);
-                    fetch('/api/onedrive-folder', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ user_id: 'help@sq1consulting.co.uk', action: 'get_folder_contents', project_folder_id: folderId }),
-                    })
-                      .then(r => r.json())
-                      .then(data => { if (data.success) setOneDriveFiles(data.items || []); else setOneDriveError(data.error || 'Failed'); })
-                      .catch(err => setOneDriveError(err.message))
-                      .finally(() => setOneDriveLoading(false));
-                  }}
+                  onClick={() => { setOneDriveFiles([]); setSubFolders([]); setOneDriveError(null); setOneDriveRefresh(n => n + 1); }}
                 >
                   ↻ Refresh
                 </button>
               </div>
             </div>
+
+            {/* Folder pills — project root + AO subfolders */}
+            {project?.onedrive_folder_id && (subFolders.length > 0 || selectedFolderId) && (
+              <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setSelectedFolderId(null)}
+                  style={{
+                    padding: '4px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)',
+                    background: !selectedFolderId ? 'var(--accent)' : 'transparent',
+                    color: !selectedFolderId ? '#fff' : 'var(--text2)',
+                    fontWeight: !selectedFolderId ? 600 : 400,
+                  }}
+                >
+                  📁 Project
+                </button>
+                {subFolders.map(folder => (
+                  <button
+                    key={folder.id}
+                    onClick={() => setSelectedFolderId(folder.id)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)',
+                      background: selectedFolderId === folder.id ? 'var(--accent)' : 'transparent',
+                      color: selectedFolderId === folder.id ? '#fff' : 'var(--text2)',
+                      fontWeight: selectedFolderId === folder.id ? 600 : 400,
+                      maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    📁 {folder.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* No OneDrive folder linked */}
             {!project?.onedrive_folder_id && (
@@ -4156,7 +4195,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             )}
 
-            {oneDriveFiles.map((f, i) => {
+            {oneDriveFiles.filter(f => selectedFolderId || !f.folder).map((f, i) => {
+              // In root view, subfolders are shown as pills above — hide them from the file list
+              // In a subfolder view, show everything including any nested folders
               const isFolder = !!f.folder;
               const ext = (f.name || '').split('.').pop().toLowerCase();
               const icon = isFolder ? '📁' : { pdf: '📄', docx: '📝', doc: '📝', xlsx: '📊', xls: '📊', jpg: '🖼️', jpeg: '🖼️', png: '🖼️' }[ext] || '📄';
@@ -4167,7 +4208,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 <div key={f.id} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '11px 16px',
-                  borderBottom: i < oneDriveFiles.length - 1 ? '1px solid var(--border)' : 'none',
+                  borderBottom: '1px solid var(--border)',
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
