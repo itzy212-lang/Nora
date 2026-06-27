@@ -374,19 +374,31 @@ export default function App() {
     }
 
     if (currentView === 'projects' && projectView && projectView !== 'list' && projectView !== 'new') {
+      const onBack = () => {
+        setProjectView(null);
+        setPendingProjectId('');
+        clearCurrentProject();
+        try {
+          sessionStorage.setItem('ely_current_view', 'projects');
+          sessionStorage.removeItem('ely_current_project_id');
+        } catch {}
+      };
+
+      // PM / Construction projects get their own detail view
+      if (projectView.project_type === 'construction') {
+        return (
+          <PMProjectDetail
+            project={projectView}
+            onBack={onBack}
+            onOpenComposer={openComposer}
+          />
+        );
+      }
+
       return (
         <ProjectDetail
           project={projectView}
-          onBack={() => {
-            setProjectView(null);
-            setPendingProjectId('');
-            clearCurrentProject();
-
-            try {
-              sessionStorage.setItem('ely_current_view', 'projects');
-              sessionStorage.removeItem('ely_current_project_id');
-            } catch {}
-          }}
+          onBack={onBack}
           onOpenComposer={openComposer}
           onRaiseInvoice={handleRaiseInvoice}
           onOpenSOC={handleOpenSOC}
