@@ -385,7 +385,7 @@ export default function App() {
       };
 
       // PM / Construction projects get their own detail view
-      if (projectView.project_type === 'construction') {
+      if (projectView.project_type === 'construction' || projectView.project_type === 'pm') {
         return (
           <PMProjectDetail
             project={projectView}
