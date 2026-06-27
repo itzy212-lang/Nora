@@ -330,11 +330,10 @@ export default function NewProjectModal({ onClose, onCreated }) {
         works: form.works.trim() || null,
         fee: Number.isFinite(fee) ? fee : null,
         project_type: form.project_type || 'party_wall',
-        // PM fields
-        client_name: form.project_type === 'construction' ? (form.bo1.name.trim() || null) : null,
-        client_email: form.project_type === 'construction' ? (form.bo1.email.trim() || null) : null,
-        site_address: form.project_type === 'construction' ? (boPremise || null) : null,
-        contract_value: form.project_type === 'construction' && form.fee.trim() ? parseFloat(form.fee) : null,
+        client_name: isConstruction ? (form.bo1.name.trim() || null) : null,
+        client_email: isConstruction ? (form.bo1.email.trim() || null) : null,
+        site_address: isConstruction ? (boPremise || null) : null,
+        contract_value: isConstruction && form.fee.trim() ? parseFloat(form.fee) : null,
       };
 
       const { data, error: err } = await sb
@@ -408,23 +407,17 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
           {/* Project type selector */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 8 }}>
-              Project type
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 8 }}>Project type</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {[
                 { value: 'party_wall', label: '⚖️ Party Wall', desc: 'Notices, awards, SOC' },
                 { value: 'construction', label: '🏗️ Construction / PM', desc: 'Projects, programme, financials' },
               ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
+                <button key={opt.value} type="button"
                   onClick={() => setForm(f => ({ ...f, project_type: opt.value }))}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                  style={{ flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
                     border: form.project_type === opt.value ? '2px solid var(--accent)' : '1px solid var(--border)',
-                    background: form.project_type === opt.value ? 'var(--blue-bg)' : 'transparent',
-                  }}
+                    background: form.project_type === opt.value ? 'var(--blue-bg)' : 'transparent' }}
                 >
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{opt.label}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{opt.desc}</div>
@@ -433,67 +426,48 @@ export default function NewProjectModal({ onClose, onCreated }) {
             </div>
           </div>
 
-          {isConstruction ? (
-            /* ── Construction / PM form ── */
+          {/* Construction / PM form */}
+          {isConstruction && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Site address *</div>
-                <input
-                  value={form.boPremise}
-                  onChange={e => setForm(f => ({ ...f, boPremise: e.target.value }))}
-                  placeholder="Full site address including postcode"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client name</div>
-                <input
-                  value={form.bo1.name}
-                  onChange={e => setBo1('name', e.target.value)}
-                  placeholder="Client full name"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client email</div>
-                <input
-                  value={form.bo1.email}
-                  onChange={e => setBo1('email', e.target.value)}
-                  placeholder="client@email.com"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Client phone</div>
-                <input
-                  value={form.bo1.phone}
-                  onChange={e => setBo1('phone', e.target.value)}
-                  placeholder="Phone number"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
-              </div>
+              {[
+                { key: 'boPremise', label: 'Site address *', placeholder: 'Full site address including postcode', isForm: true },
+              ].map(({ key, label: lbl, placeholder }) => (
+                <div key={key}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>{lbl}</div>
+                  <input value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
+                </div>
+              ))}
+              {[
+                { key: 'name', label: 'Client name', placeholder: 'Client full name' },
+                { key: 'email', label: 'Client email', placeholder: 'client@email.com' },
+                { key: 'phone', label: 'Client phone', placeholder: 'Phone number' },
+              ].map(({ key, label: lbl, placeholder }) => (
+                <div key={key}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>{lbl}</div>
+                  <input value={form.bo1[key]} onChange={e => setBo1(key, e.target.value)}
+                    placeholder={placeholder}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
+                </div>
+              ))}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Works description</div>
-                <input
-                  value={form.works}
-                  onChange={e => setForm(f => ({ ...f, works: e.target.value }))}
+                <input value={form.works} onChange={e => setForm(f => ({ ...f, works: e.target.value }))}
                   placeholder="e.g. Rear extension, loft conversion, bathroom refit"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>Contract value (£)</div>
-                <input
-                  type="number"
-                  value={form.fee}
-                  onChange={e => setForm(f => ({ ...f, fee: e.target.value }))}
+                <input type="number" value={form.fee} onChange={e => setForm(f => ({ ...f, fee: e.target.value }))}
                   placeholder="0.00"
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }}
-                />
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
             </div>
-          ) : (
-          <div>
+          )}
+
+          {/* Party wall form — only show when not construction */}
+          {!isConstruction && <div>
             <div style={{
               fontSize: 11,
               fontWeight: 700,
@@ -533,8 +507,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
                 </button>
               ))}
             </div>
-          </div>
-          )} {/* end party wall form */}
+          </div>}
 
           {!isConstruction && (isAO ? (
             <>
@@ -633,9 +606,8 @@ export default function NewProjectModal({ onClose, onCreated }) {
               </div>
             </>
           )}
-          )}
 
-          {!isConstruction && <div style={mSection}>
+          <div style={mSection}>
             <div style={{
               fontSize: 12,
               fontWeight: 700,
@@ -669,7 +641,8 @@ export default function NewProjectModal({ onClose, onCreated }) {
                 </Field>
               </div>
             </div>
-          </div>}
+          </div>
+          ))}
 
           {error && (
             <div style={{
