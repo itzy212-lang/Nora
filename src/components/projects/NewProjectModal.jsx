@@ -534,8 +534,9 @@ export default function NewProjectModal({ onClose, onCreated }) {
               ))}
             </div>
           </div>
+          )} {/* end party wall form */}
 
-          {isAO ? (
+          {!isConstruction && (isAO ? (
             <>
               <AddressBlock
                 title="Adjoining owner property"
@@ -668,7 +669,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               </div>
             </div>
           </div>
-          )} {/* end party wall form */}
+          )} {/* end !isConstruction */}
 
           {error && (
             <div style={{
