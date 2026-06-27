@@ -504,7 +504,7 @@ function AITab() {
   const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
   const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0 });
   const [counts, setCounts] = useState(null);
-  const runningRef = React.useRef(false);
+  const runningRef = useRef(false);
 
   const checkCounts = async () => {
     try {
@@ -518,7 +518,7 @@ function AITab() {
     } catch {}
   };
 
-  React.useEffect(() => { checkCounts(); }, []);
+  useEffect(() => { checkCounts(); }, []);
 
   const runBackfill = async () => {
     if (runningRef.current) return;
