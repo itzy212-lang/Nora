@@ -282,33 +282,35 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                 onChange={e => setField('property_address', e.target.value)} />
             </div>
             {projects?.length > 0 && (
-              <div style={styles.field}>
-                <label style={styles.label}>Link to Project (optional)</label>
-                <select style={styles.input} value={form.project_id}
-                  onChange={e => setField('project_id', e.target.value)}>
-                  <option value="">— No project linked —</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>{p.ref || p.reference || p.id} — {p.bo_premise_address || p.address || ''}</option>
-                  ))}
-                </select>
-              </div>
-              {form.project_id && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
-                  <input
-                    type="checkbox"
-                    id="count_against_fee"
-                    checked={form.count_against_fee !== false}
-                    onChange={e => setField('count_against_fee', e.target.checked)}
-                    style={{ width: 16, height: 16, cursor: 'pointer' }}
-                  />
-                  <label htmlFor="count_against_fee" style={{ fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
-                    Count against project fee total
-                  </label>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                    (uncheck for additional charges not included in the agreed fee)
-                  </span>
+              <>
+                <div style={styles.field}>
+                  <label style={styles.label}>Link to Project (optional)</label>
+                  <select style={styles.input} value={form.project_id}
+                    onChange={e => setField('project_id', e.target.value)}>
+                    <option value="">— No project linked —</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.ref || p.reference || p.id} — {p.bo_premise_address || p.address || ''}</option>
+                    ))}
+                  </select>
                 </div>
-              )}
+                {form.project_id && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                    <input
+                      type="checkbox"
+                      id="count_against_fee"
+                      checked={form.count_against_fee !== false}
+                      onChange={e => setField('count_against_fee', e.target.checked)}
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                    <label htmlFor="count_against_fee" style={{ fontSize: 13, color: 'var(--text2)', cursor: 'pointer' }}>
+                      Count against project fee total
+                    </label>
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      (uncheck for additional charges not included in the agreed fee)
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
