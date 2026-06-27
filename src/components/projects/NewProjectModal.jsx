@@ -227,6 +227,7 @@ function buildAORecord(form, aoService) {
 
 export default function NewProjectModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
+    project_type: 'party_wall',
     role: 'BO',
 
     boPremise: '',
@@ -327,6 +328,12 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
         works: form.works.trim() || null,
         fee: Number.isFinite(fee) ? fee : null,
+        project_type: form.project_type || 'party_wall',
+        // PM fields
+        client_name: form.project_type === 'construction' ? (form.bo1.name.trim() || null) : null,
+        client_email: form.project_type === 'construction' ? (form.bo1.email.trim() || null) : null,
+        site_address: form.project_type === 'construction' ? (boPremise || null) : null,
+        contract_value: form.project_type === 'construction' && form.fee.trim() ? parseFloat(form.fee) : null,
       };
 
       const { data, error: err } = await sb
@@ -397,6 +404,34 @@ export default function NewProjectModal({ onClose, onCreated }) {
         </div>
 
         <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Project type selector */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 8 }}>
+              Project type
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { value: 'party_wall', label: '⚖️ Party Wall', desc: 'Notices, awards, SOC' },
+                { value: 'construction', label: '🏗️ Construction / PM', desc: 'Projects, programme, financials' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, project_type: opt.value }))}
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                    border: form.project_type === opt.value ? '2px solid var(--accent)' : '1px solid var(--border)',
+                    background: form.project_type === opt.value ? 'var(--blue-bg)' : 'transparent',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{opt.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <div style={{
               fontSize: 11,
