@@ -875,21 +875,59 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               )}
             </div>
 
-            {/* Financial summary */}
+            {/* Financial summary — adapts to role */}
             <div style={card()}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Financial Summary</div>
-              {[
-                { label: 'Contract value', val: contractValue, colour: 'var(--text)' },
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>
+                {project.user_role === 'pm' ? 'My Financials (PM Fee)' : 'Financial Summary'}
+              </div>
+
+              {project.user_role === 'pm' ? (() => {
+                const pmFee = project.pm_fee_type === 'fixed'
+                  ? (parseFloat(project.pm_fee_fixed) || 0)
+                  : contractValue * ((parseFloat(project.pm_fee_percentage) || 0) / 100);
+                return [
+                  { label: "Contract value (client's)", val: contractValue, colour: '#6b7280' },
+                  { label: `My PM fee (${project.pm_fee_type === 'fixed' ? 'fixed' : `${project.pm_fee_percentage || 0}%`})`, val: pmFee, colour: '#111827', bold: true },
+                  { label: 'Received', val: amountPaid, colour: '#16a34a' },
+                  { label: 'Outstanding (my fee)', val: pmFee - amountPaid, colour: pmFee - amountPaid > 0 ? '#d97706' : '#16a34a' },
+                ].map(({ label: lbl, val, colour, bold }) => (
+                  <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+                    <span style={{ fontSize: 13, color: '#374151', fontWeight: bold ? 600 : 400 }}>{lbl}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: colour }}>{fmt(val)}</span>
+                  </div>
+                ));
+              })() : [
+                { label: 'Contract value', val: contractValue, colour: '#111827' },
+                { label: `Retention held (${project.retention_percent || 5}%)`, val: contractValue * ((project.retention_percent || 5) / 100), colour: '#6b7280' },
                 { label: 'Subcontractor costs', val: subsTotal, colour: '#ef4444' },
-                { label: 'Gross margin', val: margin, colour: margin >= 0 ? 'var(--green)' : '#ef4444' },
-                { label: 'Amount received', val: amountPaid, colour: 'var(--green)' },
-                { label: 'Outstanding balance', val: balance, colour: balance > 0 ? 'var(--amber, #d97706)' : 'var(--green)' },
+                { label: 'Gross margin', val: margin, colour: margin >= 0 ? '#16a34a' : '#ef4444' },
+                { label: 'Amount received', val: amountPaid, colour: '#16a34a' },
+                { label: 'Outstanding balance', val: balance, colour: balance > 0 ? '#d97706' : '#16a34a' },
               ].map(({ label: lbl, val, colour }) => (
-                <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text2)' }}>{lbl}</span>
+                <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+                  <span style={{ fontSize: 13, color: '#374151' }}>{lbl}</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: colour }}>{fmt(val)}</span>
                 </div>
               ))}
+
+              {/* PM role — contractor costs shown separately */}
+              {project.user_role === 'pm' && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '2px solid #e5e7eb' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    Contractor Costs (Client&#39;s Money — not your cash flow)
+                  </div>
+                  {[
+                    { label: 'Total contractor costs', val: subsTotal, colour: '#374151' },
+                    { label: 'Paid to contractors', val: subsPaid, colour: '#16a34a' },
+                    { label: 'Owed to contractors', val: subsTotal - subsPaid, colour: '#d97706' },
+                  ].map(({ label: lbl, val, colour }) => (
+                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>{lbl}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: colour }}>{fmt(val)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
