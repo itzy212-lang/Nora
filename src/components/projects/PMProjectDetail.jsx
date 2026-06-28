@@ -800,7 +800,6 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     </div>
                   )}
                 </div>
-                {/* Site & client info */}
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <div style={label}>Site address</div>
