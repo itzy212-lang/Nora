@@ -888,7 +888,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   {/* PM fee fields — only if PM role */}
                   {project.user_role === 'pm' && (
                     <div style={{ background: '#eff6ff', borderRadius: 8, padding: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>PM Fee</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 4 }}>PM Fee</div>
+              <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>Leave blank if you are managing your own project and not charging a fee.</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div>
                           <div style={label}>Fee type</div>
