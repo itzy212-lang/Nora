@@ -660,7 +660,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
             {/* ── Role & Contract card ── */}
             <div style={{ ...card(), marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Contract & Role</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Project Details</div>
                 <button onClick={() => setContractEditing(!contractEditing)}
                   style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                   {contractEditing ? 'Done' : 'Edit'}
@@ -815,6 +815,13 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   <button
                     onClick={async () => {
                       setContractSaving(true);
+                      // Calculate my fee and save to `fee` column so dashboard picks it up
+                      const cv = parseFloat(project.contract_value || project.fee || 0);
+                      const myFee = project.user_role === 'pm'
+                        ? (project.pm_fee_type === 'fixed'
+                            ? parseFloat(project.pm_fee_fixed || 0)
+                            : cv * ((parseFloat(project.pm_fee_percentage || 0)) / 100))
+                        : cv; // contractor — fee = contract value
                       await sb.from('projects').update({
                         user_role: project.user_role,
                         contract_type: project.contract_type,
@@ -827,7 +834,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         pm_fee_percentage: project.pm_fee_percentage || null,
                         pm_fee_fixed: project.pm_fee_fixed || null,
                         pm_fee_billing: project.pm_fee_billing,
+                        fee: myFee || null, // write my fee back so dashboard reads it correctly
                       }).eq('id', project.id);
+                      setProject(p => ({ ...p, fee: myFee }));
                       setContractSaving(false);
                       setContractEditing(false);
                     }}
@@ -878,7 +887,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
             {/* Financial summary — adapts to role */}
             <div style={card()}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>
-                {project.user_role === 'pm' ? 'My Financials (PM Fee)' : 'Financial Summary'}
+                {project.user_role === 'pm' ? 'Project Financials' : 'Financial Summary'}
               </div>
 
               {project.user_role === 'pm' ? (() => {
