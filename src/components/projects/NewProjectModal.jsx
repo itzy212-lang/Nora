@@ -284,7 +284,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
         return;
       }
 
-      if (!form.bo1.name.trim()) {
+      if (!uploadMode && !isConstruction && !form.bo1.name.trim()) {
         setError('Building owner name is required.');
         return;
       }
