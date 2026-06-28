@@ -275,8 +275,12 @@ export default function NewProjectModal({ onClose, onCreated }) {
         return;
       }
     } else {
-      if (!form.boPremise.trim()) {
-        setError('Building owner premise address is required.');
+      if (!uploadMode && !form.boPremise.trim()) {
+        setError('Site address is required.');
+        return;
+      }
+      if (uploadMode && !uploadFiles.length) {
+        setError('Please upload at least one document.');
         return;
       }
 
@@ -511,7 +515,9 @@ export default function NewProjectModal({ onClose, onCreated }) {
                   )}
                 </div>
               )}
-              {[
+              {!uploadMode && (
+                <>
+                  {[
                 { key: 'boPremise', label: 'Site address *', placeholder: 'Full site address including postcode', isForm: true },
               ].map(({ key, label: lbl, placeholder }) => (
                 <div key={key}>
@@ -545,6 +551,8 @@ export default function NewProjectModal({ onClose, onCreated }) {
                   placeholder="0.00"
                   style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
+                </>
+              )}
             </div>
           )}
 
