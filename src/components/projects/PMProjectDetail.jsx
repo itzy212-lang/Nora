@@ -1040,13 +1040,16 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             const stroke = line.clash ? '#ef4444' : '#64748b';
                             // Elbow path: right from dep end → fixed offset right → drop down → right to task start
                             // Always go at least 14px right before dropping, to ensure visible horizontal
-                            const OFFSET = 14;
-                            const elbowX = line.x1 + OFFSET;
-                            // Path: exit dep bar right → go to elbowX → drop to target row → go to task start
+                            // elbowX: midpoint between dep end and task start
+                            // but always at least 8px right of x1 and at least 8px left of x2
+                            const elbowX = line.x1 === line.x2
+                              ? line.x1 + 14
+                              : Math.min(line.x2 - 8, Math.max(line.x1 + 8, Math.round((line.x1 + line.x2) / 2)));
+                            // Full elbow: exit dep → right to elbowX → drop → right to task start
                             const path = line.y1 === line.y2
                               ? `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`
                               : `M ${line.x1} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
-                            // Badge sits on vertical segment, midway between the two rows
+                            // Badge on vertical segment midpoint
                             const midX = elbowX;
                             const midY = (line.y1 + line.y2) / 2;
                             return (
