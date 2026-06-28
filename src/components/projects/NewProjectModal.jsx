@@ -264,26 +264,30 @@ export default function NewProjectModal({ onClose, onCreated }) {
   const handleCreate = useCallback(async () => {
     setError('');
 
-    if (isAO) {
-      if (!form.aoPremise.trim()) {
-        setError('Adjoining owner premise address is required.');
-        return;
+    // Construction projects — skip all party wall validation
+    if (!isConstruction) {
+      if (isAO) {
+        if (!form.aoPremise.trim()) {
+          setError('Adjoining owner premise address is required.');
+          return;
+        }
+        if (!form.ao1.name.trim()) {
+          setError('Adjoining owner name is required.');
+          return;
+        }
+      } else {
+        if (!form.boPremise.trim()) {
+          setError('Building owner premise address is required.');
+          return;
+        }
+        if (!form.bo1.name.trim()) {
+          setError('Building owner name is required.');
+          return;
+        }
       }
-
-      if (!form.ao1.name.trim()) {
-        setError('Adjoining owner name is required.');
-        return;
-      }
-    } else {
-      if (uploadMode && !uploadFiles.length) {
-        setError('Please upload at least one document.');
-        return;
-      }
-
-      if (!uploadMode && !isConstruction && !form.bo1.name.trim()) {
-        setError('Building owner name is required.');
-        return;
-      }
+    } else if (uploadMode && !uploadFiles.length) {
+      setError('Please upload at least one document.');
+      return;
     }
 
     setSaving(true);
