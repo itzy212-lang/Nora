@@ -800,30 +800,6 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     </div>
                   )}
                 </div>
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <div style={label}>Site address</div>
-                    <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
-                  </div>
-                  <div>
-                    <div style={label}>Client</div>
-                    <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
-                  </div>
-                  <div>
-                    <div style={label}>Contract value</div>
-                    <div style={{ ...value, fontWeight: 700, color: '#16a34a' }}>{fmt(contractValue)}</div>
-                  </div>
-                  <div>
-                    <div style={label}>Status</div>
-                    <div style={{ ...value, textTransform: 'capitalize' }}>{project.project_stage?.replace('_', ' ') || project.status || 'Active'}</div>
-                  </div>
-                </div>
-                {project.works && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={label}>Works</div>
-                    <div style={{ ...value, fontSize: 13 }}>{project.works}</div>
-                  </div>
-                )}
               ) : (
                 /* Edit mode */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -956,6 +932,30 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   >
                     {contractSaving ? 'Saving...' : 'Save Contract Details'}
                   </button>
+                </div>
+              )}
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={label}>Site address</div>
+                  <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
+                </div>
+                <div>
+                  <div style={label}>Client</div>
+                  <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
+                </div>
+                <div>
+                  <div style={label}>Contract value</div>
+                  <div style={{ ...value, fontWeight: 700, color: '#16a34a' }}>{fmt(contractValue)}</div>
+                </div>
+                <div>
+                  <div style={label}>Status</div>
+                  <div style={{ ...value, textTransform: 'capitalize' }}>{project.project_stage?.replace('_', ' ') || project.status || 'Active'}</div>
+                </div>
+              </div>
+              {project.works && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={label}>Works</div>
+                  <div style={{ ...value, fontSize: 13 }}>{project.works}</div>
                 </div>
               )}
             </div>
