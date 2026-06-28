@@ -150,6 +150,26 @@ function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
             <input type="date" value={form.delivery_date} onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))} style={inputStyle} />
           </div>
         </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task type</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { value: 'trade', label: '🔨 Trade', desc: 'Work by a person or contractor' },
+              { value: 'material', label: '📦 Material', desc: 'Delivery or order milestone' },
+            ].map(opt => (
+              <button key={opt.value} type="button"
+                onClick={() => set('task_type', opt.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  border: form.task_type === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  background: form.task_type === opt.value ? '#eff6ff' : 'transparent' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
+                <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={labelStyle}>Room / Area</div>
@@ -210,7 +230,7 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
     start_date: isNew ? '' : task.start_date || '',
     end_date: isNew ? '' : task.end_date || '',
     status: isNew ? 'not_started' : task.status || 'not_started',
-    depends_on: isNew ? [] : task.depends_on || [],
+    depends_on: isNew ? [] : (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d),
     notes: isNew ? '' : task.notes || '',
     room_id: isNew ? '' : task.room_id || '',
     task_type: isNew ? 'trade' : task.task_type || 'trade',
@@ -279,6 +299,26 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
           </div>
         </div>
 
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task type</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { value: 'trade', label: '🔨 Trade', desc: 'Work by a person or contractor' },
+              { value: 'material', label: '📦 Material', desc: 'Delivery or order milestone' },
+            ].map(opt => (
+              <button key={opt.value} type="button"
+                onClick={() => set('task_type', opt.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  border: form.task_type === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  background: form.task_type === opt.value ? '#eff6ff' : 'transparent' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
+                <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={labelStyle}>Room / Area</div>
@@ -301,20 +341,40 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
 
         {allTasks?.filter(t => t.id !== task?.id).length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={labelStyle}>Depends on (can't start until these are complete)</div>
-            {allTasks.filter(t => t.id !== task?.id).map(t => (
-              <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={form.depends_on.includes(t.id)}
-                  onChange={e => set('depends_on', e.target.checked
-                    ? [...form.depends_on, t.id]
-                    : form.depends_on.filter(id => id !== t.id)
+            <div style={labelStyle}>Depends on</div>
+            {allTasks.filter(t => t.id !== task?.id).map(t => {
+              const existing = form.depends_on.find(d => d.task_id === t.id);
+              return (
+                <div key={t.id} style={{ marginBottom: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!existing}
+                      onChange={e => set('depends_on', e.target.checked
+                        ? [...form.depends_on, { task_id: t.id, lag_days: 0 }]
+                        : form.depends_on.filter(d => d.task_id !== t.id)
+                      )}
+                    />
+                    <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{t.title}</span>
+                  </label>
+                  {existing && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 24, marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>Lag (days after completion):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={existing.lag_days || 0}
+                        onChange={e => set('depends_on', form.depends_on.map(d =>
+                          d.task_id === t.id ? { ...d, lag_days: parseInt(e.target.value) || 0 } : d
+                        ))}
+                        style={{ width: 60, padding: '3px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, textAlign: 'center' }}
+                      />
+                      {existing.lag_days > 0 && <span style={{ fontSize: 11, color: '#3b82f6' }}>+{existing.lag_days}d wait</span>}
+                    </div>
                   )}
-                />
-                <span style={{ fontSize: 13, color: '#374151' }}>{t.title}</span>
-              </label>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -824,14 +884,23 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 clash: '#f59e0b',
               };
 
-              // Detect date clashes — task starts before its dependency ends
+              // Detect date clashes — task starts before dep end + lag_days
               const taskMap = Object.fromEntries(tasks.map(t => [t.id, t]));
+              const getEarliestStart = task => {
+                const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                if (!deps.length) return null;
+                return deps.reduce((latest, { task_id, lag_days }) => {
+                  const dep = taskMap[task_id];
+                  if (!dep?.end_date) return latest;
+                  const earliest = new Date(dep.end_date);
+                  earliest.setDate(earliest.getDate() + (lag_days || 0) + 1);
+                  return !latest || earliest > latest ? earliest : latest;
+                }, null);
+              };
               const getStatus = task => {
-                const hasCl = (task.depends_on || []).some(depId => {
-                  const dep = taskMap[depId];
-                  return dep?.end_date && task.start_date && new Date(task.start_date) < new Date(dep.end_date);
-                });
-                return hasCl ? 'clash' : task.status;
+                const earliest = getEarliestStart(task);
+                if (earliest && task.start_date && new Date(task.start_date) < earliest) return 'clash';
+                return task.status;
               };
 
               // Week markers
@@ -849,18 +918,23 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               const todayX = dayOffset(today.toISOString().slice(0, 10)) * DAY_W;
               const showToday = today >= minDate && today <= maxDate;
 
-              // Dependency lines — connect end of dep bar to start of task bar
+              // Dependency lines — connect end of dep bar (+ lag) to start of task bar
               const depLines = [];
               datedTasks.forEach((task, taskIdx) => {
-                (task.depends_on || []).forEach(depId => {
-                  const dep = datedTasks.find(t => t.id === depId);
-                  if (!dep || !dep.end_date) return;
+                const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                deps.forEach(({ task_id, lag_days }) => {
+                  const dep = datedTasks.find(t => t.id === task_id);
+                  if (!dep || !dep.end_date || !task.start_date) return;
                   const depIdx = datedTasks.indexOf(dep);
-                  const x1 = (dayOffset(dep.end_date) + 1) * DAY_W;
+                  // End of dep bar + lag
+                  const depEndWithLag = new Date(dep.end_date);
+                  depEndWithLag.setDate(depEndWithLag.getDate() + (lag_days || 0));
+                  const x1 = (dayOffset(dep.end_date) + 1 + (lag_days || 0)) * DAY_W;
                   const y1 = depIdx * ROW_H + ROW_H / 2;
                   const x2 = dayOffset(task.start_date) * DAY_W;
                   const y2 = taskIdx * ROW_H + ROW_H / 2;
-                  depLines.push({ x1, y1, x2, y2, clash: new Date(task.start_date) < new Date(dep.end_date) });
+                  const clash = new Date(task.start_date) < depEndWithLag;
+                  depLines.push({ x1, y1, x2, y2, clash, lag_days: lag_days || 0 });
                 });
               });
 
@@ -1050,8 +1124,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   }[task.status] || task.status;
 
                   // Check if any dependencies are delayed
-                  const depDelayed = (task.depends_on || []).some(depId =>
-                    tasks.find(t => t.id === depId)?.status === 'delayed'
+                  const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                  const depDelayed = deps.some(({ task_id }) =>
+                    tasks.find(t => t.id === task_id)?.status === 'delayed'
                   );
 
                   return (
