@@ -462,6 +462,119 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               </button>
             </div>
 
+            {/* ── Gantt chart ── */}
+            {!tasksLoading && tasks.length > 0 && (() => {
+              // Calculate date range
+              const dates = tasks.flatMap(t => [t.start_date, t.end_date].filter(Boolean));
+              if (dates.length === 0) return null;
+              const minDate = new Date(dates.reduce((a, b) => a < b ? a : b));
+              const maxDate = new Date(dates.reduce((a, b) => a > b ? a : b));
+              const totalDays = Math.max(1, Math.ceil((maxDate - minDate) / 86400000) + 1);
+
+              const statusColours = {
+                not_started: '#e5e7eb',
+                in_progress: '#3b82f6',
+                complete: '#16a34a',
+                delayed: '#dc2626',
+              };
+
+              // Generate week markers
+              const weeks = [];
+              const cur = new Date(minDate);
+              cur.setDate(cur.getDate() - cur.getDay() + 1); // start of week
+              while (cur <= maxDate) {
+                const pct = Math.max(0, (cur - minDate) / (totalDays * 86400000)) * 100;
+                weeks.push({ date: new Date(cur), pct });
+                cur.setDate(cur.getDate() + 7);
+              }
+
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, marginBottom: 14, overflowX: 'auto' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Gantt Chart</div>
+
+                  {/* Week headers */}
+                  <div style={{ position: 'relative', height: 24, marginLeft: 120, marginBottom: 4 }}>
+                    {weeks.map((w, i) => (
+                      <div key={i} style={{
+                        position: 'absolute', left: `${w.pct}%`,
+                        fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap',
+                      }}>
+                        {w.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Task rows */}
+                  {tasks.filter(t => t.start_date && t.end_date).map((task, idx) => {
+                    const start = new Date(task.start_date);
+                    const end = new Date(task.end_date);
+                    const left = ((start - minDate) / (totalDays * 86400000)) * 100;
+                    const width = Math.max(1, ((end - start) / (totalDays * 86400000)) * 100);
+                    const colour = statusColours[task.status] || '#e5e7eb';
+
+                    return (
+                      <div key={task.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                        {/* Task label */}
+                        <div style={{ width: 120, flexShrink: 0, fontSize: 12, color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                          {task.title}
+                        </div>
+                        {/* Bar track */}
+                        <div style={{ flex: 1, position: 'relative', height: 22, background: '#f3f4f6', borderRadius: 4 }}>
+                          {/* Week grid lines */}
+                          {weeks.map((w, i) => (
+                            <div key={i} style={{ position: 'absolute', left: `${w.pct}%`, top: 0, bottom: 0, borderLeft: '1px solid #e5e7eb' }} />
+                          ))}
+                          {/* Task bar */}
+                          <div style={{
+                            position: 'absolute',
+                            left: `${left}%`,
+                            width: `${width}%`,
+                            top: 2, bottom: 2,
+                            background: colour,
+                            borderRadius: 3,
+                            display: 'flex', alignItems: 'center', paddingLeft: 4,
+                            overflow: 'hidden',
+                          }}>
+                            {width > 5 && (
+                              <span style={{ fontSize: 10, color: task.status === 'not_started' ? '#374151' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                                {task.duration_days || Math.ceil((end - start) / 86400000) + 1}d
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Today marker */}
+                  {(() => {
+                    const today = new Date();
+                    if (today >= minDate && today <= maxDate) {
+                      const pct = ((today - minDate) / (totalDays * 86400000)) * 100;
+                      return (
+                        <div style={{ position: 'relative', marginLeft: 120 }}>
+                          <div style={{ position: 'absolute', left: `${pct}%`, top: -((tasks.filter(t => t.start_date && t.end_date).length * 28) + 28), bottom: 0, borderLeft: '2px dashed #f59e0b', zIndex: 10 }}>
+                            <div style={{ position: 'absolute', top: 0, left: 2, fontSize: 9, color: '#f59e0b', whiteSpace: 'nowrap', fontWeight: 700 }}>TODAY</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Legend */}
+                  <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+                    {Object.entries({ not_started: 'Not started', in_progress: 'In progress', complete: 'Complete', delayed: 'Delayed' }).map(([s, lbl]) => (
+                      <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: 2, background: statusColours[s] }} />
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{lbl}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {tasksLoading && <div style={{ color: '#6b7280', fontSize: 13, padding: 16 }}>Loading programme...</div>}
 
             {!tasksLoading && tasks.length === 0 && (
