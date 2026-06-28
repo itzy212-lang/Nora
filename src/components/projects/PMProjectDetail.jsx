@@ -21,6 +21,85 @@ function fmt(n) {
   return '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+// ── Payment stage modal ──────────────────────────────────────────────────
+function StageModal({ stage, projectId, onSave, onClose }) {
+  const isNew = !stage || stage === 'new';
+  const [form, setForm] = useState({
+    title: isNew ? '' : stage.title || '',
+    description: isNew ? '' : stage.description || '',
+    amount: isNew ? '' : stage.amount || '',
+    due_date: isNew ? '' : stage.due_date || '',
+    status: isNew ? 'pending' : stage.status || 'pending',
+  });
+  const [saving, setSaving] = useState(false);
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
+
+  const handleSave = async () => {
+    if (!form.title.trim() || !form.amount) return;
+    setSaving(true);
+    const payload = {
+      project_id: projectId,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      amount: parseFloat(form.amount),
+      due_date: form.due_date || null,
+      status: form.status,
+    };
+    let result;
+    if (isNew) {
+      const { data } = await sb.from('payment_stages').insert([payload]).select('*').single();
+      result = data;
+    } else {
+      const { data } = await sb.from('payment_stages').update(payload).eq('id', stage.id).select('*').single();
+      result = data;
+    }
+    onSave(result, isNew);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }}>{isNew ? 'Add Payment Stage' : 'Edit Payment Stage'}</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Stage name *</div>
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Start on site, First fix, Practical completion" style={inputStyle} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Description</div>
+          <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What work is included in this stage" style={inputStyle} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={labelStyle}>Amount (£) *</div>
+            <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" style={inputStyle} />
+          </div>
+          <div>
+            <div style={labelStyle}>Due date</div>
+            <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={labelStyle}>Status</div>
+          <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} style={inputStyle}>
+            <option value="pending">Pending</option>
+            <option value="certified">Certified</option>
+            <option value="paid">Paid</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.title.trim() || !form.amount}
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {saving ? 'Saving...' : 'Save Stage'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Room modal ───────────────────────────────────────────────────────────
 function RoomModal({ room, projectId, onSave, onClose }) {
   const isNew = !room || room === 'new';
@@ -549,6 +628,14 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [materialModal, setMaterialModal] = useState(null);
   const [contractEditing, setContractEditing] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
+  const [stages, setStages] = useState([]);
+  const [stageModal, setStageModal] = useState(null);
+
+  // Load payment stages
+  useEffect(() => {
+    if (tab !== 'payments' || !project?.id) return;
+    sb.from('payment_stages').select('*').eq('project_id', project.id).order('position').then(({ data }) => setStages(data || []));
+  }, [tab, project?.id]);
 
   // Load rooms
   useEffect(() => {
@@ -613,7 +700,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'programme', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TABS = ['overview', 'programme', 'payments', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg2)' }}>
@@ -940,6 +1027,172 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
             </div>
           </div>
         )}
+
+        {/* ── Payments tab ── */}
+        {tab === 'payments' && (() => {
+          const retentionPct = parseFloat(project.retention_percent || 5) / 100;
+          const totalStageAmounts = stages.reduce((s, st) => s + parseFloat(st.amount || 0), 0);
+          const totalPaid = stages.reduce((s, st) => s + parseFloat(st.amount_paid || 0), 0);
+          const totalRetentionHeld = totalPaid * retentionPct;
+          const totalNetPaid = totalPaid - totalRetentionHeld;
+          const retentionFirstRelease = contractValue * retentionPct * 0.5;
+          const retentionSecondRelease = contractValue * retentionPct * 0.5;
+
+          // Negative equity check — how close are we to contract sum minus retention
+          const maxPayable = contractValue * (1 - retentionPct);
+          const safeRemaining = maxPayable - totalNetPaid;
+          const warningLevel = safeRemaining < contractValue * 0.1 ? 'red' : safeRemaining < contractValue * 0.2 ? 'amber' : null;
+
+          return (
+            <div>
+              {/* Negative equity warning */}
+              {warningLevel && (
+                <div style={{
+                  padding: '12px 16px', borderRadius: 10, marginBottom: 14,
+                  background: warningLevel === 'red' ? '#fef2f2' : '#fff7ed',
+                  border: `1px solid ${warningLevel === 'red' ? '#fca5a5' : '#fed7aa'}`,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: warningLevel === 'red' ? '#dc2626' : '#d97706' }}>
+                    {warningLevel === 'red' ? '🚨 Stop — do not release further payments' : '⚠️ Approaching payment limit'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#374151', marginTop: 4 }}>
+                    {warningLevel === 'red'
+                      ? `You have paid ${fmt(totalNetPaid)} of a maximum ${fmt(maxPayable)} (contract value minus retention). Do not make further payments until more work is certified complete.`
+                      : `Only ${fmt(safeRemaining)} remaining before you reach the contract sum minus retention. Review progress carefully before releasing further payments.`}
+                  </div>
+                </div>
+              )}
+
+              {/* Retention summary */}
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 10 }}>Retention Tracker</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Total held</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{fmt(totalRetentionHeld)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Release on PC</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(retentionFirstRelease)}</div>
+                    {project.practical_completion_date && (
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>{new Date(project.practical_completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Release after defects</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(retentionSecondRelease)}</div>
+                    {project.practical_completion_date && project.defects_period_months && (() => {
+                      const d = new Date(project.practical_completion_date);
+                      d.setMonth(d.getMonth() + parseInt(project.defects_period_months || 6));
+                      return <div style={{ fontSize: 11, color: '#6b7280' }}>{d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>;
+                    })()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Max payable</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#374151' }}>{fmt(maxPayable)}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>contract minus {project.retention_percent || 5}% retention</div>
+                  </div>
+                </div>
+
+                {/* Running bar */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>Paid (net of retention): {fmt(totalNetPaid)}</span>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>Max: {fmt(maxPayable)}</span>
+                  </div>
+                  <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4 }}>
+                    <div style={{
+                      height: '100%', borderRadius: 4,
+                      width: `${Math.min(100, (totalNetPaid / maxPayable) * 100)}%`,
+                      background: warningLevel === 'red' ? '#dc2626' : warningLevel === 'amber' ? '#f59e0b' : '#3b82f6',
+                      transition: 'width 0.3s'
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment stages */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Payment Stages</div>
+                <button onClick={() => setStageModal('new')}
+                  style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  + Add Stage
+                </button>
+              </div>
+
+              {stages.length === 0 ? (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
+                  No payment stages yet. Add stages to track payments and retention.
+                </div>
+              ) : (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
+                  {/* Header */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '10px 16px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb' }}>
+                    {['Stage', 'Amount', 'Net', 'Status', ''].map((h, i) => (
+                      <div key={i} style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</div>
+                    ))}
+                  </div>
+
+                  {stages.map((stage, i) => {
+                    const retention = parseFloat(stage.amount || 0) * retentionPct;
+                    const net = parseFloat(stage.amount || 0) - retention;
+                    const statusColour = { pending: '#6b7280', certified: '#3b82f6', paid: '#16a34a' }[stage.status];
+                    const statusLabel = { pending: 'Pending', certified: 'Certified', paid: 'Paid' }[stage.status];
+
+                    return (
+                      <div key={stage.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '12px 16px', borderBottom: i < stages.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{stage.title}</div>
+                          {stage.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{stage.description}</div>}
+                          {stage.due_date && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>Due: {new Date(stage.due_date).toLocaleDateString('en-GB')}</div>}
+                          {stage.paid_date && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 1 }}>Paid: {new Date(stage.paid_date).toLocaleDateString('en-GB')}</div>}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{fmt(stage.amount)}</div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{fmt(net)}</div>
+                          <div style={{ fontSize: 10, color: '#9ca3af' }}>-{fmt(retention)} ret.</div>
+                        </div>
+                        <div>
+                          <select value={stage.status}
+                            onChange={async e => {
+                              const newStatus = e.target.value;
+                              const updates = { status: newStatus };
+                              if (newStatus === 'certified') updates.certified_date = new Date().toISOString().slice(0, 10);
+                              if (newStatus === 'paid') { updates.paid_date = new Date().toISOString().slice(0, 10); updates.amount_paid = parseFloat(stage.amount); }
+                              await sb.from('payment_stages').update(updates).eq('id', stage.id);
+                              setStages(prev => prev.map(s => s.id === stage.id ? { ...s, ...updates } : s));
+                            }}
+                            style={{ fontSize: 11, fontWeight: 600, color: statusColour, background: 'transparent', border: 'none', cursor: 'pointer', width: '100%' }}>
+                            <option value="pending">Pending</option>
+                            <option value="certified">Certified</option>
+                            <option value="paid">Paid</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => setStageModal(stage)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={async () => {
+                            if (!window.confirm('Delete this stage?')) return;
+                            await sb.from('payment_stages').delete().eq('id', stage.id);
+                            setStages(prev => prev.filter(s => s.id !== stage.id));
+                          }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Del</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Totals row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '12px 16px', background: '#f8f9fa', borderTop: '2px solid #e5e7eb' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Total</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalStageAmounts)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalStageAmounts * (1 - retentionPct))}</div>
+                    <div />
+                    <div />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Rooms tab ── */}
         {tab === 'rooms' && (
@@ -1659,6 +1912,19 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
         )}
 
       </div>
+
+      {/* Payment stage modal */}
+      {stageModal && (
+        <StageModal
+          stage={stageModal}
+          projectId={project.id}
+          onSave={(result, isNew) => {
+            setStages(prev => isNew ? [...prev, result] : prev.map(s => s.id === result.id ? result : s));
+            setStageModal(null);
+          }}
+          onClose={() => setStageModal(null)}
+        />
+      )}
 
       {/* Room modal */}
       {roomModal && (
