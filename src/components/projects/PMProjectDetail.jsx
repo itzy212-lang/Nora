@@ -86,6 +86,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
       .then(({ data }) => { if (data) setProject(data); });
   }, [initialProject?.id]);
 
+  // Safety — ensure project is always an object
+  if (!project) return <div style={{ padding: 24, color: 'var(--text3)' }}>Loading project...</div>;
+
   const subs = Array.isArray(project.subcontractors) ? project.subcontractors : [];
   const contractValue = parseFloat(project.contract_value || project.fee || 0);
   const amountPaid = parseFloat(project.amount_paid || 0);
