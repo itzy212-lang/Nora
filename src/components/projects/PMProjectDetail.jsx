@@ -464,118 +464,230 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
             {/* ── Gantt chart ── */}
             {!tasksLoading && tasks.length > 0 && (() => {
-              // Calculate date range
-              const dates = tasks.flatMap(t => [t.start_date, t.end_date].filter(Boolean));
-              if (dates.length === 0) return null;
-              const minDate = new Date(dates.reduce((a, b) => a < b ? a : b));
-              const maxDate = new Date(dates.reduce((a, b) => a > b ? a : b));
-              const totalDays = Math.max(1, Math.ceil((maxDate - minDate) / 86400000) + 1);
+              const ROW_H = 36;
+              const LABEL_W = 130;
+              const DAY_W = 28; // pixels per day
+
+              const datedTasks = tasks.filter(t => t.start_date && t.end_date);
+              if (datedTasks.length === 0) return (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, marginBottom: 14, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
+                  Add start and end dates to tasks to see the Gantt chart.
+                </div>
+              );
+
+              const allDates = datedTasks.flatMap(t => [new Date(t.start_date), new Date(t.end_date)]);
+              const minDate = new Date(Math.min(...allDates));
+              const maxDate = new Date(Math.max(...allDates));
+              minDate.setDate(minDate.getDate() - 2); // padding
+              maxDate.setDate(maxDate.getDate() + 4);
+              const totalDays = Math.ceil((maxDate - minDate) / 86400000) + 1;
+              const totalW = totalDays * DAY_W;
+
+              const dayOffset = d => Math.floor((new Date(d) - minDate) / 86400000);
+              const dayCount = (s, e) => Math.max(1, Math.ceil((new Date(e) - new Date(s)) / 86400000) + 1);
 
               const statusColours = {
-                not_started: '#e5e7eb',
+                not_started: '#d1d5db',
                 in_progress: '#3b82f6',
                 complete: '#16a34a',
                 delayed: '#dc2626',
+                clash: '#f59e0b',
               };
 
-              // Generate week markers
+              // Detect date clashes — task starts before its dependency ends
+              const taskMap = Object.fromEntries(tasks.map(t => [t.id, t]));
+              const getStatus = task => {
+                const hasCl = (task.depends_on || []).some(depId => {
+                  const dep = taskMap[depId];
+                  return dep?.end_date && task.start_date && new Date(task.start_date) < new Date(dep.end_date);
+                });
+                return hasCl ? 'clash' : task.status;
+              };
+
+              // Week markers
               const weeks = [];
               const cur = new Date(minDate);
-              cur.setDate(cur.getDate() - cur.getDay() + 1); // start of week
+              cur.setDate(cur.getDate() - cur.getDay() + 1);
               while (cur <= maxDate) {
-                const pct = Math.max(0, (cur - minDate) / (totalDays * 86400000)) * 100;
-                weeks.push({ date: new Date(cur), pct });
+                const offset = dayOffset(cur.toISOString().slice(0, 10));
+                if (offset >= 0) weeks.push({ date: new Date(cur), x: offset * DAY_W });
                 cur.setDate(cur.getDate() + 7);
               }
 
-              return (
-                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, marginBottom: 14, overflowX: 'auto' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Gantt Chart</div>
+              // Today
+              const today = new Date();
+              const todayX = dayOffset(today.toISOString().slice(0, 10)) * DAY_W;
+              const showToday = today >= minDate && today <= maxDate;
 
-                  {/* Week headers */}
-                  <div style={{ position: 'relative', height: 24, marginLeft: 120, marginBottom: 4 }}>
-                    {weeks.map((w, i) => (
-                      <div key={i} style={{
-                        position: 'absolute', left: `${w.pct}%`,
-                        fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap',
-                      }}>
-                        {w.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                      </div>
-                    ))}
+              // Dependency lines — connect end of dep bar to start of task bar
+              const depLines = [];
+              datedTasks.forEach((task, taskIdx) => {
+                (task.depends_on || []).forEach(depId => {
+                  const dep = datedTasks.find(t => t.id === depId);
+                  if (!dep || !dep.end_date) return;
+                  const depIdx = datedTasks.indexOf(dep);
+                  const x1 = (dayOffset(dep.end_date) + 1) * DAY_W;
+                  const y1 = depIdx * ROW_H + ROW_H / 2;
+                  const x2 = dayOffset(task.start_date) * DAY_W;
+                  const y2 = taskIdx * ROW_H + ROW_H / 2;
+                  depLines.push({ x1, y1, x2, y2, clash: new Date(task.start_date) < new Date(dep.end_date) });
+                });
+              });
+
+              const chartH = datedTasks.length * ROW_H;
+
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, marginBottom: 14, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Gantt Chart</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Drag to scroll →</div>
                   </div>
 
-                  {/* Task rows */}
-                  {tasks.filter(t => t.start_date && t.end_date).map((task, idx) => {
-                    const start = new Date(task.start_date);
-                    const end = new Date(task.end_date);
-                    const left = ((start - minDate) / (totalDays * 86400000)) * 100;
-                    const width = Math.max(1, ((end - start) / (totalDays * 86400000)) * 100);
-                    const colour = statusColours[task.status] || '#e5e7eb';
-
-                    return (
-                      <div key={task.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-                        {/* Task label */}
-                        <div style={{ width: 120, flexShrink: 0, fontSize: 12, color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                          {task.title}
+                  {/* Main Gantt area */}
+                  <div style={{ display: 'flex' }}>
+                    {/* Fixed label column */}
+                    <div style={{ width: LABEL_W, flexShrink: 0, borderRight: '1px solid #e5e7eb' }}>
+                      <div style={{ height: 28, borderBottom: '1px solid #e5e7eb' }} />
+                      {datedTasks.map(task => (
+                        <div key={task.id} style={{
+                          height: ROW_H, display: 'flex', alignItems: 'center',
+                          padding: '0 10px', borderBottom: '1px solid #f3f4f6',
+                        }}>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {task.title}
+                          </div>
                         </div>
-                        {/* Bar track */}
-                        <div style={{ flex: 1, position: 'relative', height: 22, background: '#f3f4f6', borderRadius: 4 }}>
+                      ))}
+                    </div>
+
+                    {/* Scrollable chart area */}
+                    <div
+                      style={{ flex: 1, overflowX: 'auto', cursor: 'grab', WebkitOverflowScrolling: 'touch' }}
+                      onMouseDown={e => {
+                        const el = e.currentTarget;
+                        const startX = e.pageX + el.scrollLeft;
+                        el.style.cursor = 'grabbing';
+                        const onMove = ev => { el.scrollLeft = startX - ev.pageX; };
+                        const onUp = () => {
+                          el.style.cursor = 'grab';
+                          window.removeEventListener('mousemove', onMove);
+                          window.removeEventListener('mouseup', onUp);
+                        };
+                        window.addEventListener('mousemove', onMove);
+                        window.addEventListener('mouseup', onUp);
+                      }}
+                    >
+                      <div style={{ width: totalW, position: 'relative' }}>
+                        {/* Week header row */}
+                        <div style={{ height: 28, position: 'relative', borderBottom: '1px solid #e5e7eb', background: '#f8f9fa' }}>
+                          {weeks.map((w, i) => (
+                            <div key={i} style={{ position: 'absolute', left: w.x, top: 0, bottom: 0, borderLeft: '1px solid #e5e7eb', paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
+                              <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                {w.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* SVG layer for bars, grid and dep lines */}
+                        <svg width={totalW} height={chartH} style={{ display: 'block' }}>
                           {/* Week grid lines */}
                           {weeks.map((w, i) => (
-                            <div key={i} style={{ position: 'absolute', left: `${w.pct}%`, top: 0, bottom: 0, borderLeft: '1px solid #e5e7eb' }} />
+                            <line key={i} x1={w.x} y1={0} x2={w.x} y2={chartH} stroke="#f3f4f6" strokeWidth={1} />
                           ))}
-                          {/* Task bar */}
-                          <div style={{
-                            position: 'absolute',
-                            left: `${left}%`,
-                            width: `${width}%`,
-                            top: 2, bottom: 2,
-                            background: colour,
-                            borderRadius: 3,
-                            display: 'flex', alignItems: 'center', paddingLeft: 4,
-                            overflow: 'hidden',
-                          }}>
-                            {width > 5 && (
-                              <span style={{ fontSize: 10, color: task.status === 'not_started' ? '#374151' : '#fff', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                                {task.duration_days || Math.ceil((end - start) / 86400000) + 1}d
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
 
-                  {/* Today marker */}
-                  {(() => {
-                    const today = new Date();
-                    if (today >= minDate && today <= maxDate) {
-                      const pct = ((today - minDate) / (totalDays * 86400000)) * 100;
-                      return (
-                        <div style={{ position: 'relative', marginLeft: 120 }}>
-                          <div style={{ position: 'absolute', left: `${pct}%`, top: -((tasks.filter(t => t.start_date && t.end_date).length * 28) + 28), bottom: 0, borderLeft: '2px dashed #f59e0b', zIndex: 10 }}>
-                            <div style={{ position: 'absolute', top: 0, left: 2, fontSize: 9, color: '#f59e0b', whiteSpace: 'nowrap', fontWeight: 700 }}>TODAY</div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                          {/* Row backgrounds */}
+                          {datedTasks.map((_, i) => (
+                            <rect key={i} x={0} y={i * ROW_H} width={totalW} height={ROW_H}
+                              fill={i % 2 === 0 ? '#fff' : '#fafafa'} />
+                          ))}
+
+                          {/* Today line */}
+                          {showToday && (
+                            <>
+                              <line x1={todayX} y1={0} x2={todayX} y2={chartH} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4,3" />
+                              <text x={todayX + 3} y={12} fontSize={9} fill="#f59e0b" fontWeight="bold">TODAY</text>
+                            </>
+                          )}
+
+                          {/* Dependency lines */}
+                          {depLines.map((line, i) => {
+                            const midX = (line.x1 + line.x2) / 2;
+                            return (
+                              <g key={i}>
+                                <path
+                                  d={`M ${line.x1} ${line.y1} C ${midX} ${line.y1} ${midX} ${line.y2} ${line.x2} ${line.y2}`}
+                                  fill="none"
+                                  stroke={line.clash ? '#ef4444' : '#94a3b8'}
+                                  strokeWidth={1.5}
+                                  strokeDasharray={line.clash ? '4,2' : 'none'}
+                                  markerEnd="url(#arrow)"
+                                />
+                              </g>
+                            );
+                          })}
+
+                          {/* Arrow marker for dep lines */}
+                          <defs>
+                            <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                              <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
+                            </marker>
+                          </defs>
+
+                          {/* Task bars */}
+                          {datedTasks.map((task, i) => {
+                            const x = dayOffset(task.start_date) * DAY_W;
+                            const w = dayCount(task.start_date, task.end_date) * DAY_W;
+                            const y = i * ROW_H + 6;
+                            const h = ROW_H - 12;
+                            const status = getStatus(task);
+                            const colour = statusColours[status];
+                            const textColour = status === 'not_started' ? '#374151' : '#fff';
+
+                            return (
+                              <g key={task.id}>
+                                <rect x={x} y={y} width={w} height={h} rx={4} ry={4} fill={colour} />
+                                {w > 20 && (
+                                  <text x={x + 6} y={y + h / 2 + 4} fontSize={10} fill={textColour} fontWeight="500">
+                                    {dayCount(task.start_date, task.end_date)}d
+                                  </text>
+                                )}
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Legend */}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-                    {Object.entries({ not_started: 'Not started', in_progress: 'In progress', complete: 'Complete', delayed: 'Delayed' }).map(([s, lbl]) => (
-                      <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <div style={{ width: 12, height: 12, borderRadius: 2, background: statusColours[s] }} />
-                        <span style={{ fontSize: 11, color: '#6b7280' }}>{lbl}</span>
+                  <div style={{ display: 'flex', gap: 12, padding: '8px 16px', flexWrap: 'wrap', borderTop: '1px solid #f3f4f6' }}>
+                    {[
+                      ['#d1d5db', 'Not started'],
+                      ['#3b82f6', 'In progress'],
+                      ['#16a34a', 'Complete'],
+                      ['#dc2626', 'Delayed'],
+                      ['#f59e0b', 'Date clash'],
+                    ].map(([colour, label]) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: 2, background: colour }} />
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{label}</span>
                       </div>
                     ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke="#94a3b8" strokeWidth="1.5" /><polygon points="16,3 20,6 16,9" fill="#94a3b8" /></svg>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>Dependency</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,2" /></svg>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>Clash</span>
+                    </div>
                   </div>
                 </div>
               );
             })()}
 
-            {tasksLoading && <div style={{ color: '#6b7280', fontSize: 13, padding: 16 }}>Loading programme...</div>}
+                        {tasksLoading && <div style={{ color: '#6b7280', fontSize: 13, padding: 16 }}>Loading programme...</div>}
 
             {!tasksLoading && tasks.length === 0 && (
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
