@@ -985,11 +985,13 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 }, null);
               };
 
-              // ── Date-based cascade clash detection ──────────────────────
-              // A task only clashes if its actual start date is before its
-              // earliest valid start (dep end + lag). Pure date check — no
-              // cascade just because an upstream task is clashed.
+              // ── Cascading date clash detection ───────────────────────────
+              // Each task checks its actual start date against dep end + lag.
+              // If a dep is clashed, we use the dep's start date + its duration
+              // as a proxy for its new (slipped) end date, then check downstream.
               const clashedIds = new Set();
+
+              // First pass — find direct clashes
               tasks.forEach(task => {
                 if (!task.start_date) return;
                 const earliest = getEarliestStart(task);
@@ -997,6 +999,46 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   clashedIds.add(task.id);
                 }
               });
+
+              // Second pass — cascade: if a dep is clashed, its effective end date
+              // is pushed. Check if that pushes downstream tasks into a clash too.
+              let changed = true;
+              while (changed) {
+                changed = false;
+                tasks.forEach(task => {
+                  if (clashedIds.has(task.id) || !task.start_date) return;
+                  const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                  const hasClashedDep = deps.some(({ task_id }) => clashedIds.has(task_id));
+                  if (!hasClashedDep) return;
+                  // Recalculate earliest start accounting for clashed deps
+                  // For clashed deps, their effective end = their start + original duration (they slipped)
+                  const effectiveEarliest = deps.reduce((latest, { task_id, lag_days }) => {
+                    const dep = taskMap[task_id];
+                    if (!dep?.end_date) return latest;
+                    let depEnd;
+                    if (clashedIds.has(task_id) && dep.start_date) {
+                      // Dep is clashed — use its original duration from its new earliest start
+                      const depEarliest = getEarliestStart(dep);
+                      if (depEarliest) {
+                        const dur = Math.max(1, Math.ceil((new Date(dep.end_date) - new Date(dep.start_date)) / 86400000));
+                        depEnd = new Date(depEarliest);
+                        depEnd.setDate(depEnd.getDate() + dur);
+                      } else {
+                        depEnd = new Date(dep.end_date);
+                      }
+                    } else {
+                      depEnd = new Date(dep.end_date);
+                    }
+                    const earliest = new Date(depEnd);
+                    earliest.setDate(earliest.getDate() + (lag_days || 0) + 1);
+                    return !latest || earliest > latest ? earliest : latest;
+                  }, null);
+                  if (effectiveEarliest && new Date(task.start_date) < effectiveEarliest) {
+                    clashedIds.add(task.id);
+                    changed = true;
+                  }
+                });
+              }
 
               const getStatus = task => {
                 if (clashedIds.has(task.id)) return 'clash';
