@@ -947,15 +947,18 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   const dep = datedTasks.find(t => t.id === task_id);
                   if (!dep || !dep.end_date || !task.start_date) return;
                   const depIdx = datedTasks.indexOf(dep);
-                  // End of dep bar + lag
-                  const depEndWithLag = new Date(dep.end_date);
-                  depEndWithLag.setDate(depEndWithLag.getDate() + (lag_days || 0));
-                  const x1 = (dayOffset(dep.end_date) + 1 + (lag_days || 0)) * DAY_W;
+                  // x_bar_end = right edge of dep bar
+                  // x_lag_end = x_bar_end + lag days (where the lag period ends)
+                  // x2 = left edge of task bar (task start)
+                  const x_bar_end = (dayOffset(dep.end_date) + 1) * DAY_W;
+                  const x_lag_end = x_bar_end + (lag_days || 0) * DAY_W;
                   const y1 = depIdx * ROW_H + ROW_H / 2;
                   const x2 = dayOffset(task.start_date) * DAY_W;
                   const y2 = taskIdx * ROW_H + ROW_H / 2;
+                  const depEndWithLag = new Date(dep.end_date);
+                  depEndWithLag.setDate(depEndWithLag.getDate() + (lag_days || 0));
                   const clash = new Date(task.start_date) < depEndWithLag;
-                  depLines.push({ x1, y1, x2, y2, clash, lag_days: lag_days || 0 });
+                  depLines.push({ x_bar_end, x_lag_end, y1, x2, y2, clash, lag_days: lag_days || 0 });
                 });
               });
 
@@ -1040,16 +1043,15 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             const stroke = line.clash ? '#ef4444' : '#64748b';
                             // Elbow path: right from dep end → fixed offset right → drop down → right to task start
                             // Always go at least 14px right before dropping, to ensure visible horizontal
-                            // elbowX: midpoint between dep end and task start
-                            // but always at least 8px right of x1 and at least 8px left of x2
-                            const elbowX = line.x1 === line.x2
-                              ? line.x1 + 14
-                              : Math.min(line.x2 - 8, Math.max(line.x1 + 8, Math.round((line.x1 + line.x2) / 2)));
-                            // Full elbow: exit dep → right to elbowX → drop → right to task start
+                            // Path: dep bar end → (lag period) → drop → task start
+                            // elbowX is midpoint of vertical drop — always between lag end and task start
+                            const elbowX = line.y1 === line.y2
+                              ? line.x_lag_end
+                              : Math.min(line.x2, Math.max(line.x_lag_end, Math.round((line.x_lag_end + line.x2) / 2)));
                             const path = line.y1 === line.y2
-                              ? `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`
-                              : `M ${line.x1} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
-                            // Badge on vertical segment midpoint
+                              ? `M ${line.x_bar_end} ${line.y1} L ${line.x2} ${line.y2}`
+                              : `M ${line.x_bar_end} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
+                            // Badge sits on the vertical drop, midway between rows
                             const midX = elbowX;
                             const midY = (line.y1 + line.y2) / 2;
                             return (
