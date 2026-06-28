@@ -170,6 +170,36 @@ function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
           </div>
         </div>
 
+        {form.task_type === 'trade' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={labelStyle}>Contractor / Tradesperson</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.in_house}
+                  onChange={e => set('in_house', e.target.checked)}
+                  style={{ width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>In-house</span>
+              </label>
+            </div>
+            {!form.in_house && (
+              <input
+                value={form.contractor}
+                onChange={e => set('contractor', e.target.value)}
+                placeholder="Contractor name or company"
+                style={inputStyle}
+              />
+            )}
+            {form.in_house && (
+              <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', padding: '8px 0' }}>
+                In-house — no contractor details needed
+              </div>
+            )}
+          </div>
+        )}
+
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={labelStyle}>Room / Area</div>
@@ -234,6 +264,8 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
     notes: isNew ? '' : task.notes || '',
     room_id: isNew ? '' : task.room_id || '',
     task_type: isNew ? 'trade' : task.task_type || 'trade',
+    contractor: isNew ? '' : task.contractor || '',
+    in_house: isNew ? false : task.in_house || false,
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -253,6 +285,8 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
         notes: form.notes.trim() || null,
         room_id: form.room_id || null,
         task_type: form.task_type,
+        contractor: form.in_house ? null : (form.contractor.trim() || null),
+        in_house: form.in_house,
       };
       let result;
       if (isNew) {
@@ -302,6 +336,36 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
             ))}
           </div>
         </div>
+
+        {form.task_type === 'trade' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={labelStyle}>Contractor / Tradesperson</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.in_house}
+                  onChange={e => set('in_house', e.target.checked)}
+                  style={{ width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>In-house</span>
+              </label>
+            </div>
+            {!form.in_house && (
+              <input
+                value={form.contractor}
+                onChange={e => set('contractor', e.target.value)}
+                placeholder="Contractor name or company"
+                style={inputStyle}
+              />
+            )}
+            {form.in_house && (
+              <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', padding: '8px 0' }}>
+                In-house — no contractor details needed
+              </div>
+            )}
+          </div>
+        )}
 
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
@@ -1189,7 +1253,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{task.title}</div>
-                        {task.trade && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.trade}</div>}
+                        {task.in_house && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>In-house</div>}
+                        {!task.in_house && task.contractor && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.contractor}</div>}
+                        {task.trade && !task.contractor && !task.in_house && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.trade}</div>}
                         {depDelayed && <div style={{ fontSize: 11, color: '#d97706', marginTop: 2 }}>⚠️ Dependency delayed</div>}
                         {task.notes && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, fontStyle: 'italic' }}>{task.notes}</div>}
                       </div>
