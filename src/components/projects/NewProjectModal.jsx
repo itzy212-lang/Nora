@@ -275,10 +275,6 @@ export default function NewProjectModal({ onClose, onCreated }) {
         return;
       }
     } else {
-      if (!uploadMode && !form.boPremise.trim()) {
-        setError('Site address is required.');
-        return;
-      }
       if (uploadMode && !uploadFiles.length) {
         setError('Please upload at least one document.');
         return;
