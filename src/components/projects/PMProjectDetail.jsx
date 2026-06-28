@@ -1038,12 +1038,15 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           {/* Dependency lines */}
                           {depLines.map((line, i) => {
                             const stroke = line.clash ? '#ef4444' : '#64748b';
-                            // Draw: right from dep end → down to task row → right to task start
-                            // Use elbow path: go right a bit, then drop down, then go to target
-                            const elbowX = Math.max(line.x1 + 12, line.x2 - 12);
+                            // Elbow path: right from dep end → fixed offset right → drop down → right to task start
+                            // Always go at least 14px right before dropping, to ensure visible horizontal
+                            const OFFSET = 14;
+                            const elbowX = line.x1 + OFFSET;
+                            // Path: exit dep bar right → go to elbowX → drop to target row → go to task start
                             const path = line.y1 === line.y2
                               ? `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`
                               : `M ${line.x1} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
+                            // Badge sits on vertical segment, midway between the two rows
                             const midX = elbowX;
                             const midY = (line.y1 + line.y2) / 2;
                             return (
