@@ -847,7 +847,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '' }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '' }) {
   // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
   // When instructions conflict, apply this order:
   // 1. Current user instruction
@@ -2679,7 +2679,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
 
-        const systemPrompt = buildSystemPrompt({
+        const systemPrompt = await buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
