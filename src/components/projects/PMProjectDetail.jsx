@@ -1033,7 +1033,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           {/* Today line */}
                           {showToday && (
                             <>
-                              <line x1={todayX} y1={0} x2={todayX} y2={chartH} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4,3" />
+                              <line x1={todayX} y1={0} x2={todayX} y2={chartH} stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4,3" />
                               <text x={todayX + 3} y={12} fontSize={9} fill="#f59e0b" fontWeight="bold">TODAY</text>
                             </>
                           )}
@@ -1057,12 +1057,12 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             return (
                               <g key={i}>
                                 {/* Exit dot at start of line */}
-                                <circle cx={line.x_bar_end} cy={line.y1} r={3} fill={stroke} />
+                                <circle cx={line.x_bar_end} cy={line.y1} r={2} fill={stroke} />
                                 <path
                                   d={path}
                                   fill="none"
                                   stroke={stroke}
-                                  strokeWidth={2}
+                                  strokeWidth={1.5}
                                   strokeDasharray={line.clash ? '4,2' : 'none'}
                                   markerEnd={line.clash ? 'url(#arrow-red)' : 'url(#arrow-grey)'}
                                 />
