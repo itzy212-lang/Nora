@@ -547,6 +547,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [materials, setMaterials] = useState([]);
   const [roomModal, setRoomModal] = useState(null);
   const [materialModal, setMaterialModal] = useState(null);
+  const [contractEditing, setContractEditing] = useState(false);
+  const [contractSaving, setContractSaving] = useState(false);
 
   // Load rooms
   useEffect(() => {
@@ -654,6 +656,189 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
         {/* ── Overview tab ── */}
         {tab === 'overview' && (
           <div>
+
+            {/* ── Role & Contract card ── */}
+            <div style={{ ...card(), marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Contract & Role</div>
+                <button onClick={() => setContractEditing(!contractEditing)}
+                  style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  {contractEditing ? 'Done' : 'Edit'}
+                </button>
+              </div>
+
+              {!contractEditing ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div style={label}>My role</div>
+                    <div style={{ ...value, textTransform: 'capitalize' }}>{project.user_role === 'pm' ? '📋 Project Manager' : '🔨 Contractor'}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Contract type</div>
+                    <div style={value}>{
+                      { none: 'No formal contract', own: 'Own contract', riba: 'RIBA contract', jct: 'JCT contract' }[project.contract_type] || 'Not set'
+                    }</div>
+                  </div>
+                  <div>
+                    <div style={label}>Start date</div>
+                    <div style={value}>{project.project_start_date ? new Date(project.project_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Practical completion</div>
+                    <div style={value}>{project.practical_completion_date ? new Date(project.practical_completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Retention</div>
+                    <div style={value}>{project.retention_percent || 5}%</div>
+                  </div>
+                  <div>
+                    <div style={label}>Defects period</div>
+                    <div style={value}>{project.defects_period_months || 6} months</div>
+                  </div>
+                  {project.liquidated_damages_per_day && (
+                    <div>
+                      <div style={label}>Liquidated damages</div>
+                      <div style={value}>£{project.liquidated_damages_per_day}/day</div>
+                    </div>
+                  )}
+                  {project.user_role === 'pm' && (
+                    <div>
+                      <div style={label}>PM fee</div>
+                      <div style={value}>
+                        {project.pm_fee_type === 'percentage'
+                          ? `${project.pm_fee_percentage || 0}% of contract value = ${fmt((contractValue * (project.pm_fee_percentage || 0)) / 100)}`
+                          : fmt(project.pm_fee_fixed)}
+                        {project.pm_fee_billing ? ` (${project.pm_fee_billing})` : ''}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Edit mode */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={label}>My role</div>
+                      <select value={project.user_role || 'contractor'}
+                        onChange={e => setProject(p => ({ ...p, user_role: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', color: '#111827' }}>
+                        <option value="contractor">🔨 Contractor</option>
+                        <option value="pm">📋 Project Manager</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={label}>Contract type</div>
+                      <select value={project.contract_type || 'none'}
+                        onChange={e => setProject(p => ({ ...p, contract_type: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', color: '#111827' }}>
+                        <option value="none">No formal contract</option>
+                        <option value="own">Own contract</option>
+                        <option value="riba">RIBA contract</option>
+                        <option value="jct">JCT contract</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={label}>Start date</div>
+                      <input type="date" value={project.project_start_date || ''}
+                        onChange={e => setProject(p => ({ ...p, project_start_date: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                    </div>
+                    <div>
+                      <div style={label}>Practical completion date</div>
+                      <input type="date" value={project.practical_completion_date || ''}
+                        onChange={e => setProject(p => ({ ...p, practical_completion_date: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={label}>Retention %</div>
+                      <input type="number" value={project.retention_percent || 5}
+                        onChange={e => setProject(p => ({ ...p, retention_percent: parseFloat(e.target.value) || 5 }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                    </div>
+                    <div>
+                      <div style={label}>Defects period (months)</div>
+                      <input type="number" value={project.defects_period_months || 6}
+                        onChange={e => setProject(p => ({ ...p, defects_period_months: parseInt(e.target.value) || 6 }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                    </div>
+                    <div>
+                      <div style={label}>Liquidated damages/day (£)</div>
+                      <input type="number" value={project.liquidated_damages_per_day || ''}
+                        onChange={e => setProject(p => ({ ...p, liquidated_damages_per_day: parseFloat(e.target.value) || null }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                    </div>
+                  </div>
+
+                  {/* PM fee fields — only if PM role */}
+                  {project.user_role === 'pm' && (
+                    <div style={{ background: '#eff6ff', borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>PM Fee</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div>
+                          <div style={label}>Fee type</div>
+                          <select value={project.pm_fee_type || 'percentage'}
+                            onChange={e => setProject(p => ({ ...p, pm_fee_type: e.target.value }))}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', color: '#111827' }}>
+                            <option value="percentage">% of contract value</option>
+                            <option value="fixed">Fixed fee</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={label}>{project.pm_fee_type === 'fixed' ? 'Fixed fee (£)' : 'Percentage (%)'}</div>
+                          <input type="number"
+                            value={project.pm_fee_type === 'fixed' ? (project.pm_fee_fixed || '') : (project.pm_fee_percentage || '')}
+                            onChange={e => setProject(p => ({
+                              ...p,
+                              [project.pm_fee_type === 'fixed' ? 'pm_fee_fixed' : 'pm_fee_percentage']: parseFloat(e.target.value) || null
+                            }))}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' }} />
+                        </div>
+                        <div>
+                          <div style={label}>Billing method</div>
+                          <select value={project.pm_fee_billing || 'monthly'}
+                            onChange={e => setProject(p => ({ ...p, pm_fee_billing: e.target.value }))}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', color: '#111827' }}>
+                            <option value="monthly">Monthly</option>
+                            <option value="milestone">Milestone</option>
+                            <option value="hourly">Hourly</option>
+                            <option value="lump_sum">Lump sum</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={async () => {
+                      setContractSaving(true);
+                      await sb.from('projects').update({
+                        user_role: project.user_role,
+                        contract_type: project.contract_type,
+                        project_start_date: project.project_start_date || null,
+                        practical_completion_date: project.practical_completion_date || null,
+                        retention_percent: project.retention_percent,
+                        defects_period_months: project.defects_period_months,
+                        liquidated_damages_per_day: project.liquidated_damages_per_day || null,
+                        pm_fee_type: project.pm_fee_type,
+                        pm_fee_percentage: project.pm_fee_percentage || null,
+                        pm_fee_fixed: project.pm_fee_fixed || null,
+                        pm_fee_billing: project.pm_fee_billing,
+                      }).eq('id', project.id);
+                      setContractSaving(false);
+                      setContractEditing(false);
+                    }}
+                    style={{ padding: '10px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    {contractSaving ? 'Saving...' : 'Save Contract Details'}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div style={card()}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Project Details</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
