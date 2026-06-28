@@ -969,8 +969,10 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 clash: '#f59e0b',
               };
 
-              // Detect date clashes — task starts before dep end + lag_days
+              // ── Full cascade clash detection ────────────────────────────────
               const taskMap = Object.fromEntries(tasks.map(t => [t.id, t]));
+
+              // Get earliest valid start for a task based on its dependencies + lags
               const getEarliestStart = task => {
                 const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
                 if (!deps.length) return null;
@@ -982,9 +984,33 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   return !latest || earliest > latest ? earliest : latest;
                 }, null);
               };
-              const getStatus = task => {
+
+              // Build set of all clashed task IDs — cascades through full dependency chain
+              const clashedIds = new Set();
+              const checkCascade = (task, visited = new Set()) => {
+                if (visited.has(task.id)) return; // prevent infinite loops
+                visited.add(task.id);
                 const earliest = getEarliestStart(task);
-                if (earliest && task.start_date && new Date(task.start_date) < earliest) return 'clash';
+                const directClash = earliest && task.start_date && new Date(task.start_date) < earliest;
+                // Also clashed if any dependency is clashed (cascade)
+                const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                const depClash = deps.some(({ task_id }) => clashedIds.has(task_id));
+                if (directClash || depClash) {
+                  clashedIds.add(task.id);
+                  // Now check all tasks that depend on this one — they're also affected
+                  tasks.forEach(t => {
+                    const tDeps = (t.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                    if (tDeps.some(d => d.task_id === task.id)) {
+                      checkCascade(t, visited);
+                    }
+                  });
+                }
+              };
+              // Run cascade check for all tasks
+              tasks.forEach(t => checkCascade(t, new Set()));
+
+              const getStatus = task => {
+                if (clashedIds.has(task.id)) return 'clash';
                 return task.status;
               };
 
@@ -1240,9 +1266,18 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
                   // Check if any dependencies are delayed
                   const deps = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
-                  const depDelayed = deps.some(({ task_id }) =>
-                    tasks.find(t => t.id === task_id)?.status === 'delayed'
-                  );
+                  // Check if any dep is delayed OR clashed (cascade)
+                  const isAffected = (taskId, visited = new Set()) => {
+                    if (visited.has(taskId)) return false;
+                    visited.add(taskId);
+                    const t = tasks.find(x => x.id === taskId);
+                    if (!t) return false;
+                    if (t.status === 'delayed') return true;
+                    // Check t's own deps
+                    const tDeps = (t.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                    return tDeps.some(({ task_id: tid }) => isAffected(tid, visited));
+                  };
+                  const depDelayed = deps.some(({ task_id }) => isAffected(task_id));
 
                   return (
                     <div key={task.id} style={{
