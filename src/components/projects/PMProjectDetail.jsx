@@ -21,8 +21,188 @@ function fmt(n) {
   return '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+// ── Room modal ───────────────────────────────────────────────────────────
+function RoomModal({ room, projectId, onSave, onClose }) {
+  const isNew = !room || room === 'new';
+  const [form, setForm] = useState({ name: isNew ? '' : room.name || '', description: isNew ? '' : room.description || '' });
+  const [saving, setSaving] = useState(false);
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    const payload = { project_id: projectId, name: form.name.trim(), description: form.description.trim() || null };
+    let result;
+    if (isNew) {
+      const { data } = await sb.from('project_rooms').insert([payload]).select('*').single();
+      result = data;
+    } else {
+      const { data } = await sb.from('project_rooms').update(payload).eq('id', room.id).select('*').single();
+      result = data;
+    }
+    onSave(result, isNew);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }}>{isNew ? 'Add Room' : 'Edit Room'}</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Room / Area name *</div>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Front Room, Loft, Rear Extension" style={inputStyle} />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={labelStyle}>Description (optional)</div>
+          <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Any notes about this room" style={inputStyle} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Material modal ────────────────────────────────────────────────────────
+function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
+  const isNew = !material || material === 'new';
+  const [form, setForm] = useState({
+    name: isNew ? '' : material.name || '',
+    supplier: isNew ? '' : material.supplier || '',
+    cost: isNew ? '' : material.cost || '',
+    quantity: isNew ? '' : material.quantity || '',
+    unit: isNew ? '' : material.unit || '',
+    lead_time_days: isNew ? '' : material.lead_time_days || '',
+    order_date: isNew ? '' : material.order_date || '',
+    delivery_date: isNew ? '' : material.delivery_date || '',
+    status: isNew ? 'not_ordered' : material.status || 'not_ordered',
+    room_ids: isNew ? [] : material.room_ids || [],
+    notes: isNew ? '' : material.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    const payload = {
+      project_id: projectId,
+      name: form.name.trim(),
+      supplier: form.supplier.trim() || null,
+      cost: form.cost ? parseFloat(form.cost) : null,
+      quantity: form.quantity ? parseFloat(form.quantity) : null,
+      unit: form.unit.trim() || null,
+      lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : null,
+      order_date: form.order_date || null,
+      delivery_date: form.delivery_date || null,
+      status: form.status,
+      room_ids: form.room_ids,
+      notes: form.notes.trim() || null,
+    };
+    let result;
+    if (isNew) {
+      const { data } = await sb.from('project_materials').insert([payload]).select('*').single();
+      result = data;
+    } else {
+      const { data } = await sb.from('project_materials').update(payload).eq('id', material.id).select('*').single();
+      result = data;
+    }
+    onSave(result, isNew);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }}>{isNew ? 'Add Material' : 'Edit Material'}</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Material name *</div>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Hardwood flooring, Plasterboard" style={inputStyle} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Supplier</div>
+          <input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} placeholder="Supplier name" style={inputStyle} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={labelStyle}>Cost (£)</div>
+            <input type="number" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} placeholder="0.00" style={inputStyle} />
+          </div>
+          <div>
+            <div style={labelStyle}>Lead time (days)</div>
+            <input type="number" value={form.lead_time_days} onChange={e => setForm(f => ({ ...f, lead_time_days: e.target.value }))} placeholder="e.g. 42" style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={labelStyle}>Order date</div>
+            <input type="date" value={form.order_date} onChange={e => setForm(f => ({ ...f, order_date: e.target.value }))} style={inputStyle} />
+          </div>
+          <div>
+            <div style={labelStyle}>Delivery date</div>
+            <input type="date" value={form.delivery_date} onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))} style={inputStyle} />
+          </div>
+        </div>
+        {rooms?.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelStyle}>Room / Area</div>
+            <select value={form.room_id} onChange={e => set('room_id', e.target.value)} style={inputStyle}>
+              <option value="">— No room linked —</option>
+              {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Status</div>
+          <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} style={inputStyle}>
+            <option value="not_ordered">Not ordered</option>
+            <option value="ordered">Ordered</option>
+            <option value="delivered">Delivered</option>
+            <option value="delayed">Delayed</option>
+          </select>
+        </div>
+
+        {rooms.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelStyle}>Linked rooms (select all that apply)</div>
+            {rooms.map(r => (
+              <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+                <input type="checkbox"
+                  checked={form.room_ids.includes(r.id)}
+                  onChange={e => setForm(f => ({ ...f, room_ids: e.target.checked ? [...f.room_ids, r.id] : f.room_ids.filter(id => id !== r.id) }))}
+                />
+                <span style={{ fontSize: 13, color: '#374151' }}>{r.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={labelStyle}>Notes</div>
+          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {saving ? 'Saving...' : 'Save Material'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Task modal ───────────────────────────────────────────────────────────
-function TaskModal({ task, projectId, allTasks, onSave, onClose }) {
+function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
   const isNew = !task || task === 'new';
   const [form, setForm] = useState({
     title: isNew ? '' : task.title || '',
@@ -32,6 +212,8 @@ function TaskModal({ task, projectId, allTasks, onSave, onClose }) {
     status: isNew ? 'not_started' : task.status || 'not_started',
     depends_on: isNew ? [] : task.depends_on || [],
     notes: isNew ? '' : task.notes || '',
+    room_id: isNew ? '' : task.room_id || '',
+    task_type: isNew ? 'trade' : task.task_type || 'trade',
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -49,6 +231,8 @@ function TaskModal({ task, projectId, allTasks, onSave, onClose }) {
         status: form.status,
         depends_on: form.depends_on,
         notes: form.notes.trim() || null,
+        room_id: form.room_id || null,
+        task_type: form.task_type,
       };
       let result;
       if (isNew) {
@@ -94,6 +278,16 @@ function TaskModal({ task, projectId, allTasks, onSave, onClose }) {
             <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} style={inputStyle} />
           </div>
         </div>
+
+        {rooms?.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelStyle}>Room / Area</div>
+            <select value={form.room_id} onChange={e => set('room_id', e.target.value)} style={inputStyle}>
+              <option value="">— No room linked —</option>
+              {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
 
         <div style={{ marginBottom: 12 }}>
           <div style={labelStyle}>Status</div>
@@ -204,6 +398,22 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task}
+  const [rooms, setRooms] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [roomModal, setRoomModal] = useState(null);
+  const [materialModal, setMaterialModal] = useState(null);
+
+  // Load rooms
+  useEffect(() => {
+    if (!project?.id) return;
+    sb.from('project_rooms').select('*').eq('project_id', project.id).order('position').then(({ data }) => setRooms(data || []));
+  }, [project?.id]);
+
+  // Load materials when tab opens
+  useEffect(() => {
+    if (tab !== 'materials' || !project?.id) return;
+    sb.from('project_materials').select('*').eq('project_id', project.id).order('created_at').then(({ data }) => setMaterials(data || []));
+  }, [tab, project?.id]);
 
   // Load tasks when programme tab opens
   useEffect(() => {
@@ -256,7 +466,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'programme', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TABS = ['overview', 'programme', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg2)' }}>
@@ -351,6 +561,126 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Rooms tab ── */}
+        {tab === 'rooms' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Rooms & Areas</div>
+              <button onClick={() => setRoomModal('new')}
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                + Add Room
+              </button>
+            </div>
+            {rooms.length === 0 ? (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
+                No rooms yet. Add rooms to link tasks, materials and scope of works together.
+              </div>
+            ) : (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
+                {rooms.map((room, i) => {
+                  const roomTasks = tasks.filter(t => t.room_id === room.id);
+                  const roomMaterials = materials.filter(m => (m.room_ids || []).includes(room.id));
+                  return (
+                    <div key={room.id} style={{ padding: '14px 16px', borderBottom: i < rooms.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{room.name}</div>
+                          {room.description && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{room.description}</div>}
+                          <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                            <span style={{ fontSize: 11, color: '#6b7280' }}>📋 {roomTasks.length} task{roomTasks.length !== 1 ? 's' : ''}</span>
+                            <span style={{ fontSize: 11, color: '#6b7280' }}>📦 {roomMaterials.length} material{roomMaterials.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => setRoomModal(room)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={async () => {
+                            if (!window.confirm('Delete this room?')) return;
+                            await sb.from('project_rooms').delete().eq('id', room.id);
+                            setRooms(prev => prev.filter(r => r.id !== room.id));
+                          }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Materials tab ── */}
+        {tab === 'materials' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Materials</div>
+              <button onClick={() => setMaterialModal('new')}
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                + Add Material
+              </button>
+            </div>
+            {materials.length === 0 ? (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
+                No materials yet. Add materials to track orders, lead times and delivery dates.
+              </div>
+            ) : (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
+                {materials.map((mat, i) => {
+                  const statusColour = { not_ordered: '#6b7280', ordered: '#3b82f6', delivered: '#16a34a', delayed: '#dc2626' }[mat.status];
+                  const statusLabel = { not_ordered: 'Not ordered', ordered: 'Ordered', delivered: 'Delivered', delayed: 'Delayed' }[mat.status];
+                  const linkedRooms = rooms.filter(r => (mat.room_ids || []).includes(r.id));
+                  // Calculate latest order date from linked tasks
+                  const linkedTasks = tasks.filter(t => t.material_id === mat.id);
+                  const earliestStart = linkedTasks.reduce((min, t) => t.start_date && (!min || t.start_date < min) ? t.start_date : min, null);
+                  const latestOrderDate = earliestStart && mat.lead_time_days
+                    ? new Date(new Date(earliestStart).getTime() - mat.lead_time_days * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : null;
+                  const orderDeadlinePassed = latestOrderDate && !mat.order_date && new Date() > new Date(new Date(earliestStart).getTime() - mat.lead_time_days * 86400000);
+
+                  return (
+                    <div key={mat.id} style={{ padding: '14px 16px', borderBottom: i < materials.length - 1 ? '1px solid #e5e7eb' : 'none', background: orderDeadlinePassed ? '#fff7ed' : 'transparent' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{mat.name}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: statusColour }}>{statusLabel}</span>
+                          </div>
+                          {mat.supplier && <div style={{ fontSize: 12, color: '#6b7280' }}>Supplier: {mat.supplier}</div>}
+                          <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                            {mat.cost && <span style={{ fontSize: 11, color: '#374151' }}>£{Number(mat.cost).toLocaleString()}</span>}
+                            {mat.lead_time_days && <span style={{ fontSize: 11, color: '#6b7280' }}>⏱ {mat.lead_time_days} day lead time</span>}
+                            {latestOrderDate && !mat.order_date && (
+                              <span style={{ fontSize: 11, color: orderDeadlinePassed ? '#dc2626' : '#d97706', fontWeight: 600 }}>
+                                {orderDeadlinePassed ? '⚠️ Order overdue!' : `📅 Order by ${latestOrderDate}`}
+                              </span>
+                            )}
+                            {mat.order_date && <span style={{ fontSize: 11, color: '#6b7280' }}>Ordered: {new Date(mat.order_date).toLocaleDateString('en-GB')}</span>}
+                            {mat.delivery_date && <span style={{ fontSize: 11, color: '#6b7280' }}>Delivery: {new Date(mat.delivery_date).toLocaleDateString('en-GB')}</span>}
+                          </div>
+                          {linkedRooms.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                              {linkedRooms.map(r => (
+                                <span key={r.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe' }}>{r.name}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                          <button onClick={() => setMaterialModal(mat)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={async () => {
+                            if (!window.confirm('Delete this material?')) return;
+                            await sb.from('project_materials').delete().eq('id', mat.id);
+                            setMaterials(prev => prev.filter(m => m.id !== mat.id));
+                          }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -809,12 +1139,40 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
       </div>
 
+      {/* Room modal */}
+      {roomModal && (
+        <RoomModal
+          room={roomModal}
+          projectId={project.id}
+          onSave={(result, isNew) => {
+            setRooms(prev => isNew ? [...prev, result] : prev.map(r => r.id === result.id ? result : r));
+            setRoomModal(null);
+          }}
+          onClose={() => setRoomModal(null)}
+        />
+      )}
+
+      {/* Material modal */}
+      {materialModal && (
+        <MaterialModal
+          material={materialModal}
+          projectId={project.id}
+          rooms={rooms}
+          onSave={(result, isNew) => {
+            setMaterials(prev => isNew ? [...prev, result] : prev.map(m => m.id === result.id ? result : m));
+            setMaterialModal(null);
+          }}
+          onClose={() => setMaterialModal(null)}
+        />
+      )}
+
       {/* Task modal */}
       {taskModal && (
         <TaskModal
           task={taskModal}
           projectId={project.id}
           allTasks={tasks}
+          rooms={rooms}
           onSave={(result, isNew) => {
             setTasks(prev => isNew ? [...prev, result] : prev.map(t => t.id === result.id ? result : t));
             setTaskModal(null);
