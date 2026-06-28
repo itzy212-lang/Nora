@@ -279,6 +279,15 @@ function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
           </div>
         )}
 
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task value (£)</div>
+          <input type="number" value={form.task_value}
+            onChange={e => set('task_value', e.target.value)}
+            placeholder="Value of this task e.g. 2500"
+            style={inputStyle} />
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Used for payment certification and payment schedule</div>
+        </div>
+
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={labelStyle}>Room / Area</div>
@@ -345,6 +354,7 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
     task_type: isNew ? 'trade' : task.task_type || 'trade',
     contractor: isNew ? '' : task.contractor || '',
     in_house: isNew ? false : task.in_house || false,
+    task_value: isNew ? '' : task.task_value || '',
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -366,6 +376,7 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
         task_type: form.task_type,
         contractor: form.in_house ? null : (form.contractor.trim() || null),
         in_house: form.in_house,
+        task_value: form.task_value ? parseFloat(form.task_value) : null,
       };
       let result;
       if (isNew) {
@@ -445,6 +456,15 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
             )}
           </div>
         )}
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task value (£)</div>
+          <input type="number" value={form.task_value}
+            onChange={e => set('task_value', e.target.value)}
+            placeholder="Value of this task e.g. 2500"
+            style={inputStyle} />
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Used for payment certification and payment schedule</div>
+        </div>
 
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
@@ -900,6 +920,27 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     </div>
                   )}
 
+                  {/* Payment mode */}
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 8 }}>Payment Method</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { value: 'task', label: '✅ Task completion', desc: 'Payment raised on completion of each task. Most controlled — payment tied to specific work.' },
+                        { value: 'milestone', label: '🏁 Milestone', desc: 'Payment stages agreed upfront. Multiple tasks bundled into each stage.' },
+                        { value: 'interim', label: '📅 Interim / weekly', desc: 'Percentage of work completed each week. Requires trust or a contract administrator.' },
+                      ].map(opt => (
+                        <button key={opt.value} type="button"
+                          onClick={() => setProject(p => ({ ...p, payment_mode: opt.value }))}
+                          style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                            border: (project.payment_mode || 'task') === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                            background: (project.payment_mode || 'task') === opt.value ? '#eff6ff' : 'transparent' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{opt.label}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <button
                     onClick={async () => {
                       setContractSaving(true);
@@ -923,6 +964,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         pm_fee_fixed: project.pm_fee_fixed || null,
                         pm_fee_billing: project.pm_fee_billing,
                         fee: myFee || null, // write my fee back so dashboard reads it correctly
+                        payment_mode: project.payment_mode || 'task',
                       }).eq('id', project.id);
                       setProject(p => ({ ...p, fee: myFee }));
                       setContractSaving(false);
@@ -934,6 +976,14 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   </button>
                 </div>
               )}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f3f4f6' }}>
+                <div style={label}>Payment method</div>
+                <div style={value}>{{
+                  task: '✅ Task completion',
+                  milestone: '🏁 Milestone',
+                  interim: '📅 Interim / weekly'
+                }[project.payment_mode || 'task']}</div>
+              </div>
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <div style={label}>Site address</div>
@@ -1018,39 +1068,194 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
         {/* ── Payments tab ── */}
         {tab === 'payments' && (() => {
           const retentionPct = parseFloat(project.retention_percent || 5) / 100;
+          const paymentMode = project.payment_mode || 'task';
+          const totalTaskValue = tasks.reduce((s, t) => s + parseFloat(t.task_value || 0), 0);
           const totalStageAmounts = stages.reduce((s, st) => s + parseFloat(st.amount || 0), 0);
-          const totalPaid = stages.reduce((s, st) => s + parseFloat(st.amount_paid || 0), 0);
+          const contractTotal = totalTaskValue || contractValue;
+          const totalPaid = stages.filter(s => s.status === 'paid').reduce((s, st) => s + parseFloat(st.amount_paid || st.amount || 0), 0);
           const totalRetentionHeld = totalPaid * retentionPct;
           const totalNetPaid = totalPaid - totalRetentionHeld;
-          const retentionFirstRelease = contractValue * retentionPct * 0.5;
-          const retentionSecondRelease = contractValue * retentionPct * 0.5;
-
-          // Negative equity check — how close are we to contract sum minus retention
-          const maxPayable = contractValue * (1 - retentionPct);
+          const maxPayable = contractTotal * (1 - retentionPct);
           const safeRemaining = maxPayable - totalNetPaid;
-          const warningLevel = safeRemaining < contractValue * 0.1 ? 'red' : safeRemaining < contractValue * 0.2 ? 'amber' : null;
+          const warningLevel = safeRemaining < contractTotal * 0.1 ? 'red' : safeRemaining < contractTotal * 0.2 ? 'amber' : null;
+
+          // Tasks ready for payment (complete, have value, not yet certified)
+          const certifiableTasks = tasks.filter(t =>
+            t.status === 'complete' && parseFloat(t.task_value || 0) > 0 && !t.certified_for_payment
+          );
 
           return (
             <div>
+              {/* Payment mode banner */}
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e40af' }}>
+                    {{ task: '✅ Task completion payments', milestone: '🏁 Milestone payments', interim: '📅 Interim / weekly payments' }[paymentMode]}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>
+                    {{ task: 'Payment raised when tasks are marked complete', milestone: 'Payment raised when agreed milestones are reached', interim: 'Payment raised as percentage of work completed' }[paymentMode]}
+                  </div>
+                </div>
+                <button onClick={() => { setTab('overview'); setContractEditing(true); }}
+                  style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
+              </div>
+
               {/* Negative equity warning */}
               {warningLevel && (
-                <div style={{
-                  padding: '12px 16px', borderRadius: 10, marginBottom: 14,
+                <div style={{ padding: '12px 16px', borderRadius: 10, marginBottom: 14,
                   background: warningLevel === 'red' ? '#fef2f2' : '#fff7ed',
-                  border: `1px solid ${warningLevel === 'red' ? '#fca5a5' : '#fed7aa'}`,
-                }}>
+                  border: `1px solid ${warningLevel === 'red' ? '#fca5a5' : '#fed7aa'}` }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: warningLevel === 'red' ? '#dc2626' : '#d97706' }}>
                     {warningLevel === 'red' ? '🚨 Stop — do not release further payments' : '⚠️ Approaching payment limit'}
                   </div>
                   <div style={{ fontSize: 12, color: '#374151', marginTop: 4 }}>
                     {warningLevel === 'red'
-                      ? `You have paid ${fmt(totalNetPaid)} of a maximum ${fmt(maxPayable)} (contract value minus retention). Do not make further payments until more work is certified complete.`
-                      : `Only ${fmt(safeRemaining)} remaining before you reach the contract sum minus retention. Review progress carefully before releasing further payments.`}
+                      ? `Total paid (net of retention): ${fmt(totalNetPaid)} of maximum ${fmt(maxPayable)}. Do not make further payments until more work is certified.`
+                      : `Only ${fmt(safeRemaining)} remaining before reaching contract sum minus retention.`}
                   </div>
                 </div>
               )}
 
-              {/* Retention summary */}
+              {/* ── TASK COMPLETION MODE ── */}
+              {paymentMode === 'task' && (
+                <div>
+                  {certifiableTasks.length > 0 && (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d', marginBottom: 10 }}>
+                        {certifiableTasks.length} task{certifiableTasks.length !== 1 ? 's' : ''} ready for payment — {fmt(certifiableTasks.reduce((s,t) => s + parseFloat(t.task_value||0), 0))}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                        {certifiableTasks.map(t => (
+                          <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', background: '#fff', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                            <input type="checkbox" id={`cert-${t.id}`}
+                              onChange={e => {
+                                const el = document.getElementById(`cert-${t.id}`);
+                              }}
+                              style={{ width: 16, height: 16 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{t.title}</div>
+                              {t.contractor && <div style={{ fontSize: 11, color: '#6b7280' }}>{t.contractor}</div>}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>{fmt(t.task_value)}</div>
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const checked = certifiableTasks.filter(t => document.getElementById(`cert-${t.id}`)?.checked);
+                          if (checked.length === 0) { alert('Select at least one task to certify.'); return; }
+                          const total = checked.reduce((s,t) => s + parseFloat(t.task_value||0), 0);
+                          const taskNames = checked.map(t => t.title).join(', ');
+                          const confirmed = window.confirm(
+                            `You are about to certify payment of ${fmt(total)} for:
+
+${taskNames}
+
+By confirming, you acknowledge these tasks have been satisfactorily completed.
+
+Proceed?`
+                          );
+                          if (!confirmed) return;
+                          // Create payment stage for these tasks
+                          const net = total * (1 - retentionPct);
+                          const { data: newStage } = await sb.from('payment_stages').insert([{
+                            project_id: project.id,
+                            title: `Payment — ${checked.length > 1 ? `${checked.length} tasks` : checked[0].title}`,
+                            description: taskNames,
+                            amount: total,
+                            status: 'certified',
+                            certified_date: new Date().toISOString().slice(0,10),
+                            payment_type: 'task_completion',
+                            task_ids: checked.map(t => t.id),
+                            confirmed_complete: true,
+                            position: stages.length,
+                          }]).select('*').single();
+                          // Mark tasks as certified
+                          await sb.from('programme_tasks').update({ certified_for_payment: true, payment_stage_id: newStage.id })
+                            .in('id', checked.map(t => t.id));
+                          setStages(prev => [...prev, newStage]);
+                          setTasks(prev => prev.map(t => checked.find(c => c.id === t.id) ? { ...t, certified_for_payment: true } : t));
+                        }}
+                        style={{ width: '100%', padding: '11px', borderRadius: 10, background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                        Certify selected tasks for payment
+                      </button>
+                    </div>
+                  )}
+
+                  {certifiableTasks.length === 0 && tasks.filter(t => t.task_value > 0).length > 0 && (
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 16px', marginBottom: 14, color: '#6b7280', fontSize: 13 }}>
+                      No tasks ready for payment yet. Mark tasks as complete in the Programme tab to certify them here.
+                    </div>
+                  )}
+
+                  {tasks.filter(t => t.task_value > 0).length === 0 && (
+                    <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#d97706' }}>⚠️ No task values set</div>
+                      <div style={{ fontSize: 12, color: '#374151', marginTop: 4 }}>Go to Programme → Edit each task → add a value to enable task completion payments.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── INTERIM MODE ── */}
+              {paymentMode === 'interim' && (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Raise Interim Payment</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>% claimed by contractor</div>
+                      <input type="number" min="0" max="100" placeholder="e.g. 50"
+                        id="interim-claimed"
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>% you approve</div>
+                      <input type="number" min="0" max="100" placeholder="e.g. 25"
+                        id="interim-approved"
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#92400e' }}>
+                    ⚠️ Interim payments require both parties to agree on the percentage of work completed. Without a contract administrator, you are relying on self-assessment.
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const claimed = parseFloat(document.getElementById('interim-claimed')?.value || 0);
+                      const approved = parseFloat(document.getElementById('interim-approved')?.value || 0);
+                      if (!approved) { alert('Enter the percentage you are approving.'); return; }
+                      const amount = contractTotal * (approved / 100);
+                      const confirmed = window.confirm(
+                        `You are approving an interim payment of ${fmt(amount)} (${approved}% of contract value).
+
+Contractor claimed: ${claimed}%
+You approved: ${approved}%
+
+By confirming, you acknowledge this percentage of work has been satisfactorily completed.
+
+Proceed?`
+                      );
+                      if (!confirmed) return;
+                      const { data: newStage } = await sb.from('payment_stages').insert([{
+                        project_id: project.id,
+                        title: `Interim payment — ${approved}% complete`,
+                        amount,
+                        status: 'certified',
+                        certified_date: new Date().toISOString().slice(0,10),
+                        payment_type: 'interim',
+                        percentage_claimed: claimed,
+                        percentage_approved: approved,
+                        confirmed_complete: true,
+                        position: stages.length,
+                      }]).select('*').single();
+                      setStages(prev => [...prev, newStage]);
+                    }}
+                    style={{ width: '100%', padding: '11px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                    Raise interim payment
+                  </button>
+                </div>
+              )}
+
+              {/* Retention summary — shown for all modes */}
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 10 }}>Retention Tracker</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1060,15 +1265,15 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Release on PC</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(retentionFirstRelease)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(contractTotal * retentionPct * 0.5)}</div>
                     {project.practical_completion_date && (
                       <div style={{ fontSize: 11, color: '#6b7280' }}>{new Date(project.practical_completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                     )}
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Release after defects</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(retentionSecondRelease)}</div>
-                    {project.practical_completion_date && project.defects_period_months && (() => {
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{fmt(contractTotal * retentionPct * 0.5)}</div>
+                    {project.practical_completion_date && (() => {
                       const d = new Date(project.practical_completion_date);
                       d.setMonth(d.getMonth() + parseInt(project.defects_period_months || 6));
                       return <div style={{ fontSize: 11, color: '#6b7280' }}>{d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>;
@@ -1077,67 +1282,65 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   <div>
                     <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Max payable</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#374151' }}>{fmt(maxPayable)}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>contract minus {project.retention_percent || 5}% retention</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>excl. {project.retention_percent || 5}% retention</div>
                   </div>
                 </div>
-
-                {/* Running bar */}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: '#6b7280' }}>Paid (net of retention): {fmt(totalNetPaid)}</span>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>Paid net of retention: {fmt(totalNetPaid)}</span>
                     <span style={{ fontSize: 11, color: '#6b7280' }}>Max: {fmt(maxPayable)}</span>
                   </div>
                   <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4 }}>
-                    <div style={{
-                      height: '100%', borderRadius: 4,
-                      width: `${Math.min(100, (totalNetPaid / maxPayable) * 100)}%`,
-                      background: warningLevel === 'red' ? '#dc2626' : warningLevel === 'amber' ? '#f59e0b' : '#3b82f6',
-                      transition: 'width 0.3s'
-                    }} />
+                    <div style={{ height: '100%', borderRadius: 4, width: `${Math.min(100, maxPayable > 0 ? (totalNetPaid / maxPayable) * 100 : 0)}%`,
+                      background: warningLevel === 'red' ? '#dc2626' : warningLevel === 'amber' ? '#f59e0b' : '#3b82f6', transition: 'width 0.3s' }} />
                   </div>
                 </div>
               </div>
 
-              {/* Payment stages */}
+              {/* Payment history — all modes */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Payment Stages</div>
-                <button onClick={() => setStageModal('new')}
-                  style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                  + Add Stage
-                </button>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                  {paymentMode === 'milestone' ? 'Payment Stages' : 'Payment History'}
+                </div>
+                {paymentMode === 'milestone' && (
+                  <button onClick={() => setStageModal('new')}
+                    style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    + Add Stage
+                  </button>
+                )}
               </div>
 
               {stages.length === 0 ? (
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic' }}>
-                  No payment stages yet. Add stages to track payments and retention.
+                  {paymentMode === 'milestone' ? 'No payment stages yet. Add stages to define your payment schedule.' : 'No payments certified yet.'}
                 </div>
               ) : (
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
-                  {/* Header */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '10px 16px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb' }}>
-                    {['Stage', 'Amount', 'Net', 'Status', ''].map((h, i) => (
+                    {['Description', 'Gross', 'Net', 'Status', ''].map((h, i) => (
                       <div key={i} style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</div>
                     ))}
                   </div>
-
                   {stages.map((stage, i) => {
                     const retention = parseFloat(stage.amount || 0) * retentionPct;
                     const net = parseFloat(stage.amount || 0) - retention;
                     const statusColour = { pending: '#6b7280', certified: '#3b82f6', paid: '#16a34a' }[stage.status];
-                    const statusLabel = { pending: 'Pending', certified: 'Certified', paid: 'Paid' }[stage.status];
-
+                    const typeLabel = { task_completion: '✅ Tasks', interim: '📅 Interim', stage: '🏁 Stage' }[stage.payment_type || 'stage'];
                     return (
                       <div key={stage.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '12px 16px', borderBottom: i < stages.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{stage.title}</div>
                           {stage.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{stage.description}</div>}
-                          {stage.due_date && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>Due: {new Date(stage.due_date).toLocaleDateString('en-GB')}</div>}
-                          {stage.paid_date && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 1 }}>Paid: {new Date(stage.paid_date).toLocaleDateString('en-GB')}</div>}
+                          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                            <span style={{ fontSize: 10, color: '#9ca3af' }}>{typeLabel}</span>
+                            {stage.certified_date && <span style={{ fontSize: 10, color: '#9ca3af' }}>Certified: {new Date(stage.certified_date).toLocaleDateString('en-GB')}</span>}
+                            {stage.paid_date && <span style={{ fontSize: 10, color: '#16a34a' }}>Paid: {new Date(stage.paid_date).toLocaleDateString('en-GB')}</span>}
+                          </div>
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{fmt(stage.amount)}</div>
                         <div>
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{fmt(net)}</div>
-                          <div style={{ fontSize: 10, color: '#9ca3af' }}>-{fmt(retention)} ret.</div>
+                          <div style={{ fontSize: 10, color: '#9ca3af' }}>-{fmt(retention)}</div>
                         </div>
                         <div>
                           <select value={stage.status}
@@ -1156,9 +1359,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           </select>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => setStageModal(stage)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          {paymentMode === 'milestone' && <button onClick={() => setStageModal(stage)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>}
                           <button onClick={async () => {
-                            if (!window.confirm('Delete this stage?')) return;
+                            if (!window.confirm('Delete this payment record?')) return;
                             await sb.from('payment_stages').delete().eq('id', stage.id);
                             setStages(prev => prev.filter(s => s.id !== stage.id));
                           }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Del</button>
@@ -1166,14 +1369,11 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                       </div>
                     );
                   })}
-
-                  {/* Totals row */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '12px 16px', background: '#f8f9fa', borderTop: '2px solid #e5e7eb' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Total</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Total certified</div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalStageAmounts)}</div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalStageAmounts * (1 - retentionPct))}</div>
-                    <div />
-                    <div />
+                    <div /><div />
                   </div>
                 </div>
               )}
@@ -1823,6 +2023,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           })()}
                         </div>
                         {task.in_house && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>In-house</div>}
+                        {task.task_value > 0 && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>£{Number(task.task_value).toLocaleString()}</div>}
                         {!task.in_house && task.contractor && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.contractor}</div>}
                         {task.trade && !task.contractor && !task.in_house && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.trade}</div>}
                         {depDelayed && <div style={{ fontSize: 11, color: '#d97706', marginTop: 2 }}>⚠️ Dependency delayed</div>}
