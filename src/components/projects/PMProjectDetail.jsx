@@ -1037,25 +1037,45 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
                           {/* Dependency lines */}
                           {depLines.map((line, i) => {
-                            const midX = (line.x1 + line.x2) / 2;
+                            const stroke = line.clash ? '#ef4444' : '#64748b';
+                            // Draw: right from dep end → down to task row → right to task start
+                            // Use elbow path: go right a bit, then drop down, then go to target
+                            const elbowX = Math.max(line.x1 + 12, line.x2 - 12);
+                            const path = line.y1 === line.y2
+                              ? `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`
+                              : `M ${line.x1} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
+                            const midX = elbowX;
+                            const midY = (line.y1 + line.y2) / 2;
                             return (
                               <g key={i}>
                                 <path
-                                  d={`M ${line.x1} ${line.y1} C ${midX} ${line.y1} ${midX} ${line.y2} ${line.x2} ${line.y2}`}
+                                  d={path}
                                   fill="none"
-                                  stroke={line.clash ? '#ef4444' : '#94a3b8'}
+                                  stroke={stroke}
                                   strokeWidth={1.5}
                                   strokeDasharray={line.clash ? '4,2' : 'none'}
-                                  markerEnd="url(#arrow)"
+                                  markerEnd={line.clash ? 'url(#arrow-red)' : 'url(#arrow-grey)'}
                                 />
+                                {/* Lag label on the vertical segment */}
+                                {line.lag_days > 0 && (
+                                  <g>
+                                    <rect x={midX - 12} y={midY - 8} width={24} height={16} rx={3} fill="#fff" stroke={stroke} strokeWidth={1} />
+                                    <text x={midX} y={midY + 4} textAnchor="middle" fontSize={9} fill={stroke} fontWeight="700">
+                                      +{line.lag_days}d
+                                    </text>
+                                  </g>
+                                )}
                               </g>
                             );
                           })}
 
-                          {/* Arrow marker for dep lines */}
+                          {/* Arrow markers */}
                           <defs>
-                            <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                              <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
+                            <marker id="arrow-grey" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                              <path d="M0,0 L0,6 L6,3 z" fill="#64748b" />
+                            </marker>
+                            <marker id="arrow-red" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                              <path d="M0,0 L0,6 L6,3 z" fill="#ef4444" />
                             </marker>
                           </defs>
 
