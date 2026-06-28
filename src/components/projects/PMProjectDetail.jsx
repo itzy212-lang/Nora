@@ -21,6 +21,150 @@ function fmt(n) {
   return '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+// ── Scope item modal ─────────────────────────────────────────────────────
+function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
+  const isNew = !item || item === 'new';
+  const [form, setForm] = useState({
+    title: isNew ? '' : item.title || '',
+    description: isNew ? '' : item.description || '',
+    trade: isNew ? '' : item.trade || '',
+    subcontractor_name: isNew ? '' : item.subcontractor_name || '',
+    cost: isNew ? '' : item.cost || '',
+    markup_type: isNew ? 'none' : item.markup_type || 'none',
+    markup_value: isNew ? '' : item.markup_value || '',
+    client_charge: isNew ? '' : item.client_charge || '',
+    room_id: isNew ? '' : item.room_id || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
+
+  const cost = parseFloat(form.cost || 0);
+  const markupVal = parseFloat(form.markup_value || 0);
+  const calculatedCharge = form.markup_type === 'percentage' ? cost + (cost * markupVal / 100)
+    : form.markup_type === 'fixed' ? cost + markupVal
+    : parseFloat(form.client_charge || 0);
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return;
+    setSaving(true);
+    const payload = {
+      project_id: projectId,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      trade: form.trade.trim() || null,
+      subcontractor_name: form.subcontractor_name.trim() || null,
+      cost: form.cost ? parseFloat(form.cost) : null,
+      markup_type: form.markup_type,
+      markup_value: form.markup_value ? parseFloat(form.markup_value) : null,
+      client_charge: calculatedCharge || null,
+      room_id: form.room_id || null,
+    };
+    let result;
+    if (isNew) {
+      const { data } = await sb.from('scope_items').insert([payload]).select('*').single();
+      result = data;
+    } else {
+      const { data } = await sb.from('scope_items').update(payload).eq('id', item.id).select('*').single();
+      result = data;
+    }
+    onSave(result, isNew);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }}>{isNew ? 'Add Scope Item' : 'Edit Scope Item'}</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Item description *</div>
+          <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. First fix plumbing" style={inputStyle} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Details</div>
+          <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={2} placeholder="Scope details..." style={{ ...inputStyle, resize: 'vertical' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={labelStyle}>Trade</div>
+            <input value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="e.g. Plumber" style={inputStyle} />
+          </div>
+          <div>
+            <div style={labelStyle}>Subcontractor</div>
+            <input value={form.subcontractor_name} onChange={e => set('subcontractor_name', e.target.value)} placeholder="Company / name" style={inputStyle} />
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <div style={{ background: '#f8f9fa', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Pricing</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={labelStyle}>Subcontractor / supplier cost (£)</div>
+            <input type="number" value={form.cost} onChange={e => set('cost', e.target.value)} placeholder="What you're paying" style={inputStyle} />
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={labelStyle}>Markup</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {[
+                { val: 'none', label: 'None' },
+                { val: 'percentage', label: '% markup' },
+                { val: 'fixed', label: '£ fixed' },
+              ].map(opt => (
+                <button key={opt.val} type="button" onClick={() => set('markup_type', opt.val)}
+                  style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                    border: form.markup_type === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    background: form.markup_type === opt.val ? '#eff6ff' : 'transparent',
+                    color: form.markup_type === opt.val ? '#1e40af' : '#374151' }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {form.markup_type !== 'none' && (
+              <input type="number" value={form.markup_value} onChange={e => set('markup_value', e.target.value)}
+                placeholder={form.markup_type === 'percentage' ? 'e.g. 20 for 20%' : 'Fixed amount to add'}
+                style={inputStyle} />
+            )}
+          </div>
+          {form.markup_type === 'none' && (
+            <div>
+              <div style={labelStyle}>Client charge (£)</div>
+              <input type="number" value={form.client_charge} onChange={e => set('client_charge', e.target.value)}
+                placeholder="What you're charging the client" style={inputStyle} />
+            </div>
+          )}
+          {(cost > 0 || calculatedCharge > 0) && (
+            <div style={{ marginTop: 10, padding: '8px 12px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
+              <div><div style={{ fontSize: 10, color: '#9ca3af' }}>YOUR COST</div><div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>£{cost.toLocaleString()}</div></div>
+              <div><div style={{ fontSize: 10, color: '#9ca3af' }}>MARKUP</div><div style={{ fontSize: 13, fontWeight: 700, color: '#d97706' }}>£{(calculatedCharge - cost).toLocaleString()}</div></div>
+              <div><div style={{ fontSize: 10, color: '#9ca3af' }}>CLIENT PAYS</div><div style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>£{calculatedCharge.toLocaleString()}</div></div>
+            </div>
+          )}
+        </div>
+
+        {rooms?.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelStyle}>Room / Area</div>
+            <select value={form.room_id} onChange={e => set('room_id', e.target.value)} style={inputStyle}>
+              <option value="">— No room linked —</option>
+              {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving || !form.title.trim()}
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {saving ? 'Saving...' : 'Save Item'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Payment stage modal ──────────────────────────────────────────────────
 function StageModal({ stage, projectId, onSave, onClose }) {
   const isNew = !stage || stage === 'new';
@@ -650,6 +794,17 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [contractSaving, setContractSaving] = useState(false);
   const [stages, setStages] = useState([]);
   const [stageModal, setStageModal] = useState(null);
+  const [scopeItems, setScopeItems] = useState([]);
+  const [scopeModal, setScopeModal] = useState(null);
+  const [scopeLoading, setScopeLoading] = useState(false);
+
+  // Load scope items
+  useEffect(() => {
+    if (tab !== 'scope' || !project?.id) return;
+    setScopeLoading(true);
+    sb.from('scope_items').select('*').eq('project_id', project.id)
+      .order('position').then(({ data }) => { setScopeItems(data || []); setScopeLoading(false); });
+  }, [tab, project?.id]);
 
   // Load payment stages
   useEffect(() => {
@@ -720,7 +875,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'programme', 'payments', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TABS = ['overview', 'scope', 'programme', 'payments', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg2)' }}>
@@ -1596,6 +1751,131 @@ Proceed?`
           </div>
         )}
 
+        {/* ── Scope of Works tab ── */}
+        {tab === 'scope' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Scope of Works</div>
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Price each item — costs flow into financials and payment schedule</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setScopeModal('new')}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  + Add Item
+                </button>
+              </div>
+            </div>
+
+            {scopeLoading && <div style={{ color: '#6b7280', fontSize: 13, padding: 16 }}>Loading scope...</div>}
+
+            {!scopeLoading && scopeItems.length === 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, marginBottom: 8 }}>📋</div>
+                No scope items yet. Add items manually or create a new project with document upload to extract them automatically.
+              </div>
+            )}
+
+            {scopeItems.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                {/* Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '10px 16px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb' }}>
+                  {['Item', 'Sub cost', 'Markup', 'Charge', ''].map((h, i) => (
+                    <div key={i} style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</div>
+                  ))}
+                </div>
+
+                {scopeItems.map((item, i) => {
+                  const cost = parseFloat(item.cost || 0);
+                  const markupVal = parseFloat(item.markup_value || 0);
+                  const charge = item.markup_type === 'percentage'
+                    ? cost + (cost * markupVal / 100)
+                    : item.markup_type === 'fixed'
+                    ? cost + markupVal
+                    : parseFloat(item.client_charge || 0);
+
+                  return (
+                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', borderBottom: i < scopeItems.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center',
+                      background: item.extracted_by_ai && !item.cost ? '#fffbeb' : 'transparent' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{item.title}</span>
+                          {item.extracted_by_ai && !item.cost && <span style={{ fontSize: 9, background: '#fef3c7', color: '#d97706', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>NEEDS PRICING</span>}
+                        </div>
+                        {item.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.description}</div>}
+                        {item.trade && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.trade}</div>}
+                        {item.subcontractor_name && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 1 }}>👤 {item.subcontractor_name}</div>}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#374151' }}>{cost > 0 ? fmt(cost) : '—'}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>
+                        {item.markup_type === 'percentage' ? `${markupVal}%` : item.markup_type === 'fixed' ? fmt(markupVal) : '—'}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: charge > 0 ? '#16a34a' : '#9ca3af' }}>
+                        {charge > 0 ? fmt(charge) : '—'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setScopeModal(item)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={async () => {
+                          if (!window.confirm('Delete this scope item?')) return;
+                          await sb.from('scope_items').delete().eq('id', item.id);
+                          setScopeItems(prev => prev.filter(s => s.id !== item.id));
+                        }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Del</button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Totals */}
+                {(() => {
+                  const totalCost = scopeItems.reduce((s, item) => s + parseFloat(item.cost || 0), 0);
+                  const totalCharge = scopeItems.reduce((s, item) => {
+                    const cost = parseFloat(item.cost || 0);
+                    const markup = parseFloat(item.markup_value || 0);
+                    return s + (item.markup_type === 'percentage' ? cost + (cost * markup / 100) : item.markup_type === 'fixed' ? cost + markup : parseFloat(item.client_charge || 0));
+                  }, 0);
+                  const margin = totalCharge - totalCost;
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', background: '#f8f9fa', borderTop: '2px solid #e5e7eb' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Total</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmt(totalCost)}</div>
+                      <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>Margin: {fmt(margin)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>{fmt(totalCharge)}</div>
+                      <div />
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Generate quote button */}
+            {scopeItems.length > 0 && (
+              <div style={{ background: '#1e3a5f', borderRadius: 14, padding: '16px 20px' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Ready to generate a quote?</div>
+                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 12 }}>Price all items first, then generate your quote or tender document.</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['quote', 'tender'].map(type => (
+                    <button key={type} type="button"
+                      onClick={async () => {
+                        const unpricedCount = scopeItems.filter(s => !s.cost && !s.client_charge).length;
+                        if (unpricedCount > 0) {
+                          if (!window.confirm(`${unpricedCount} item${unpricedCount !== 1 ? 's' : ''} still need pricing. Generate anyway?`)) return;
+                        }
+                        await sb.from('projects').update({ quote_type: type, quote_status: 'draft' }).eq('id', project.id);
+                        alert(`✅ ${type === 'tender' ? 'Tender package' : 'Quote'} saved as draft. Document generation will be available when the quoting platform is connected.`);
+                      }}
+                      style={{ flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        background: type === 'tender' ? 'transparent' : '#3b82f6',
+                        color: '#fff',
+                        border: type === 'tender' ? '2px solid #93c5fd' : 'none' }}>
+                      {type === 'quote' ? '📄 Generate Quote' : '📦 Generate Tender Pack'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Programme tab ── */}
         {tab === 'programme' && (
           <div>
@@ -2100,6 +2380,20 @@ Proceed?`
         )}
 
       </div>
+
+      {/* Scope item modal */}
+      {scopeModal && (
+        <ScopeModal
+          item={scopeModal}
+          projectId={project.id}
+          rooms={rooms}
+          onSave={(result, isNew) => {
+            setScopeItems(prev => isNew ? [...prev, result] : prev.map(s => s.id === result.id ? result : s));
+            setScopeModal(null);
+          }}
+          onClose={() => setScopeModal(null)}
+        />
+      )}
 
       {/* Payment stage modal */}
       {stageModal && (
