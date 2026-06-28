@@ -1044,10 +1044,10 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             // Elbow path: right from dep end → fixed offset right → drop down → right to task start
                             // Always go at least 14px right before dropping, to ensure visible horizontal
                             // Path: dep bar end → (lag period) → drop → task start
-                            // elbowX is midpoint of vertical drop — always between lag end and task start
-                            const elbowX = line.y1 === line.y2
-                              ? line.x_lag_end
-                              : Math.min(line.x2, Math.max(line.x_lag_end, Math.round((line.x_lag_end + line.x2) / 2)));
+                            // elbowX: fixed 14px right of dep bar end
+                            // This ensures the vertical drop always sits just right of the dep bar
+                            // regardless of where the task bar starts (even if far away due to lag)
+                            const elbowX = line.x_bar_end + 14;
                             const path = line.y1 === line.y2
                               ? `M ${line.x_bar_end} ${line.y1} L ${line.x2} ${line.y2}`
                               : `M ${line.x_bar_end} ${line.y1} L ${elbowX} ${line.y1} L ${elbowX} ${line.y2} L ${line.x2} ${line.y2}`;
