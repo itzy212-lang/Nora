@@ -1481,7 +1481,7 @@ ${JSON.stringify(draftingExamples, null, 2)}
   return prompt;
 }
 
-function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
+async function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
   const { prompt, chatHistory = [], brainContext = [] } = body;
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -2690,7 +2690,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       userPrompt: prompt,
     });
 
-    const messages = buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
+    const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
 
     // Recipient-change override — inject targeted instruction immediately before user message
     // when the prompt is a recipient redirect and there is an existing draft in history
