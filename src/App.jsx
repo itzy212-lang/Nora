@@ -15,6 +15,7 @@ import LoginScreen from './components/layout/LoginScreen';
 // Features
 import ProjectList from './components/projects/ProjectList';
 import ProjectDetail from './components/projects/ProjectDetailNoticeWorkflow';
+import PMProjectDetail from './components/projects/PMProjectDetail';
 import Inbox from './components/email/Inbox';
 import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
