@@ -1040,7 +1040,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
                           {/* Dependency lines */}
                           {depLines.map((line, i) => {
-                            const stroke = line.clash ? '#ef4444' : '#64748b';
+                            const stroke = line.clash ? '#ef4444' : '#334155';
                             // Elbow path: right from dep end → fixed offset right → drop down → right to task start
                             // Always go at least 14px right before dropping, to ensure visible horizontal
                             // Path: dep bar end → (lag period) → drop → task start
@@ -1056,11 +1056,13 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             const midY = (line.y1 + line.y2) / 2;
                             return (
                               <g key={i}>
+                                {/* Exit dot at start of line */}
+                                <circle cx={line.x_bar_end} cy={line.y1} r={3} fill={stroke} />
                                 <path
                                   d={path}
                                   fill="none"
                                   stroke={stroke}
-                                  strokeWidth={1.5}
+                                  strokeWidth={2}
                                   strokeDasharray={line.clash ? '4,2' : 'none'}
                                   markerEnd={line.clash ? 'url(#arrow-red)' : 'url(#arrow-grey)'}
                                 />
