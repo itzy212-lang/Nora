@@ -284,22 +284,6 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <div style={labelStyle}>Trade</div>
-          <input value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="e.g. Plumber, Electrician" style={inputStyle} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div>
-            <div style={labelStyle}>Start date</div>
-            <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <div style={labelStyle}>End date</div>
-            <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} style={inputStyle} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
           <div style={labelStyle}>Task type</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
@@ -377,6 +361,43 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
             })}
           </div>
         )}
+
+        {/* Dates — AFTER dependencies so min date reflects lag */}
+        {(() => {
+          const minStart = form.depends_on.reduce((latest, { task_id, lag_days }) => {
+            const dep = allTasks?.find(t => t.id === task_id);
+            if (!dep?.end_date) return latest;
+            const d = new Date(dep.end_date);
+            d.setDate(d.getDate() + (lag_days || 0) + 1);
+            return !latest || d > latest ? d : latest;
+          }, null);
+          const minStartStr = minStart ? minStart.toISOString().slice(0, 10) : null;
+          const minEndStr = form.start_date || minStartStr;
+          if (minStartStr && form.start_date && form.start_date < minStartStr) {
+            setTimeout(() => set('start_date', minStartStr), 0);
+          }
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <div style={labelStyle}>
+                  Start date
+                  {minStartStr && <span style={{ color: '#3b82f6', fontWeight: 400, fontSize: 10, marginLeft: 6 }}>earliest: {new Date(minStartStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+                </div>
+                <input type="date" value={form.start_date} min={minStartStr || undefined}
+                  onChange={e => { set('start_date', e.target.value); if (form.end_date && e.target.value > form.end_date) set('end_date', ''); }}
+                  style={{ ...inputStyle, borderColor: minStartStr && form.start_date && form.start_date < minStartStr ? '#ef4444' : '#e5e7eb' }} />
+                {minStartStr && form.start_date && form.start_date < minStartStr && (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>⚠️ Too early — dependency + lag requires later start</div>
+                )}
+              </div>
+              <div>
+                <div style={labelStyle}>End date</div>
+                <input type="date" value={form.end_date} min={minEndStr || undefined}
+                  onChange={e => set('end_date', e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+          );
+        })()}
 
         <div style={{ marginBottom: 16 }}>
           <div style={labelStyle}>Notes</div>
