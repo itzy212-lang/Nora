@@ -1315,7 +1315,41 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                       background: depDelayed ? '#fff7ed' : 'transparent',
                     }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{task.title}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{task.title}</span>
+                          {depDelayed && task.start_date && (() => {
+                            const deps2 = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
+                            const earliest = deps2.reduce((latest, { task_id, lag_days }) => {
+                              const dep = tasks.find(t => t.id === task_id);
+                              if (!dep?.end_date) return latest;
+                              const d = new Date(dep.end_date);
+                              d.setDate(d.getDate() + (lag_days || 0) + 1);
+                              return !latest || d > latest ? d : latest;
+                            }, null);
+                            if (!earliest) return null;
+                            const newStart = earliest.toISOString().slice(0, 10);
+                            const dur = task.end_date ? Math.ceil((new Date(task.end_date) - new Date(task.start_date)) / 86400000) : 0;
+                            const newEnd = new Date(earliest);
+                            newEnd.setDate(newEnd.getDate() + dur);
+                            const newEndStr = newEnd.toISOString().slice(0, 10);
+                            return (
+                              <button
+                                onClick={async () => {
+                                  await sb.from('programme_tasks')
+                                    .update({ start_date: newStart, end_date: newEndStr })
+                                    .eq('id', task.id);
+                                  setTasks(prev => prev.map(t => t.id === task.id
+                                    ? { ...t, start_date: newStart, end_date: newEndStr }
+                                    : t
+                                  ));
+                                }}
+                                style={{ fontSize: 10, color: '#fff', background: '#f59e0b', border: 'none', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}
+                              >
+                                ↻ Realign
+                              </button>
+                            );
+                          })()}
+                        </div>
                         {task.in_house && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>In-house</div>}
                         {!task.in_house && task.contractor && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.contractor}</div>}
                         {task.trade && !task.contractor && !task.in_house && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.trade}</div>}
@@ -1344,42 +1378,6 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         </select>
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {depDelayed && task.start_date && (() => {
-                          // Calculate earliest valid start
-                          const deps2 = (task.depends_on || []).map(d => typeof d === 'string' ? { task_id: d, lag_days: 0 } : d);
-                          const earliest = deps2.reduce((latest, { task_id, lag_days }) => {
-                            const dep = tasks.find(t => t.id === task_id);
-                            if (!dep?.end_date) return latest;
-                            const d = new Date(dep.end_date);
-                            d.setDate(d.getDate() + (lag_days || 0) + 1);
-                            return !latest || d > latest ? d : latest;
-                          }, null);
-                          if (!earliest) return null;
-                          const newStart = earliest.toISOString().slice(0, 10);
-                          // Keep same duration
-                          const oldStart = new Date(task.start_date);
-                          const oldEnd = new Date(task.end_date);
-                          const dur = task.end_date ? Math.ceil((oldEnd - oldStart) / 86400000) : 0;
-                          const newEnd = new Date(earliest);
-                          newEnd.setDate(newEnd.getDate() + dur);
-                          const newEndStr = newEnd.toISOString().slice(0, 10);
-                          return (
-                            <button
-                              onClick={async () => {
-                                await sb.from('programme_tasks')
-                                  .update({ start_date: newStart, end_date: newEndStr })
-                                  .eq('id', task.id);
-                                setTasks(prev => prev.map(t => t.id === task.id
-                                  ? { ...t, start_date: newStart, end_date: newEndStr }
-                                  : t
-                                ));
-                              }}
-                              style={{ fontSize: 11, color: '#fff', background: '#f59e0b', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
-                            >
-                              ↻ Realign
-                            </button>
-                          );
-                        })()}
                         <button onClick={() => setTaskModal(task)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                         <button onClick={async () => {
                           if (!window.confirm('Delete this task?')) return;
