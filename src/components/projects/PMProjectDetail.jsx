@@ -800,6 +800,31 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     </div>
                   )}
                 </div>
+                {/* Site & client info */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={label}>Site address</div>
+                    <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Client</div>
+                    <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Contract value</div>
+                    <div style={{ ...value, fontWeight: 700, color: '#16a34a' }}>{fmt(contractValue)}</div>
+                  </div>
+                  <div>
+                    <div style={label}>Status</div>
+                    <div style={{ ...value, textTransform: 'capitalize' }}>{project.project_stage?.replace('_', ' ') || project.status || 'Active'}</div>
+                  </div>
+                </div>
+                {project.works && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={label}>Works</div>
+                    <div style={{ ...value, fontSize: 13 }}>{project.works}</div>
+                  </div>
+                )}
               ) : (
                 /* Edit mode */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -935,47 +960,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               )}
             </div>
 
-            <div style={card()}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Project Details</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={label}>Site address</div>
-                  <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
-                </div>
-                <div>
-                  <div style={label}>Status</div>
-                  <div style={{ ...value, textTransform: 'capitalize' }}>{project.project_stage?.replace('_', ' ') || project.status || 'Active'}</div>
-                </div>
-                <div>
-                  <div style={label}>Client</div>
-                  <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
-                </div>
-                <div>
-                  <div style={label}>Client email</div>
-                  <div style={{ ...value, fontSize: 12, wordBreak: 'break-all' }}>{project.client_email || project.bo_1_email || '—'}</div>
-                </div>
-                <div>
-                  <div style={label}>Contract value</div>
-                  <div style={{ ...value, color: 'var(--green)', fontWeight: 700 }}>{fmt(contractValue)}</div>
-                </div>
-                <div>
-                  <div style={label}>Balance remaining</div>
-                  <div style={{ ...value, color: balance > 0 ? 'var(--amber, #d97706)' : 'var(--green)', fontWeight: 700 }}>{fmt(balance)}</div>
-                </div>
-              </div>
-              {project.works && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={label}>Works</div>
-                  <div style={{ ...value, fontSize: 13 }}>{project.works}</div>
-                </div>
-              )}
-            </div>
-
             {/* Financial summary — adapts to role */}
             <div style={card()}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>
-                {project.user_role === 'pm' ? 'Project Financials' : 'Financial Summary'}
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Project Financials</div>
 
               {project.user_role === 'pm' ? (() => {
                 const pmFee = project.pm_fee_type === 'fixed'
