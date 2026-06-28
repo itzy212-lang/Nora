@@ -251,6 +251,10 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
   const isAO = form.role === 'AO';
   const isConstruction = form.project_type === 'construction';
+  const [uploadMode, setUploadMode] = useState(false); // true = upload docs, false = manual
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedScope, setExtractedScope] = useState(null);
 
   const setBo1 = (k, v) => setForm(f => ({ ...f, bo1: { ...f.bo1, [k]: v } }));
   const setBo2 = (k, v) => setForm(f => ({ ...f, bo2: { ...f.bo2, [k]: v } }));
@@ -330,6 +334,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
         works: form.works.trim() || null,
         fee: Number.isFinite(fee) ? fee : null,
         project_type: form.project_type || 'party_wall',
+        quote_status: isConstruction ? 'draft' : null,
         client_name: isConstruction ? (form.bo1.name.trim() || null) : null,
         client_email: isConstruction ? (form.bo1.email.trim() || null) : null,
         site_address: isConstruction ? (boPremise || null) : null,
@@ -344,6 +349,22 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
       if (err) throw err;
 
+      // Save extracted scope items if any
+      if (isConstruction && extractedScope?.length && data?.id) {
+        for (let i = 0; i < extractedScope.length; i++) {
+          const item = extractedScope[i];
+          await sb.from('scope_items').insert([{
+            project_id: data.id,
+            title: item.title,
+            description: item.description || null,
+            trade: item.trade || null,
+            position: i,
+            extracted_by_ai: true,
+            markup_type: 'none',
+            client_charge: 0,
+          }]);
+        }
+      }
       onCreated?.(data);
       onClose();
     } catch (err) {
@@ -429,6 +450,67 @@ export default function NewProjectModal({ onClose, onCreated }) {
           {/* Construction / PM form */}
           {isConstruction && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* Upload or manual toggle */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[
+                  { val: false, label: '✏️ Enter manually' },
+                  { val: true, label: '📄 Upload documents' },
+                ].map(opt => (
+                  <button key={String(opt.val)} type="button"
+                    onClick={() => setUploadMode(opt.val)}
+                    style={{ flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      border: uploadMode === opt.val ? '2px solid #3b82f6' : '1px solid var(--border)',
+                      background: uploadMode === opt.val ? '#eff6ff' : 'transparent',
+                      color: uploadMode === opt.val ? '#1e40af' : 'var(--text2)' }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Document upload area */}
+              {uploadMode && (
+                <div>
+                  <div style={{ border: '2px dashed #bfdbfe', borderRadius: 10, padding: 20, textAlign: 'center', background: '#f8faff', cursor: 'pointer', position: 'relative' }}
+                    onClick={() => document.getElementById('doc-upload-input').click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); setUploadFiles(files); extractFromDocuments(files); }}>
+                    <input id="doc-upload-input" type="file" multiple accept=".pdf,.doc,.docx,.txt"
+                      style={{ display: 'none' }}
+                      onChange={e => { const files = Array.from(e.target.files); setUploadFiles(files); extractFromDocuments(files); }} />
+                    {extracting ? (
+                      <div>
+                        <div style={{ fontSize: 14, color: '#3b82f6', fontWeight: 600 }}>🔍 Reading documents...</div>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Claude is extracting project details and scope of works</div>
+                      </div>
+                    ) : uploadFiles.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✅ {uploadFiles.length} file{uploadFiles.length !== 1 ? 's' : ''} uploaded</div>
+                        {uploadFiles.map(f => <div key={f.name} style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{f.name}</div>)}
+                        {extractedScope && <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 6, fontWeight: 600 }}>✨ {extractedScope.length} scope items extracted — review below</div>}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 14, color: '#6b7280' }}>📎 Drop files here or tap to upload</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Tender pack, drawings, spec, architect's schedule — PDF, Word or text</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Extracted scope preview */}
+                  {extractedScope?.length > 0 && (
+                    <div style={{ marginTop: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>Extracted scope items — will be added to your project:</div>
+                      {extractedScope.map((item, i) => (
+                        <div key={i} style={{ fontSize: 12, color: '#374151', padding: '4px 0', borderBottom: i < extractedScope.length - 1 ? '1px solid #dcfce7' : 'none' }}>
+                          <span style={{ fontWeight: 600 }}>{item.title}</span>
+                          {item.trade && <span style={{ color: '#6b7280', marginLeft: 6 }}>({item.trade})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {[
                 { key: 'boPremise', label: 'Site address *', placeholder: 'Full site address including postcode', isForm: true },
               ].map(({ key, label: lbl, placeholder }) => (
