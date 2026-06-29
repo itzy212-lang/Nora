@@ -478,10 +478,10 @@ export default function NewProjectModal({ onClose, onCreated }) {
                   <div style={{ border: '2px dashed #bfdbfe', borderRadius: 10, padding: 20, textAlign: 'center', background: '#f8faff', cursor: 'pointer', position: 'relative' }}
                     onClick={() => document.getElementById('doc-upload-input').click()}
                     onDragOver={e => e.preventDefault()}
-                    onDrop={async e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); setUploadFiles(files); await extractFromDocuments(files); }}>
+                    onDrop={e => { e.preventDefault(); setUploadFiles(Array.from(e.dataTransfer.files)); setExtractedScope(null); }}>
                     <input id="doc-upload-input" type="file" multiple accept=".pdf,.doc,.docx,.txt"
                       style={{ display: 'none' }}
-                      onChange={async e => { const files = Array.from(e.target.files); setUploadFiles(files); await extractFromDocuments(files); }} />
+                      onChange={e => { setUploadFiles(Array.from(e.target.files)); setExtractedScope(null); }} />
                     {extracting ? (
                       <div>
                         <div style={{ fontSize: 14, color: '#3b82f6', fontWeight: 600 }}>🔍 Reading documents...</div>
