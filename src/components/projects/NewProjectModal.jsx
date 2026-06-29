@@ -274,7 +274,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const { extracted } = json;
       if (!extracted) throw new Error('Nothing extracted');
       if (extracted.site_address) setForm(f => ({ ...f, boPremise: extracted.site_address, works: extracted.works_description || f.works }));
-      if (extracted.contract_value) setForm(f => ({ ...f, fee: String(extracted.contract_value) }));
+      // Don't auto-set fee from tender — that's client's budget, not our quote price
       if (extracted.client_name) setBo1('name', extracted.client_name);
       if (extracted.client_email) setBo1('email', extracted.client_email);
       if (extracted.client_phone) setBo1('phone', extracted.client_phone);
