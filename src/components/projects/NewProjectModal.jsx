@@ -478,10 +478,10 @@ export default function NewProjectModal({ onClose, onCreated }) {
                   <div style={{ border: '2px dashed #bfdbfe', borderRadius: 10, padding: 20, textAlign: 'center', background: '#f8faff', cursor: 'pointer', position: 'relative' }}
                     onClick={() => document.getElementById('doc-upload-input').click()}
                     onDragOver={e => e.preventDefault()}
-                    onDrop={e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); setUploadFiles(files); extractFromDocuments(files); }}>
+                    onDrop={async e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); setUploadFiles(files); await extractFromDocuments(files); }}>
                     <input id="doc-upload-input" type="file" multiple accept=".pdf,.doc,.docx,.txt"
                       style={{ display: 'none' }}
-                      onChange={e => { const files = Array.from(e.target.files); setUploadFiles(files); extractFromDocuments(files); }} />
+                      onChange={async e => { const files = Array.from(e.target.files); setUploadFiles(files); await extractFromDocuments(files); }} />
                     {extracting ? (
                       <div>
                         <div style={{ fontSize: 14, color: '#3b82f6', fontWeight: 600 }}>🔍 Reading documents...</div>
@@ -758,7 +758,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               Cancel
             </button>
 
-            <button onClick={handleCreate} disabled={saving} style={{
+            <button onClick={handleCreate} disabled={saving || extracting || (uploadMode && uploadFiles.length > 0 && !extractedScope && !form.boPremise)} style={{
               padding: '9px 24px',
               borderRadius: 99,
               border: 'none',
