@@ -381,6 +381,18 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   if (!sb && suppliedEmail) return [suppliedEmail];
   if (!sb || !wantsEmailContext(prompt, projectId, suppliedEmail, threadId, emailId)) return suppliedEmail ? [suppliedEmail] : [];
 
+  // Auto-search: detect "open email from [name]" in prompt
+  if (!suppliedEmail && !emailId && !threadId) {
+    const senderName = extractEmailSenderFromPrompt(prompt);
+    if (senderName) {
+      const found = await searchEmailsBySender(senderName, 3);
+      if (found.length) {
+        // Return the most recent matching email as context
+        return found;
+      }
+    }
+  }
+
   const directThreadId = firstNonEmpty(threadId, suppliedEmail?.thread_id);
   const directEmailId = firstNonEmpty(emailId, suppliedEmail?.id);
 
@@ -1488,6 +1500,36 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
   const emailContextText = buildEmailContextText({ body, scopedEmailContext });
   if (emailContextText) messages.push({ role: 'system', content: emailContextText });
 
+  // Auto-fetch attachments from the loaded email if it has them
+  if (scopedEmailContext?.length > 0) {
+    const primaryEmail = scopedEmailContext[0];
+    const hasAttachments = primaryEmail?.has_attachments || primaryEmail?.hasAttachments ||
+      primaryEmail?.attachments?.length > 0;
+    const graphMsgId = primaryEmail?.graph_message_id || primaryEmail?.graphMessageId ||
+      primaryEmail?.microsoft_message_id;
+    const emailDbId = primaryEmail?.id;
+
+    if (hasAttachments && (graphMsgId || emailDbId)) {
+      try {
+        const attachments = await fetchEmailAttachments(emailDbId, graphMsgId);
+        if (attachments?.length > 0) {
+          const attachText = attachments
+            .filter(a => a.text || a.extracted_text || a.content_text)
+            .map(a => `ATTACHMENT: ${a.filename || a.name || 'file'}\n\n${(a.text || a.extracted_text || a.content_text || '').slice(0, 8000)}`)
+            .join('\n\n---\n\n');
+          if (attachText.trim()) {
+            messages.push({
+              role: 'system',
+              content: `The email above has the following attachments. Read them carefully:\n\n${attachText}`
+            });
+          }
+        }
+      } catch (attachErr) {
+        console.warn('[ely-smart] attachment fetch skipped:', attachErr.message);
+      }
+    }
+  }
+
   // ── Inject uploaded document text ────────────────────────────────────────
   const uploadedFiles = body.context?.uploadedExtractedText || body.uploadContext || [];
   if (uploadedFiles?.length) {
@@ -1707,6 +1749,60 @@ INSTRUCTIONS:
 }
 
 // ── Full-text email search ─────────────────────────────────────────────────
+// Detect "open email from X" / "find email from X" in prompt
+function extractEmailSenderFromPrompt(prompt = '') {
+  const p = String(prompt || '').toLowerCase().trim();
+  const patterns = [
+    /(?:open|find|read|get|load|pull up|show me|look at)(?:\s+(?:an?|the))?\s+email\s+from\s+([a-z][a-z '\-]+?)(?:\s*[,\.!?]|$|\s+and\s|\s+then|\s+read|\s+attach|\s+draw)/i,
+    /email\s+from\s+([a-z][a-z '\-]+?)(?:\s*[,\.!?]|$|\s+and\s|\s+then|\s+about)/i,
+    /from\s+([a-z][a-z '\-]+?)\s*['']?s?\s+email/i,
+  ];
+  for (const re of patterns) {
+    const m = prompt.match(re);
+    if (m && m[1] && m[1].trim().length > 1) {
+      return m[1].trim().replace(/\s+/g, ' ');
+    }
+  }
+  return null;
+}
+
+// Search emails globally by sender name (no project required)
+async function searchEmailsBySender(senderName, limit = 3) {
+  const sb = getSupabase();
+  if (!sb || !senderName) return [];
+  try {
+    const { data, error } = await sb
+      .from('emails')
+      .select('*')
+      .or(`sender_name.ilike.%${senderName}%,sender_email.ilike.%${senderName}%`)
+      .order('received_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).map(normaliseEmailRecord).filter(Boolean);
+  } catch (err) {
+    console.warn('[ely-smart] searchEmailsBySender error:', err.message);
+    return [];
+  }
+}
+
+// Fetch email attachments from Microsoft Graph via fetch-attachment endpoint
+async function fetchEmailAttachments(emailId, graphMessageId) {
+  if (!emailId) return [];
+  try {
+    const res = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://nora-d9wy.vercel.app'}/api/fetch-attachment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_id: emailId }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.attachments || [];
+  } catch (err) {
+    console.warn('[ely-smart] fetchEmailAttachments error:', err.message);
+    return [];
+  }
+}
+
 // Called when GPT-4o detects a specific email lookup request
 async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
   const sb = getSupabase();
