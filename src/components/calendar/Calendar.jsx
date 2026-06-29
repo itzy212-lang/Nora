@@ -167,11 +167,16 @@ async function safeUpdate(table, id, payload) {
 
 async function syncSocToAO(project, aoId, socData) {
   if (!project?.id || !aoId) return;
-  const aos = getAOs(project);
+  // Always fetch fresh project from DB to avoid stale cache overwriting AO data
+  const { data: freshProject, error: fetchErr } = await sb
+    .from('projects').select('*').eq('id', project.id).single();
+  const liveProject = (!fetchErr && freshProject) ? freshProject : project;
+  const aos = getAOs(liveProject);
   if (!aos.length) return;
 
   const nextAOs = aos.map(ao => {
-    if (String(aoKey(ao)) !== String(aoId)) return ao;
+    const cleanedAoId = clean(aoId);
+    if (String(aoKey(ao)) !== String(cleanedAoId)) return ao;
 
     if (socData.clear) {
       const next = { ...ao };
@@ -194,7 +199,7 @@ async function syncSocToAO(project, aoId, socData) {
   });
 
   try {
-    await safeUpdate('projects', project.id, { aos: nextAOs });
+    await safeUpdate('projects', liveProject.id, { aos: nextAOs });
   } catch (err) {
     console.warn('[Calendar] Could not sync SOC data to project AO card:', err.message);
   }
