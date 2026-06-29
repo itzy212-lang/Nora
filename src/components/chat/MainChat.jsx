@@ -718,6 +718,22 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setMessages(prev => [...prev, ...newMessages]);
   }, [state.currentProject?.id, selectedEmailContext]);
 
+  const generateFeeQuote = useCallback(async (vars = {}) => {
+    try {
+      const res = await fetch('/api/generate-fee-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vars),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      return data; // { base64, file_name, content_type, quote_ref }
+    } catch (err) {
+      console.error('[generateFeeQuote]', err);
+      return null;
+    }
+  }, []);
+
   const handleFilesSelected = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length || uploading) return;
@@ -1117,25 +1133,49 @@ export default function MainChat({ onOpenComposer, onClose }) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Fee quote quick action — shown when Ely has analysed drawings */}
-          {attachments.length > 0 && messages.length > 0 && messages[messages.length-1]?.role !== 'user' && (
+          {/* Fee quote quick actions */}
+          {messages.length > 0 && messages[messages.length-1]?.role !== 'user' && (
             <div style={{ padding: '8px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {attachments.length > 0 && (
+                <button
+                  onClick={() => handleSend('Please draft a professional fee quote response email I can send to this client. Include a brief summary of the party wall implications you identified from their drawings, what notices are required, and my standard fees.')}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  ✍️ Draft fee quote email
+                </button>
+              )}
               <button
-                onClick={() => {
+                onClick={async () => {
+                  // Extract variables from the conversation
+                  const allText = messages.map(m => m.content).join(' ');
+                  // Simple extraction from conversation — Ely will have stated these
+                  const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
                   const recipient = selectedEmailContext?.senderEmail || selectedEmailContext?.from || '';
+                  const subject = selectedEmailContext?.subject || '';
+                  const lastElyMsg = messages.filter(m => m.role === 'ely' || m.role === 'assistant').slice(-1)[0]?.content || '';
+                  const data = await generateFeeQuote({
+                    client_name: selectedEmailContext?.senderName || '',
+                    property_address: '',
+                    works_description: '',
+                    num_aos: numAOs,
+                    fee_notice: 100,
+                    fee_soc: 300,
+                    fee_agreed: 450,
+                    fee_separate: 600,
+                  });
+                  if (!data) { alert('Could not generate fee quote — try again.'); return; }
                   onOpenComposer?.({
                     to: recipient,
-                    subject: selectedEmailContext?.subject ? `Re: ${selectedEmailContext.subject}` : 'Party Wall Fee Quotation',
-                    body: messages.filter(m => m.role === 'ely' || m.role === 'assistant').slice(-1)[0]?.content || '',
+                    subject: subject ? `Re: ${subject}` : 'Party Wall Fee Quotation',
+                    body: lastElyMsg,
+                    attachments: [{
+                      name: data.file_name,
+                      contentType: data.content_type,
+                      contentBytes: data.base64,
+                    }],
                   });
                 }}
-                style={{ padding: '7px 16px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                📧 Open in email composer
-              </button>
-              <button
-                onClick={() => handleSend('Please draft a professional fee quote response email I can send to this client. Include a brief summary of the party wall implications you identified from their drawings, what notices are required, and my fees.')}
-                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                ✍️ Draft fee quote email
+                style={{ padding: '7px 14px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                📄 Generate fee quote + open composer
               </button>
             </div>
           )}
