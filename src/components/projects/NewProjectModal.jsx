@@ -769,7 +769,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               cursor: (saving || extracting) ? 'not-allowed' : 'pointer',
               opacity: (saving || extracting) ? 0.6 : 1,
             }}>
-              {saving ? 'Creating…' : extracting ? '🔍 Reading document...' : 'Create project →'}
+              {saving ? 'Creating…' : extracting ? '🔍 Reading document...' : (uploadMode && uploadFiles.length > 0 && !extractedScope) ? '🔍 Extract & Continue →' : 'Create project →'}
             </button>
           </div>
         </div>
