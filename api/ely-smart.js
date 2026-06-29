@@ -3036,8 +3036,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini';
-    const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini';
+    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-4o';
+    const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-4o';
     const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
     const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
 
