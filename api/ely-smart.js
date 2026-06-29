@@ -2942,9 +2942,12 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini';
+    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-4o';
     const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini';
-    const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
+    // Escalate to gpt-4o for main chat when attachments are present or drafting is requested
+    const hasAttachmentsInContext = (body.uploadedFiles?.length > 0) || (body.context?.uploadedExtractedText?.length > 0);
+    const needsGpt4o = isDraftWithEly || hasAttachmentsInContext || wantsDraft;
+    const activeModel = needsGpt4o ? 'gpt-4o' : isMainChat ? mainChatModel : 'gpt-4o';
     const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
 
     const modelPayload = isReasoningModel
