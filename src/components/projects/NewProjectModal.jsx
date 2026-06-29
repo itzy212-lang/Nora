@@ -290,6 +290,12 @@ export default function NewProjectModal({ onClose, onCreated }) {
       return;
     }
 
+    // If upload mode and not yet extracted — run extraction first
+    if (form.project_type === 'construction' && uploadMode && uploadFiles.length > 0 && !extractedScope) {
+      await extractFromDocuments(uploadFiles);
+      return; // Stop here — user sees extracted data, clicks Create again to confirm
+    }
+
     setSaving(true);
 
     try {
