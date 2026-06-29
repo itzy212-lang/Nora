@@ -1791,11 +1791,25 @@ async function fetchEmailAttachments(emailId) {
   if (!sb) return [];
   try {
     // Get attachment records from DB
-    const { data: attachments, error } = await sb
+    // Prioritise structural drawings and floor plans — limit to 4 to avoid timeout
+    const { data: allAtts, error } = await sb
       .from('email_attachments')
       .select('id, filename, content_type, storage_path, extracted_text')
       .eq('email_id', emailId)
       .limit(12);
+
+    // Sort: cached first, then structural/survey docs, then floor plans, then others
+    const attachments = (allAtts || []).sort((a, b) => {
+      const score = (f) => {
+        if (f.extracted_text) return 10; // already cached — always include
+        const fn = (f.filename || '').toLowerCase();
+        if (fn.includes('structural') || fn.includes('survey')) return 3;
+        if (fn.includes('lower ground') || fn.includes('ground floor') || fn.includes('section')) return 2;
+        if (fn.includes('floor') || fn.includes('elevation')) return 1;
+        return 0;
+      };
+      return score(b) - score(a);
+    }).slice(0, 4); // max 4 at a time — remaining can be fetched on subsequent messages
 
     console.log('[ely-smart] email_attachments query result:', { count: attachments?.length, error: error?.message });
     if (error) { console.warn('[ely-smart] email_attachments error:', error); return []; }
