@@ -1796,7 +1796,9 @@ async function fetchEmailAttachments(emailId) {
       .eq('email_id', emailId)
       .limit(12);
 
-    if (error || !attachments?.length) return [];
+    console.log('[ely-smart] email_attachments query result:', { count: attachments?.length, error: error?.message });
+    if (error) { console.warn('[ely-smart] email_attachments error:', error); return []; }
+    if (!attachments?.length) return [];
 
     const results = [];
 
