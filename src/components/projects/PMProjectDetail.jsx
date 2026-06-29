@@ -29,6 +29,7 @@ function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
     description: isNew ? '' : item.description || '',
     trade: isNew ? '' : item.trade || '',
     subcontractor_name: isNew ? '' : item.subcontractor_name || '',
+    in_house: isNew ? false : item.in_house || false,
     cost: isNew ? '' : item.cost || '',
     markup_type: isNew ? 'none' : item.markup_type || 'none',
     markup_value: isNew ? '' : item.markup_value || '',
@@ -54,7 +55,8 @@ function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
       title: form.title.trim(),
       description: form.description.trim() || null,
       trade: form.trade.trim() || null,
-      subcontractor_name: form.subcontractor_name.trim() || null,
+      subcontractor_name: form.in_house ? null : (form.subcontractor_name.trim() || null),
+      in_house: form.in_house || false,
       cost: form.cost ? parseFloat(form.cost) : null,
       markup_type: form.markup_type,
       markup_value: form.markup_value ? parseFloat(form.markup_value) : null,
@@ -92,18 +94,41 @@ function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
             <input value={form.trade} onChange={e => set('trade', e.target.value)} placeholder="e.g. Plumber" style={inputStyle} />
           </div>
           <div>
+            <div style={labelStyle}>Who's doing this?</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+              {[{ val: false, label: '🏢 Sub' }, { val: true, label: '🔨 In-house' }].map(opt => (
+                <button key={String(opt.val)} type="button" onClick={() => set('in_house', opt.val)}
+                  style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                    border: (form.in_house || false) === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    background: (form.in_house || false) === opt.val ? '#eff6ff' : 'transparent',
+                    color: (form.in_house || false) === opt.val ? '#1e40af' : '#374151' }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {!form.in_house && (
+          <div style={{ marginBottom: 12 }}>
             <div style={labelStyle}>Subcontractor</div>
             <input value={form.subcontractor_name} onChange={e => set('subcontractor_name', e.target.value)} placeholder="Company / name" style={inputStyle} />
           </div>
-        </div>
+        )}
 
         {/* Pricing */}
         <div style={{ background: '#f8f9fa', borderRadius: 10, padding: 12, marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Pricing</div>
-          <div style={{ marginBottom: 10 }}>
-            <div style={labelStyle}>Subcontractor / supplier cost (£)</div>
-            <input type="number" value={form.cost} onChange={e => set('cost', e.target.value)} placeholder="What you're paying" style={inputStyle} />
-          </div>
+          {!form.in_house && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={labelStyle}>Subcontractor / supplier cost (£)</div>
+              <input type="number" value={form.cost} onChange={e => set('cost', e.target.value)} placeholder="What you're paying" style={inputStyle} />
+            </div>
+          )}
+          {form.in_house && (
+            <div style={{ marginBottom: 10, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#3b82f6' }}>
+              In-house — enter your charge to the client below
+            </div>
+          )}
           <div style={{ marginBottom: 10 }}>
             <div style={labelStyle}>Markup</div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -797,6 +822,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [scopeItems, setScopeItems] = useState([]);
   const [scopeModal, setScopeModal] = useState(null);
   const [scopeLoading, setScopeLoading] = useState(false);
+  const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
 
   // Load scope items
   useEffect(() => {
@@ -1452,6 +1478,53 @@ Proceed?`
                 </div>
               </div>
 
+              {/* % Paid vs % Complete chart */}
+              {(() => {
+                const totalTaskVal = tasks.filter(t => t.task_value > 0).reduce((s, t) => s + parseFloat(t.task_value || 0), 0);
+                const completedVal = tasks.filter(t => t.status === 'complete' && t.task_value > 0).reduce((s, t) => s + parseFloat(t.task_value || 0), 0);
+                const pctComplete = totalTaskVal > 0 ? (completedVal / totalTaskVal) * 100 : 0;
+                const pctPaid = maxPayable > 0 ? (totalNetPaid / maxPayable) * 100 : 0;
+                const overpaid = pctPaid > pctComplete + 10; // More than 10% ahead = warning
+                const severelyOverpaid = pctPaid > pctComplete + 25;
+                if (totalTaskVal === 0) return null;
+                return (
+                  <div style={{ background: '#fff', border: `1px solid ${severelyOverpaid ? '#fca5a5' : overpaid ? '#fed7aa' : '#e5e7eb'}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Payment vs Progress</div>
+                      {severelyOverpaid && <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '3px 8px', borderRadius: 99 }}>🚨 Overpaid vs work done</div>}
+                      {overpaid && !severelyOverpaid && <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fff7ed', padding: '3px 8px', borderRadius: 99 }}>⚠️ Ahead of progress</div>}
+                      {!overpaid && <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>✅ On track</div>}
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>Work completed</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>{pctComplete.toFixed(0)}% ({fmt(completedVal)})</span>
+                      </div>
+                      <div style={{ height: 10, background: '#e5e7eb', borderRadius: 5 }}>
+                        <div style={{ height: '100%', borderRadius: 5, width: `${Math.min(100, pctComplete)}%`, background: '#16a34a' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>Amount paid (net of retention)</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: severelyOverpaid ? '#dc2626' : overpaid ? '#d97706' : '#3b82f6' }}>{pctPaid.toFixed(0)}% ({fmt(totalNetPaid)})</span>
+                      </div>
+                      <div style={{ height: 10, background: '#e5e7eb', borderRadius: 5 }}>
+                        <div style={{ height: '100%', borderRadius: 5, width: `${Math.min(100, pctPaid)}%`,
+                          background: severelyOverpaid ? '#dc2626' : overpaid ? '#f59e0b' : '#3b82f6' }} />
+                      </div>
+                    </div>
+                    {(overpaid || severelyOverpaid) && (
+                      <div style={{ marginTop: 8, fontSize: 11, color: severelyOverpaid ? '#dc2626' : '#92400e', background: severelyOverpaid ? '#fee2e2' : '#fff7ed', padding: '6px 10px', borderRadius: 6 }}>
+                        {severelyOverpaid
+                          ? `You have paid ${pctPaid.toFixed(0)}% but only ${pctComplete.toFixed(0)}% of work is complete. Do not release further payments until progress catches up.`
+                          : `Payment is ${(pctPaid - pctComplete).toFixed(0)}% ahead of completed work. Monitor progress before next payment.`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Payment history — all modes */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
@@ -1759,7 +1832,45 @@ Proceed?`
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Scope of Works</div>
                 <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Price each item — costs flow into financials and payment schedule</div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {selectedScopeIds.size >= 2 && (
+                  <button onClick={async () => {
+                    const selected = scopeItems.filter(s => selectedScopeIds.has(s.id));
+                    const merged = {
+                      title: selected.map(s => s.title).join(' + '),
+                      description: selected.filter(s => s.description).map(s => s.description).join('; ') || null,
+                      trade: selected[0].trade || null,
+                      subcontractor_name: selected[0].subcontractor_name || null,
+                      in_house: selected[0].in_house || false,
+                      cost: selected.reduce((s, i) => s + parseFloat(i.cost || 0), 0),
+                      markup_type: selected[0].markup_type || 'none',
+                      markup_value: selected[0].markup_value || null,
+                      client_charge: selected.reduce((s, i) => {
+                        const cost = parseFloat(i.cost || 0);
+                        const mv = parseFloat(i.markup_value || 0);
+                        return s + (i.markup_type === 'percentage' ? cost + cost * mv / 100 : i.markup_type === 'fixed' ? cost + mv : parseFloat(i.client_charge || 0));
+                      }, 0),
+                      position: Math.min(...selected.map(s => s.position || 0)),
+                      extracted_by_ai: selected.some(s => s.extracted_by_ai),
+                      project_id: project.id,
+                    };
+                    // Delete all selected items
+                    for (const s of selected) await sb.from('scope_items').delete().eq('id', s.id);
+                    // Insert merged
+                    const { data: newItem } = await sb.from('scope_items').insert([merged]).select('*').single();
+                    setScopeItems(prev => [...prev.filter(s => !selectedScopeIds.has(s.id)), newItem].sort((a,b) => (a.position||0)-(b.position||0)));
+                    setSelectedScopeIds(new Set());
+                  }}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#8b5cf6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    ⊕ Merge {selectedScopeIds.size} items
+                  </button>
+                )}
+                {selectedScopeIds.size > 0 && (
+                  <button onClick={() => setSelectedScopeIds(new Set())}
+                    style={{ padding: '7px 10px', borderRadius: 99, background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', fontSize: 12, cursor: 'pointer' }}>
+                    Clear
+                  </button>
+                )}
                 <button onClick={() => setScopeModal('new')}
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   + Add Item
@@ -1779,8 +1890,8 @@ Proceed?`
             {scopeItems.length > 0 && (
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
                 {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '10px 16px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb' }}>
-                  {['Item', 'Sub cost', 'Markup', 'Charge', ''].map((h, i) => (
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 90px 90px 90px 70px', gap: 8, padding: '10px 16px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb' }}>
+                  {['', 'Item', 'Sub cost', 'Markup', 'Charge', ''].map((h, i) => (
                     <div key={i} style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</div>
                   ))}
                 </div>
@@ -1795,8 +1906,11 @@ Proceed?`
                     : parseFloat(item.client_charge || 0);
 
                   return (
-                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', borderBottom: i < scopeItems.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center',
-                      background: item.extracted_by_ai && !item.cost ? '#fffbeb' : 'transparent' }}>
+                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', borderBottom: i < scopeItems.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center',
+                      background: selectedScopeIds.has(item.id) ? '#f5f3ff' : item.extracted_by_ai && !item.cost ? '#fffbeb' : 'transparent' }}>
+                      <input type="checkbox" checked={selectedScopeIds.has(item.id)}
+                        onChange={e => setSelectedScopeIds(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n; })}
+                        style={{ width: 16, height: 16, cursor: 'pointer' }} />
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{item.title}</span>
@@ -1804,7 +1918,8 @@ Proceed?`
                         </div>
                         {item.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.description}</div>}
                         {item.trade && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.trade}</div>}
-                        {item.subcontractor_name && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 1 }}>👤 {item.subcontractor_name}</div>}
+                        {item.in_house && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 1 }}>🔨 In-house</div>}
+                        {!item.in_house && item.subcontractor_name && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 1 }}>👤 {item.subcontractor_name}</div>}
                       </div>
                       <div style={{ fontSize: 12, color: '#374151' }}>{cost > 0 ? fmt(cost) : '—'}</div>
                       <div style={{ fontSize: 12, color: '#6b7280' }}>
@@ -1835,7 +1950,7 @@ Proceed?`
                   }, 0);
                   const margin = totalCharge - totalCost;
                   return (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', background: '#f8f9fa', borderTop: '2px solid #e5e7eb' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', background: '#f8f9fa', borderTop: '2px solid #e5e7eb' }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Total</div>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmt(totalCost)}</div>
                       <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>Margin: {fmt(margin)}</div>
