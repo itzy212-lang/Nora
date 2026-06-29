@@ -381,7 +381,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
       setError(err.message || 'Could not create project.');
       setSaving(false);
     }
-  }, [form, boSameAddr, aoSameAddr, isAO, onClose, onCreated]);
+  }, [form, boSameAddr, aoSameAddr, isAO, onClose, onCreated, uploadMode, uploadFiles, extractedScope, extractFromDocuments]);
 
   return (
     <div style={{
