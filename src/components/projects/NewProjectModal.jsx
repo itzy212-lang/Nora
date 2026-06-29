@@ -261,6 +261,32 @@ export default function NewProjectModal({ onClose, onCreated }) {
   const setAo1 = (k, v) => setForm(f => ({ ...f, ao1: { ...f.ao1, [k]: v } }));
   const setAo2 = (k, v) => setForm(f => ({ ...f, ao2: { ...f.ao2, [k]: v } }));
 
+  const extractFromDocuments = async (files) => {
+    if (!files || !files.length) return;
+    setExtracting(true);
+    setError('Reading document with AI — please wait (15-30 seconds)...');
+    try {
+      const formData = new FormData();
+      formData.append('file', files[0]);
+      const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
+      const { extracted } = json;
+      if (!extracted) throw new Error('Nothing extracted');
+      if (extracted.site_address) setForm(f => ({ ...f, boPremise: extracted.site_address, works: extracted.works_description || f.works }));
+      if (extracted.contract_value) setForm(f => ({ ...f, fee: String(extracted.contract_value) }));
+      if (extracted.client_name) setBo1('name', extracted.client_name);
+      if (extracted.client_email) setBo1('email', extracted.client_email);
+      if (extracted.client_phone) setBo1('phone', extracted.client_phone);
+      if (extracted.scope_items?.length) setExtractedScope(extracted.scope_items);
+      setError('');
+    } catch (e) {
+      setError('Extraction failed: ' + e.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   const handleCreate = useCallback(async () => {
     setError('');
 
