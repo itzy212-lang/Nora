@@ -1511,7 +1511,7 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
 
     if (hasAttachments && (graphMsgId || emailDbId)) {
       try {
-        const attachments = await fetchEmailAttachments(emailDbId, graphMsgId);
+        const attachments = await fetchEmailAttachments(emailDbId);
         if (attachments?.length > 0) {
           const attachText = attachments
             .filter(a => a.text || a.extracted_text || a.content_text)
@@ -1785,18 +1785,88 @@ async function searchEmailsBySender(senderName, limit = 3) {
   }
 }
 
-// Fetch email attachments from Microsoft Graph via fetch-attachment endpoint
-async function fetchEmailAttachments(emailId, graphMessageId) {
+// Fetch email attachments directly from Supabase storage and extract text
+async function fetchEmailAttachments(emailId) {
   if (!emailId) return [];
+  const sb = getSupabase();
+  if (!sb) return [];
   try {
-    const res = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://nora-d9wy.vercel.app'}/api/fetch-attachment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email_id: emailId }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.attachments || [];
+    // Get attachment records
+    const { data: attachments, error } = await sb
+      .from('email_attachments')
+      .select('id, filename, content_type, storage_path, extracted_text')
+      .eq('email_id', emailId)
+      .limit(12);
+    
+    if (error || !attachments?.length) return [];
+    
+    const results = [];
+    for (const att of attachments) {
+      // If already extracted, use it
+      if (att.extracted_text) {
+        results.push({ filename: att.filename, text: att.extracted_text });
+        continue;
+      }
+      
+      // Skip non-text types we can't easily parse
+      const ct = att.content_type || '';
+      if (!ct.includes('pdf') && !ct.includes('word') && !ct.includes('text') && !ct.includes('docx')) {
+        results.push({ filename: att.filename, text: `[${att.filename} — binary file, cannot extract text]` });
+        continue;
+      }
+
+      // Fetch from storage
+      if (att.storage_path) {
+        try {
+          const { data: fileData, error: storErr } = await sb
+            .storage
+            .from('email-attachments')
+            .download(att.storage_path);
+          
+          if (storErr || !fileData) {
+            results.push({ filename: att.filename, text: `[Could not download ${att.filename}]` });
+            continue;
+          }
+
+          const buffer = Buffer.from(await fileData.arrayBuffer());
+          let extractedText = '';
+
+          if (ct.includes('pdf')) {
+            // Use pdf-parse for PDFs
+            try {
+              const pdfParse = await import('pdf-parse/lib/pdf-parse.js');
+              const parsed = await pdfParse.default(buffer);
+              extractedText = parsed.text?.slice(0, 8000) || '';
+            } catch (pdfErr) {
+              extractedText = `[PDF extraction failed: ${pdfErr.message}]`;
+            }
+          } else if (ct.includes('word') || ct.includes('docx') || att.filename?.endsWith('.docx')) {
+            try {
+              const mammoth = await import('mammoth');
+              const result = await mammoth.extractRawText({ buffer });
+              extractedText = result.value?.slice(0, 8000) || '';
+            } catch (docErr) {
+              extractedText = `[DOCX extraction failed: ${docErr.message}]`;
+            }
+          }
+
+          if (extractedText) {
+            // Cache in DB for next time
+            await sb.from('email_attachments')
+              .update({ extracted_text: extractedText })
+              .eq('id', att.id)
+              .catch(() => {}); // ignore cache error
+            
+            results.push({ filename: att.filename, text: extractedText });
+          }
+        } catch (storageErr) {
+          console.warn('[ely-smart] storage fetch failed:', storageErr.message);
+          results.push({ filename: att.filename, text: `[Storage error for ${att.filename}]` });
+        }
+      }
+    }
+    
+    return results.filter(r => r.text && !r.text.startsWith('['));
   } catch (err) {
     console.warn('[ely-smart] fetchEmailAttachments error:', err.message);
     return [];
