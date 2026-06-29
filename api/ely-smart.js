@@ -1785,88 +1785,128 @@ async function searchEmailsBySender(senderName, limit = 3) {
   }
 }
 
-// Fetch email attachments directly from Supabase storage and extract text
+// Fetch email attachments from Supabase storage and extract text using Claude Vision
 async function fetchEmailAttachments(emailId) {
   if (!emailId) return [];
   const sb = getSupabase();
   if (!sb) return [];
   try {
-    // Get attachment records
     const { data: attachments, error } = await sb
       .from('email_attachments')
       .select('id, filename, content_type, storage_path, extracted_text')
       .eq('email_id', emailId)
       .limit(12);
-    
+
     if (error || !attachments?.length) return [];
-    
+
     const results = [];
+
     for (const att of attachments) {
-      // If already extracted, use it
-      if (att.extracted_text) {
+      // Use cached extraction if available
+      if (att.extracted_text && att.extracted_text.length > 20) {
         results.push({ filename: att.filename, text: att.extracted_text });
         continue;
       }
-      
-      // Skip non-text types we can't easily parse
-      const ct = att.content_type || '';
-      if (!ct.includes('pdf') && !ct.includes('word') && !ct.includes('text') && !ct.includes('docx')) {
-        results.push({ filename: att.filename, text: `[${att.filename} — binary file, cannot extract text]` });
-        continue;
-      }
 
-      // Fetch from storage
-      if (att.storage_path) {
-        try {
-          const { data: fileData, error: storErr } = await sb
-            .storage
-            .from('email-attachments')
-            .download(att.storage_path);
-          
-          if (storErr || !fileData) {
-            results.push({ filename: att.filename, text: `[Could not download ${att.filename}]` });
-            continue;
+      if (!att.storage_path) continue;
+
+      const ct = att.content_type || '';
+      const fname = att.filename || '';
+      const isPdf = ct.includes('pdf') || fname.endsWith('.pdf');
+      const isDocx = ct.includes('word') || ct.includes('docx') || fname.endsWith('.docx');
+      const isText = ct.includes('text') || fname.endsWith('.txt');
+
+      if (!isPdf && !isDocx && !isText) continue;
+
+      try {
+        const { data: fileData, error: storErr } = await sb
+          .storage
+          .from('email-attachments')
+          .download(att.storage_path);
+
+        if (storErr || !fileData) continue;
+
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+        let extractedText = '';
+
+        if (isText) {
+          extractedText = buffer.toString('utf8').slice(0, 8000);
+
+        } else if (isDocx) {
+          try {
+            const mammoth = await import('mammoth');
+            const result = await mammoth.extractRawText({ buffer });
+            extractedText = (result.value || '').slice(0, 8000);
+          } catch (e) {
+            extractedText = '';
           }
 
-          const buffer = Buffer.from(await fileData.arrayBuffer());
-          let extractedText = '';
+        } else if (isPdf) {
+          // Send PDF directly to Claude Vision — Claude can read PDFs natively as base64
+          try {
+            const base64 = buffer.toString('base64');
+            const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'anthropic-beta': 'pdfs-2024-09-25',
+              },
+              body: JSON.stringify({
+                model: 'claude-opus-4-6',
+                max_tokens: 2000,
+                messages: [{
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'document',
+                      source: {
+                        type: 'base64',
+                        media_type: 'application/pdf',
+                        data: base64,
+                      }
+                    },
+                    {
+                      type: 'text',
+                      text: 'This is an architectural drawing or construction document. Please extract and describe: (1) What type of document is this (floor plan, section, elevation, structural drawing, building survey, etc.)? (2) What floor or area does it cover? (3) What are the key dimensions, room names, or spaces shown? (4) Are there any party walls, shared walls, or boundary walls marked? (5) Are there any proposed structural works shown (excavations, underpinning, beams, extensions)? (6) Is there a symbol legend — if so list what each symbol means. (7) Any written notes or specifications on the drawing. Be concise but thorough.'
+                    }
+                  ]
+                }]
+              })
+            });
 
-          if (ct.includes('pdf')) {
-            // Use pdf-parse for PDFs
+            if (claudeRes.ok) {
+              const claudeData = await claudeRes.json();
+              extractedText = claudeData?.content?.[0]?.text || '';
+            }
+          } catch (visionErr) {
+            console.warn('[ely-smart] Claude Vision PDF failed:', visionErr.message);
+            // Fallback: try pdf-parse for text-based PDFs
             try {
               const pdfParse = await import('pdf-parse/lib/pdf-parse.js');
               const parsed = await pdfParse.default(buffer);
-              extractedText = parsed.text?.slice(0, 8000) || '';
-            } catch (pdfErr) {
-              extractedText = `[PDF extraction failed: ${pdfErr.message}]`;
-            }
-          } else if (ct.includes('word') || ct.includes('docx') || att.filename?.endsWith('.docx')) {
-            try {
-              const mammoth = await import('mammoth');
-              const result = await mammoth.extractRawText({ buffer });
-              extractedText = result.value?.slice(0, 8000) || '';
-            } catch (docErr) {
-              extractedText = `[DOCX extraction failed: ${docErr.message}]`;
-            }
+              extractedText = (parsed.text || '').slice(0, 6000);
+            } catch {}
           }
-
-          if (extractedText) {
-            // Cache in DB for next time
-            await sb.from('email_attachments')
-              .update({ extracted_text: extractedText })
-              .eq('id', att.id)
-              .catch(() => {}); // ignore cache error
-            
-            results.push({ filename: att.filename, text: extractedText });
-          }
-        } catch (storageErr) {
-          console.warn('[ely-smart] storage fetch failed:', storageErr.message);
-          results.push({ filename: att.filename, text: `[Storage error for ${att.filename}]` });
         }
+
+        if (extractedText && extractedText.length > 10) {
+          // Cache for next time
+          await sb.from('email_attachments')
+            .update({ extracted_text: extractedText })
+            .eq('id', att.id)
+            .catch(() => {});
+
+          results.push({ filename: att.filename, text: extractedText });
+        }
+
+      } catch (err) {
+        console.warn('[ely-smart] attachment processing error:', att.filename, err.message);
       }
     }
-    
-    return results.filter(r => r.text && !r.text.startsWith('['));
+
+    return results;
   } catch (err) {
     console.warn('[ely-smart] fetchEmailAttachments error:', err.message);
     return [];
@@ -2942,12 +2982,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-4o';
+    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini';
     const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini';
-    // Escalate to gpt-4o for main chat when attachments are present or drafting is requested
-    const hasAttachmentsInContext = (body.uploadedFiles?.length > 0) || (body.context?.uploadedExtractedText?.length > 0);
-    const needsGpt4o = isDraftWithEly || hasAttachmentsInContext || wantsDraft;
-    const activeModel = needsGpt4o ? 'gpt-4o' : isMainChat ? mainChatModel : 'gpt-4o';
+    const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
     const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
 
     const modelPayload = isReasoningModel
