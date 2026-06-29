@@ -1472,11 +1472,26 @@ export default function Inbox({ onOpenComposer }) {
 
   const syncingRef = useRef(false);
 
-  const loadEmails = useCallback(async ({ force = false } = {}) => {
+  const loadEmails = useCallback(async ({ force = false, incremental = false } = {}) => {
     if (!sb) return;
-    // Skip reload if already have emails in global state and not forced
-    if (!force && state.emails && state.emails.length > 0) return;
-    setLoading(true);
+    const existing = state.emails || [];
+    const lastLoaded = state.emailsLoadedAt || 0;
+    const staleAfterMs = 5 * 60 * 1000; // 5 minutes
+    const isStale = Date.now() - lastLoaded > staleAfterMs;
+
+    // Skip reload if data is fresh (loaded within 5 mins) and not forced
+    if (!force && !incremental && existing.length > 0 && !isStale) return;
+
+    // Incremental: only fetch emails newer than the most recent one we have
+    const doIncremental = incremental && existing.length > 0 && !force;
+    const newestDate = doIncremental
+      ? existing.reduce((latest, e) => {
+          const d = e.received_at || e.created_at || '';
+          return d > latest ? d : latest;
+        }, '')
+      : null;
+
+    if (!doIncremental) setLoading(true);
     try {
       let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
       if (folder === 'Unread')  q = q.eq('is_read', false);
@@ -1484,33 +1499,51 @@ export default function Inbox({ onOpenComposer }) {
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
       if (folder === 'Sent')    q = q.eq('is_sent', true);
       if (folder === 'Inbox')   q = q.or('folder.eq.inbox,folder.is.null').or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false').or('sender_email.is.null,sender_email.neq.help@sq1consulting.co.uk');
+      if (doIncremental && newestDate) q = q.gt('received_at', newestDate).limit(50);
       const { data, error } = await q;
       if (error) throw error;
 
-      let emails = data || [];
+      let newEmails = data || [];
 
-      // Lightweight: mark which emails have attachments (for paperclip indicator)
-      if (emails.length > 0) {
+      // Mark attachments
+      if (newEmails.length > 0) {
         try {
-          const emailIds = emails.map(e => e.id).filter(Boolean);
+          const emailIds = newEmails.map(e => e.id).filter(Boolean);
           const { data: hasAttach } = await sb
             .from('email_attachments')
             .select('email_id')
             .in('email_id', emailIds);
           if (hasAttach?.length) {
             const attachedSet = new Set(hasAttach.map(a => a.email_id));
-            emails = emails.map(e => ({ ...e, has_attachments: attachedSet.has(e.id) }));
+            newEmails = newEmails.map(e => ({ ...e, has_attachments: attachedSet.has(e.id) }));
           }
         } catch {}
       }
 
-      dispatch({ type: 'SET_EMAILS', payload: emails });
+      if (doIncremental && newEmails.length > 0) {
+        // Prepend new emails to existing list
+        const existingIds = new Set(existing.map(e => e.id));
+        const truly_new = newEmails.filter(e => !existingIds.has(e.id));
+        if (truly_new.length > 0) {
+          dispatch({ type: 'SET_EMAILS', payload: [...truly_new, ...existing] });
+        }
+      } else {
+        dispatch({ type: 'SET_EMAILS', payload: newEmails });
+      }
+      dispatch({ type: 'SET_EMAILS_LOADED_AT', payload: Date.now() });
     } catch (err) { console.error('loadEmails:', err); }
-    setLoading(false);
-  }, [folder]);
+    if (!doIncremental) setLoading(false);
+  }, [folder, state.emails, state.emailsLoadedAt]);
 
-  // Initial load only
-  useEffect(() => { loadEmails({ force: true }); }, [folder]);
+  // Initial load — only force if no emails cached or switching folder
+  useEffect(() => {
+    const existing = state.emails || [];
+    const lastLoaded = state.emailsLoadedAt || 0;
+    const isStale = Date.now() - lastLoaded > 5 * 60 * 1000;
+    if (existing.length === 0 || isStale) {
+      loadEmails({ force: true });
+    }
+  }, [folder]);
 
   // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
@@ -1520,7 +1553,7 @@ export default function Inbox({ onOpenComposer }) {
       try {
         const { data, error } = await sb.functions.invoke('sync_outlook', { body: {} });
         if (!error && data?.newEmails > 0) {
-          await loadEmails();
+          await loadEmails({ incremental: true });
         }
       } catch (err) {
         console.warn('[auto-sync] error:', err);
