@@ -1519,7 +1519,7 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
           if (attachText.trim()) {
             messages.push({
               role: 'system',
-              content: `The email above has the following attachments. Read them carefully:\n\n${attachText}`
+              content: `The following attachment contents have been extracted from the email above using Claude Vision. This IS the actual content of the PDF files — you have full access to this information. Do not say you cannot see attachments. Analyse this content and answer questions about it directly.\n\n${attachText}`
             });
           }
         }
