@@ -1503,13 +1503,10 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
   // Auto-fetch attachments from the loaded email if it has them
   if (scopedEmailContext?.length > 0) {
     const primaryEmail = scopedEmailContext[0];
-    const hasAttachments = primaryEmail?.has_attachments || primaryEmail?.hasAttachments ||
-      primaryEmail?.attachments?.length > 0;
-    const graphMsgId = primaryEmail?.graph_message_id || primaryEmail?.graphMessageId ||
-      primaryEmail?.microsoft_message_id;
     const emailDbId = primaryEmail?.id;
 
-    if (hasAttachments && (graphMsgId || emailDbId)) {
+    // Always try to fetch attachments — the function checks DB and returns empty if none
+    if (emailDbId) {
       try {
         const attachments = await fetchEmailAttachments(emailDbId);
         if (attachments?.length > 0) {
