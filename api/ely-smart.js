@@ -1841,15 +1841,20 @@ async function fetchEmailAttachments(emailId) {
       // Try Microsoft Graph API first
       if (messageId && accessToken) {
         try {
-          // Extract attachment ID from storage_path (it's at the end after the last /)
-          const pathParts = att.storage_path?.split('/') || [];
+          // Extract attachment ID from storage_path
+          // Format: email@domain / messageId / attachmentId_filename
+          const pathParts = (att.storage_path || '').split('/');
           const lastPart = pathParts[pathParts.length - 1] || '';
-          // The attachment ID is embedded in the filename part before the underscore+filename
-          // Format: <attachmentId>_<filename>
-          const attachmentId = lastPart.split('_' + fname)[0];
+          // attachmentId is everything before the first underscore+filename
+          const attachmentId = lastPart.includes('_' + fname) 
+            ? lastPart.split('_' + fname)[0]
+            : lastPart.split('_')[0]; // fallback: split on first underscore
+
+          console.log('[ely-smart] attachment ID extracted:', attachmentId?.slice(0, 30));
 
           if (attachmentId) {
-            const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+            const encodedId = encodeURIComponent(attachmentId);
+            const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(messageId)}/attachments/${encodedId}/$value`;
             const graphRes = await fetch(graphUrl, {
               headers: { 'Authorization': `Bearer ${accessToken}` }
             });
