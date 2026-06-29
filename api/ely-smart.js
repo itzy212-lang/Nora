@@ -1506,9 +1506,11 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
     const emailDbId = primaryEmail?.id;
 
     // Always try to fetch attachments — the function checks DB and returns empty if none
+    console.log('[ely-smart] checking attachments for email:', emailDbId);
     if (emailDbId) {
       try {
         const attachments = await fetchEmailAttachments(emailDbId);
+        console.log('[ely-smart] attachments found:', attachments?.length || 0);
         if (attachments?.length > 0) {
           const attachText = attachments
             .filter(a => a.text || a.extracted_text || a.content_text)
