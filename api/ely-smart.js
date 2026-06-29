@@ -1577,7 +1577,7 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
               'anthropic-version': '2023-06-01',
             },
             body: JSON.stringify({
-              model: 'claude-opus-4-6',
+              model: 'claude-sonnet-4-6', // Sonnet sufficient for drawing analysis, 40% cheaper than Opus
               max_tokens: 800,
               messages: [{ role: 'user', content: lrPrompt }],
             }),
