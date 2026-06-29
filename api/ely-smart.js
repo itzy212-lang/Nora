@@ -1936,10 +1936,11 @@ async function fetchEmailAttachments(emailId) {
       }
 
       if (extractedText && extractedText.length > 10) {
-        await sb.from('email_attachments')
-          .update({ extracted_text: extractedText })
-          .eq('id', att.id)
-          .catch(() => {});
+        try {
+          await sb.from('email_attachments')
+            .update({ extracted_text: extractedText })
+            .eq('id', att.id);
+        } catch (_) {}
         results.push({ filename: att.filename, text: extractedText });
       }
     }
