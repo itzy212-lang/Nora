@@ -766,10 +766,10 @@ export default function NewProjectModal({ onClose, onCreated }) {
               color: '#fff',
               fontSize: 13,
               fontWeight: 600,
-              cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.7 : 1,
+              cursor: (saving || extracting) ? 'not-allowed' : 'pointer',
+              opacity: (saving || extracting) ? 0.6 : 1,
             }}>
-              {saving ? 'Creating…' : 'Create project →'}
+              {saving ? 'Creating…' : extracting ? '🔍 Reading document...' : 'Create project →'}
             </button>
           </div>
         </div>
