@@ -1784,12 +1784,13 @@ async function searchEmailsBySender(senderName, limit = 3) {
   }
 }
 
-// Fetch email attachments from Supabase storage and extract text using Claude Vision
+// Fetch email attachments via Microsoft Graph API and extract text using Claude Vision
 async function fetchEmailAttachments(emailId) {
   if (!emailId) return [];
   const sb = getSupabase();
   if (!sb) return [];
   try {
+    // Get attachment records from DB
     const { data: attachments, error } = await sb
       .from('email_attachments')
       .select('id, filename, content_type, storage_path, extracted_text')
@@ -1800,6 +1801,25 @@ async function fetchEmailAttachments(emailId) {
     if (error) { console.warn('[ely-smart] email_attachments error:', error); return []; }
     if (!attachments?.length) return [];
 
+    // Get the email's external_id (Microsoft Graph message ID) and access token
+    const { data: emailRow } = await sb
+      .from('emails')
+      .select('external_id')
+      .eq('id', emailId)
+      .single();
+
+    const { data: accountRow } = await sb
+      .from('email_accounts')
+      .select('access_token, refresh_token')
+      .eq('provider', 'outlook')
+      .limit(1)
+      .single();
+
+    const messageId = emailRow?.external_id;
+    const accessToken = accountRow?.access_token;
+
+    console.log('[ely-smart] graph fetch setup:', { messageId: !!messageId, accessToken: !!accessToken });
+
     const results = [];
 
     for (const att of attachments) {
@@ -1809,104 +1829,117 @@ async function fetchEmailAttachments(emailId) {
         continue;
       }
 
-      if (!att.storage_path) continue;
-
       const ct = att.content_type || '';
       const fname = att.filename || '';
       const isPdf = ct.includes('pdf') || fname.endsWith('.pdf');
       const isDocx = ct.includes('word') || ct.includes('docx') || fname.endsWith('.docx');
-      const isText = ct.includes('text') || fname.endsWith('.txt');
 
-      if (!isPdf && !isDocx && !isText) continue;
+      if (!isPdf && !isDocx) continue;
 
-      try {
-        const { data: fileData, error: storErr } = await sb
-          .storage
-          .from('email-attachments')
-          .download(att.storage_path);
+      let buffer = null;
 
-        if (storErr || !fileData) continue;
+      // Try Microsoft Graph API first
+      if (messageId && accessToken) {
+        try {
+          // Extract attachment ID from storage_path (it's at the end after the last /)
+          const pathParts = att.storage_path?.split('/') || [];
+          const lastPart = pathParts[pathParts.length - 1] || '';
+          // The attachment ID is embedded in the filename part before the underscore+filename
+          // Format: <attachmentId>_<filename>
+          const attachmentId = lastPart.split('_' + fname)[0];
 
-        const buffer = Buffer.from(await fileData.arrayBuffer());
-        let extractedText = '';
-
-        if (isText) {
-          extractedText = buffer.toString('utf8').slice(0, 8000);
-
-        } else if (isDocx) {
-          try {
-            const mammoth = await import('mammoth');
-            const result = await mammoth.extractRawText({ buffer });
-            extractedText = (result.value || '').slice(0, 8000);
-          } catch (e) {
-            extractedText = '';
-          }
-
-        } else if (isPdf) {
-          // Send PDF directly to Claude Vision — Claude can read PDFs natively as base64
-          try {
-            const base64 = buffer.toString('base64');
-            const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': process.env.ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01',
-                'anthropic-beta': 'pdfs-2024-09-25',
-              },
-              body: JSON.stringify({
-                model: 'claude-opus-4-6',
-                max_tokens: 2000,
-                messages: [{
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'document',
-                      source: {
-                        type: 'base64',
-                        media_type: 'application/pdf',
-                        data: base64,
-                      }
-                    },
-                    {
-                      type: 'text',
-                      text: 'This is an architectural drawing or construction document. Please extract and describe: (1) What type of document is this (floor plan, section, elevation, structural drawing, building survey, etc.)? (2) What floor or area does it cover? (3) What are the key dimensions, room names, or spaces shown? (4) Are there any party walls, shared walls, or boundary walls marked? (5) Are there any proposed structural works shown (excavations, underpinning, beams, extensions)? (6) Is there a symbol legend — if so list what each symbol means. (7) Any written notes or specifications on the drawing. Be concise but thorough.'
-                    }
-                  ]
-                }]
-              })
+          if (attachmentId) {
+            const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+            const graphRes = await fetch(graphUrl, {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
             });
-
-            if (claudeRes.ok) {
-              const claudeData = await claudeRes.json();
-              extractedText = claudeData?.content?.[0]?.text || '';
+            console.log('[ely-smart] graph attachment fetch:', fname, graphRes.status);
+            if (graphRes.ok) {
+              const arrayBuf = await graphRes.arrayBuffer();
+              buffer = Buffer.from(arrayBuf);
             }
-          } catch (visionErr) {
-            console.warn('[ely-smart] Claude Vision PDF failed:', visionErr.message);
-            // Fallback: try pdf-parse for text-based PDFs
-            try {
-              const pdfParse = await import('pdf-parse/lib/pdf-parse.js');
-              const parsed = await pdfParse.default(buffer);
-              extractedText = (parsed.text || '').slice(0, 6000);
-            } catch {}
           }
+        } catch (graphErr) {
+          console.warn('[ely-smart] graph fetch failed:', fname, graphErr.message);
         }
+      }
 
-        if (extractedText && extractedText.length > 10) {
-          // Cache for next time
-          await sb.from('email_attachments')
-            .update({ extracted_text: extractedText })
-            .eq('id', att.id)
-            .catch(() => {});
-
-          results.push({ filename: att.filename, text: extractedText });
+      // If graph failed, try listing attachments and find by name
+      if (!buffer && messageId && accessToken) {
+        try {
+          const listUrl = `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments`;
+          const listRes = await fetch(listUrl, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            const match = listData.value?.find(a => a.name === fname);
+            if (match?.contentBytes) {
+              buffer = Buffer.from(match.contentBytes, 'base64');
+              console.log('[ely-smart] got attachment via list:', fname);
+            }
+          }
+        } catch (listErr) {
+          console.warn('[ely-smart] attachment list failed:', listErr.message);
         }
+      }
 
-      } catch (err) {
-        console.warn('[ely-smart] attachment processing error:', att.filename, err.message);
+      if (!buffer) {
+        console.warn('[ely-smart] could not get buffer for:', fname);
+        continue;
+      }
+
+      let extractedText = '';
+
+      if (isPdf) {
+        try {
+          const base64 = buffer.toString('base64');
+          const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'anthropic-beta': 'pdfs-2024-09-25',
+            },
+            body: JSON.stringify({
+              model: 'claude-opus-4-6',
+              max_tokens: 2000,
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+                  { type: 'text', text: 'This is an architectural drawing or construction document for a party wall survey. Please extract and describe: (1) What type of document is this? (2) What floor/area does it cover? (3) Key dimensions, room names, spaces shown. (4) Any party walls, shared walls, or boundary walls marked. (5) Any proposed structural works — excavations, underpinning, beams, extensions. (6) Symbol legend if present. (7) Any written notes or specifications. Be concise but thorough.' }
+                ]
+              }]
+            })
+          });
+          if (claudeRes.ok) {
+            const claudeData = await claudeRes.json();
+            extractedText = claudeData?.content?.[0]?.text || '';
+            console.log('[ely-smart] Claude Vision extracted:', fname, extractedText.length, 'chars');
+          }
+        } catch (visionErr) {
+          console.warn('[ely-smart] Claude Vision failed:', fname, visionErr.message);
+        }
+      } else if (isDocx) {
+        try {
+          const mammoth = await import('mammoth');
+          const result = await mammoth.extractRawText({ buffer });
+          extractedText = (result.value || '').slice(0, 8000);
+        } catch (e) {}
+      }
+
+      if (extractedText && extractedText.length > 10) {
+        await sb.from('email_attachments')
+          .update({ extracted_text: extractedText })
+          .eq('id', att.id)
+          .catch(() => {});
+        results.push({ filename: att.filename, text: extractedText });
       }
     }
 
+    console.log('[ely-smart] attachments found:', results.length);
     return results;
   } catch (err) {
     console.warn('[ely-smart] fetchEmailAttachments error:', err.message);
