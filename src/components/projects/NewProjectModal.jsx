@@ -758,7 +758,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               Cancel
             </button>
 
-            <button onClick={handleCreate} disabled={saving || extracting || (uploadMode && uploadFiles.length > 0 && !extractedScope && !form.boPremise)} style={{
+            <button onClick={handleCreate} disabled={saving || extracting} style={{
               padding: '9px 24px',
               borderRadius: 99,
               border: 'none',
@@ -769,7 +769,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               cursor: (saving || extracting) ? 'not-allowed' : 'pointer',
               opacity: (saving || extracting) ? 0.6 : 1,
             }}>
-              {saving ? 'Creating…' : extracting ? '🔍 Reading document...' : (uploadMode && uploadFiles.length > 0 && !extractedScope) ? '🔍 Extract & Continue →' : 'Create project →'}
+              {saving ? 'Creating…' : extracting ? '🔍 Reading document...' : 'Create project →'}
             </button>
           </div>
         </div>
