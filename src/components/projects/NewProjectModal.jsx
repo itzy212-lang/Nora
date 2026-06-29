@@ -266,8 +266,11 @@ export default function NewProjectModal({ onClose, onCreated }) {
     setExtracting(true);
     setError('Reading document with AI — please wait (15-30 seconds)...');
     try {
+      // Process first file for project details, but note all files for scope
       const formData = new FormData();
-      formData.append('file', files[0]);
+      // Send docx/txt first for project details; drawings second for scope
+      const docFile = files.find(f => /\.(docx|doc|txt)$/i.test(f.name)) || files[0];
+      formData.append('file', docFile);
       const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
@@ -511,7 +514,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
                     onClick={() => document.getElementById('doc-upload-input').click()}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); setUploadFiles(Array.from(e.dataTransfer.files)); setExtractedScope(null); }}>
-                    <input id="doc-upload-input" type="file" multiple accept=".pdf,.doc,.docx,.txt"
+                    <input id="doc-upload-input" type="file" multiple accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
                       style={{ display: 'none' }}
                       onChange={e => { setUploadFiles(Array.from(e.target.files)); setExtractedScope(null); }} />
                     {extracting ? (
@@ -528,7 +531,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
                     ) : (
                       <div>
                         <div style={{ fontSize: 14, color: '#6b7280' }}>📎 Drop files here or tap to upload</div>
-                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Tender pack, drawings, spec, architect's schedule — PDF, Word or text</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Tender pack, drawings, specs — PDF, Word, or images (JPG/PNG). Upload multiple files.</div>
                       </div>
                     )}
                   </div>
