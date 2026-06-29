@@ -326,6 +326,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [feeQuotePreview, setFeeQuotePreview] = useState(null); // { data, recipient, subject, body }
   const fileInputRef = useRef(null);
   const [localEmails, setLocalEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
@@ -1145,9 +1146,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
               )}
               <button
                 onClick={async () => {
-                  // Extract variables from the conversation
                   const allText = messages.map(m => m.content).join(' ');
-                  // Simple extraction from conversation — Ely will have stated these
                   const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
                   const recipient = selectedEmailContext?.senderEmail || selectedEmailContext?.from || '';
                   const subject = selectedEmailContext?.subject || '';
@@ -1163,20 +1162,51 @@ export default function MainChat({ onOpenComposer, onClose }) {
                     fee_separate: 600,
                   });
                   if (!data) { alert('Could not generate fee quote — try again.'); return; }
-                  onOpenComposer?.({
-                    to: recipient,
-                    subject: subject ? `Re: ${subject}` : 'Party Wall Fee Quotation',
-                    body: lastElyMsg,
-                    attachments: [{
-                      name: data.file_name,
-                      contentType: data.content_type,
-                      contentBytes: data.base64,
-                    }],
-                  });
+                  // Show preview instead of going straight to composer
+                  setFeeQuotePreview({ data, recipient, subject, body: lastElyMsg });
                 }}
                 style={{ padding: '7px 14px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                📄 Generate fee quote + open composer
+                📄 Generate fee quote
               </button>
+            </div>
+          )}
+
+          {/* Fee quote preview card */}
+          {feeQuotePreview && (
+            <div style={{ margin: '8px 16px', padding: '16px', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>📄 Fee Quote Ready</div>
+                  <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>{feeQuotePreview.data.file_name}</div>
+                </div>
+                <button onClick={() => setFeeQuotePreview(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 16, padding: 0 }}>×</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a
+                  href={`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${feeQuotePreview.data.base64}`}
+                  download={feeQuotePreview.data.file_name}
+                  style={{ flex: 1, padding: '8px 14px', borderRadius: 99, background: '#fff', border: '1.5px solid #86efac', color: '#166534', fontSize: 12, fontWeight: 600, textDecoration: 'none', textAlign: 'center', cursor: 'pointer' }}>
+                  ⬇️ Download to review
+                </a>
+                <button
+                  onClick={() => {
+                    onOpenComposer?.({
+                      to: feeQuotePreview.recipient,
+                      subject: feeQuotePreview.subject ? `Re: ${feeQuotePreview.subject}` : 'Party Wall Fee Quotation',
+                      body: feeQuotePreview.body,
+                      attachments: [{
+                        name: feeQuotePreview.data.file_name,
+                        contentType: feeQuotePreview.data.content_type,
+                        contentBytes: feeQuotePreview.data.base64,
+                      }],
+                    });
+                    setFeeQuotePreview(null);
+                  }}
+                  style={{ flex: 1, padding: '8px 14px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  📧 Send in composer
+                </button>
+              </div>
             </div>
           )}
 
