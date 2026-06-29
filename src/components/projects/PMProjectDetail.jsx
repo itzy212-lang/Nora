@@ -823,6 +823,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [scopeModal, setScopeModal] = useState(null);
   const [scopeLoading, setScopeLoading] = useState(false);
   const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
+  const [drawingExtracting, setDrawingExtracting] = useState(false);
+  const [drawingError, setDrawingError] = useState('');
 
   // Load scope items
   useEffect(() => {
@@ -1875,10 +1877,76 @@ Proceed?`
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   + Add Item
                 </button>
+                <button onClick={() => document.getElementById('drawing-upload-input').click()}
+                  disabled={drawingExtracting}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: drawingExtracting ? 0.6 : 1 }}>
+                  {drawingExtracting ? '🔍 Reading...' : '📐 Upload drawings'}
+                </button>
+                <input id="drawing-upload-input" type="file" multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.docx,.doc,.txt"
+                  style={{ display: 'none' }}
+                  onChange={async e => {
+                    const files = Array.from(e.target.files);
+                    if (!files.length) return;
+                    setDrawingExtracting(true);
+                    setDrawingError('');
+                    try {
+                      // Process all files and merge results
+                      const allItems = [];
+                      for (const file of files) {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
+                        const json = await res.json();
+                        if (json.extracted?.scope_items?.length) {
+                          allItems.push(...json.extracted.scope_items);
+                        }
+                      }
+                      if (allItems.length === 0) {
+                        setDrawingError('No scope items found in the uploaded files.');
+                        return;
+                      }
+                      // Save all items to scope_items table
+                      const saved = [];
+                      for (let i = 0; i < allItems.length; i++) {
+                        const item = allItems[i];
+                        const { data: newItem } = await sb.from('scope_items').insert([{
+                          project_id: project.id,
+                          title: item.title,
+                          description: item.description || null,
+                          trade: item.trade || null,
+                          position: (scopeItems.length) + i,
+                          extracted_by_ai: true,
+                          markup_type: 'none',
+                          client_charge: 0,
+                          cost: null,
+                        }]).select('*').single();
+                        if (newItem) saved.push(newItem);
+                      }
+                      setScopeItems(prev => [...prev, ...saved]);
+                      setDrawingError('');
+                      // Reset input
+                      e.target.value = '';
+                    } catch (err) {
+                      setDrawingError('Extraction failed: ' + err.message);
+                    } finally {
+                      setDrawingExtracting(false);
+                    }
+                  }} />
               </div>
             </div>
 
             {scopeLoading && <div style={{ color: '#6b7280', fontSize: 13, padding: 16 }}>Loading scope...</div>}
+            {drawingError && (
+              <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#dc2626' }}>
+                {drawingError}
+              </div>
+            )}
+            {drawingExtracting && (
+              <div style={{ padding: '12px 16px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, marginBottom: 10, fontSize: 13, color: '#7c3aed', fontWeight: 600 }}>
+                🔍 Claude is reading your drawings — finding the legend and counting symbols... (15-30 seconds)
+              </div>
+            )}
 
             {!scopeLoading && scopeItems.length === 0 && (
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, color: '#6b7280', fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>
