@@ -323,6 +323,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [lastDraft, setLastDraft] = useState('');
   const [restoreAttempted, setRestoreAttempted] = useState(false);
   const [linkingProject, setLinkingProject] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef(null);
   const [localEmails, setLocalEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
 
@@ -538,6 +542,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
     stopVoice();
     setMessages([]);
     setInput('');
+    setAttachments([]);
+    setUploadError('');
     setLastDraft('');
     setActiveChatId(null);
     resetSession();
@@ -712,6 +718,42 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setMessages(prev => [...prev, ...newMessages]);
   }, [state.currentProject?.id, selectedEmailContext]);
 
+  const handleFilesSelected = useCallback(async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length || uploading) return;
+    setUploading(true);
+    setUploadError('');
+    const pending = files.map(file => ({
+      id: Math.random().toString(36).slice(2),
+      file_name: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      file_size: file.size,
+      upload_status: 'uploading',
+    }));
+    setAttachments(prev => [...prev, ...pending]);
+    const completed = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const localId = pending[i].id;
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', selectedProjectId || '');
+        formData.append('session_id', activeChatId || '');
+        const res = await fetch('/api/project-chat-upload', { method: 'POST', body: formData });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error || 'Upload failed');
+        const done = { ...pending[i], ...payload, upload_status: payload.upload_status || 'uploaded' };
+        completed.push(done);
+        setAttachments(prev => prev.map(a => a.id === localId ? done : a));
+      } catch (err) {
+        setAttachments(prev => prev.map(a => a.id === localId ? { ...a, upload_status: 'failed', error: err.message } : a));
+        setUploadError(err.message || 'Upload failed');
+      }
+    }
+    setUploading(false);
+  }, [activeChatId, selectedProjectId, uploading]);
+
   const handleSend = useCallback(async (overrideText) => {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim();
     if (!text || loading) return;
@@ -782,20 +824,33 @@ export default function MainChat({ onOpenComposer, onClose }) {
         return;
       }
 
+      const readyAttachments = attachments.filter(a => a.upload_status === 'uploaded');
+
       const result = await send(text, {
         projectId: selectedProjectId || null,
         emailContext: selectedEmailContext,
         emailId: selectedEmailContext?.emailId || null,
         threadId: selectedEmailContext?.threadId || null,
         mainChatWorkflow: wantsDraft ? 'draft_clean_bubble_only' : 'general',
+        uploadedFiles: readyAttachments,
+        uploadedExtractedText: readyAttachments
+          .filter(a => a.extracted_text)
+          .map(a => ({ file_name: a.file_name, mime_type: a.mime_type, extracted_text: a.extracted_text })),
         context: {
           previousDraft: lastDraft || null,
           selectedEmailContext,
           selectedEmailId: selectedEmailContext?.emailId || null,
           selectedThreadId: selectedEmailContext?.threadId || null,
+          hasAttachments: readyAttachments.length > 0,
+          attachedFileNames: readyAttachments.map(a => a.file_name),
+          uploadedExtractedText: readyAttachments
+            .filter(a => a.extracted_text)
+            .map(a => ({ file_name: a.file_name, mime_type: a.mime_type, extracted_text: a.extracted_text })),
           mainChatInstruction: wantsDraft
             ? 'Return the draft as clean final text only. Do not add commentary inside or after the draft. If you include an explanation, it must be separate from the draft.'
-            : null,
+            : readyAttachments.length > 0
+              ? 'The user has attached documents or drawings. Read them carefully and analyse fully. If they appear to be architectural drawings or a planning pack: (1) identify what works are proposed, (2) identify which walls or boundaries are party walls or within notifiable distances, (3) estimate how many adjoining owners are likely affected, (4) state which sections of the Party Wall Act apply and what notices are required, (5) flag any uncertainties or questions that need clarification before a notice can be served. If images are included check for a symbol legend and use it to interpret electrical, structural or architectural symbols. Present your analysis clearly and offer to draft a fee quote response email.'
+              : null,
         },
       });
 
@@ -1062,7 +1117,57 @@ export default function MainChat({ onOpenComposer, onClose }) {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Fee quote quick action — shown when Ely has analysed drawings */}
+          {attachments.length > 0 && messages.length > 0 && messages[messages.length-1]?.role !== 'user' && (
+            <div style={{ padding: '8px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => {
+                  const recipient = selectedEmailContext?.senderEmail || selectedEmailContext?.from || '';
+                  onOpenComposer?.({
+                    to: recipient,
+                    subject: selectedEmailContext?.subject ? `Re: ${selectedEmailContext.subject}` : 'Party Wall Fee Quotation',
+                    body: messages.filter(m => m.role === 'ely' || m.role === 'assistant').slice(-1)[0]?.content || '',
+                  });
+                }}
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                📧 Open in email composer
+              </button>
+              <button
+                onClick={() => handleSend('Please draft a professional fee quote response email I can send to this client. Include a brief summary of the party wall implications you identified from their drawings, what notices are required, and my fees.')}
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                ✍️ Draft fee quote email
+              </button>
+            </div>
+          )}
+
           <div className="ai-full-input">
+
+            {/* Hidden file input */}
+            <input ref={fileInputRef} type="file" multiple
+              accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.heic,.webp,image/*"
+              onChange={handleFilesSelected} style={{ display: 'none' }} />
+
+            {/* Attachment previews */}
+            {(attachments.length > 0 || uploadError) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0' }}>
+                {attachments.map(file => (
+                  <div key={file.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 20, fontSize: 11,
+                    background: file.upload_status === 'failed' ? 'rgba(255,0,0,0.08)' : 'var(--bg3)',
+                    border: '1px solid var(--border)', color: 'var(--text2)'
+                  }}>
+                    <span>📎 {file.file_name}</span>
+                    <span style={{ color: 'var(--text3)' }}>
+                      {file.upload_status === 'uploading' ? 'uploading...' : file.upload_status === 'failed' ? '✗ failed' : '✓'}
+                    </span>
+                    <button onClick={() => setAttachments(prev => prev.filter(a => a.id !== file.id))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 0, fontSize: 13 }}>×</button>
+                  </div>
+                ))}
+                {uploadError && <div style={{ fontSize: 11, color: '#dc2626', padding: '4px 8px' }}>{uploadError}</div>}
+              </div>
+            )}
 
             <ChatInputBar
               value={input}
@@ -1071,12 +1176,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
               onTranscript={(transcript) => {
                 setInput(transcript);
               }}
+              showAttach={true}
+              onAttach={() => fileInputRef.current?.click()}
               placeholder={
                 selectedEmailContext
                   ? 'Ask Ely about the selected email thread, or draft a reply...'
                   : selectedProjectId
                     ? 'Ask Ely about this linked project...'
-                    : 'Ask Ely anything about party wall, your projects, or drafting...'
+                    : attachments.length > 0
+                      ? 'Files attached — ask Ely to read them, analyse party wall implications, draft a quote...'
+                      : 'Ask Ely anything — or attach drawings/documents with the + button'
               }
               disabled={loading}
               loading={loading}
