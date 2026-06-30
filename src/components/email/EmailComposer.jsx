@@ -13,6 +13,9 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const { currentUser, projects, emails } = state;
 
   const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
+  const [showCc, setShowCc] = useState(false);
+  const [ccSuggestions, setCcSuggestions] = useState([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -52,6 +55,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   useEffect(() => {
     if (!opts) return;
     setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
+    if (opts.cc) { setCc(opts.cc); setShowCc(true); }
     const proj = (projects || []).find(p => p.id === opts.projectId);
     const defaultSubject = proj
       ? `Party Wall etc. Act 1996 — ${proj.bo_premise_address || proj.name || ''}`
@@ -92,6 +96,53 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const handleToFocus = () => {
     if (projectContacts.length > 0) setToSuggestions(projectContacts.slice(0, 8));
+  };
+
+  // Normalise pasted/typed multiple addresses to a consistent "a@x.com, b@y.com"
+  // format on blur — handles semicolons, newlines, or missing spacing.
+  const normaliseRecipientField = (val) =>
+    String(val || '')
+      .split(/[;,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(', ');
+
+  const handleToBlur = () => {
+    setTimeout(() => setToSuggestions([]), 200);
+    setTo((prev) => normaliseRecipientField(prev));
+  };
+
+  const handleCcInput = async (val) => {
+    setCc(val);
+    setDirty(true);
+    const q = val.trim();
+    if (!q) { setCcSuggestions([]); return; }
+    const lastPart = q.split(/[;,]/).pop().trim();
+    if (lastPart.length < 2) { setCcSuggestions([]); return; }
+    const { data } = await sb.rpc('search_email_contacts', {
+      search_query: lastPart,
+      p_project_id: projectId || null,
+      p_user_id: null,
+    });
+    setCcSuggestions((data || []).slice(0, 8).map(r => ({ name: r.name, email: r.email })));
+  };
+
+  const handleCcFocus = () => {
+    if (projectContacts.length > 0) setCcSuggestions(projectContacts.slice(0, 8));
+  };
+
+  const handleCcBlur = () => {
+    setTimeout(() => setCcSuggestions([]), 200);
+    setCc((prev) => normaliseRecipientField(prev));
+  };
+
+  const addCcSuggestion = (email) => {
+    setCc((prev) => {
+      const parts = prev.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+      parts[parts.length - 1] = email; // replace the in-progress fragment
+      return parts.join(', ');
+    });
+    setCcSuggestions([]);
   };
 
   const bodyEditorRef = useRef(null);
@@ -144,6 +195,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
       await sendEmail({
         to: to.trim(),
+        cc: cc.trim() || null,
         subject: subject.trim() || '(No subject)',
         body: htmlBody,
         userId: userEmail,
@@ -163,7 +215,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     } finally {
       setSending(false);
     }
-  }, [to, subject, body, bodyEditorRef, signatureHtml, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
+  }, [to, cc, subject, body, bodyEditorRef, signatureHtml, sendEmail, attachments, currentUser, markReplied, onSent, onClose]);
 
   const handleClose = () => {
     if (dirty) {
@@ -203,7 +255,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                 value={to}
                 onChange={e => handleToInput(e.target.value)}
                 onFocus={handleToFocus}
-                onBlur={() => setTimeout(() => setToSuggestions([]), 200)}
+                onBlur={handleToBlur}
                 placeholder="Name or email address"
                 autoComplete="off"
               />
@@ -224,6 +276,49 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                 </div>
               )}
             </div>
+
+            {!showCc && (
+              <div className="form-row">
+                <button
+                  type="button"
+                  onClick={() => setShowCc(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 11.5, cursor: 'pointer', padding: '2px 0', textAlign: 'left' }}
+                >
+                  + Add Cc
+                </button>
+              </div>
+            )}
+
+            {showCc && (
+              <div className="form-row" style={{ position: 'relative' }}>
+                <label className="form-label">Cc</label>
+                <input
+                  value={cc}
+                  onChange={e => handleCcInput(e.target.value)}
+                  onFocus={handleCcFocus}
+                  onBlur={handleCcBlur}
+                  placeholder="Name or email address — separate multiple with a comma"
+                  autoComplete="off"
+                />
+                {ccSuggestions.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--r)', maxHeight: 180, overflowY: 'auto', boxShadow: 'var(--shadow)' }}>
+                    {ccSuggestions.map((c, i) => (
+                      <div
+                        key={i}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12.5, borderBottom: '1px solid var(--border)' }}
+                        onMouseEnter={e => e.target.style.background = 'var(--bg4)'}
+                        onMouseLeave={e => e.target.style.background = ''}
+                        onMouseDown={(e) => { e.preventDefault(); addCcSuggestion(c.email); }}
+                      >
+                        <strong>{c.name || c.email}</strong>
+                        {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` · ${c.role}` : ''}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="form-row">
               <label className="form-label">Subject</label>
               <input value={subject} onChange={e => { setSubject(e.target.value); setDirty(true); }} />
