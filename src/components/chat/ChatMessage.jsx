@@ -89,6 +89,29 @@ export function splitSubjectFromDraft(raw = '') {
   return { subject, body, full: draft };
 }
 
+/**
+ * Parse FEE_AGREED: tag from an Ely message.
+ * Returns { notice, soc, agreed_surveyor, separate } or null.
+ */
+export function parseFeeAgreed(text = '') {
+  const match = String(text || '').match(/FEE_AGREED:\s*([^\n]+)/i);
+  if (!match) return null;
+  const parts = match[1].split(',').map(s => s.trim());
+  const fees = {};
+  parts.forEach(part => {
+    const [key, val] = part.split('=').map(s => s.trim());
+    if (key && val) fees[key] = val;
+  });
+  // Return null if no fee keys found
+  if (!fees.notice && !fees.soc && !fees.agreed_surveyor && !fees.separate) return null;
+  return {
+    fee_notice: fees.notice || '100',
+    fee_soc: fees.soc || '300',
+    fee_agreed: fees.agreed_surveyor || '450',
+    fee_separate: fees.separate || '600',
+  };
+}
+
 async function copyToClipboard(text) {
   if (!text) return false;
 
@@ -116,10 +139,11 @@ async function copyToClipboard(text) {
   }
 }
 
-export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
+export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote }) {
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const { speak, stop, speaking, autoPlay } = useSpeech();
 
   // Auto-play when a new Ely response arrives
@@ -135,8 +159,11 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   const draftText = normaliseDraftText(draftSource);
   const actionText = isDraft ? draftText : '';
 
+  // Strip the FEE_AGREED tag from displayed text
+  const displayText = actionText.replace(/\nFEE_AGREED:[^\n]*/i, '').trim();
+
   const handleCopy = async () => {
-    const ok = await copyToClipboard(actionText);
+    const ok = await copyToClipboard(displayText || actionText);
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
@@ -144,10 +171,9 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
   };
 
   const handleCompose = () => {
-    const { subject, body } = splitSubjectFromDraft(actionText);
+    const { subject, body } = splitSubjectFromDraft(displayText || actionText);
     if (!body) return;
 
-    // Clean sign-off, then convert to HTML with paragraph spacing
     let cleanBody = body
       .replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,')
       .replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,')
@@ -167,6 +193,20 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     });
   };
 
+  const handleAttachQuote = async () => {
+    if (quoteLoading) return;
+
+    // Try to find FEE_AGREED tag from this message's content
+    const fees = parseFeeAgreed(replyText) || parseFeeAgreed(draftSource);
+
+    setQuoteLoading(true);
+    try {
+      await onAttachQuote?.(fees);
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
   const handleGenerateDocument = () => {
     if (!actionText) return;
     onUseDraft?.(actionText);
@@ -178,7 +218,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     const win = window.open('', '_blank', 'noopener,noreferrer');
     if (!win) return;
 
-    const escaped = actionText
+    const escaped = (displayText || actionText)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -207,6 +247,8 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     setTimeout(() => win.print(), 250);
   };
 
+  const displayDraftText = displayText || draftText;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
       <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
@@ -217,9 +259,9 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
             className="draft-body"
             style={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}
             dangerouslySetInnerHTML={{
-              __html: draftText.trim().startsWith('<')
-                ? draftText
-                : draftText.split(/\n\n+/).filter(Boolean).map(p => `<p style="margin:0 0 0.75em 0">${p.replace(/\n/g, '<br>')}</p>`).join('')
+              __html: displayDraftText.trim().startsWith('<')
+                ? displayDraftText
+                : displayDraftText.split(/\n\n+/).filter(Boolean).map(p => `<p style="margin:0 0 0.75em 0">${p.replace(/\n/g, '<br>')}</p>`).join('')
             }}
           />
         ) : (
@@ -244,9 +286,9 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
         )}
       </div>
 
-      {isDraft && actionText.trim().length > 0 && (
+      {isDraft && (displayDraftText || actionText).trim().length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
-          <button type="button" onClick={() => speaking ? stop() : speak(actionText)} style={{
+          <button type="button" onClick={() => speaking ? stop() : speak(displayDraftText || actionText)} style={{
             border: '1px solid var(--border)', background: speaking ? 'var(--blue-bg)' : 'var(--bg2)',
             color: speaking ? 'var(--blue)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
             fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
@@ -267,6 +309,16 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
           }}>
             Open in email composer
           </button>
+
+          {onAttachQuote && (
+            <button type="button" onClick={handleAttachQuote} disabled={quoteLoading} style={{
+              border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
+              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: quoteLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 500, opacity: quoteLoading ? 0.6 : 1,
+            }}>
+              {quoteLoading ? 'Generating…' : '📎 Attach Quote'}
+            </button>
+          )}
 
           <button type="button" onClick={handleGenerateDocument} style={{
             border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
@@ -304,4 +356,3 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer }) {
     </div>
   );
 }
-
