@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
-import ChatMessage from './ChatMessage';
+import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
 import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
@@ -1267,14 +1267,16 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   onOpenInComposer={(draft) => {
                     // Strip Subject line and clean sign-off before opening composer
                     let raw = typeof draft === 'string' ? draft : draft?.body || '';
+                    const aoAddresses = parseAoSubjectRef(raw);
                     raw = raw.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
+                    raw = raw.replace(/\nAO_SUBJECT_REF:[^\n]*/i, '').trim();
                     raw = raw.replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,');
                     raw = raw.replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,');
                     const isHtml = raw.trim().startsWith('<');
                     const htmlBody = isHtml ? raw : raw.split(/\n\n+/).map((p, i, arr) =>
                       `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
                     ).join('');
-                    onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId });
+                    onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId, aoAddresses });
                   }}
                 />
 
