@@ -154,11 +154,12 @@ async function copyToClipboard(text) {
   }
 }
 
-export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote }) {
+export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote, onPreviewQuote }) {
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const { speak, stop, speaking, autoPlay } = useSpeech();
 
   // Auto-play when a new Ely response arrives
@@ -225,6 +226,19 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
       await onAttachQuote?.(fees);
     } finally {
       setQuoteLoading(false);
+    }
+  };
+
+  const handlePreviewQuote = async () => {
+    if (previewLoading) return;
+
+    const fees = parseFeeAgreed(replyText) || parseFeeAgreed(draftSource);
+
+    setPreviewLoading(true);
+    try {
+      await onPreviewQuote?.(fees);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -339,6 +353,16 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
           }}>
             Open in email composer
           </button>
+
+          {onPreviewQuote && (
+            <button type="button" onClick={handlePreviewQuote} disabled={previewLoading} style={{
+              border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)',
+              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: previewLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 500, opacity: previewLoading ? 0.6 : 1,
+            }}>
+              {previewLoading ? 'Generating…' : '👁 Preview Quote'}
+            </button>
+          )}
 
           {onAttachQuote && (
             <button type="button" onClick={handleAttachQuote} disabled={quoteLoading} style={{
