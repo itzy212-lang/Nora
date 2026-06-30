@@ -1435,7 +1435,7 @@ function isBriefContent(text = '') {
 }
 
 
-export default function Inbox({ onOpenComposer }) {
+export default function Inbox({ onOpenComposer, onNavigate }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
@@ -1834,6 +1834,20 @@ if (syncErr) throw syncErr;
         background: 'var(--bg)',
       }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0, background: 'var(--bg2)' }}>
+          {isMobile && onNavigate && (
+            <button
+              onClick={() => onNavigate('dashboard')}
+              title="Back to Dashboard"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '6px 10px', borderRadius: 99,
+                border: '1px solid var(--border)', background: 'var(--bg3)',
+                fontSize: 13, cursor: 'pointer', color: 'var(--text2)', flexShrink: 0,
+              }}
+            >
+              ← Dashboard
+            </button>
+          )}
           <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>✎ Compose</button>
           <div style={{ position: 'relative', flex: 1 }} ref={folderRef}>
             <button onClick={() => setFolderOpen(v => !v)} style={{ width: '100%', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
