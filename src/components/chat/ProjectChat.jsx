@@ -741,7 +741,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
-        content: cleanReply(result.reply || 'Done.',
+        content: cleanReply(result.reply || 'Done.'),
         suggestedActions: result.suggestedActions,
         createdAt: new Date().toISOString(),
       }]);
