@@ -361,6 +361,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     refreshGlobalSessions,
     projectSessions,
     globalSessions,
+    saveMessage,
   } = useEly({
     surface: 'main_chat',
     projectId: selectedProjectId || null,
@@ -726,6 +727,16 @@ export default function MainChat({ onOpenComposer, onClose }) {
         suggestedActions: result.suggestedActions,
       });
     }
+
+    // Persist each split message (brief/draft/after) with its real messageType —
+    // the hook's internal auto-save happens before this client-side split occurs
+    // and has no way to know which part is the draft, so without this explicit
+    // save the classification (and the action row it drives) is lost on reload.
+    newMessages.forEach(m => {
+      if (m.role === 'ely' && m.content) {
+        saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType }).catch?.(() => {});
+      }
+    });
 
     setMessages(prev => [...prev, ...newMessages]);
   }, [state.currentProject?.id, selectedEmailContext]);
