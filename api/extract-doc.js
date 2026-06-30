@@ -103,10 +103,21 @@ export default async function handler(req, res) {
       // branch routed to GPT-4o — text/docx extraction below stays on Claude.
       const base64Data = fileToBase64(file.filepath);
       const mediaType = getMediaType(fileName);
-
-      // GPT-4o vision does not accept application/pdf directly — PDFs must be
-      // sent as image_url with a data URL; images use the same image_url format.
       const dataUrl = `data:${mediaType};base64,${base64Data}`;
+
+      // GPT-4o accepts PDFs natively via the 'file' content type (extracts both
+      // text and page images server-side). Plain images (jpg/png) use 'image_url'.
+      // These are NOT interchangeable — sending a PDF as image_url silently
+      // produces poor/garbled results rather than a clear error.
+      const contentParts = isPdf
+        ? [
+            { type: 'text', text: DRAWING_PROMPT },
+            { type: 'file', file: { filename: fileName || 'drawing.pdf', file_data: dataUrl } },
+          ]
+        : [
+            { type: 'text', text: DRAWING_PROMPT },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ];
 
       const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -119,10 +130,7 @@ export default async function handler(req, res) {
           max_tokens: 4000,
           messages: [{
             role: 'user',
-            content: [
-              { type: 'text', text: DRAWING_PROMPT },
-              { type: 'image_url', image_url: { url: dataUrl } },
-            ],
+            content: contentParts,
           }],
         }),
       });
