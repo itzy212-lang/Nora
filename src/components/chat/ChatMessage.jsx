@@ -181,6 +181,16 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
     .replace(/\nAO_SUBJECT_REF:[^\n]*/i, '')
     .trim();
 
+  // A FEE_AGREED tag can appear in a plain conversational confirmation message
+  // ("Understood, I've got the fee structure locked in...") which is NOT
+  // classified as a draft (no greeting/subject line), so it was never showing
+  // Preview/Attach Quote at all even though the fees were genuinely agreed.
+  // Check the raw reply directly, independent of isDraft.
+  const hasFeeAgreement = !isDraft && /FEE_AGREED:/i.test(replyText);
+  const nonDraftDisplayText = hasFeeAgreement
+    ? replyText.replace(/\nFEE_AGREED:[^\n]*/i, '').replace(/FEE_AGREED:[^\n]*/i, '').trim()
+    : '';
+
   const handleCopy = async () => {
     const ok = await copyToClipboard(displayText || actionText);
     if (ok) {
@@ -387,6 +397,32 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
           }}>
             Generate PDF
           </button>
+        </div>
+      )}
+
+      {/* Fee agreed in plain conversation, not classified as a draft —
+          show just Preview/Attach Quote so the fees aren't stranded with no
+          way to act on them. */}
+      {hasFeeAgreement && (onPreviewQuote || onAttachQuote) && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
+          {onPreviewQuote && (
+            <button type="button" onClick={handlePreviewQuote} disabled={previewLoading} style={{
+              border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)',
+              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: previewLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 500, opacity: previewLoading ? 0.6 : 1,
+            }}>
+              {previewLoading ? 'Generating…' : '👁 Preview Quote'}
+            </button>
+          )}
+          {onAttachQuote && (
+            <button type="button" onClick={handleAttachQuote} disabled={quoteLoading} style={{
+              border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
+              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: quoteLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 500, opacity: quoteLoading ? 0.6 : 1,
+            }}>
+              {quoteLoading ? 'Generating…' : '📎 Attach Quote'}
+            </button>
+          )}
         </div>
       )}
 
