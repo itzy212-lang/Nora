@@ -113,6 +113,12 @@ Use UK English.
 Do not invent facts.
 Do not use long dashes.
 Refer to the legislation as the Act where context is clear.
+
+FEE QUOTING RULE:
+When fees are agreed with a client during conversation, end your message with a structured tag on its own line:
+FEE_AGREED: notice=100, soc=300, agreed_surveyor=450, separate=600
+Replace the numbers with the actual agreed figures. This tag is read by the system to auto-populate the fee quote document.
+Do not include this tag unless specific fees have been agreed or confirmed in this conversation.
 `;
 
 function normaliseProject(project = {}) {
