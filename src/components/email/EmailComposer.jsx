@@ -7,6 +7,41 @@ import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import sb from '../../supabaseClient';
 import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 
+// Build a project subject line, optionally appending a short AO reference
+// e.g. "Party Wall etc. Act 1996 — 12 Oak Road" or, when one or more AOs are
+// specified and share a street with the BO/each other, a compact form like
+// "Party Wall etc. Act 1996 — 12 Oak Road (Adjoining Owner: 8 & 6 Oak Road)".
+function buildSubjectWithAoRef(baseAddress, aoList = []) {
+  const base = `Party Wall etc. Act 1996 — ${baseAddress || ''}`.trim();
+  if (!aoList.length) return base;
+
+  // Extract "<number(s)> <street name>" from a free-text address.
+  // e.g. "8 Park Avenue, London N12 9QL" -> { number: '8', street: 'Park Avenue' }
+  const parseAddress = (addr) => {
+    const m = String(addr || '').trim().match(/^(\d+[a-zA-Z]?)\s+(.+?)(?:,|$)/);
+    if (!m) return null;
+    return { number: m[1], street: m[2].trim() };
+  };
+
+  const parsed = aoList.map(parseAddress).filter(Boolean);
+  if (!parsed.length) {
+    // Fall back to full AO addresses if we can't parse a clean number+street
+    const names = aoList.filter(Boolean).join(' & ');
+    return names ? `${base} (Adjoining Owner: ${names})` : base;
+  }
+
+  // Group by street name so "8 Park Avenue" + "6 Park Avenue" become "8 & 6 Park Avenue"
+  const byStreet = {};
+  parsed.forEach(({ number, street }) => {
+    if (!byStreet[street]) byStreet[street] = [];
+    byStreet[street].push(number);
+  });
+
+  const label = aoList.length > 1 ? 'Adjoining Owners' : 'Adjoining Owner';
+  const parts = Object.entries(byStreet).map(([street, numbers]) => `${numbers.join(' & ')} ${street}`);
+  return `${base} (${label}: ${parts.join('; ')})`;
+}
+
 export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const { state } = useApp();
   const { sendEmail, markReplied } = useEmails();
@@ -57,8 +92,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setTo(opts.to || (opts.originalEmail ? (opts.originalEmail.from_email || opts.originalEmail.from || '') : ''));
     if (opts.cc) { setCc(opts.cc); setShowCc(true); }
     const proj = (projects || []).find(p => p.id === opts.projectId);
+    // opts.aoAddresses lets a caller (e.g. project chat: "relating to the AO at number 6")
+    // request the adjoining owner's address be appended to the subject in compact form.
     const defaultSubject = proj
-      ? `Party Wall etc. Act 1996 — ${proj.bo_premise_address || proj.name || ''}`
+      ? buildSubjectWithAoRef(proj.bo_premise_address || proj.name || '', opts.aoAddresses || [])
       : '';
     setSubject(opts.subject || (opts.originalEmail ? `RE: ${opts.originalEmail.subject || ''}` : defaultSubject));
     setBody(toHtml(opts.body) || (opts.originalEmail && opts.prefillGreeting !== false ? `<p>Hi ${opts.originalEmail.from || ''},</p><p></p>` : ''));
