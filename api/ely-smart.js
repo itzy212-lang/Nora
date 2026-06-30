@@ -3064,9 +3064,14 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-4o';
-    const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-4o';
-    const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
+    // HARDCODED — do not read from environment variables. A Vercel env var
+    // (ELY_MAIN_CHAT_MODEL) was found set to 'gpt-5.4-mini' in production,
+    // silently overriding this default and degrading every main chat and
+    // draft response for an extended period (repeated/near-identical drafts,
+    // losing track of corrected facts like adjoining owner count mid-
+    // conversation). gpt-5.4-mini must NEVER be used for chat/drafting —
+    // gpt-4o only. Hardcoding removes any path for an env var to override this.
+    const activeModel = 'gpt-4o';
     const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
 
     const modelPayload = isReasoningModel
