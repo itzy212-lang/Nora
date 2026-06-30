@@ -23,8 +23,13 @@ export function normaliseDraftText(raw = '') {
   const startMarkers = [
     /\bSubject\s*:/i,
     /\bDear\s+[A-Z0-9]/i,
+    /\bDear\s+(Sir|Madam|Sirs)/i,
     /\bHi\s+[A-Z0-9]/i,
+    /\bHi\s*,/i,
     /\bHello\s+[A-Z0-9]/i,
+    /\bHello\s*,/i,
+    /\bGood\s+(morning|afternoon|evening)\s*,?\s*[A-Z]?/i,
+    /\bTo\s+whom\s+it\s+may\s+concern/i,
   ];
 
   const starts = startMarkers
