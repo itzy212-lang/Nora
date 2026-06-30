@@ -127,29 +127,44 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       console.error('[SOC] init_session failed:', initData);
       throw new Error(initData.error || 'Could not start the SOC session — please try again.');
     }
+    // The session itself now exists and is usable — set this immediately so a
+    // failure in the secondary fetches below (notes history, existing report)
+    // can never leave the session "not ready" from the user's perspective.
     setSocSessionId(initData.session_id);
 
-    // Load existing notes for this session
-    const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
-    const notesData = await notesRes.json();
-    if (notesData.notes?.length) {
-      setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    // Load existing notes for this session — best-effort, non-fatal.
+    try {
+      const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
+      if (notesRes.ok) {
+        const notesData = await notesRes.json();
+        if (notesData.notes?.length) {
+          setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+        }
+      } else {
+        console.warn('[SOC] notes fetch returned', notesRes.status, '— continuing without history.');
+      }
+    } catch (err) {
+      console.warn('[SOC] notes fetch failed — continuing without history:', err);
     }
 
-    // Load existing SOC report for this session if one exists
-    const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
-    if (reportRes.ok) {
-      const reportData = await reportRes.json();
-      if (reportData.preview_html && reportData.structured_data) {
-        setPreviewHtml(reportData.preview_html);
-        setStructuredData(reportData.structured_data);
-        setReportId(reportData.report_id || null);
-        setEditableSections(JSON.parse(JSON.stringify(
-          reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
-        )));
-        setPhase('preview');
-        return initData.session_id;
+    // Load existing SOC report for this session if one exists — best-effort, non-fatal.
+    try {
+      const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
+      if (reportRes.ok) {
+        const reportData = await reportRes.json();
+        if (reportData.preview_html && reportData.structured_data) {
+          setPreviewHtml(reportData.preview_html);
+          setStructuredData(reportData.structured_data);
+          setReportId(reportData.report_id || null);
+          setEditableSections(JSON.parse(JSON.stringify(
+            reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
+          )));
+          setPhase('preview');
+          return initData.session_id;
+        }
       }
+    } catch (err) {
+      console.warn('[SOC] report fetch failed — continuing to recording phase:', err);
     }
 
     return initData.session_id;
