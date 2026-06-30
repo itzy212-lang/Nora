@@ -182,7 +182,10 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 .qa { display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--bg4); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 7px; font-size: 12.5px; cursor: pointer; transition: all 0.15s; font-weight: 500; color: var(--text2); }
 .qa:hover { background: var(--bg3); color: var(--text); box-shadow: var(--shadow); }
 @media (max-width: 768px) {
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); z-index: 50; transition: transform 0.3s; }
+  /* z-index raised above every overlay (composer=300, modals up to 400) so the
+     sidebar/burger menu is always reachable as a fallback way out on mobile,
+     even when an overlay like the email composer is open on top of it. */
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); z-index: 500; transition: transform 0.3s; }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.open { display: block; }
   .burger { display: flex; }
