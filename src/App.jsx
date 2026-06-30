@@ -516,7 +516,13 @@ export default function App() {
         borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 50,
+        // Inline style was hardcoded to 50 and silently overrode the .sidebar
+        // CSS class's z-index (raised to 500 so the sidebar sits above
+        // overlays like the composer) — inline styles always win over class
+        // rules, so the sidebar was still rendering at 50 in practice, behind
+        // the backdrop overlay (z-index 499), which made it look open but
+        // swallow every tap. Now matches the CSS class.
+        zIndex: 500,
         overflowY: 'auto',
         transition: 'transform 0.3s',
       }}>
