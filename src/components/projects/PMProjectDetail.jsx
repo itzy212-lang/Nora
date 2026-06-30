@@ -1975,14 +1975,27 @@ Proceed?`
 
                   return (
                     <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 90px 90px 90px 70px', gap: 8, padding: '12px 16px', borderBottom: i < scopeItems.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center',
-                      background: selectedScopeIds.has(item.id) ? '#f5f3ff' : (item.extracted_by_ai && !item.cost && !item.client_charge) ? '#fffbeb' : 'transparent' }}>
+                      background: selectedScopeIds.has(item.id) ? '#f5f3ff' : item.extracted_by_ai ? '#eff6ff' : 'transparent' }}>
                       <input type="checkbox" checked={selectedScopeIds.has(item.id)}
                         onChange={e => setSelectedScopeIds(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n; })}
                         style={{ width: 16, height: 16, cursor: 'pointer' }} />
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{item.title}</span>
-                          {item.extracted_by_ai && !item.cost && !item.client_charge && <span style={{ fontSize: 9, background: '#fef3c7', color: '#d97706', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>NEEDS PRICING</span>}
+                          {item.extracted_by_ai
+                          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 9, background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>AI IMPORTED</span>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await sb.from('scope_items').update({ extracted_by_ai: false }).eq('id', item.id);
+                                  setScopeItems(prev => prev.map(s => s.id === item.id ? { ...s, extracted_by_ai: false } : s));
+                                }}
+                                style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 4, fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                              >✓ Approve</button>
+                            </span>
+                          : (!item.cost && !item.client_charge && <span style={{ fontSize: 9, background: '#fef3c7', color: '#d97706', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>NEEDS PRICING</span>)
+                          }
                         </div>
                         {item.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.description}</div>}
                         {item.trade && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.trade}</div>}
