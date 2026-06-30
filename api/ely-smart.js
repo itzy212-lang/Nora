@@ -452,12 +452,20 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    query = query.eq('project_id', projectId).order('received_at', { ascending: true });
+    // Cap project email context at the 30 most recent — an unbounded fetch here
+    // was pulling a project's ENTIRE email history into every single request
+    // (even a one-line "draft me a clause" ask), which on projects with long
+    // correspondence histories blew past OpenAI's tokens-per-minute limit and
+    // forced a silent fallback to Claude. Most requests only need recent
+    // context; broader history lookups go through searchProjectEmails instead.
+    query = query.eq('project_id', projectId).order('received_at', { ascending: false }).limit(30);
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
 
   const { data, error } = await query;
+  // Restore chronological order for project context after the limited, most-recent-first fetch above
+  if (projectId && data?.length) data.reverse();
 
   if (error) {
     console.warn('[ely-smart] email context error:', error.message);
