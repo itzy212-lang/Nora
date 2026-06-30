@@ -1129,12 +1129,18 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
       {/* Context bar — project + email selectors, hidden on mobile unless expanded */}
       <div className="main-chat-context-selectors">
+        {/* Project linking removed from the visible UI per user request — main
+           chat is for general/email-tied work; project-specific discussion
+           belongs in project chat instead. State/logic kept intact (29 other
+           references depend on selectedProjectId) so nothing downstream breaks
+           — this just stops it competing for space with the email selector. */}
         <select
           value={selectedProjectId}
           onChange={handleProjectChange}
           disabled={loading || linkingProject}
           title="Link this chat to a project"
           className="main-chat-select"
+          style={{ display: 'none' }}
         >
           <option value="">No project linked</option>
           {(state.projects || []).map(project => (
