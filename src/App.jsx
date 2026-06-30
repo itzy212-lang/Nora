@@ -82,6 +82,7 @@ export default function App() {
   };
 
   const [currentView, setCurrentView]       = useState(getInitialView);
+  const [inboxResetKey, setInboxResetKey] = useState(0);
   const [previousView, setPreviousView]     = useState(getInitialPreviousView);
   const [projectView, setProjectView]       = useState(null);
   const [pendingProjectId, setPendingProjectId] = useState(getInitialProjectId);
@@ -181,6 +182,17 @@ export default function App() {
       return;
     }
 
+    // Re-clicking "Inbox" while already on Inbox is otherwise a no-op (state
+    // doesn't change, so the component never resets) — this leaves an open
+    // email/reply stuck on screen with no way back except a full refresh.
+    // Bumping inboxResetKey lets Inbox.jsx detect "navigated back to me" and
+    // clear its own selected-email state without losing the loaded list.
+    if (view === 'inbox' && currentView === 'inbox') {
+      setInboxResetKey(k => k + 1);
+      setSidebarOpen(false);
+      return;
+    }
+
     setCurrentView(view);
     setProjectView(null);
     setPendingProjectId('');
@@ -191,7 +203,7 @@ export default function App() {
       sessionStorage.setItem('ely_current_view', view);
       sessionStorage.removeItem('ely_current_project_id');
     } catch {}
-  }, [clearCurrentProject, rememberPreviousLocation]);
+  }, [clearCurrentProject, rememberPreviousLocation, currentView]);
 
   const handleOpenProject = useCallback((project) => {
     if (project === 'new') {
@@ -422,7 +434,7 @@ export default function App() {
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
-        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} />;
+        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} />;
       case 'chat':
         return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':
