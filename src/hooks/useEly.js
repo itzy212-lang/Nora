@@ -101,6 +101,14 @@ function mapDbMessagesToUiMessages(messages = []) {
       role: m.role === 'assistant' ? 'ely' : m.role,
       content: String(m.content || ''),
       created_at: m.created_at || null,
+      // Restores draft/brief classification on reload — without this, every
+      // draft's action row (Copy/Compose/Attach Quote) silently disappeared
+      // whenever a session reloaded, because messageType was never persisted.
+      ...(m.message_type ? { messageType: m.message_type } : {}),
+      // draft field is what ChatMessage.jsx actually checks for the draft body —
+      // restore it from content when messageType is 'draft' so reload behaves
+      // identically to a freshly-generated draft message.
+      ...(m.message_type === 'draft' ? { draft: String(m.content || '') } : {}),
     }));
 }
 
@@ -136,7 +144,7 @@ async function createAiSession({ userId, projectId, surface, mode = 'discuss', t
   return data || null;
 }
 
-async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model }) {
+async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model, messageType }) {
   if (!sb || !sessionId || !content) return null;
 
   const dbRole = role === 'ely' ? 'assistant' : role;
@@ -152,8 +160,9 @@ async function saveAiMessage({ sessionId, userId, projectId, surface, role, cont
       surface: projectId ? 'project_chat' : surface,
       source_type: 'chat',
       ...(model ? { model } : {}),
+      ...(messageType ? { message_type: messageType } : {}),
     }])
-    .select('id, role, content, created_at')
+    .select('id, role, content, created_at, message_type')
     .single();
 
   if (error) {
@@ -621,6 +630,24 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     refreshGlobalSessions,
   ]);
 
+  // Exposed so callers (e.g. MainChat) that split one AI reply into multiple
+  // UI messages (brief / draft / after) client-side can persist each one with
+  // its correct messageType — the auto-save inside send() happens before that
+  // split occurs and can't know the classification yet.
+  const saveMessage = useCallback(({ role, content, messageType, model } = {}) => {
+    if (!sessionId) return null;
+    return saveAiMessage({
+      sessionId,
+      userId,
+      projectId: projectId || state.currentProject?.id || state.selectedProject?.id || null,
+      surface,
+      role,
+      content,
+      messageType,
+      model,
+    });
+  }, [sessionId, userId, projectId, state.currentProject?.id, state.selectedProject?.id, surface]);
+
   return {
     send,
     loading,
@@ -636,6 +663,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     projectSessions,
     globalSessions,
     chatHistory,
+    saveMessage,
   };
 }
 
