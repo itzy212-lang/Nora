@@ -422,7 +422,7 @@ export default function App() {
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
-        return <Inbox onOpenComposer={openComposer} />;
+        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} />;
       case 'chat':
         return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':
