@@ -186,7 +186,10 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   // classified as a draft (no greeting/subject line), so it was never showing
   // Preview/Attach Quote at all even though the fees were genuinely agreed.
   // Check the raw reply directly, independent of isDraft.
-  const hasFeeAgreement = !isDraft && /FEE_AGREED:/i.test(replyText);
+  // Single source of truth for showing Preview/Attach Quote — fires on ANY
+  // message containing FEE_AGREED, whether or not it's also classified as a
+  // draft, so there is exactly one set of these buttons per message, never two.
+  const hasFeeAgreement = /FEE_AGREED:/i.test(replyText);
   const nonDraftDisplayText = hasFeeAgreement
     ? replyText.replace(/\nFEE_AGREED:[^\n]*/i, '').replace(/FEE_AGREED:[^\n]*/i, '').trim()
     : '';
@@ -364,25 +367,10 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
             Open in email composer
           </button>
 
-          {onPreviewQuote && (
-            <button type="button" onClick={handlePreviewQuote} disabled={previewLoading} style={{
-              border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)',
-              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: previewLoading ? 'not-allowed' : 'pointer',
-              fontWeight: 500, opacity: previewLoading ? 0.6 : 1,
-            }}>
-              {previewLoading ? 'Generating…' : '👁 Preview Quote'}
-            </button>
-          )}
-
-          {onAttachQuote && (
-            <button type="button" onClick={handleAttachQuote} disabled={quoteLoading} style={{
-              border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
-              borderRadius: 99, padding: '4px 10px', fontSize: 11.5, cursor: quoteLoading ? 'not-allowed' : 'pointer',
-              fontWeight: 500, opacity: quoteLoading ? 0.6 : 1,
-            }}>
-              {quoteLoading ? 'Generating…' : '📎 Attach Quote'}
-            </button>
-          )}
+          {/* Preview/Attach Quote intentionally NOT rendered here even on
+              FEE_AGREED drafts — they render exactly once, below, from the
+              single shared block (regardless of isDraft), to guarantee there
+              is never more than one Preview Quote button per message. */}
 
           <button type="button" onClick={handleGenerateDocument} style={{
             border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)',
