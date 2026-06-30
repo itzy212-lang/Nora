@@ -117,6 +117,16 @@ export function parseFeeAgreed(text = '') {
   };
 }
 
+/**
+ * Parse AO_SUBJECT_REF: tag from an Ely message.
+ * Returns an array of AO address strings, or [] if not present.
+ */
+export function parseAoSubjectRef(text = '') {
+  const match = String(text || '').match(/AO_SUBJECT_REF:\s*([^\n]+)/i);
+  if (!match) return [];
+  return match[1].split(',').map(s => s.trim()).filter(Boolean);
+}
+
 async function copyToClipboard(text) {
   if (!text) return false;
 
@@ -165,7 +175,10 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const actionText = isDraft ? draftText : '';
 
   // Strip the FEE_AGREED tag from displayed text
-  const displayText = actionText.replace(/\nFEE_AGREED:[^\n]*/i, '').trim();
+  const displayText = actionText
+    .replace(/\nFEE_AGREED:[^\n]*/i, '')
+    .replace(/\nAO_SUBJECT_REF:[^\n]*/i, '')
+    .trim();
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(displayText || actionText);
@@ -189,12 +202,15 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
       .map((para, i, arr) => `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${para.replace(/\n/g, '<br>')}</p>`)
       .join('');
 
+    const aoAddresses = parseAoSubjectRef(replyText);
+
     onOpenInComposer?.({
       mode: 'compose',
       body: htmlBody,
       subject: msg.subject || subject || '',
       to: msg.to || msg.recipient?.email || '',
       projectId: msg.projectId || msg.project_id || '',
+      aoAddresses,
     });
   };
 
