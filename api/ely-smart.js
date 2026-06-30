@@ -367,24 +367,30 @@ function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext =
   // Only load when the prompt clearly refers to emails/correspondence.
   const lower = String(prompt || '').toLowerCase();
 
+  // 'draft' alone is NOT a signal to load email context — "draft me a clause"
+  // or "draft an award paragraph" has nothing to do with prior correspondence.
+  // Only treat drafting language as wanting email context when it's clearly
+  // tied to replying to or referencing something that already exists.
+  const draftingAgainstExisting =
+    /\breply\s+(to|saying)\b/.test(lower) ||
+    /\brespond\s+(to|saying)\b/.test(lower) ||
+    /\bdraft\s+(a\s+)?reply\b/.test(lower) ||
+    /\bdraft\s+(a\s+)?response\b/.test(lower) ||
+    /\b(draft|write|reply)\b.{0,30}\b(their|his|her|that)\s+email\b/.test(lower);
+
   return (
     lower.includes('email') ||
     lower.includes('thread') ||
     lower.includes('inbox') ||
-    lower.includes('reply') ||
     lower.includes('correspondence') ||
-    lower.includes('letter') ||
     lower.includes('wrote') ||
     lower.includes('received') ||
-    lower.includes('sent') ||
-    lower.includes('response') ||
-    lower.includes('respond') ||
-    lower.includes('draft') ||
     lower.includes('what do you think about this email') ||
     lower.includes('what did they say') ||
     lower.includes('what is he asking') ||
     lower.includes('what is she asking') ||
-    lower.includes('what are they asking')
+    lower.includes('what are they asking') ||
+    draftingAgainstExisting
   );
 }
 
@@ -2364,11 +2370,8 @@ async function callClaude(messages = []) {
     content: m.content,
   }));
 
-  // Prepend the handoff message as a system note.
-  // IMPORTANT: never mention or imply a model handoff, capacity limit, "supervisor",
-  // or anything about request size/complexity — answer the request directly as Ely,
-  // exactly as if nothing unusual happened. The person should never see this fallback.
-  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\nNever mention that a request was passed to another system, model, or "supervisor", and never comment on request size or complexity. Just answer directly and naturally, as Ely.\n\n${systemMsg}`;
+  // Prepend the handoff message as a system note
+  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
