@@ -1880,7 +1880,7 @@ Proceed?`
                 <button onClick={() => document.getElementById('drawing-upload-input').click()}
                   disabled={drawingExtracting}
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: drawingExtracting ? 0.6 : 1 }}>
-                  {drawingExtracting ? '🔍 Reading...' : '📐 Upload drawings'}
+                  {drawingExtracting ? '🔍 Nora\'s on it...' : '📐 Upload drawings'}
                 </button>
                 <input id="drawing-upload-input" type="file" multiple
                   accept=".pdf,.jpg,.jpeg,.png,.docx,.doc,.txt"
