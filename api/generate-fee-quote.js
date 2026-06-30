@@ -190,17 +190,14 @@ export default async function handler(req, res) {
               ]}),
               feeRow("2A", `Consent. The adjoining owner${parseInt(numAOs) !== 1 ? 's' : ''} consent to the works in writing. No further action is required.`, "No further fee", false),
               feeRow("2B", `Consent subject to Schedule of Conditions. My fee covers the inspection, photography, and preparation of the written Schedule of Conditions report.`, fmt(fee_soc), true),
-              feeRow("2C", `Dissent and appointment as Agreed Surveyor. My fee covers preparation and service of the Party Wall Award and all associated correspondence. This is the most cost-effective route for both parties.`, fmt(fee_agreed), false),
-              feeRow("2D", `Dissent and separate surveyors. If the adjoining owner${parseInt(numAOs) !== 1 ? 's' : ''} appoint${parseInt(numAOs) !== 1 ? '' : 's'} ${parseInt(numAOs) !== 1 ? 'their' : 'their'} own surveyor, my fee remains ${fmt(fee_agreed)} as set out in Stage 2C above, plus an additional ${fmt(fee_separate)} to act as your appointed surveyor and negotiate directly with the adjoining owner's surveyor. The adjoining owner's own surveyor's fees are also payable by you, in addition to the above.`, `+${fmt(fee_separate)}`, true),
-              new TableRow({ children: [
-                new TableCell({ borders: hdrBorders, shading: { fill: NAVY, type: ShadingType.CLEAR }, width: { size: 800, type: WidthType.DXA }, margins: { top: 100, bottom: 100, left: 120, right: 120 }, children: [new Paragraph({ children: [] })] }),
-                new TableCell({ borders: hdrBorders, shading: { fill: NAVY, type: ShadingType.CLEAR }, width: { size: 6426, type: WidthType.DXA }, margins: { top: 100, bottom: 100, left: 120, right: 120 }, children: [new Paragraph({ children: [new TextRun({ text: "Maximum fee payable to us (worst case: Stage 1 + Stage 2C + Stage 2D addition)", bold: true, size: 19, color: "FFFFFF", font: "Arial" })] })] }),
-                new TableCell({ borders: hdrBorders, shading: { fill: NAVY, type: ShadingType.CLEAR }, width: { size: 1800, type: WidthType.DXA }, margins: { top: 100, bottom: 100, left: 120, right: 120 }, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: fmt(maxTotal), bold: true, size: 20, color: "FFFFFF", font: "Arial" })] })] }),
-              ]}),
+              feeRow("2C", `Dissent and my appointment as your surveyor. My fee covers preparation and service of the Party Wall Award and all associated correspondence. If the adjoining owner${parseInt(numAOs) !== 1 ? 's' : ''} appoint${parseInt(numAOs) !== 1 ? '' : 's'} ${parseInt(numAOs) !== 1 ? 'their own surveyors' : 'their own surveyor'}, ${parseInt(numAOs) !== 1 ? 'those' : 'their'} fees are also payable by you in addition to the fee below.`, fmt(fee_agreed), false),
             ]
           }),
 
           new Paragraph({ spacing: { before: 120 } }),
+          p(`If I am appointed as the Agreed Surveyor, acting on behalf of both the building owner and the adjoining owner${parseInt(numAOs) !== 1 ? 's' : ''}, my fee is ${fmt(fee_separate)} per appointment.`),
+          p(`The fees set out above are per adjoining owner. ${numAOs} adjoining owner${parseInt(numAOs) !== 1 ? 's are' : ' is'} affected by the proposed works.`),
+
 
           // PART 2: INCLUDED
           h1("2.  What Is Included"),
