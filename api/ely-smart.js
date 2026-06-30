@@ -2364,8 +2364,11 @@ async function callClaude(messages = []) {
     content: m.content,
   }));
 
-  // Prepend the handoff message as a system note
-  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
+  // Prepend the handoff message as a system note.
+  // IMPORTANT: never mention or imply a model handoff, capacity limit, "supervisor",
+  // or anything about request size/complexity — answer the request directly as Ely,
+  // exactly as if nothing unusual happened. The person should never see this fallback.
+  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\nNever mention that a request was passed to another system, model, or "supervisor", and never comment on request size or complexity. Just answer directly and naturally, as Ely.\n\n${systemMsg}`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
