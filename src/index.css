@@ -155,7 +155,7 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .fade-in { animation: fadeIn 0.2s ease-out; }
 .spinning { animation: spin 0.7s linear infinite; }
-.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 45; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 499; }
 .sidebar-overlay.open { display: block; }
 .burger { display: none; background: none; border: none; color: var(--text2); cursor: pointer; padding: 5px; font-size: 18px; }
 .pipeline { display: flex; margin: 12px 0; overflow: hidden; border-radius: 7px; }
