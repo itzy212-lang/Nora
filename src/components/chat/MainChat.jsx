@@ -771,15 +771,20 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const handlePreviewQuote = useCallback(async (fees = null) => {
     const allText = messages.map(m => m.content || '').join(' ');
     const numAOs = (() => {
-      // Match digit form ("2 adjoining owners") AND spelled-out form
-      // ("two adjoining owners") — Ely often writes numbers as words, and
-      // the digit-only regex silently fell back to '1' whenever it did,
-      // which is why a 2-AO quote was generated showing "1 adjoining owner".
-      const digitMatch = allText.match(/(\d+)\s+adjoining owners?/i);
-      if (digitMatch) return digitMatch[1];
-      const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
-      const wordMatch = allText.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
-      if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      // Search messages MOST-RECENT-FIRST and stop at the first match — using
+      // a forward, non-global match on the whole concatenated history meant
+      // an early mention of "1 adjoining owner" permanently won over a later
+      // correction to "two adjoining owners", even after the user explicitly
+      // corrected it and Ely confirmed the change.
+      const reversedMessages = [...messages].reverse();
+      for (const m of reversedMessages) {
+        const text = m.content || '';
+        const digitMatch = text.match(/(\d+)\s+adjoining owners?/i);
+        if (digitMatch) return digitMatch[1];
+        const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+        const wordMatch = text.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
+        if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      }
       return '1';
     })();
 
@@ -821,15 +826,20 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const handleAttachQuote = useCallback(async (fees = null) => {
     const allText = messages.map(m => m.content || '').join(' ');
     const numAOs = (() => {
-      // Match digit form ("2 adjoining owners") AND spelled-out form
-      // ("two adjoining owners") — Ely often writes numbers as words, and
-      // the digit-only regex silently fell back to '1' whenever it did,
-      // which is why a 2-AO quote was generated showing "1 adjoining owner".
-      const digitMatch = allText.match(/(\d+)\s+adjoining owners?/i);
-      if (digitMatch) return digitMatch[1];
-      const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
-      const wordMatch = allText.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
-      if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      // Search messages MOST-RECENT-FIRST and stop at the first match — using
+      // a forward, non-global match on the whole concatenated history meant
+      // an early mention of "1 adjoining owner" permanently won over a later
+      // correction to "two adjoining owners", even after the user explicitly
+      // corrected it and Ely confirmed the change.
+      const reversedMessages = [...messages].reverse();
+      for (const m of reversedMessages) {
+        const text = m.content || '';
+        const digitMatch = text.match(/(\d+)\s+adjoining owners?/i);
+        if (digitMatch) return digitMatch[1];
+        const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+        const wordMatch = text.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
+        if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      }
       return '1';
     })();
     const recipient = selectedEmailContext?.from || selectedEmailContext?.senderEmail || '';
