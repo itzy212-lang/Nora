@@ -327,6 +327,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [feeQuotePreview, setFeeQuotePreview] = useState(null); // { data, recipient, subject, body }
+  const [leadPrompt, setLeadPrompt] = useState(null); // { client_name, property_address, works }
   const fileInputRef = useRef(null);
   const [localEmails, setLocalEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
@@ -735,6 +736,42 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
   }, []);
 
+  const handleAttachQuote = useCallback(async (fees = null) => {
+    const allText = messages.map(m => m.content || '').join(' ');
+    const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
+    const recipient = selectedEmailContext?.from || selectedEmailContext?.senderEmail || '';
+    const subject = selectedEmailContext?.subject || '';
+
+    // Use agreed fees from FEE_AGREED tag, or fall back to defaults
+    const quoteData = await generateFeeQuote({
+      client_name: selectedEmailContext?.fromName || selectedEmailContext?.senderName || '',
+      property_address: '',
+      works_description: '',
+      num_aos: numAOs,
+      fee_notice: fees?.fee_notice || 100,
+      fee_soc: fees?.fee_soc || 300,
+      fee_agreed: fees?.fee_agreed || 450,
+      fee_separate: fees?.fee_separate || 600,
+    });
+
+    if (!quoteData) {
+      alert('Could not generate fee quote — please try again.');
+      return;
+    }
+
+    // Open composer with quote attached immediately
+    onOpenComposer?.({
+      to: recipient,
+      subject: subject ? `Re: ${subject}` : 'Party Wall Fee Quotation',
+      body: '',
+      attachments: [{
+        name: quoteData.file_name,
+        contentType: quoteData.content_type,
+        contentBytes: quoteData.base64,
+      }],
+    });
+  }, [generateFeeQuote, messages, onOpenComposer, selectedEmailContext]);
+
   const handleFilesSelected = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length || uploading) return;
@@ -1126,6 +1163,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                     requestAnimationFrame(resizeTextarea);
                   }}
                   onOpenInComposer={handleOpenInComposer}
+                  onAttachQuote={handleAttachQuote}
                 />
               ))
             )}
@@ -1134,42 +1172,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Fee quote quick actions */}
-          {messages.length > 0 && messages[messages.length-1]?.role !== 'user' && (
-            <div style={{ padding: '8px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {attachments.length > 0 && (
-                <button
-                  onClick={() => handleSend('Please draft a professional fee quote response email I can send to this client. Include a brief summary of the party wall implications you identified from their drawings, what notices are required, and my standard fees.')}
-                  style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                  ✍️ Draft fee quote email
-                </button>
-              )}
-              <button
-                onClick={async () => {
-                  const allText = messages.map(m => m.content).join(' ');
-                  const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
-                  const recipient = selectedEmailContext?.senderEmail || selectedEmailContext?.from || '';
-                  const subject = selectedEmailContext?.subject || '';
-                  const lastElyMsg = messages.filter(m => m.role === 'ely' || m.role === 'assistant').slice(-1)[0]?.content || '';
-                  const data = await generateFeeQuote({
-                    client_name: selectedEmailContext?.senderName || '',
-                    property_address: '',
-                    works_description: '',
-                    num_aos: numAOs,
-                    fee_notice: 100,
-                    fee_soc: 300,
-                    fee_agreed: 450,
-                    fee_separate: 600,
-                  });
-                  if (!data) { alert('Could not generate fee quote — try again.'); return; }
-                  // Show preview instead of going straight to composer
-                  setFeeQuotePreview({ data, recipient, subject, body: lastElyMsg });
-                }}
-                style={{ padding: '7px 14px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                📄 Generate fee quote
-              </button>
-            </div>
-          )}
+
 
           {/* Fee quote preview card */}
           {feeQuotePreview && (
@@ -1205,6 +1208,46 @@ export default function MainChat({ onOpenComposer, onClose }) {
                   }}
                   style={{ flex: 1, padding: '8px 14px', borderRadius: 99, background: '#1e3a5f', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   📧 Send in composer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Lead prompt — shown after sending a fee quote email */}
+          {leadPrompt && (
+            <div style={{ margin: '8px 16px', padding: '14px 16px', background: 'var(--bg2)', border: '1.5px solid var(--border)', borderRadius: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>💼 Create a lead from this enquiry?</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12 }}>
+                {leadPrompt.client_name && <span><strong>Client:</strong> {leadPrompt.client_name} · </span>}
+                {leadPrompt.property_address && <span><strong>Property:</strong> {leadPrompt.property_address}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      await sb.from('leads').insert({
+                        client_name: leadPrompt.client_name || '',
+                        property_address: leadPrompt.property_address || '',
+                        works_description: leadPrompt.works || '',
+                        source: 'ely_chat',
+                        status: 'new',
+                        created_at: new Date().toISOString(),
+                      });
+                      setLeadPrompt(null);
+                      setMessages(prev => [...prev, { id: uid(), role: 'ely', content: '✅ Lead created — you can find it in your leads pipeline.' }]);
+                    } catch (err) {
+                      alert('Could not save lead: ' + err.message);
+                    }
+                  }}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✓ Yes, create lead
+                </button>
+                <button
+                  onClick={() => setLeadPrompt(null)}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontSize: 12, cursor: 'pointer' }}
+                >
+                  Not now
                 </button>
               </div>
             </div>
