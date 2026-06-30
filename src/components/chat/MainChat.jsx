@@ -738,7 +738,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
         // `?.` on .catch only guards against saveMessage itself being undefined,
         // NOT against the call resolving to null, so `null.catch` still threw
         // "Cannot read properties of null (reading 'catch')" and broke the chat.
-        const result = saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType });
+        // Passing result.sessionId explicitly (from THIS send's actual result,
+        // not the hook's possibly-stale React state) fixes the intermittent
+        // silent failure where message_type never reached the database.
+        const result = saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType, sessionId: result?.sessionId });
         if (result && typeof result.catch === 'function') {
           result.catch(() => {});
         }
