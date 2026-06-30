@@ -770,7 +770,18 @@ export default function MainChat({ onOpenComposer, onClose }) {
   // quote was to attach it blind and hope it was right.
   const handlePreviewQuote = useCallback(async (fees = null) => {
     const allText = messages.map(m => m.content || '').join(' ');
-    const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
+    const numAOs = (() => {
+      // Match digit form ("2 adjoining owners") AND spelled-out form
+      // ("two adjoining owners") — Ely often writes numbers as words, and
+      // the digit-only regex silently fell back to '1' whenever it did,
+      // which is why a 2-AO quote was generated showing "1 adjoining owner".
+      const digitMatch = allText.match(/(\d+)\s+adjoining owners?/i);
+      if (digitMatch) return digitMatch[1];
+      const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+      const wordMatch = allText.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
+      if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      return '1';
+    })();
 
     const quoteData = await generateFeeQuote({
       client_name: selectedEmailContext?.fromName || selectedEmailContext?.senderName || '',
@@ -809,7 +820,18 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const handleAttachQuote = useCallback(async (fees = null) => {
     const allText = messages.map(m => m.content || '').join(' ');
-    const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
+    const numAOs = (() => {
+      // Match digit form ("2 adjoining owners") AND spelled-out form
+      // ("two adjoining owners") — Ely often writes numbers as words, and
+      // the digit-only regex silently fell back to '1' whenever it did,
+      // which is why a 2-AO quote was generated showing "1 adjoining owner".
+      const digitMatch = allText.match(/(\d+)\s+adjoining owners?/i);
+      if (digitMatch) return digitMatch[1];
+      const wordMap = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+      const wordMatch = allText.match(/\b(one|two|three|four|five|six)\s+adjoining owners?/i);
+      if (wordMatch) return wordMap[wordMatch[1].toLowerCase()];
+      return '1';
+    })();
     const recipient = selectedEmailContext?.from || selectedEmailContext?.senderEmail || '';
     const subject = selectedEmailContext?.subject || '';
 
