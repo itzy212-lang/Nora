@@ -220,36 +220,45 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const handleGeneratePdf = () => {
     if (!actionText) return;
 
-    const win = window.open('', '_blank', 'noopener,noreferrer');
-    if (!win) return;
-
     const escaped = (displayText || actionText)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/\n/g, '<br />');
 
-    win.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <title>Draft PDF</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              font-size: 12pt;
-              line-height: 1.55;
-              padding: 36px;
-              color: #111827;
-            }
-          </style>
-        </head>
-        <body>${escaped}</body>
-      </html>
-    `);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 250);
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Draft PDF</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 12pt;
+        line-height: 1.55;
+        padding: 36px;
+        color: #111827;
+      }
+    </style>
+  </head>
+  <body onload="window.print()">${escaped}</body>
+</html>`;
+
+    // Build a blob URL — far more reliable across browsers/mobile than
+    // window.open('') + document.write, which often yields a blank tab.
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+
+    if (!win) {
+      // Popup blocked — fall back to a direct navigation so the user still sees the content.
+      window.location.href = blobUrl;
+      return;
+    }
+
+    // Release the blob URL once the new tab has had a chance to load it.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   };
 
   const displayDraftText = displayText || draftText;
