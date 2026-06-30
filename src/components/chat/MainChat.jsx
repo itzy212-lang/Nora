@@ -914,10 +914,14 @@ export default function MainChat({ onOpenComposer, onClose }) {
       replyToEmailId: hasOriginalEmail ? selectedEmailContext.id : undefined,
       originalEmail: hasOriginalEmail ? selectedEmailContext : undefined,
       prefillGreeting: false, // body is empty here; don't add a "Hi X," the user didn't ask for
+      // EmailComposer.jsx's send logic reads attachment fields as
+      // { name, type, data } — this was sending { name, contentType,
+      // contentBytes } instead, so the attachment chip showed in the UI but
+      // type/data were undefined and nothing actually reached the sent email.
       attachments: [{
         name: quoteData.file_name,
-        contentType: quoteData.content_type,
-        contentBytes: quoteData.base64,
+        type: quoteData.content_type,
+        data: quoteData.base64,
       }],
     });
   }, [generateFeeQuote, messages, onOpenComposer, selectedEmailContext]);
