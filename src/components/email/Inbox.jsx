@@ -1435,7 +1435,7 @@ function isBriefContent(text = '') {
 }
 
 
-export default function Inbox({ onOpenComposer, onNavigate }) {
+export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
@@ -1454,6 +1454,16 @@ export default function Inbox({ onOpenComposer, onNavigate }) {
   const windowWidth = useWindowWidth();
   const isMobile = isMobileWidth(windowWidth);
   const folderRef = useRef(null);
+
+  // Re-navigating to Inbox while already here (e.g. tapping "Inbox" in the
+  // sidebar from inside an open email) bumps resetKey — clear the open-email
+  // view so the user lands back on the list, without reloading the inbox.
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setSelectedEmail(null);
+    setMobileShowEmail(false);
+  }, [resetKey]);
 
   useEffect(() => {
     const h = e => { if (folderRef.current && !folderRef.current.contains(e.target)) setFolderOpen(false); };
