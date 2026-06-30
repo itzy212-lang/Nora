@@ -247,7 +247,17 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
         subject: subject.trim() || '(No subject)',
         body: htmlBody,
         userId: userEmail,
-        attachments: attachments.map(a => ({ name: a.name, type: a.type, data: a.data })),
+        // Accept several field-name variants — this exact mismatch (caller sent
+        // {contentType, contentBytes}, this only read {type, data}) silently
+        // dropped a fee quote attachment with no error: the chip showed in the
+        // UI but type/data came through undefined and nothing reached the sent
+        // email. useEmails.js's sendEmail is similarly tolerant; matching that
+        // here prevents this exact class of bug recurring for any future caller.
+        attachments: attachments.map(a => ({
+          name: a.name || a.filename || 'attachment',
+          type: a.type || a.contentType || a.content_type || a.mime_type || 'application/octet-stream',
+          data: a.data || a.contentBytes || a.base64 || a.content || '',
+        })),
         projectId: projectId || null,
       });
 
