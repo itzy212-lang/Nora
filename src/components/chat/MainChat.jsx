@@ -757,6 +757,49 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
   }, []);
 
+  // Generates the quote and opens it as a real document in a new tab so the
+  // user can actually see it (formatting, figures, wording) before deciding
+  // to attach it to anything. Previously the only way to "see" a generated
+  // quote was to attach it blind and hope it was right.
+  const handlePreviewQuote = useCallback(async (fees = null) => {
+    const allText = messages.map(m => m.content || '').join(' ');
+    const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
+
+    const quoteData = await generateFeeQuote({
+      client_name: selectedEmailContext?.fromName || selectedEmailContext?.senderName || '',
+      property_address: '',
+      works_description: '',
+      num_aos: numAOs,
+      fee_notice: fees?.fee_notice || 100,
+      fee_soc: fees?.fee_soc || 300,
+      fee_agreed: fees?.fee_agreed || 450,
+      fee_separate: fees?.fee_separate || 600,
+    });
+
+    if (!quoteData) {
+      alert('Could not generate fee quote — please try again.');
+      return;
+    }
+
+    // Build a blob from the base64 .docx and open it — on most phones this
+    // either opens directly in a viewer or prompts a save/open action, which
+    // is the most reliable cross-device way to actually view a Word document
+    // without building a separate in-app renderer.
+    const byteChars = atob(quoteData.base64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: quoteData.content_type });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      // Popup blocked — fall back to direct navigation
+      window.location.href = blobUrl;
+    }
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  }, [generateFeeQuote, messages, selectedEmailContext]);
+
   const handleAttachQuote = useCallback(async (fees = null) => {
     const allText = messages.map(m => m.content || '').join(' ');
     const numAOs = (allText.match(/(\d+)\s+adjoining owner/i)?.[1]) || '1';
@@ -1194,6 +1237,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                   }}
                   onOpenInComposer={handleOpenInComposer}
                   onAttachQuote={handleAttachQuote}
+                  onPreviewQuote={handlePreviewQuote}
                 />
               ))
             )}
