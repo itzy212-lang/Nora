@@ -7,6 +7,16 @@ import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import sb from '../../supabaseClient';
 import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return isMobile;
+}
+
 // Build a project subject line, optionally appending a short AO reference
 // e.g. "Party Wall etc. Act 1996 — 12 Oak Road" or, when one or more AOs are
 // specified and share a street with the BO/each other, a compact form like
@@ -43,6 +53,7 @@ function buildSubjectWithAoRef(baseAddress, aoList = []) {
 }
 
 export default function EmailComposer({ opts = {}, onClose, onSent }) {
+  const isMobile = useIsMobile();
   const { state } = useApp();
   const { sendEmail, markReplied } = useEmails();
   const { currentUser, projects, emails } = state;
@@ -276,7 +287,24 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   return (
     <div className="email-composer-overlay open">
       <div className="email-composer-header">
-        <button className="btn btn-sm btn-ghost" onClick={handleClose}>← Back</button>
+        {isMobile ? (
+          <button
+            onClick={handleClose}
+            aria-label="Close"
+            title="Close"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: '50%',
+              border: '1px solid var(--border)', background: 'var(--bg3)',
+              fontSize: 18, lineHeight: 1, cursor: 'pointer', color: 'var(--text2)',
+              flexShrink: 0,
+            }}
+          >
+            ✕
+          </button>
+        ) : (
+          <button className="btn btn-sm btn-ghost" onClick={handleClose}>← Back</button>
+        )}
         <div style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>
           {replyInfoRef.current.mode === 'reply' ? 'Reply email' : 'Compose email'}
         </div>
