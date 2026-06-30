@@ -1944,7 +1944,7 @@ Proceed?`
             )}
             {drawingExtracting && (
               <div style={{ padding: '12px 16px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, marginBottom: 10, fontSize: 13, color: '#7c3aed', fontWeight: 600 }}>
-                🔍 Reading your drawings — finding the legend and counting symbols... (15-30 seconds)
+                🔍 Nora's squinting at your drawings, counting every socket like her life depends on it... (15-30 seconds)
               </div>
             )}
 
