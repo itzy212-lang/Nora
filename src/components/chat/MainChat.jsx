@@ -769,11 +769,20 @@ export default function MainChat({ onOpenComposer, onClose }) {
       return;
     }
 
-    // Open composer with quote attached immediately
+    // Open composer as a genuine reply against the original email (when one
+    // is linked to this chat) so the quote lands in the SAME thread, instead
+    // of a disconnected new email. Falls back to plain compose only if there's
+    // no original email to reply to.
+    const hasOriginalEmail = !!selectedEmailContext?.id;
+
     onOpenComposer?.({
+      mode: hasOriginalEmail ? 'reply' : 'compose',
       to: recipient,
       subject: subject ? `Re: ${subject}` : 'Party Wall Fee Quotation',
       body: '',
+      replyToEmailId: hasOriginalEmail ? selectedEmailContext.id : undefined,
+      originalEmail: hasOriginalEmail ? selectedEmailContext : undefined,
+      prefillGreeting: false, // body is empty here; don't add a "Hi X," the user didn't ask for
       attachments: [{
         name: quoteData.file_name,
         contentType: quoteData.content_type,
