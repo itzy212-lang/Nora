@@ -39,13 +39,39 @@ function getMediaType(fileName) {
 }
 
 // Claude Vision prompt for drawings
-const DRAWING_PROMPT = `You are reading a construction drawing or architectural plan.
+const DRAWING_PROMPT = `You are reading a construction drawing or architectural plan. Your job is to extract a COMPLETE, COUNTED list of every item visible — especially for electrical plans.
 
-Your task:
-1. Find the LEGEND or SYMBOL TABLE on this drawing (usually a box listing what each symbol means — e.g. ⊕ = double socket, ○ = single socket, etc.)
-2. Use the legend to identify and COUNT every symbol on the plan
-3. Also read any written notes, specifications, room names and dimensions you can see
-4. Extract any electrical, plumbing, structural or other trade information visible
+IMPORTANT: Many UK architectural electrical plans do NOT show a separate legend box. Instead they use standard symbols directly on the plan. You must count these even without a legend.
+
+STANDARD ELECTRICAL SYMBOLS TO COUNT (even without a legend):
+- "2" next to an outlet symbol = double switched socket outlet. COUNT EVERY INSTANCE across all rooms.
+- "1" next to an outlet symbol = single switched socket outlet. COUNT EVERY INSTANCE.
+- "P" = pendant ceiling light / ceiling rose. COUNT EVERY INSTANCE.
+- "W" = wall light. COUNT EVERY INSTANCE.
+- "R" = recessed downlight / spotlight. COUNT EVERY INSTANCE.
+- "S" = switch (1-gang unless number shown). COUNT EVERY INSTANCE.
+- "2S" or "S2" = 2-gang switch. COUNT EVERY INSTANCE.
+- "PIR" = PIR motion sensor / occupancy sensor. COUNT EVERY INSTANCE.
+- "TV" = TV aerial point. COUNT EVERY INSTANCE.
+- "CAT" or "DATA" = data/ethernet point. COUNT EVERY INSTANCE.
+- "SPKR" = speaker point. COUNT EVERY INSTANCE.
+- "EV" = electric vehicle charging point. COUNT EVERY INSTANCE.
+- "DC" = doorbell/door chime. COUNT EVERY INSTANCE.
+- "DB" = distribution board / consumer unit. COUNT EVERY INSTANCE.
+- "T" = thermostat. COUNT EVERY INSTANCE.
+- Shaver socket = shaver socket. COUNT EVERY INSTANCE.
+- Extractor fan = extractor fan. COUNT EVERY INSTANCE.
+- Towel rail (electric/dual fuel) = electric towel rail. COUNT EVERY INSTANCE.
+- Smoke detector / fire alarm = smoke/CO detector. COUNT EVERY INSTANCE.
+- Any symbol at a specific height notation (e.g. @450mm, @1050mm) = socket at that height. NOTE the height.
+
+CIRCUIT REFERENCES (e.g. C1, C2, C20 etc.) are lighting circuit labels — do NOT count these as separate items. They tell you which lighting circuit a fitting is on, not the type of fitting.
+
+METHOD:
+1. Go room by room across the entire plan
+2. Count EVERY symbol in EVERY room
+3. Add up totals per item type across all rooms
+4. Note the room breakdown in the description where useful
 
 Return ONLY valid JSON with no markdown:
 {
@@ -53,13 +79,13 @@ Return ONLY valid JSON with no markdown:
   "drawing_type": "floor plan / electrical plan / structural / etc",
   "rooms": ["list of room names visible"],
   "scope_items": [
-    { "title": "item description e.g. Double socket outlet", "quantity": 24, "unit": "no.", "trade": "Electrical", "description": "any notes" }
+    { "title": "Double switched socket outlet", "quantity": 24, "unit": "no.", "trade": "Electrical", "description": "Counted across all rooms: Kitchen 6, Living 4, Dining 2, etc." }
   ],
   "notes": "any other important notes visible on the drawing",
   "legend_found": true
 }
 
-If no legend is found, still extract what you can see and set legend_found to false.`;
+CRITICAL: Never return "located throughout the plan" as a quantity. Always give a real number. If you are unsure of an exact count, give your best estimate and note it.`;
 
 // Claude text prompt for written specs/tender packs
 const TEXT_PROMPT = `You are extracting project information from a construction tender package or specification document.
