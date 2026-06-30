@@ -118,8 +118,15 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr }),
     });
+    if (!initRes.ok) {
+      console.error('[SOC] init_session HTTP error:', initRes.status);
+      throw new Error(`Could not start the SOC session (server returned ${initRes.status}). Please try again.`);
+    }
     const initData = await initRes.json();
-    if (!initData.session_id) { console.error('[SOC] init_session failed:', initData); return null; }
+    if (!initData.session_id) {
+      console.error('[SOC] init_session failed:', initData);
+      throw new Error(initData.error || 'Could not start the SOC session — please try again.');
+    }
     setSocSessionId(initData.session_id);
 
     // Load existing notes for this session
@@ -251,7 +258,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const handleSend = useCallback(async (overrideText) => {
     const userContent = (overrideText ?? textInput).trim();
     if (!userContent) return;
-    if (!socSessionId) { alert('Session not ready — please wait a moment and try again.'); return; }
+    if (!socSessionId) {
+      const reason = sessionLoadError
+        ? `SOC session could not be loaded: ${sessionLoadError}`
+        : 'SOC session is not ready yet. This can happen if "Start SOC" was not completed, or the connection dropped.';
+      alert(`${reason}\n\nTry going back to the project and starting the SOC again.`);
+      return;
+    }
 
     const msgId = uid();
     setMessages(prev => [...prev, { id: msgId, role: 'user', content: userContent }]);
@@ -619,8 +632,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             onClick={async () => {
               const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
               const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
-              await initSession(aoId, aoAddr).catch(console.error);
-              setPhase('recording');
+              try {
+                await initSession(aoId, aoAddr);
+                setPhase('recording');
+              } catch (err) {
+                console.error('[SOC] Start SOC failed:', err);
+                alert(err.message || 'Could not start the SOC session — please check your connection and try again.');
+              }
             }}
             style={{ ...s.generateBtn, opacity: !projectId ? 0.5 : 1, alignSelf: 'flex-start' }}
           >
