@@ -181,7 +181,7 @@ export function useEmails() {
     }
   }, [dispatch, state.emails]);
 
-  const sendEmail = useCallback(async ({ to, subject, body, attachments = [], userId, projectId }) => {
+  const sendEmail = useCallback(async ({ to, cc, subject, body, attachments = [], userId, projectId }) => {
     if (!sb) throw new Error('Supabase client is not available.');
 
     const normalisedAttachments = (attachments || []).map((attachment) => {
@@ -198,9 +198,19 @@ export function useEmails() {
       };
     }).filter(att => att.base64 && att.name);
 
+    // Normalise to comma + space separated, in case multiple addresses were
+    // pasted with semicolons, newlines, or no spacing.
+    const normaliseRecipients = (val) =>
+      String(val || '')
+        .split(/[;,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ');
+
     const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
       body: {
-        to_email: to,
+        to_email: normaliseRecipients(to),
+        cc_email: cc ? normaliseRecipients(cc) : null,
         subject: subject || '(No subject)',
         body,
         user_id: userId || state.currentUser?.email || state.currentUser?.id || null,
