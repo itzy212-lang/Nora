@@ -12,6 +12,7 @@ import path from 'path';
 export const config = { api: { bodyParser: false } };
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
 // Extract text from docx using mammoth
 async function extractDocxText(filePath) {
@@ -94,25 +95,47 @@ export default async function handler(req, res) {
     const isDocx = ['.docx', '.doc'].includes(ext);
     const isTxt = ext === '.txt';
 
-    let claudeMessages;
+    let rawJson = '';
 
     if (isDrawing || isPdf) {
-      // Vision mode — send image/PDF directly to Claude
+      // Vision mode — drawings/PDFs go to GPT-4o (better structured/diagrammatic
+      // extraction for drawings with a legend + symbol count). This is the ONLY
+      // branch routed to GPT-4o — text/docx extraction below stays on Claude.
       const base64Data = fileToBase64(file.filepath);
       const mediaType = getMediaType(fileName);
 
-      claudeMessages = [{
-        role: 'user',
-        content: [
-          {
-            type: isPdf ? 'document' : 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64Data }
-          },
-          { type: 'text', text: DRAWING_PROMPT }
-        ]
-      }];
+      // GPT-4o vision does not accept application/pdf directly — PDFs must be
+      // sent as image_url with a data URL; images use the same image_url format.
+      const dataUrl = `data:${mediaType};base64,${base64Data}`;
+
+      const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: DRAWING_PROMPT },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          }],
+        }),
+      });
+
+      if (!gptRes.ok) {
+        const err = await gptRes.text();
+        return res.status(500).json({ error: 'GPT-4o drawing extraction failed', detail: err });
+      }
+
+      const gptData = await gptRes.json();
+      rawJson = gptData?.choices?.[0]?.message?.content || '';
     } else {
-      // Text mode — extract text first then send to Claude
+      // Text mode — extract text first then send to Claude (unchanged)
       let rawText = '';
       if (isDocx) {
         rawText = await extractDocxText(file.filepath);
@@ -123,34 +146,35 @@ export default async function handler(req, res) {
       }
 
       const truncated = rawText.slice(0, 40000);
-      claudeMessages = [{
+      const claudeMessages = [{
         role: 'user',
         content: `${TEXT_PROMPT}\n\nDOCUMENT:\n${truncated}`
       }];
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'pdfs-2024-09-25', // enable PDF support
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 4000,
+          messages: claudeMessages,
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const err = await claudeRes.text();
+        return res.status(500).json({ error: 'Claude extraction failed', detail: err });
+      }
+
+      const claudeData = await claudeRes.json();
+      rawJson = claudeData?.content?.[0]?.text || '';
     }
 
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25', // enable PDF support
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-6',
-        max_tokens: 4000,
-        messages: claudeMessages,
-      }),
-    });
-
-    if (!claudeRes.ok) {
-      const err = await claudeRes.text();
-      return res.status(500).json({ error: 'Claude extraction failed', detail: err });
-    }
-
-    const claudeData = await claudeRes.json();
-    const rawJson = claudeData?.content?.[0]?.text || '';
     const clean = rawJson.replace(/```json|```/g, '').trim();
 
     let extracted;
