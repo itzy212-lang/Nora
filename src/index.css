@@ -263,7 +263,9 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
   .ai-full-sidebar { display: none; }
   .ai-full-sidebar.mob-open { display: flex; position: fixed; top: 0; left: 0; bottom: 0; z-index: 200; width: 80%; max-width: 300px; min-width: unset; box-shadow: 4px 0 24px rgba(0,0,0,0.18); }
   .ai-sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 199; }
-  .main-chat-context-selectors .main-chat-email-select { display: none; }
-  .main-chat-context-selectors .main-chat-email-refresh-btn { display: none; }
+  /* Pre-existing rule was hiding the email selector entirely on mobile —
+     with the project selector now hidden too, this left NO way to link an
+     email to main chat on phone, breaking reply-in-thread for fee quotes
+     and any draft. Email linking is essential on mobile, so it stays visible. */
 }
 
