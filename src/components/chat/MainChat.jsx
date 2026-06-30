@@ -734,7 +734,14 @@ export default function MainChat({ onOpenComposer, onClose }) {
     // save the classification (and the action row it drives) is lost on reload.
     newMessages.forEach(m => {
       if (m.role === 'ely' && m.content) {
-        saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType }).catch?.(() => {});
+        // saveMessage can return null synchronously (e.g. no sessionId yet) —
+        // `?.` on .catch only guards against saveMessage itself being undefined,
+        // NOT against the call resolving to null, so `null.catch` still threw
+        // "Cannot read properties of null (reading 'catch')" and broke the chat.
+        const result = saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType });
+        if (result && typeof result.catch === 'function') {
+          result.catch(() => {});
+        }
       }
     });
 
