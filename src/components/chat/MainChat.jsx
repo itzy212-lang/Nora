@@ -748,16 +748,47 @@ export default function MainChat({ onOpenComposer, onClose }) {
     setMessages(prev => [...prev, ...newMessages]);
   }, [state.currentProject?.id, selectedEmailContext]);
 
+  // Fee quote is now exported as a genuine PDF rather than .docx — there is no
+  // PDF-writing library in this project (only docx, which can't export PDF),
+  // so this reuses the EXACT pipeline already proven for Schedule of Conditions
+  // exports: build the quote as HTML, send it to export-soc-pdf.js, which uses
+  // the API2PDF service (a headless-Chrome HTML→PDF renderer already configured
+  // and paid for in this project) to return a real PDF.
   const generateFeeQuote = useCallback(async (vars = {}) => {
     try {
-      const res = await fetch('/api/generate-fee-quote', {
+      const htmlRes = await fetch('/api/generate-fee-quote-html', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vars),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
-      return data; // { base64, file_name, content_type, quote_ref }
+      const htmlData = await htmlRes.json();
+      if (!htmlRes.ok) throw new Error(htmlData.error || 'Fee quote HTML generation failed');
+
+      const safeFilename = `Party Wall Fee Quote - ${htmlData.quote_ref}`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+      const pdfRes = await fetch('/api/export-soc-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: htmlData.html, filename: `${safeFilename}.pdf` }),
+      });
+      if (!pdfRes.ok) {
+        const errPayload = await pdfRes.json().catch(() => ({}));
+        throw new Error(errPayload.error || 'Fee quote PDF export failed');
+      }
+
+      const pdfBlob = await pdfRes.blob();
+      const arrayBuffer = await pdfBlob.arrayBuffer();
+      let binary = '';
+      const bytes = new Uint8Array(arrayBuffer);
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+
+      return {
+        base64,
+        file_name: `${safeFilename}.pdf`,
+        content_type: 'application/pdf',
+        quote_ref: htmlData.quote_ref,
+      };
     } catch (err) {
       console.error('[generateFeeQuote]', err);
       return null;
