@@ -3088,16 +3088,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       const err = await response.json().catch(() => ({}));
       const errMsg = err.error?.message || `OpenAI error ${response.status}`;
 
-      // TPM limit hit — pass to Claude instead
+      // TPM limit hit — never fall back to Claude, return clean error
       if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
-        console.log('[ely-smart] TPM limit hit — falling back to Claude');
-        const claudeReply = await callClaude(messages);
-        return res.status(200).json({
-          reply: claudeReply,
-          resolvedProject,
-          model: 'claude',
-          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        });
+        console.warn('[ely-smart] TPM limit hit — returning error, not calling Claude');
+        throw new Error('Your request context is too large. Please try again or break your request into smaller parts.');
       }
 
       // Model not available — fall back to gpt-4o
