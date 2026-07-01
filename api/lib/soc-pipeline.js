@@ -108,7 +108,14 @@ SPEECH-TO-TEXT CORRECTIONS (apply automatically):
 "kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC"
 
 SECTION NAMES — use exactly:
-Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | First Floor Rear Bedroom | First Floor Front Elevation Room | External Areas
+Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
+
+SELF-CORRECTION / FALSE STARTS — critical rule:
+When a speaker starts a phrase and immediately corrects themselves in the same sentence or next breath, ignore the false start entirely and use only the corrected version.
+Examples:
+- "Starting the extension, starting the schedule of conditions in the ground floor rear outrigger" → section is "Ground Floor Rear Outrigger", ignore "starting the extension"
+- "first floor rear bedroom, rear bathroom" → section is "First Floor Rear Bathroom", ignore "rear bedroom"
+- Any phrase of the form "[false start], [correction]" where the correction is a fuller or more specific description — use the correction only.
 
 NAVIGATION PHRASES → section_transition or contextual, never observations.
 
