@@ -2537,6 +2537,7 @@ Never summarise. Never explain. Never ask questions.`,
     const modeHint = inferModeHint(body.surface, body.prompt, body);
     const prompt = String(body.prompt || '').trim();
     const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
+    console.log('[ely-smart] isDraftWithEly=', isDraftWithEly, 'mode=', body.mode, 'workflowStage=', body.workflowStage);
 
     // ── Case review confirmation ──────────────────────────────────────────
     if (body.case_review_confirmed && body.case_review_topic && projectId) {
@@ -3088,10 +3089,20 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       const err = await response.json().catch(() => ({}));
       const errMsg = err.error?.message || `OpenAI error ${response.status}`;
 
-      // TPM limit hit — never fall back to Claude, return clean error
+      // TPM limit hit — only fall back to Claude for explicit case reviews
       if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
-        console.warn('[ely-smart] TPM limit hit — returning error, not calling Claude');
-        throw new Error('Your request context is too large. Please try again or break your request into smaller parts.');
+        if (body.case_review_topic) {
+          console.log('[ely-smart] TPM limit hit on case review — falling back to Claude');
+          const claudeReply = await callClaude(messages);
+          return res.status(200).json({
+            reply: claudeReply,
+            resolvedProject,
+            model: 'claude',
+            sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          });
+        }
+        console.warn('[ely-smart] TPM limit hit on normal chat — returning error to client');
+        throw new Error('Your request is too large for this session. Try shortening your message or breaking it into smaller parts.');
       }
 
       // Model not available — fall back to gpt-4o
