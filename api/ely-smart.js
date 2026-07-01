@@ -3089,20 +3089,16 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       const err = await response.json().catch(() => ({}));
       const errMsg = err.error?.message || `OpenAI error ${response.status}`;
 
-      // TPM limit hit — only fall back to Claude for explicit case reviews
+      // TPM limit hit — fall back to Claude (restores original behaviour)
       if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
-        if (body.case_review_topic) {
-          console.log('[ely-smart] TPM limit hit on case review — falling back to Claude');
-          const claudeReply = await callClaude(messages);
-          return res.status(200).json({
-            reply: claudeReply,
-            resolvedProject,
-            model: 'claude',
-            sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          });
-        }
-        console.warn('[ely-smart] TPM limit hit on normal chat — returning error to client');
-        throw new Error('Your request is too large for this session. Try shortening your message or breaking it into smaller parts.');
+        console.log('[ely-smart] TPM limit hit — falling back to Claude');
+        const claudeReply = await callClaude(messages);
+        return res.status(200).json({
+          reply: claudeReply,
+          resolvedProject,
+          model: 'claude',
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
       }
 
       // Model not available — fall back to gpt-4o
