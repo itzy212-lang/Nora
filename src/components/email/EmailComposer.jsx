@@ -117,7 +117,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setAttachments(opts.attachments || []);
     replyInfoRef.current = {
       replyToEmailId: opts.replyToEmailId || '',
-      threadId: opts.threadId || uid(),
+      threadId: opts.threadId || null, // null on compose — don't generate fake threadId that triggers email fetch
       original: opts.originalEmail || null,
       mode: opts.mode || 'compose',
     };
