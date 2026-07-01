@@ -316,6 +316,7 @@ async function loadProjectBundle(projectId) {
 
 // ── Semantic search across all project content ───────────────────────────
 async function semanticSearchProject(projectId, userPrompt, limit = 20) {
+  const sb = getSupabase();
   if (!sb || !projectId || !userPrompt) return null;
   try {
     const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -2919,7 +2920,14 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Never load everything on every call. Fetch each piece only if relevant.
 
     const hasSuppliedEmail = !!suppliedEmailContext || !!body.threadId || !!body.emailId;
-    const needsEmails = hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId);
+    // On draft_with_ely surface, never bulk-fetch project emails.
+    // Words like "correspondence", "reply", "received" appear naturally in dictated draft content
+    // and must NOT trigger a database fetch. Only load emails if an actual email is supplied
+    // (i.e. replying to an existing email) or the user explicitly asks to search correspondence.
+    const explicitResearchRequest = /\b(check|find|look up|search|what did they say|previous email|earlier email|check my email|search correspondence)\b/i.test(prompt);
+    const needsEmails = isDraftWithEly
+      ? (hasSuppliedEmail || explicitResearchRequest)
+      : (hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId));
     const needsProject = needsProjectContext(prompt);
     const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
 
