@@ -1410,10 +1410,12 @@ export default async function handler(req, res) {
       const preview_html = htmlTemplate.replace('{{SOC_CONTENT}}', renderedContent);
       // Save edit state
       if (final_soc_data.report_id) {
-        await supabase.rpc('save_soc_structured_data', {
-          report_id: final_soc_data.report_id,
-          structured_data: renderData,
-        }).catch(() => {});
+        try {
+          await supabase.rpc('save_soc_structured_data', {
+            report_id: final_soc_data.report_id,
+            structured_data: renderData,
+          });
+        } catch (_) {}
       }
       return res.status(200).json({ preview_html, structured_data: renderData, report_id: final_soc_data.report_id || null });
     }
