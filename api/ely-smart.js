@@ -113,20 +113,6 @@ Use UK English.
 Do not invent facts.
 Do not use long dashes.
 Refer to the legislation as the Act where context is clear.
-
-FEE QUOTING RULE:
-When fees are agreed with a client during conversation, end your message with a structured tag on its own line:
-FEE_AGREED: notice=100, soc=300, agreed_surveyor=450, separate=600
-Replace the numbers with the actual agreed figures. This tag is read by the system to auto-populate the fee quote document.
-Do not include this tag unless specific fees have been agreed or confirmed in this conversation.
-
-SUBJECT LINE — ADJOINING OWNER REFERENCE:
-The default email subject already includes the Building Owner's property address — do not include the project reference number in the subject under any circumstances, it has no meaning to the recipient.
-If the user's message in this conversation makes clear that the email or draft specifically concerns one or more adjoining owners (e.g. "this is for the AO at number 6", "relating to the adjoining owner at 8 Park Avenue", "for both AOs"), end your message with a structured tag on its own line:
-AO_SUBJECT_REF: 6 Park Avenue
-or, for more than one:
-AO_SUBJECT_REF: 8 Park Avenue, 6 Park Avenue
-List the full address of each relevant adjoining owner exactly as known from the project context, separated by a comma if there is more than one. Do not include this tag unless the user has specifically indicated the correspondence relates to one or more named adjoining owners.
 `;
 
 function normaliseProject(project = {}) {
@@ -367,30 +353,24 @@ function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext =
   // Only load when the prompt clearly refers to emails/correspondence.
   const lower = String(prompt || '').toLowerCase();
 
-  // 'draft' alone is NOT a signal to load email context — "draft me a clause"
-  // or "draft an award paragraph" has nothing to do with prior correspondence.
-  // Only treat drafting language as wanting email context when it's clearly
-  // tied to replying to or referencing something that already exists.
-  const draftingAgainstExisting =
-    /\breply\s+(to|saying)\b/.test(lower) ||
-    /\brespond\s+(to|saying)\b/.test(lower) ||
-    /\bdraft\s+(a\s+)?reply\b/.test(lower) ||
-    /\bdraft\s+(a\s+)?response\b/.test(lower) ||
-    /\b(draft|write|reply)\b.{0,30}\b(their|his|her|that)\s+email\b/.test(lower);
-
   return (
     lower.includes('email') ||
     lower.includes('thread') ||
     lower.includes('inbox') ||
+    lower.includes('reply') ||
     lower.includes('correspondence') ||
+    lower.includes('letter') ||
     lower.includes('wrote') ||
     lower.includes('received') ||
+    lower.includes('sent') ||
+    lower.includes('response') ||
+    lower.includes('respond') ||
+    lower.includes('draft') ||
     lower.includes('what do you think about this email') ||
     lower.includes('what did they say') ||
     lower.includes('what is he asking') ||
     lower.includes('what is she asking') ||
-    lower.includes('what are they asking') ||
-    draftingAgainstExisting
+    lower.includes('what are they asking')
   );
 }
 
@@ -458,20 +438,12 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    // Cap project email context at the 30 most recent — an unbounded fetch here
-    // was pulling a project's ENTIRE email history into every single request
-    // (even a one-line "draft me a clause" ask), which on projects with long
-    // correspondence histories blew past OpenAI's tokens-per-minute limit and
-    // forced a silent fallback to Claude. Most requests only need recent
-    // context; broader history lookups go through searchProjectEmails instead.
-    query = query.eq('project_id', projectId).order('received_at', { ascending: false }).limit(30);
+    query = query.eq('project_id', projectId).order('received_at', { ascending: true });
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
 
   const { data, error } = await query;
-  // Restore chronological order for project context after the limited, most-recent-first fetch above
-  if (projectId && data?.length) data.reverse();
 
   if (error) {
     console.warn('[ely-smart] email context error:', error.message);
@@ -2524,7 +2496,8 @@ export default async function handler(req, res) {
       const emailCtx = body.emailContext || {};
       const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
 
-      const openai = getOpenAI();
+      const { default: OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const silentResult = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 150,
@@ -3064,14 +3037,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    // HARDCODED — do not read from environment variables. A Vercel env var
-    // (ELY_MAIN_CHAT_MODEL) was found set to 'gpt-5.4-mini' in production,
-    // silently overriding this default and degrading every main chat and
-    // draft response for an extended period (repeated/near-identical drafts,
-    // losing track of corrected facts like adjoining owner count mid-
-    // conversation). gpt-5.4-mini must NEVER be used for chat/drafting —
-    // gpt-4o only. Hardcoding removes any path for an env var to override this.
-    const activeModel = 'gpt-4o';
+    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini';
+    const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini';
+    const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
     const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
 
     const modelPayload = isReasoningModel
