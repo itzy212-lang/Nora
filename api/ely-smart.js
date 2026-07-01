@@ -353,24 +353,28 @@ function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext =
   // Only load when the prompt clearly refers to emails/correspondence.
   const lower = String(prompt || '').toLowerCase();
 
+  // 'draft' alone is NOT a signal to load email context — only load when
+  // the user is clearly referencing existing correspondence to reply to or read.
+  const draftingAgainstExisting =
+    /\breply\s+(to|saying)\b/.test(lower) ||
+    /\brespond\s+(to|saying)\b/.test(lower) ||
+    /\bdraft\s+(a\s+)?reply\b/.test(lower) ||
+    /\bdraft\s+(a\s+)?response\b/.test(lower) ||
+    /\b(draft|write|reply)\b.{0,30}\b(their|his|her|that)\s+email\b/.test(lower);
+
   return (
     lower.includes('email') ||
     lower.includes('thread') ||
     lower.includes('inbox') ||
-    lower.includes('reply') ||
     lower.includes('correspondence') ||
-    lower.includes('letter') ||
     lower.includes('wrote') ||
     lower.includes('received') ||
-    lower.includes('sent') ||
-    lower.includes('response') ||
-    lower.includes('respond') ||
-    lower.includes('draft') ||
     lower.includes('what do you think about this email') ||
     lower.includes('what did they say') ||
     lower.includes('what is he asking') ||
     lower.includes('what is she asking') ||
-    lower.includes('what are they asking')
+    lower.includes('what are they asking') ||
+    draftingAgainstExisting
   );
 }
 
@@ -438,12 +442,16 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
     .order('received_at', { ascending: false });
 
   if (projectId) {
-    query = query.eq('project_id', projectId).order('received_at', { ascending: true });
+    // Cap at 30 most recent — unbounded fetch blows past OpenAI TPM limits on projects
+    // with long correspondence histories. Broader history goes through searchProjectEmails.
+    query = query.eq('project_id', projectId).order('received_at', { ascending: false }).limit(30);
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
 
   const { data, error } = await query;
+  // Restore chronological order after most-recent-first fetch
+  if (projectId && data?.length) data.reverse();
 
   if (error) {
     console.warn('[ely-smart] email context error:', error.message);
@@ -3072,21 +3080,16 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       const err = await response.json().catch(() => ({}));
       const errMsg = err.error?.message || `OpenAI error ${response.status}`;
 
-      // TPM limit hit — only fall back to Claude for explicit case reviews
+      // TPM limit hit — pass to Claude instead
       if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
-        if (body.case_review_topic) {
-          console.log('[ely-smart] TPM limit hit on case review — falling back to Claude');
-          const claudeReply = await callClaude(messages);
-          return res.status(200).json({
-            reply: claudeReply,
-            resolvedProject,
-            model: 'claude',
-            sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          });
-        }
-        // Normal chat/draft — never call Anthropic, return clean error
-        console.warn('[ely-smart] TPM limit hit on normal chat — returning error to client');
-        throw new Error('Your request is too large for this session. Try shortening your message or breaking it into smaller parts.');
+        console.log('[ely-smart] TPM limit hit — falling back to Claude');
+        const claudeReply = await callClaude(messages);
+        return res.status(200).json({
+          reply: claudeReply,
+          resolvedProject,
+          model: 'claude',
+          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
       }
 
       // Model not available — fall back to gpt-4o
