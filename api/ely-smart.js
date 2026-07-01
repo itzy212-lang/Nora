@@ -2933,7 +2933,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const needsEmails = isDraftWithEly
       ? explicitResearchRequest
       : (hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId));
-    const needsProject = needsProjectContext(prompt);
+    // Always load slim project facts when projectId is present — BO/AO names and addresses only.
+    // The full project bundle (emails, notes, documents) only loads when explicitly requested.
+    const needsProject = !!projectId;
     const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
