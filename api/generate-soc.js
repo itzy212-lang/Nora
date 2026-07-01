@@ -1149,7 +1149,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   let draftedResult;
   let draftMeta = {};
   try {
-    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt4o';
+    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt54'; // gpt54 = gpt-5.4 (not mini) — do not change to gpt4o
     // Build rawNotesBySeq map so drafting model can read original context
     const rawNoteLines = (message || '').split(/\n+/).filter(l => l.trim());
     const rawNotesBySeq = {};
