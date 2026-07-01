@@ -5,7 +5,6 @@ import {
   extractAtomicClaims,
   draftFromClaims,
   runQualityAudit,
-  runFidelityAudit,
   runCompletenessAudit,
 } from './lib/soc-pipeline.js';
 
