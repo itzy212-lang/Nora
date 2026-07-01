@@ -250,11 +250,16 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
         projectId,
-        emailContext: {
-          from: email?.from || email?.from_email || '',
-          subject: email?.subject || '',
-          body: (email?.body || email?.preview || '').slice(0, 6000),
-        },
+        // Only pass emailContext if there is an actual existing email being replied to.
+        // On a blank compose, email is null/empty — passing an empty object here
+        // causes ely-smart to treat it as a supplied email and fetch all project emails.
+        emailContext: (email?.id || email?.body)
+          ? {
+              from: email?.from || email?.from_email || '',
+              subject: email?.subject || '',
+              body: (email?.body || email?.preview || '').slice(0, 6000),
+            }
+          : null,
       };
 
       // If we're in a pending case review flow, send confirmation
