@@ -1818,21 +1818,6 @@ if (syncErr) throw syncErr;
         />
       )}
 
-      {draftWithEly && selectedEmail && (
-        <DraftWithElyOverlay
-          email={selectedEmail}
-          threadEmails={threadEmails}
-          onSendWithDraft={({ to, subject, body }) => {
-            setDraftWithEly(false);
-            const htmlBody = body && !body.trim().startsWith('<')
-              ? body.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-              : body || '';
-            setReplyOverlay({ mode: 'reply', prefillBody: htmlBody, prefillTo: to, prefillSubject: subject });
-          }}
-          onClose={() => setDraftWithEly(false)}
-        />
-      )}
-
       {/* Left panel — hidden on mobile when email is open */}
       <div style={{
         width: isMobile ? '100%' : 360,
@@ -2039,6 +2024,22 @@ if (syncErr) throw syncErr;
             alert('✅ Added to diary — check your calendar.');
           }}
           onClose={() => setBookingOverlay(null)}
+        />
+      )}
+
+      {/* DraftWithEly must be outside the overflow:hidden container so position:fixed works on desktop */}
+      {draftWithEly && selectedEmail && (
+        <DraftWithElyOverlay
+          email={selectedEmail}
+          threadEmails={threadEmails}
+          onSendWithDraft={({ to, subject, body }) => {
+            setDraftWithEly(false);
+            const htmlBody = body && !body.trim().startsWith('<')
+              ? body.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+              : body || '';
+            setReplyOverlay({ mode: 'reply', prefillBody: htmlBody, prefillTo: to, prefillSubject: subject });
+          }}
+          onClose={() => setDraftWithEly(false)}
         />
       )}
     </>
