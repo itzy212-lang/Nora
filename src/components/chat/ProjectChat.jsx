@@ -1036,16 +1036,14 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   };
 
   const handleVoicePreview = (phrase, meta) => {
-    // Ignore restart gaps — never switch phase during Web Speech API restart
+    // Ignore restart gaps — Web Speech API briefly stops between sessions on desktop
     if (meta?.restarting) return;
 
     if (meta?.recording === false) {
       if (latestTranscriptRef.current) {
         setInput(latestTranscriptRef.current);
-        setVoicePhase('idle');
-      } else if (voicePhase !== 'idle') {
-        setVoicePhase('transcribing');
       }
+      setVoicePhase('idle');
       setLiveTop('');
       setLiveBottom('');
       prevPhraseRef.current = '';
