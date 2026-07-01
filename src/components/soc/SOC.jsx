@@ -466,7 +466,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // ── Section list + review-phase helpers ─────────────────────────────────
   const STANDARD_SECTIONS = [
     'Ground Floor Front Elevation Room','Ground Floor Rear Elevation Room',
-    'Ground Floor Rear Extension',
+    'Ground Floor Rear Extension','Ground Floor Rear Outrigger','Ground Floor Rear Outrigger Kitchen',
     'First Floor Rear Bedroom','First Floor Front Elevation Room',
     'External Areas','Site Notes',
     'Front Elevation','Rear Elevation','Side Flank Wall','Entrance Hall','Lounge',
@@ -722,7 +722,16 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           {editableSections.map((section, sIdx) => (
             <div key={sIdx} style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
-                {section.number || sIdx + 2}. {section.title}
+                <input
+                  value={section.title}
+                  onChange={e => {
+                    const next = JSON.parse(JSON.stringify(editableSections));
+                    next[sIdx].title = e.target.value;
+                    setEditableSections(next);
+                  }}
+                  style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 'inherit', color: 'inherit', width: '100%', outline: 'none', cursor: 'text' }}
+                  title="Click to rename section"
+                />
                 {flaggedSectionTitles.has(section.title) && (
                   <span style={{ fontSize: 11, fontWeight: 500, color: '#b45309', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 4, padding: '2px 7px', marginLeft: 10 }}>
                     ⚠ check no-defects wording
