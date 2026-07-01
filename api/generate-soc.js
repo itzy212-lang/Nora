@@ -1389,6 +1389,35 @@ export default async function handler(req, res) {
 
     let dataForRender = final_soc_data || structured_data || null;
 
+    // ── Fast path: if edited data provided, render directly without regenerating ──
+    if (final_soc_data && final_soc_data.sections) {
+      const config = template.renderer_config || {};
+      const htmlTemplate = template.html_template || '<!DOCTYPE html><html><body>{{SOC_CONTENT}}</body></html>';
+      const renderData = {
+        ...final_soc_data,
+        introduction: fixedIntroduction(projectMeta),
+        ao_address: projectMeta.ao_address || final_soc_data.ao_address || '',
+        bo_address: projectMeta.bo_address || final_soc_data.bo_address || '',
+        inspection_date: projectMeta.inspection_date || final_soc_data.inspection_date || '',
+        proposed_works: projectMeta.proposed_works || final_soc_data.proposed_works || '',
+        prepared_by: projectMeta.prepared_by || final_soc_data.prepared_by || '',
+        sections: normaliseSections(final_soc_data.sections),
+        site_notes: Array.isArray(final_soc_data.site_notes) ? final_soc_data.site_notes : [],
+        actions: Array.isArray(final_soc_data.actions) ? final_soc_data.actions : [],
+        emails_required: Array.isArray(final_soc_data.emails_required) ? final_soc_data.emails_required : [],
+      };
+      const renderedContent = renderSocContent(renderData, config, projectMeta);
+      const preview_html = htmlTemplate.replace('{{SOC_CONTENT}}', renderedContent);
+      // Save edit state
+      if (final_soc_data.report_id) {
+        await supabase.rpc('save_soc_structured_data', {
+          report_id: final_soc_data.report_id,
+          structured_data: renderData,
+        }).catch(() => {});
+      }
+      return res.status(200).json({ preview_html, structured_data: renderData, report_id: final_soc_data.report_id || null });
+    }
+
     if (!dataForRender) {
       let notesText = message || '';
 
