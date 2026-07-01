@@ -490,7 +490,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         context: {
           currentProject,
           projectsContext,
-          recentEmails,
+          recentEmails: surface === 'main_chat' ? recentEmails : [],
           currentView: state.currentView || null,
           activeProjectId: effectiveProjectId,
           sessionId: actualSessionId,
@@ -530,7 +530,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         })(),
         projectsContext,
         currentProject,
-        recentEmails,
+        recentEmails: surface === 'main_chat' ? recentEmails : [],
 
         ...extraOpts,
       });
