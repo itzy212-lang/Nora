@@ -3072,16 +3072,21 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       const err = await response.json().catch(() => ({}));
       const errMsg = err.error?.message || `OpenAI error ${response.status}`;
 
-      // TPM limit hit — pass to Claude instead
+      // TPM limit hit — only fall back to Claude for explicit case reviews
       if (errMsg.toLowerCase().includes('tokens per min') || errMsg.toLowerCase().includes('tpm') || errMsg.includes('Request too large')) {
-        console.log('[ely-smart] TPM limit hit — falling back to Claude');
-        const claudeReply = await callClaude(messages);
-        return res.status(200).json({
-          reply: claudeReply,
-          resolvedProject,
-          model: 'claude',
-          sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        });
+        if (body.case_review_topic) {
+          console.log('[ely-smart] TPM limit hit on case review — falling back to Claude');
+          const claudeReply = await callClaude(messages);
+          return res.status(200).json({
+            reply: claudeReply,
+            resolvedProject,
+            model: 'claude',
+            sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          });
+        }
+        // Normal chat/draft — never call Anthropic, return clean error
+        console.warn('[ely-smart] TPM limit hit on normal chat — returning error to client');
+        throw new Error('Your request is too large for this session. Try shortening your message or breaking it into smaller parts.');
       }
 
       // Model not available — fall back to gpt-4o
