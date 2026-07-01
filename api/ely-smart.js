@@ -2925,12 +2925,14 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Words like "correspondence", "reply", "received" appear naturally in dictated draft content
     // and must NOT trigger a database fetch. Only load emails if an actual email is supplied
     // (i.e. replying to an existing email) or the user explicitly asks to search correspondence.
-    const explicitResearchRequest = /\b(check|find|look up|search|what did they say|previous email|earlier email|check my email|search correspondence)\b/i.test(prompt);
-    // On draft_with_ely: ONLY load emails if explicitly requested by the user.
-    // suppliedEmailContext (the email being replied to) is already in the prompt/body —
-    // there is no reason to fetch 30 more project emails on top of it.
-    // On all other surfaces: existing logic applies.
-    const needsEmails = isDraftWithEly
+    const explicitResearchRequest = /\b(check|find|look up|search|what did they say|previous email|earlier email|check my email|search correspondence|review.*email|read.*email)\b/i.test(prompt);
+
+    // RULE: Only load emails when explicitly requested by the user.
+    // On drafting surfaces (draft_with_ely, inbox_draft): never load project emails.
+    // The current email being replied to is already in emailContext.body — no fetch needed.
+    // On all other surfaces: only load if prompt clearly references existing correspondence.
+    const isDraftingSurface = isDraftWithEly || body.surface === 'inbox_draft';
+    const needsEmails = isDraftingSurface
       ? explicitResearchRequest
       : (hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId));
     // Always load slim project facts when projectId is present — BO/AO names and addresses only.
