@@ -3037,10 +3037,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    const draftModel = process.env.ELY_DRAFT_MODEL || 'gpt-5.4-mini';
-    const mainChatModel = process.env.ELY_MAIN_CHAT_MODEL || 'gpt-5.4-mini';
-    const activeModel = isDraftWithEly ? draftModel : isMainChat ? mainChatModel : 'gpt-4o';
-    const isReasoningModel = activeModel.startsWith('gpt-5.') || activeModel.startsWith('o');
+    // HARDCODED — do not restore env var override. ELY_MAIN_CHAT_MODEL was silently set to gpt-5.4
+    // in Vercel env vars and degraded every response. gpt-4o for everything.
+    const activeModel = 'gpt-4o';
+    const isReasoningModel = false;
 
     const modelPayload = isReasoningModel
       ? {
