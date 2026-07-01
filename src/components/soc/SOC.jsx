@@ -75,7 +75,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         const res = await fetch(`/api/soc-save?project_id=${projectId}`);
         if (!res.ok) throw new Error(`Failed to load SOC sessions (status ${res.status})`);
         const data = await res.json();
-        if (!data.sessions?.length) return;
+        if (!data.sessions?.length) {
+          // No session exists for this project yet — auto-create one so the user
+          // can start dictating immediately without hitting "Start SOC" manually.
+          const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+          const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+          if (projectId && aoId) {
+            try {
+              await initSession(aoId, aoAddr);
+              setPhase('recording');
+            } catch (err) {
+              console.warn('[SOC] auto-init session failed:', err.message);
+            }
+          }
+          return;
+        }
         // Find session matching current AO if possible, otherwise take most recent
         const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
         const match = data.sessions.find(s => s.aoId === String(aoId)) || data.sessions[0];
