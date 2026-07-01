@@ -496,7 +496,7 @@ ${threadText}`;
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 400,
+      position: 'fixed', inset: 0, zIndex: 600,
       background: 'var(--bg2)', display: 'flex', flexDirection: 'column',
     }}>
       {/* Header */}
@@ -2027,21 +2027,6 @@ if (syncErr) throw syncErr;
         />
       )}
 
-      {/* DraftWithEly must be outside the overflow:hidden container so position:fixed works on desktop */}
-      {draftWithEly && selectedEmail && (
-        <DraftWithElyOverlay
-          email={selectedEmail}
-          threadEmails={threadEmails}
-          onSendWithDraft={({ to, subject, body }) => {
-            setDraftWithEly(false);
-            const htmlBody = body && !body.trim().startsWith('<')
-              ? body.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-              : body || '';
-            setReplyOverlay({ mode: 'reply', prefillBody: htmlBody, prefillTo: to, prefillSubject: subject });
-          }}
-          onClose={() => setDraftWithEly(false)}
-        />
-      )}
     </>
   );
 }
