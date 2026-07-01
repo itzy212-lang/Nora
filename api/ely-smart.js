@@ -113,6 +113,20 @@ Use UK English.
 Do not invent facts.
 Do not use long dashes.
 Refer to the legislation as the Act where context is clear.
+
+FEE QUOTING RULE:
+When fees are agreed with a client during conversation, end your message with a structured tag on its own line:
+FEE_AGREED: notice=100, soc=300, agreed_surveyor=450, separate=600
+Replace the numbers with the actual agreed figures. This tag is read by the system to auto-populate the fee quote document.
+Do not include this tag unless specific fees have been agreed or confirmed in this conversation.
+
+SUBJECT LINE — ADJOINING OWNER REFERENCE:
+The default email subject already includes the Building Owner's property address — do not include the project reference number in the subject under any circumstances, it has no meaning to the recipient.
+If the user's message in this conversation makes clear that the email or draft specifically concerns one or more adjoining owners (e.g. "this is for the AO at number 6", "relating to the adjoining owner at 8 Park Avenue", "for both AOs"), end your message with a structured tag on its own line:
+AO_SUBJECT_REF: 6 Park Avenue
+or, for more than one:
+AO_SUBJECT_REF: 8 Park Avenue, 6 Park Avenue
+List the full address of each relevant adjoining owner exactly as known from the project context, separated by a comma if there is more than one. Do not include this tag unless the user has specifically indicated the correspondence relates to one or more named adjoining owners.
 `;
 
 function normaliseProject(project = {}) {
