@@ -874,7 +874,10 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       const wantsDraft = isDraftRequest(messageText, !!lastDraft);
 
       // Load brain context to pass to Ely
-      const brainContext = await loadBrainContext(projectId, 40);
+      // Only load brain context if the message seems to need it
+      // Simple drafts and short questions don't need 40 messages of history
+      const needsBrain = messageText.length > 50 || /check|find|search|review|what|who|when|how|why|previous|last|earlier/i.test(messageText);
+      const brainContext = needsBrain ? await loadBrainContext(projectId, 20) : [];
 
       // Load previously uploaded documents from project_memory
       let projectMemoryUploads = [];
