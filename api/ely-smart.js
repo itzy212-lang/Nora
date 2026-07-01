@@ -1505,9 +1505,11 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
     const primaryEmail = scopedEmailContext[0];
     const emailDbId = primaryEmail?.id;
 
-    // Always try to fetch attachments — the function checks DB and returns empty if none
-    console.log('[ely-smart] checking attachments for email:', emailDbId);
-    if (emailDbId) {
+    // Only fetch attachments when explicitly requested OR when cached (no Vision cost)
+    // Prevents burning Anthropic credits on every email interaction
+    const wantsAttachments = /read.*attach|attach.*read|open.*attach|attach.*open|drawing|pdf|document/i.test(prompt);
+    console.log('[ely-smart] checking attachments for email:', emailDbId, 'wantsAttachments:', wantsAttachments);
+    if (emailDbId && wantsAttachments) {
       try {
         const attachments = await fetchEmailAttachments(emailDbId);
         console.log('[ely-smart] attachments found:', attachments?.length || 0);
