@@ -73,6 +73,8 @@ export default function ChatInputBar({
   }, [voicePhase]);
 
   const handleVoicePreview = useCallback((preview, meta = {}) => {
+    // Ignore restart gaps — Web Speech API briefly stops between sessions on desktop
+    if (meta.restarting) return;
     if (meta.recording === true) {
       setVoicePhase('recording');
       const p = meta.currentPhrase || meta.interim || preview || '';
@@ -80,7 +82,7 @@ export default function ChatInputBar({
         setLivePreview(p);
         onChange?.(p);
       }
-    } else if (meta.recording === false && !meta.restarting) {
+    } else if (meta.recording === false) {
       setVoicePhase('transcribing');
       setLivePreview('');
     }
