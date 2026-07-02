@@ -68,11 +68,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
   // ── Auto-load existing session on mount if one exists for this project ───────
   // SOC opens blank — no auto-loading of previous sessions.
-  // Previous sessions are accessed via the history sidebar only.
-  // When AO changes, reset to blank state ready for new dictation.
+  // Session is created automatically when user sends their first note.
+  // When AO changes, reset to blank state ready for fresh dictation.
   useEffect(() => {
     if (!projectId) return;
-    // Reset to blank state when AO selection changes
     setMessages([]);
     setSocSessionId(null);
     setPhase('recording');
@@ -81,53 +80,11 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setStructuredData(null);
     setReportId(null);
     setSessionLoadError(null);
-
-    async function autoLoadSession() {
-      setSessionLoadError(null);
-      try {
-        const res = await fetch(`/api/soc-save?project_id=${projectId}`);
-        if (!res.ok) throw new Error(`Failed to load SOC sessions (status ${res.status})`);
-        const data = await res.json();
-        if (!data.sessions?.length) {
-          // No previous sessions — blank state is correct, nothing to do
-          return;
-        }
-        // Do NOT auto-load any session — user must choose from sidebar
-        // Just pre-fetch session list for sidebar
-        return;
-        // Find session matching current AO if possible, otherwise take most recent
-        const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
-        const match = data.sessions.find(s => s.aoId === String(aoId)) || data.sessions[0];
-        if (!match) return;
-        setSocSessionId(match.sessionId);
-        // Load notes
-        const notesRes = await fetch(`/api/soc-save?session_id=${match.sessionId}`);
-        if (!notesRes.ok) throw new Error(`Failed to load SOC notes (status ${notesRes.status})`);
-        const notesData = await notesRes.json();
-        if (notesData.notes?.length) {
-          setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
-          if (phase === 'setup') setPhase('recording');
-        }
-        // Load existing report if one exists
-        const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${match.sessionId}`);
-        if (reportRes.ok) {
-          const reportData = await reportRes.json();
-          if (reportData.preview_html && reportData.structured_data) {
-            setPreviewHtml(reportData.preview_html);
-            setStructuredData(reportData.structured_data);
-            setReportId(reportData.report_id || null);
-            setEditableSections(JSON.parse(JSON.stringify(
-              reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
-            )));
-            setPhase('preview');
-          }
-        }
-      } catch (err) {
-        console.error('[SOC] autoLoadSession failed:', err);
-        setSessionLoadError(err.message || 'Could not load this SOC session — check your connection and try again.');
-      }
-    }
-    autoLoadSession();
+    // Pre-fetch session list for sidebar only
+    fetch('/api/soc-save?project_id=' + projectId)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.sessions?.length) setSessionHistory(data.sessions); })
+      .catch(() => {});
   }, [projectId, selectedAOIndex]);
 
   const initSession = useCallback(async (aoId, aoAddr) => {
