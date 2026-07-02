@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
-// UnifiedVoice replaced by unified VoiceInput
+import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
 import { uid } from '../../utils/formatters';
