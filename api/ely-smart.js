@@ -436,7 +436,7 @@ async function searchNamedProject(prompt, projectsContext = []) {
             .select('id, content, created_at, role')
             .eq('project_id', projectId)
             .eq('role', 'user')
-            .ilike('content', \`%\${term}%\`)
+            .ilike('content', '%' + term + '%')
             .limit(10);
           if (msgs?.length) {
             for (const m of msgs) {
@@ -453,7 +453,7 @@ async function searchNamedProject(prompt, projectsContext = []) {
             .from('emails')
             .select('id, subject, body, body_preview')
             .eq('project_id', projectId)
-            .or(\`subject.ilike.%\${term}%,body.ilike.%\${term}%,body_preview.ilike.%\${term}%\`)
+            .or('subject.ilike.%' + term + '%,body.ilike.%' + term + '%,body_preview.ilike.%' + term + '%')
             .limit(10);
           if (emails?.length) {
             for (const e of emails) {
