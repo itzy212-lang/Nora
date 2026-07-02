@@ -253,6 +253,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const userContent = (overrideText ?? textInput).trim();
     if (!userContent) return;
     // Auto-create session on first note if none exists
+    let newSessionId = null;
     if (!socSessionId) {
       const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
       const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
@@ -260,7 +261,6 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         alert('Please select an Adjoining Owner before dictating.');
         return;
       }
-      let newSessionId;
       try {
         newSessionId = await initSession(aoId, aoAddr, true); // force new session
       } catch (err) {
