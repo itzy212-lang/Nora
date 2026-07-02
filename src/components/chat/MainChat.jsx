@@ -307,6 +307,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const { state } = useApp();
 
   const [messages, setMessages] = useState([]);
+  const [memorySaveProposal, setMemorySaveProposal] = useState(null);
+  const [memorySaved, setMemorySaved] = useState(false);
   const [input, setInput] = useState('');
   const [pendingBooking, setPendingBooking] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
@@ -1470,7 +1472,17 @@ export default function MainChat({ onOpenComposer, onClose }) {
               </div>
             )}
 
-            <ChatInputBar
+            {memorySaveProposal && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 16px', padding: '10px 14px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>💾 {memorySaveProposal.suggestion}</span>
+          <button onClick={() => handleSaveToMemory(memorySaveProposal)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #3b82f6)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Remember this</button>
+          <button onClick={() => setMemorySaveProposal(null)} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>No</button>
+        </div>
+      )}
+      {memorySaved && (
+        <div style={{ margin: '4px 16px', fontSize: 12, color: 'var(--green, #22c55e)' }}>✓ Saved to your preferences</div>
+      )}
+      <ChatInputBar
               value={input}
               onChange={setInput}
               onSend={(text) => handleSend(text)}
