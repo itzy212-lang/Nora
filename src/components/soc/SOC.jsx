@@ -107,6 +107,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     // failure in the secondary fetches below (notes history, existing report)
     // can never leave the session "not ready" from the user's perspective.
     setSocSessionId(initData.session_id);
+    return initData.session_id; // return so caller can use immediately without waiting for state
 
     // Load existing notes only if NOT forcing a new session
     if (!forceNew) {
@@ -259,15 +260,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         alert('Please select an Adjoining Owner before dictating.');
         return;
       }
+      let newSessionId;
       try {
-        await initSession(aoId, aoAddr, true); // force new session — blank screen start
-        // Wait briefly for state to update
-        await new Promise(r => setTimeout(r, 400));
+        newSessionId = await initSession(aoId, aoAddr, true); // force new session
       } catch (err) {
         alert('Could not create SOC session. Please try again.');
         return;
       }
-      if (!socSessionId) {
+      if (!newSessionId) {
         alert('SOC session is not ready yet. Please try again.');
         return;
       }
