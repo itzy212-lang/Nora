@@ -89,18 +89,20 @@ export default async function handler(req, res) {
     if (action === 'init_session') {
       if (!project_id || !ao_id) return res.status(400).json({ error: 'project_id and ao_id required' });
 
-      // Find existing
-      const { data: existing } = await supabase
-        .from('ai_sessions')
-        .select('id')
-        .eq('project_id', project_id)
-        .eq('session_type', 'soc')
-        .eq('ao_id', String(ao_id))
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // Find existing — unless force_new is set, in which case always create fresh
+      if (!force_new) {
+        const { data: existing } = await supabase
+          .from('ai_sessions')
+          .select('id')
+          .eq('project_id', project_id)
+          .eq('session_type', 'soc')
+          .eq('ao_id', String(ao_id))
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (existing?.[0]?.id) {
-        return res.status(200).json({ session_id: existing[0].id, created: false });
+        if (existing?.[0]?.id) {
+          return res.status(200).json({ session_id: existing[0].id, created: false });
+        }
       }
 
       // Create new
