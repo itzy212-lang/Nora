@@ -849,6 +849,26 @@ function inferModeHint(surface, prompt = '', body = {}) {
 // Build Package 2 — June 2026
 // ================================================================
 
+// ── User brain memory save detection ─────────────────────────────────────
+// Detects when the user is expressing a preference, rule or personal fact
+// that should be saved to their user brain for future use.
+function detectMemorySaveIntent(prompt = '') {
+  const p = prompt.toLowerCase();
+  return (
+    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|note that|keep in mind|my preference)\b/i.test(p) &&
+    p.length > 10
+  );
+}
+
+function classifyMemoryField(prompt = '') {
+  const p = prompt.toLowerCase();
+  if (/fee|rate|charge|price|cost|quote/.test(p)) return 'fee_structure';
+  if (/sign.?off|sign off|close|regards|yours/.test(p)) return 'sign_off';
+  if (/style|voice|tone|wording|write|phrase|sentence|formal|informal/.test(p)) return 'writing_voice';
+  if (/never use|don't use|avoid|banned|do not use|hate when/.test(p)) return 'banned_phrases';
+  return 'personal_preferences';
+}
+
 function inferDomain({ prompt = '', body = {}, projectBundle = null, scopedEmailContext = [] } = {}) {
   const p = String(prompt || '').toLowerCase();
   const surface = String(body.surface || '').toLowerCase();
@@ -1483,27 +1503,7 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
-  // ── User brain memory save detection ─────────────────────────────────────
-// Detects when the user is expressing a preference, rule or personal fact
-// that should be saved to their user brain for future use.
-function detectMemorySaveIntent(prompt = '') {
-  const p = prompt.toLowerCase();
-  return (
-    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|note that|keep in mind|my preference)\b/i.test(p) &&
-    p.length > 10
-  );
-}
-
-function classifyMemoryField(prompt = '') {
-  const p = prompt.toLowerCase();
-  if (/fee|rate|charge|price|cost|quote/.test(p)) return 'fee_structure';
-  if (/sign.?off|sign off|close|regards|yours/.test(p)) return 'sign_off';
-  if (/style|voice|tone|wording|write|phrase|sentence|formal|informal/.test(p)) return 'writing_voice';
-  if (/never use|don't use|avoid|banned|do not use|hate when/.test(p)) return 'banned_phrases';
-  return 'personal_preferences';
-}
-
-// ── Semantic search across ALL project content ───────────────────────────
+  // ── Semantic search across ALL project content ───────────────────────────
   // Only runs on first message or when user explicitly requests research.
   // If chatHistory has messages, results are already in context — no need to re-fetch.
   const chatHistoryLength = chatHistory.length;
