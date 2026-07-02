@@ -286,7 +286,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const saveRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save_note', session_id: socSessionId, content: userContent, project_id: projectId || null }),
+      body: JSON.stringify({ action: 'save_note', session_id: newSessionId || socSessionId, content: userContent, project_id: projectId || null }),
     });
     if (saveRes.ok) {
       setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: 'Noted.' }]);
