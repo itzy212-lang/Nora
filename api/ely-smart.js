@@ -921,7 +921,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '' }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [] }) {
   // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
   // When instructions conflict, apply this order:
   // 1. Current user instruction
@@ -1353,7 +1353,7 @@ ${projectFacts}
     }
     // Cross-project search — fires from main chat when no project is active
     // but user mentions a project by name ("look at the Sellafield project notes")
-    const projectsCtx = body?.context?.projectsContext || body?.projectsContext || [];
+    const projectsCtx = projectsContext || [];
     if (!projectId && projectsCtx.length) {
       const crossResult = await searchNamedProject(userPrompt, projectsCtx);
       if (crossResult) {
@@ -3050,6 +3050,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       modeHint,
       draftingExamples,
       userPrompt: prompt,
+      projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
