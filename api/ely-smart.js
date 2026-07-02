@@ -361,6 +361,47 @@ async function semanticSearchProject(projectId, userPrompt, limit = 20) {
   }
 }
 
+// ── Cross-project search — finds project by name then searches its content ──
+// Used from main chat when user says "look at the Sellafield project notes"
+async function searchNamedProject(prompt, projectsContext = []) {
+  if (!projectsContext?.length || !prompt) return null;
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  // Extract project name mentions from prompt
+  // Match patterns like "the X project", "X project notes", "from X", "in X"
+  const lower = prompt.toLowerCase();
+
+  // Try to match against known project addresses/names
+  let matchedProject = null;
+  for (const proj of projectsContext) {
+    const addr = (proj.bo_premise_address || proj.address || proj.name || '').toLowerCase();
+    const ref = (proj.ref || '').toLowerCase();
+    if (!addr && !ref) continue;
+
+    // Extract key words from address (street name, area)
+    const addrWords = addr.split(/[,\s]+/).filter(w => w.length > 3);
+    const matched = addrWords.some(w => lower.includes(w)) || (ref && lower.includes(ref.toLowerCase()));
+    if (matched) {
+      matchedProject = proj;
+      break;
+    }
+  }
+
+  if (!matchedProject) return null;
+
+  const projectId = matchedProject.id;
+  console.log('[ely-smart] cross-project search matched:', matchedProject.bo_premise_address || matchedProject.ref);
+
+  const results = await semanticSearchProject(projectId, prompt, 20);
+  if (!results?.length) return null;
+
+  return {
+    project: matchedProject,
+    results,
+  };
+}
+
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
   if (suppliedEmailContext || threadId || emailId) return true;
 
@@ -1307,13 +1348,33 @@ ${projectFacts}
   // ── Semantic search across ALL project content ───────────────────────────
   // Uses vector embeddings — no limit, finds relevant content regardless of volume
   let semanticResults = null;
+  let crossProjectResults = null;
   try {
     if (projectBundle?.project?.id) {
       semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
     }
+    // Cross-project search — fires from main chat when no project is active
+    // but user mentions a project by name ("look at the Sellafield project notes")
+    if (!projectId && body.context?.projectsContext?.length) {
+      const crossResult = await searchNamedProject(userPrompt, body.context.projectsContext);
+      if (crossResult) {
+        crossProjectResults = crossResult;
+        console.log('[ely-smart] cross-project results found:', crossResult.results.length, 'items from', crossResult.project.bo_premise_address);
+      }
+    }
   } catch (semErr) {
     console.warn('[ely-smart] semantic search failed silently:', semErr.message);
     semanticResults = null;
+  }
+
+  // Inject cross-project results into context
+  if (crossProjectResults?.results?.length) {
+    const cp = crossProjectResults;
+    systemParts.push(`
+CROSS-PROJECT RESEARCH — ${cp.project.bo_premise_address || cp.project.ref}:
+The following was found in the notes and content of this project:
+${cp.results.map(r => `[${r.content_type || 'note'}] ${r.content}`).join('\n\n')}
+`);
   }
 
   if (semanticResults?.length) {
