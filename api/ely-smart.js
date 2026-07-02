@@ -1117,6 +1117,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       ub.banned_phrases ? `BANNED PHRASES:\n${ub.banned_phrases}` : null,
       ub.sign_off ? `SIGN-OFF: Always end correspondence with: ${ub.sign_off}` : null,
       ub.fee_structure ? `FEE STRUCTURE:\n${ub.fee_structure}` : null,
+      ub.notes ? `USER NOTES & REMEMBERED PREFERENCES:\n${ub.notes}` : null,
     ].filter(Boolean);
     if (userParts.length) {
       prompt += `\n\n--- USER PREFERENCES ---\n\n${userParts.join('\n\n')}`;
