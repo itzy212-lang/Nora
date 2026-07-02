@@ -1449,11 +1449,9 @@ ${projectFacts}
   // Inject cross-project results into context
   if (crossProjectResults?.results?.length) {
     const cp = crossProjectResults;
-    systemParts.push(`
-CROSS-PROJECT RESEARCH — ${cp.project.bo_premise_address || cp.project.ref}:
-The following was found in the notes and content of this project:
-${cp.results.map(r => `[${r.content_type || 'note'}] ${r.content}`).join('\n\n')}
-`);
+    const cpTitle = cp.project.bo_premise_address || cp.project.address || cp.project.ref || 'Named Project';
+    const cpContent = cp.results.map(r => '[' + (r.content_type || 'note') + '] ' + (r.content || '')).join('\n\n');
+    prompt += '\n\nCROSS-PROJECT RESEARCH — ' + cpTitle + ':\nThe following was found in the notes and content of this project:\n\n' + cpContent;
   }
 
   if (semanticResults?.length) {
