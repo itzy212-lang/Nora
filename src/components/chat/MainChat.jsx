@@ -666,6 +666,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   }, [onOpenComposer, selectedEmailContext]);
 
   const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
+    console.log('[MainChat] appendAssistantMessagesFromResult memory_save_proposal:', result.memory_save_proposal);
     if (!wantsDraft) {
       setMessages(prev => [...prev, {
         id: uid(),
