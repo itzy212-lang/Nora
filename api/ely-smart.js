@@ -754,6 +754,30 @@ function hasExecuteIntent(prompt = '', body = {}) {
   );
 }
 
+function looksLikeAmendmentInstruction(prompt = '') {
+  const p = normalisePromptForIntent(prompt).toLowerCase();
+  // Catches instructions to modify/add/change a draft that's already been produced
+  return (
+    /\badd (the|a|that|this|some|more)\b/i.test(p) ||
+    /\binclude (the|a|that|this)\b/i.test(p) ||
+    /\btake out\b/i.test(p) ||
+    /\bremove (the|a|that)\b/i.test(p) ||
+    /\bchange (the|a|that|this)\b/i.test(p) ||
+    /\bmake it\b/i.test(p) ||
+    /\bkeep it\b/i.test(p) ||
+    /\bshorter\b/i.test(p) ||
+    /\blonger\b/i.test(p) ||
+    /\badd that\b/i.test(p) ||
+    /\balso (add|include|mention|say)\b/i.test(p) ||
+    /\bput in\b/i.test(p) ||
+    /\bmention (the|that|this)\b/i.test(p) ||
+    /\bsay that\b/i.test(p) ||
+    /\bcheck if\b/i.test(p) ||
+    /\bseems (too|quite|very)\b/i.test(p) ||
+    /\bthat('?s| is) (too|quite|very|not|wrong|correct|right|accurate|small|large|big)\b/i.test(p)
+  );
+}
+
 function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
   const explicitMode = String(body.mode || body.workflowStage || '').toLowerCase();
   const p = normalisePromptForIntent(prompt);
@@ -769,6 +793,13 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
   if (hasExplicitReviewRequest(p)) return 'review';
 
   if (hasDiscussionIntent(p)) return 'discuss';
+
+  // If an email thread is selected and the prompt looks like an amendment instruction
+  // (add this, include that, change this) — stay in draft mode
+  // This catches the case where a draft has been produced and the user is refining it
+  if ((body.emailContext || body.threadId || body.emailId) && looksLikeAmendmentInstruction(p)) {
+    return 'draft';
+  }
 
   return 'discuss';
 }
