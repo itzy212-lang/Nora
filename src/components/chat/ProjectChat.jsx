@@ -873,10 +873,10 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     try {
       const wantsDraft = isDraftRequest(messageText, !!lastDraft);
 
-      // Load brain context to pass to Ely
-      // Only load brain context if the message seems to need it
-      // Simple drafts and short questions don't need 40 messages of history
-      const needsBrain = messageText.length > 50 || /check|find|search|review|what|who|when|how|why|previous|last|earlier/i.test(messageText);
+      // Load project chat history ONLY when explicitly requested.
+      // The current conversation history already contains what has been discussed.
+      // Loading 20 project messages on every send bloats the token count and causes TPM hits.
+      const needsBrain = /\b(check|find|search|look up|go through|review|pull up|look at|previous|earlier|what did|what was|notes?|history|chat|project chat|show me)\b/i.test(messageText);
       const brainContext = needsBrain ? await loadBrainContext(projectId, 20) : [];
 
       // Load previously uploaded documents from project_memory
