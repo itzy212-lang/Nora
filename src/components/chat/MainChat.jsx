@@ -1123,8 +1123,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          field: proposal.field,
-          value: proposal.prompt,
+          note: proposal.note,
         }),
       });
       if (res.ok) {
