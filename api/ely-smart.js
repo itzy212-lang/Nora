@@ -3393,12 +3393,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Detect if user expressed a preference that should be saved
     const wantsToRemember = detectMemorySaveIntent(prompt);
     let memorySaveProposal = null;
-    if (wantsToRemember && modeHint === 'discuss') {
-      const field = classifyMemoryField(prompt);
+    if (wantsToRemember) {
       memorySaveProposal = {
-        field,
-        prompt: prompt.slice(0, 200),
-        suggestion: `Save this to your preferences (${field.replace(/_/g, ' ')})?`,
+        note: prompt.slice(0, 300),
+        suggestion: 'Save this to your preferences?',
       };
     }
 
