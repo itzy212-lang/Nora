@@ -373,7 +373,7 @@ async function searchNamedProject(prompt, projectsContext = []) {
   // Try to match against known project addresses/names
   let matchedProject = null;
   for (const proj of projectsContext) {
-    const addr = (proj.bo_premise_address || proj.name || '').toLowerCase();
+    const addr = (proj.bo_premise_address || proj.address || proj.name || '').toLowerCase();
     const ref = (proj.ref || '').toLowerCase();
     if (!addr && !ref) continue;
 
@@ -386,10 +386,14 @@ async function searchNamedProject(prompt, projectsContext = []) {
     }
   }
 
-  if (!matchedProject) return null;
+  console.log('[ely-smart] cross-project search: prompt=', prompt.slice(0,80), 'projects=', projectsContext.length);
+  if (!matchedProject) {
+    console.log('[ely-smart] cross-project search: no project matched');
+    return null;
+  }
 
   const projectId = matchedProject.id;
-  console.log('[ely-smart] cross-project search matched:', matchedProject.bo_premise_address || matchedProject.ref);
+  console.log('[ely-smart] cross-project search matched:', matchedProject.bo_premise_address || matchedProject.address || matchedProject.ref);
 
   const results = await semanticSearchProject(projectId, prompt, 20);
   if (!results?.length) return null;
