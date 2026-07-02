@@ -236,9 +236,7 @@ async function resolveProjectFromPrompt(prompt) {
     .from('projects')
     .select('*')
     .or([
-      `name.ilike.%${search}%`,
       `ref.ilike.%${search}%`,
-      `address.ilike.%${search}%`,
       `bo_premise_address.ilike.%${search}%`,
       `ao_premise_address.ilike.%${search}%`
     ].join(','))
