@@ -412,7 +412,66 @@ async function searchNamedProject(prompt, projectsContext = []) {
   const projectId = matchedProject.id;
   console.log('[ely-smart] cross-project search matched:', matchedProject.bo_premise_address || matchedProject.address || matchedProject.ref);
 
-  const results = await semanticSearchProject(projectId, prompt, 20);
+  // Try semantic search first
+  let results = await semanticSearchProject(projectId, prompt, 20);
+
+  // Fallback to plain text search if semantic returns nothing (e.g. no embeddings yet)
+  if (!results?.length) {
+    console.log('[ely-smart] semantic search empty — falling back to text search');
+    const sb = getSupabase();
+    if (sb) {
+      // Extract key search terms from prompt (skip common words)
+      const stopWords = new Set(['the','and','for','from','with','this','that','have','find','look','notes','project','please','can','you','use','apply']);
+      const searchTerms = prompt.toLowerCase().split(/\s+/)
+        .filter(w => w.length > 3 && !stopWords.has(w))
+        .slice(0, 5);
+
+      if (searchTerms.length) {
+        const textResults = [];
+
+        // Search chat messages
+        for (const term of searchTerms) {
+          const { data: msgs } = await sb
+            .from('ai_messages')
+            .select('id, content, created_at, role')
+            .eq('project_id', projectId)
+            .eq('role', 'user')
+            .ilike('content', \`%\${term}%\`)
+            .limit(10);
+          if (msgs?.length) {
+            for (const m of msgs) {
+              if (!textResults.find(r => r.content_id === m.id)) {
+                textResults.push({ content_type: 'chat', content_id: m.id, content: m.content, similarity: 0.5 });
+              }
+            }
+          }
+        }
+
+        // Search emails
+        for (const term of searchTerms) {
+          const { data: emails } = await sb
+            .from('emails')
+            .select('id, subject, body, body_preview')
+            .eq('project_id', projectId)
+            .or(\`subject.ilike.%\${term}%,body.ilike.%\${term}%,body_preview.ilike.%\${term}%\`)
+            .limit(10);
+          if (emails?.length) {
+            for (const e of emails) {
+              if (!textResults.find(r => r.content_id === e.id)) {
+                textResults.push({ content_type: 'email', content_id: e.id, subject: e.subject, content: e.body_preview || (e.body || '').slice(0, 500), similarity: 0.4 });
+              }
+            }
+          }
+        }
+
+        if (textResults.length) {
+          console.log('[ely-smart] text search fallback found:', textResults.length, 'results');
+          results = textResults;
+        }
+      }
+    }
+  }
+
   if (!results?.length) return null;
 
   return {
