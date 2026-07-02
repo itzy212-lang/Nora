@@ -87,12 +87,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       .catch(() => {});
   }, [projectId, selectedAOIndex]);
 
-  const initSession = useCallback(async (aoId, aoAddr) => {
+  const initSession = useCallback(async (aoId, aoAddr, forceNew = false) => {
     // Find or create SOC session via API (service-role key)
     const initRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr }),
+      body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr, force_new: forceNew }),
     });
     if (!initRes.ok) {
       console.error('[SOC] init_session HTTP error:', initRes.status);
@@ -108,19 +108,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     // can never leave the session "not ready" from the user's perspective.
     setSocSessionId(initData.session_id);
 
-    // Load existing notes for this session — best-effort, non-fatal.
-    try {
-      const notesRes = await fetch(`/api/soc-save?session_id=${initData.session_id}`);
-      if (notesRes.ok) {
-        const notesData = await notesRes.json();
-        if (notesData.notes?.length) {
-          setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    // Load existing notes only if NOT forcing a new session
+    if (!forceNew) {
+      try {
+        const notesRes = await fetch('/api/soc-save?session_id=' + initData.session_id);
+        if (notesRes.ok) {
+          const notesData = await notesRes.json();
+          if (notesData.notes?.length) {
+            setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+          }
+        } else {
+          console.warn('[SOC] notes fetch returned', notesRes.status, '— continuing without history.');
         }
-      } else {
-        console.warn('[SOC] notes fetch returned', notesRes.status, '— continuing without history.');
+      } catch (err) {
+        console.warn('[SOC] notes fetch failed — continuing without history:', err);
       }
-    } catch (err) {
-      console.warn('[SOC] notes fetch failed — continuing without history:', err);
     }
 
     // Load existing SOC report for this session if one exists — best-effort, non-fatal.
@@ -258,7 +260,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         return;
       }
       try {
-        await initSession(aoId, aoAddr);
+        await initSession(aoId, aoAddr, true); // force new session — blank screen start
         // Wait briefly for state to update
         await new Promise(r => setTimeout(r, 400));
       } catch (err) {
