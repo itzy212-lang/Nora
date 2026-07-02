@@ -1032,7 +1032,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [] }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [] }) {
   // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
   // When instructions conflict, apply this order:
   // 1. Current user instruction
@@ -1457,7 +1457,7 @@ ${projectFacts}
   // ── Semantic search across ALL project content ───────────────────────────
   // Only runs on first message or when user explicitly requests research.
   // If chatHistory has messages, results are already in context — no need to re-fetch.
-  const chatHistoryLength = (body.chatHistory || []).length;
+  const chatHistoryLength = chatHistory.length;
   const isFirstMessage = chatHistoryLength === 0;
   const isExplicitResearch = /\b(check|find|look up|search|go through|look at|pull up|review.*notes?|project notes?|find.*email|search.*email|look.*email|what.*notes?|any.*notes?)\b/i.test(userPrompt);
   const shouldRunSearch = isFirstMessage || isExplicitResearch;
@@ -3171,6 +3171,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       draftingExamples,
       userPrompt: prompt,
       projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
+      chatHistory: body?.chatHistory || [],
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
