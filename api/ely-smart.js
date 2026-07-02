@@ -1063,6 +1063,19 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
   }
 
+  // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
+  // Loads when on a party wall surface or drafting/reviewing party wall matters.
+  // Does NOT load for simple general chat with no party wall content.
+  if (brain?.knowledge_layer?.system_prompt) {
+    prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
+  }
+
+  // ── DRAFTING LAYER — detailed drafting rules ─────────────────────────────
+  // Loads only when actively drafting correspondence.
+  if (brain?.drafting_layer?.system_prompt) {
+    prompt += `\n\n--- DRAFTING RULES ---\n\n${brain.drafting_layer.system_prompt}`;
+  }
+
   // ── DOMAIN LAYER — injected when a specific mode is active ────────────
   // This is the second instruction set loaded from the layered brain loader.
   // It adds mode-specific rules on top of the global layer without replacing it.
@@ -1071,6 +1084,22 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     const parts = [dl.system_prompt, dl.output_rules, dl.behaviour_rules].filter(Boolean);
     if (parts.length) {
       prompt += `\n\n--- DOMAIN LAYER: ${dl.name || dl.layer_type || 'specialist'} ---\n\n${parts.join('\n\n')}`;
+    }
+  }
+
+  // ── USER BRAIN — personal preferences, writing voice, fees ──────────────
+  // Always loads — small, personalised to this user.
+  if (brain?.user_brain) {
+    const ub = brain.user_brain;
+    const userParts = [
+      ub.writing_voice ? `WRITING VOICE:\n${ub.writing_voice}` : null,
+      ub.personal_preferences ? `PERSONAL PREFERENCES:\n${ub.personal_preferences}` : null,
+      ub.banned_phrases ? `BANNED PHRASES:\n${ub.banned_phrases}` : null,
+      ub.sign_off ? `SIGN-OFF: Always end correspondence with: ${ub.sign_off}` : null,
+      ub.fee_structure ? `FEE STRUCTURE:\n${ub.fee_structure}` : null,
+    ].filter(Boolean);
+    if (userParts.length) {
+      prompt += `\n\n--- USER PREFERENCES ---\n\n${userParts.join('\n\n')}`;
     }
   }
 
