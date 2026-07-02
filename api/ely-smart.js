@@ -3391,17 +3391,35 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const isDraftWithElyMP = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
     const missingPoints = [];
 
-    // Detect if user expressed a preference that should be saved
+    // Detect if user expressed a preference and save directly to user_brain
     const wantsToRemember = detectMemorySaveIntent(prompt);
     let memorySaveProposal = null;
-    if (wantsToRemember) {
-      memorySaveProposal = {
-        note: prompt.slice(0, 300),
-        suggestion: 'Save this to your preferences?',
-      };
-      console.log('[ely-smart] memory_save_proposal set for prompt:', prompt.slice(0, 80));
-    } else {
-      console.log('[ely-smart] no memory save detected for prompt:', prompt.slice(0, 80));
+    if (wantsToRemember && userId) {
+      try {
+        const sb2 = getSupabase();
+        if (sb2) {
+          // Get existing notes
+          const { data: existingBrain } = await sb2
+            .from('user_brain')
+            .select('notes')
+            .eq('user_id', userId)
+            .single();
+          const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+          const newEntry = '[' + date + '] ' + prompt.slice(0, 400);
+          const updatedNotes = existingBrain?.notes
+            ? existingBrain.notes + '\n' + newEntry
+            : newEntry;
+          await sb2.from('user_brain').upsert({
+            user_id: userId,
+            notes: updatedNotes,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+          console.log('[ely-smart] saved to user_brain for user:', userId);
+          memorySaveProposal = { saved: true };
+        }
+      } catch (memErr) {
+        console.warn('[ely-smart] user_brain save failed:', memErr.message);
+      }
     }
 
     return res.status(200).json({
