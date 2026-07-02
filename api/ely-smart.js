@@ -3131,7 +3131,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // The current email being replied to is already in emailContext.body — no fetch needed.
     // On all other surfaces: only load if prompt clearly references existing correspondence.
     const isDraftingSurface = isDraftWithEly || body.surface === 'inbox_draft';
-    const needsEmails = isDraftingSurface
+    const isProjectChatSurface = isProjectChat || body.surface === 'project_chat';
+    // On drafting and project chat surfaces — only load emails when explicitly requested
+    // On main chat — load if supplied email or wantsEmailContext (user may be doing inbox research)
+    const needsEmails = (isDraftingSurface || isProjectChatSurface)
       ? explicitResearchRequest
       : (hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId));
     // Always load slim project facts when projectId is present — BO/AO names and addresses only.
