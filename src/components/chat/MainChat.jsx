@@ -1083,6 +1083,11 @@ export default function MainChat({ onOpenComposer, onClose }) {
         setPendingCaseReview({ project_id: result.project_id || selectedProjectId });
       }
 
+      // ── Memory save proposal ─────────────────────────────────────────────
+      if (result.memory_save_proposal) {
+        setMemorySaveProposal(result.memory_save_proposal);
+      }
+
       if (selectedProjectId) {
         refreshProjectSessions(selectedProjectId);
       } else {
@@ -1107,6 +1112,28 @@ export default function MainChat({ onOpenComposer, onClose }) {
     refreshProjectSessions,
     refreshGlobalSessions,
   ]);
+
+  const handleSaveToMemory = async (proposal) => {
+    try {
+      const userId = state.currentUser?.id || state.currentUser?.email || 'itzy212@gmail.com';
+      const res = await fetch('/api/save-user-brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          field: proposal.field,
+          value: proposal.prompt,
+        }),
+      });
+      if (res.ok) {
+        setMemorySaved(true);
+        setMemorySaveProposal(null);
+        setTimeout(() => setMemorySaved(false), 3000);
+      }
+    } catch (err) {
+      console.error('[MainChat] save to memory failed:', err);
+    }
+  };
 
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
