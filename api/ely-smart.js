@@ -855,7 +855,7 @@ function inferModeHint(surface, prompt = '', body = {}) {
 function detectMemorySaveIntent(prompt = '') {
   const p = prompt.toLowerCase();
   return (
-    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|note that|keep in mind|my preference)\b/i.test(p) &&
+    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|save that|note that|keep in mind|my preference|add to|add a note|memory brain|to the memory|store that|store this|want you to save|want you to remember|want you to note|want you to add)\b/i.test(p) &&
     p.length > 10
   );
 }
