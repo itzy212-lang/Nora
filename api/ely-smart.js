@@ -1455,16 +1455,27 @@ ${projectFacts}
 `;
 
   // ── Semantic search across ALL project content ───────────────────────────
-  // Uses vector embeddings — no limit, finds relevant content regardless of volume
+  // Only runs on first message or when user explicitly requests research.
+  // If chatHistory has messages, results are already in context — no need to re-fetch.
+  const chatHistoryLength = (body.chatHistory || []).length;
+  const isFirstMessage = chatHistoryLength === 0;
+  const isExplicitResearch = /\b(check|find|look up|search|go through|look at|pull up|review.*notes?|project notes?|find.*email|search.*email|look.*email|what.*notes?|any.*notes?)\b/i.test(userPrompt);
+  const shouldRunSearch = isFirstMessage || isExplicitResearch;
+
   let semanticResults = null;
   let crossProjectResults = null;
   try {
-    if (projectBundle?.project?.id) {
-      semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
+    if (shouldRunSearch) {
+      if (projectBundle?.project?.id) {
+        semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
+      }
+    } else {
+      console.log('[ely-smart] skipping semantic search — chat in progress, no explicit research request');
     }
     // Cross-project search — fires from main chat when no project is active
     // but user mentions a project by name ("look at the Sellafield project notes")
-    const projectsCtx = projectsContext || [];
+    // Only runs when explicitly requested — never on follow-up messages
+    const projectsCtx = isExplicitResearch ? (projectsContext || []) : [];
     if (!projectId && projectsCtx.length) {
       const crossResult = await searchNamedProject(userPrompt, projectsCtx);
       if (crossResult) {
