@@ -1,600 +1,304 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * VoiceInput.jsx — unified voice dictation for all Nora surfaces
+ *
+ * Engine: Whisper (final accuracy) + Web Speech API (live preview)
+ * Visual: UnifiedVoice style — waveform bars, 3-line live preview, blue when active
+ *
+ * Props:
+ *   onTranscript(text)     — called with final Whisper transcript
+ *   onPreview(text, meta)  — called with live interim text (optional)
+ *   disabled               — disables the button
+ *   stopSignal             — increment to force-stop recording
+ *   placeholder            — idle placeholder text
+ *   className              — outer class
+ */
 
-function cleanText(value = '') {
-  return String(value || '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([,.!?;:])/g, '$1')
-    .trim();
+import { useState, useRef, useCallback, useEffect } from 'react';
+
+const STATES = { IDLE: 'idle', RECORDING: 'recording', TRANSCRIBING: 'transcribing' };
+
+// ── Waveform bars ─────────────────────────────────────────────────────────────
+function WaveformBars({ active }) {
+  const heights = [0.6, 1, 0.7, 0.9, 0.5, 1, 0.8, 0.6, 0.9, 0.7, 0.5, 0.8];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 20, padding: '0 4px' }}>
+      {heights.map((h, i) => (
+        <div
+          key={i}
+          style={{
+            width: 3,
+            borderRadius: 2,
+            background: active ? 'var(--blue, #3b82f6)' : 'var(--border, #e5e7eb)',
+            height: active ? `${8 + h * 12}px` : '4px',
+            animation: active ? `waveBar 0.8s ease-in-out ${i * 0.06}s infinite alternate` : 'none',
+            transition: 'height 0.2s ease, background 0.2s ease',
+          }}
+        />
+      ))}
+      <style>{`@keyframes waveBar { from { transform: scaleY(0.4); } to { transform: scaleY(1); } }`}</style>
+    </div>
+  );
 }
 
-function wordKey(value = '') {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[.,!?;:()[\]{}"“”‘’]/g, '')
-    .trim();
+// ── Live preview lines ────────────────────────────────────────────────────────
+function LivePreview({ lines }) {
+  const visible = lines.slice(-3);
+  return (
+    <div style={{ minHeight: 58, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 2, padding: '4px 0', overflow: 'hidden' }}>
+      {visible.map((line, i) => {
+        const age = visible.length - 1 - i;
+        return (
+          <div key={i} style={{
+            fontSize: 14, lineHeight: 1.5,
+            color: age === 0 ? 'var(--text, #111)' : `rgba(100,100,100,${age === 1 ? 0.55 : 0.3})`,
+            fontWeight: age === 0 ? 500 : 400,
+            transition: 'all 0.3s ease',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {line}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function removeImmediateDuplicateWords(value = '') {
-  const words = cleanText(value).split(' ').filter(Boolean);
-  const output = [];
-
+// ── Text to preview lines ─────────────────────────────────────────────────────
+function textToLines(text, interim = '') {
+  const combined = [text, interim].filter(Boolean).join(' ').trim();
+  if (!combined) return [];
+  const words = combined.split(' ');
+  const lines = [];
+  let current = '';
   for (const word of words) {
-    const previous = output[output.length - 1];
-
-    if (previous && wordKey(previous) === wordKey(word)) {
-      continue;
-    }
-
-    output.push(word);
-  }
-
-  return output.join(' ').trim();
-}
-
-function orderedResultText(results = {}) {
-  return Object.keys(results)
-    .map(Number)
-    .sort((a, b) => a - b)
-    .map(index => results[index])
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-}
-
-function mergeWithoutRepeating(previous = '', next = '') {
-  const prev = removeImmediateDuplicateWords(previous);
-  const curr = removeImmediateDuplicateWords(next);
-
-  if (!curr) return prev;
-  if (!prev) return curr;
-
-  const prevLower = prev.toLowerCase();
-  const currLower = curr.toLowerCase();
-
-  if (prevLower === currLower) return prev;
-  if (prevLower.endsWith(currLower)) return prev;
-  if (currLower.startsWith(prevLower)) return curr;
-
-  const prevWords = prev.split(' ').filter(Boolean);
-  const currWords = curr.split(' ').filter(Boolean);
-  const maxOverlap = Math.min(prevWords.length, currWords.length, 20);
-
-  for (let size = maxOverlap; size > 0; size -= 1) {
-    const prevTail = prevWords.slice(-size).map(wordKey).join(' ');
-    const currHead = currWords.slice(0, size).map(wordKey).join(' ');
-
-    if (prevTail && prevTail === currHead) {
-      return removeImmediateDuplicateWords([
-        ...prevWords,
-        ...currWords.slice(size),
-      ].join(' '));
+    if ((current + ' ' + word).trim().length > 42) {
+      if (current) lines.push(current.trim());
+      current = word;
+    } else {
+      current = current ? current + ' ' + word : word;
     }
   }
-
-  return removeImmediateDuplicateWords(`${prev} ${curr}`);
+  if (current) lines.push(current.trim());
+  return lines;
 }
 
-function isMobileBrowser() {
-  if (typeof navigator === 'undefined') return false;
-
-  const ua = navigator.userAgent || '';
-  const platform = navigator.platform || '';
-
-  return /Android|iPhone|iPad|iPod/i.test(ua)
-    || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-function getSupportedAudioMimeType() {
+// ── Best supported audio mime type ───────────────────────────────────────────
+function getBestMimeType() {
   if (typeof MediaRecorder === 'undefined') return '';
-
-  // iOS Safari only supports mp4/aac — check for that first on mobile
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
   const candidates = isIOS
     ? ['audio/mp4', 'audio/mp4;codecs=mp4a.40.2', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm']
-    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg'];
-
-  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+  return candidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export default function VoiceInput({
   onTranscript,
   onPreview,
   disabled = false,
   stopSignal = 0,
+  placeholder = 'Tap to speak...',
+  className = '',
 }) {
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-
-  const recognitionRef = useRef(null);
-  const shouldKeepRecordingRef = useRef(false);
-  const manualStopRef = useRef(false);
-  const restartTimerRef = useRef(null);
-
-  const committedRef = useRef('');
-  const sessionResultsRef = useRef({});
-  const lastEmittedRef = useRef('');
+  const [state, setState] = useState(STATES.IDLE);
+  const [previewLines, setPreviewLines] = useState([]);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const mediaRecorderRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const mediaChunksRef = useRef([]);
+  const chunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const accumulatedRef = useRef('');
+  const streamRef = useRef(null);
+  const stateRef = useRef(STATES.IDLE);
 
-  const clearRestartTimer = useCallback(() => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
+  const isRecording = state === STATES.RECORDING;
+  const isTranscribing = state === STATES.TRANSCRIBING;
+
+  const setStateSync = useCallback((s) => {
+    stateRef.current = s;
+    setState(s);
+  }, []);
+
+  // ── Stop all recording ────────────────────────────────────────────────────
+  const stopAll = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
   }, []);
 
-  const stopMediaTracks = useCallback(() => {
-    try {
-      mediaStreamRef.current?.getTracks?.().forEach(track => track.stop());
-    } catch {}
-
-    mediaStreamRef.current = null;
-  }, []);
-
-  const emit = useCallback((fullText = '', currentPhrase = '', finalText = '') => {
-    const cleanFull = removeImmediateDuplicateWords(fullText);
-    const cleanPhrase = removeImmediateDuplicateWords(currentPhrase);
-    const cleanFinal = removeImmediateDuplicateWords(finalText);
-
-    if (cleanFull === lastEmittedRef.current && !cleanPhrase) {
-      return;
+  // ── Stop signal from parent ───────────────────────────────────────────────
+  useEffect(() => {
+    if (stopSignal > 0 && stateRef.current !== STATES.IDLE) {
+      stopAll();
+      setStateSync(STATES.IDLE);
+      setPreviewLines([]);
     }
+  }, [stopSignal, stopAll, setStateSync]);
 
-    lastEmittedRef.current = cleanFull;
-
-    onPreview?.(cleanPhrase, {
-      recording: shouldKeepRecordingRef.current,
-      currentPhrase: cleanPhrase,
-      interim: cleanPhrase,
-      final: cleanFinal,
-    });
-
-    onTranscript?.(cleanFull, {
-      recording: shouldKeepRecordingRef.current,
-      currentPhrase: cleanPhrase,
-      interim: cleanPhrase,
-      final: cleanFinal,
-    });
-  }, [onPreview, onTranscript]);
-
-  const stopRecording = useCallback(() => {
-    manualStopRef.current = true;
-    shouldKeepRecordingRef.current = false;
-    clearRestartTimer();
+  // ── Start recording ───────────────────────────────────────────────────────
+  const startRecording = useCallback(async () => {
+    setErrorMsg('');
+    accumulatedRef.current = '';
+    chunksRef.current = [];
+    setPreviewLines([]);
 
     try {
-      recognitionRef.current?.abort?.();
-    } catch {}
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = getBestMimeType();
 
-    try {
-      recognitionRef.current?.stop?.();
-    } catch {}
+      // MediaRecorder → Whisper for final accuracy
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
 
-    recognitionRef.current = null;
-    committedRef.current = '';
-    sessionResultsRef.current = {};
-    lastEmittedRef.current = '';
-
-    try {
-      const recorder = mediaRecorderRef.current;
-
-      if (recorder && recorder.state !== 'inactive') {
-        recorder.stop();
-      }
-    } catch {}
-
-    onPreview?.('', {
-      recording: false,
-      currentPhrase: '',
-      interim: '',
-      final: '',
-    });
-
-    setRecording(false);
-  }, [clearRestartTimer, onPreview]);
-
-  const sendMobileAudioForTranscription = useCallback(async (blob) => {
-    if (!blob || blob.size === 0) return;
-
-    setTranscribing(true);
-
-    // Log file size to help diagnose slow transcription on mobile
-    const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
-    console.log(`[transcribe] sending audio: ${sizeMB}MB, type: ${blob.type}`);
-
-    try {
-      const formData = new FormData();
-      const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
-
-      formData.append('audio', blob, `voice.${extension}`);
-
-      const response = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok || !payload?.success) {
-        const detail = payload?.error || payload?.message || JSON.stringify(payload) || '';
-        throw new Error(`Transcription failed (${response.status})${detail ? ': ' + detail : ''}`);
-      }
-
-      const text = cleanText(payload.text || '');
-
-      if (text) {
-        lastEmittedRef.current = text;
-
-        onPreview?.('', {
-          recording: false,
-          currentPhrase: '',
-          interim: '',
-          final: text,
-        });
-
-        onTranscript?.(text, {
-          recording: false,
-          currentPhrase: '',
-          interim: '',
-          final: text,
-        });
-      }
-    } catch (error) {
-      console.error('[VoiceInput] mobile transcription failed:', error);
-      const msg = error?.message || 'Voice transcription failed. Please try again.';
-      alert(`[Transcription error — please screenshot this]\n\n${msg}`);
-    } finally {
-      setTranscribing(false);
-      setRecording(false);
-      stopMediaTracks();
-      mediaRecorderRef.current = null;
-      mediaChunksRef.current = [];
-    }
-  }, [onPreview, onTranscript, stopMediaTracks]);
-
-  const startMobileRecording = useCallback(async () => {
-    if (disabled || transcribing) return;
-
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      alert('Audio recording is not supported in this browser.');
-      return;
-    }
-
-    // Warm up the transcribe function immediately — prevents cold start delay
-    fetch('/api/transcribe', { method: 'GET' }).catch(() => {});
-
-    try {
-      manualStopRef.current = false;
-      shouldKeepRecordingRef.current = true;
-      mediaChunksRef.current = [];
-
-      // Request low-bitrate mono audio — faster to upload, faster to transcribe
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        } 
-      });
-      const mimeType = getSupportedAudioMimeType();
-
-      const recorderOptions = { audioBitsPerSecond: 16000 };
-      if (mimeType) recorderOptions.mimeType = mimeType;
-
-      const recorder = new MediaRecorder(stream, recorderOptions);
-
-      mediaStreamRef.current = stream;
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = event => {
-        if (event.data && event.data.size > 0) {
-          mediaChunksRef.current.push(event.data);
+      mr.onstop = async () => {
+        setStateSync(STATES.TRANSCRIBING);
+        try {
+          const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
+          const fd = new FormData();
+          fd.append('audio', blob, 'recording.' + (mimeType.includes('mp4') ? 'm4a' : 'webm'));
+          const res = await fetch('/api/transcribe', { method: 'POST', body: fd });
+          if (!res.ok) throw new Error('Transcribe failed');
+          const data = await res.json();
+          const text = (data.text || '').trim();
+          if (text) onTranscript?.(text);
+        } catch (err) {
+          setErrorMsg('Could not transcribe. Please try again.');
+        } finally {
+          setStateSync(STATES.IDLE);
+          setPreviewLines([]);
         }
       };
 
-      recorder.onstop = () => {
-        shouldKeepRecordingRef.current = false;
+      mr.start(200);
 
-        const type = recorder.mimeType || mimeType || 'audio/webm';
-        const blob = new Blob(mediaChunksRef.current, { type });
-
-        sendMobileAudioForTranscription(blob);
-      };
-
-      recorder.onerror = () => {
-        shouldKeepRecordingRef.current = false;
-        setRecording(false);
-        stopMediaTracks();
-      };
-
-      recorder.start();
-      setRecording(true);
-
-      onPreview?.('🔴 Recording… speak now, then tap Send', {
-        recording: true,
-        currentPhrase: '🔴 Recording… speak now, then tap Send',
-        interim: '',
-        final: '',
-      });
-
-      // Run Web Speech in parallel for live preview only — Whisper handles final accuracy
+      // Web Speech API in parallel — live preview only
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
-        try {
-          const previewRec = new SpeechRecognition();
-          previewRec.continuous = true;
-          previewRec.interimResults = true;
-          previewRec.maxAlternatives = 1;
-          previewRec.onresult = (event) => {
-            if (!shouldKeepRecordingRef.current) return;
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              if (!event.results[i].isFinal) {
-                interim = cleanText(event.results[i][0]?.transcript || '');
-              }
-            }
-            if (interim) {
-              onPreview?.(interim, { recording: true, currentPhrase: interim, interim, final: '' });
-            }
-          };
-          previewRec.onerror = () => {};
-          previewRec.onend = () => {};
-          previewRec.start();
-          // Store so we can stop it when recording stops
-          recognitionRef.current = previewRec;
-        } catch {}
-      }
-    } catch (error) {
-      console.error('[VoiceInput] mobile recording failed:', error);
-      shouldKeepRecordingRef.current = false;
-      setRecording(false);
-      stopMediaTracks();
-      alert(error?.message || 'Could not start voice recording.');
-    }
-  }, [disabled, onPreview, sendMobileAudioForTranscription, stopMediaTracks, transcribing]);
+        const rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = 'en-GB';
+        recognitionRef.current = rec;
 
-  const startRecognitionSession = useCallback(() => {
-    if (disabled || manualStopRef.current || !shouldKeepRecordingRef.current) {
-      setRecording(false);
-      return;
-    }
+        rec.onresult = e => {
+          let interim = '';
+          let final = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) final += e.results[i][0].transcript;
+            else interim += e.results[i][0].transcript;
+          }
+          if (final) accumulatedRef.current += (accumulatedRef.current ? ' ' : '') + final.trim();
+          const lines = textToLines(accumulatedRef.current, interim);
+          setPreviewLines(lines);
+          onPreview?.(accumulatedRef.current, { recording: true, interim, currentPhrase: interim || accumulatedRef.current });
+        };
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert('Voice input is not supported in this browser. Please use Chrome.');
-      shouldKeepRecordingRef.current = false;
-      setRecording(false);
-      return;
-    }
-
-    clearRestartTimer();
-    sessionResultsRef.current = {};
-
-    const recognition = new SpeechRecognition();
-
-    recognition.lang = 'en-GB';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
-      setRecording(true);
-    };
-
-    recognition.onresult = (event) => {
-      if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
-
-      let latestInterim = '';
-
-      for (let i = 0; i < event.results.length; i += 1) {
-        const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
-
-        if (!spoken) continue;
-
-        sessionResultsRef.current[i] = spoken;
-
-        if (!event.results[i].isFinal && i >= event.resultIndex) {
-          latestInterim = spoken;
-        }
+        rec.onerror = () => {}; // silent — Whisper handles final result
+        try { rec.start(); } catch (_) {}
       }
 
-      const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
-      const fullText = mergeWithoutRepeating(committedRef.current, sessionText);
+      setStateSync(STATES.RECORDING);
 
-      emit(fullText, latestInterim, sessionText);
-    };
-
-    recognition.onend = () => {
-      if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
-        setRecording(false);
-        return;
-      }
-
-      const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
-
-      if (sessionText) {
-        committedRef.current = mergeWithoutRepeating(committedRef.current, sessionText);
-      }
-
-      sessionResultsRef.current = {};
-
-      // Signal consumers that this is a restart gap, not a final stop
-      // This prevents voicePhase switching to idle/transcribing during the gap
-      const restartMeta = { recording: true, restarting: true, currentPhrase: '', interim: '', final: '' };
-      onPreview?.(committedRef.current || '', restartMeta);
-      if (committedRef.current) {
-        onTranscript?.(committedRef.current, restartMeta);
-      }
-
-      setRecording(true);
-
-      restartTimerRef.current = setTimeout(() => {
-        if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) return;
-        startRecognitionSession();
-      }, 180);
-    };
-
-    recognition.onerror = (event) => {
-      const errorType = event?.error || '';
-      console.warn('[VoiceInput] Web Speech error:', errorType);
-
-      // Permission denied or service unavailable — fall back to Whisper
-      if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
-        shouldKeepRecordingRef.current = false;
-        setRecording(false);
-        console.log('[VoiceInput] Microphone permission denied or service unavailable — falling back to Whisper');
-        startMobileRecording();
-        return;
-      }
-
-      if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
-        setRecording(false);
-        return;
-      }
-
-      try {
-        recognition.stop();
-      } catch {}
-    };
-
-    recognitionRef.current = recognition;
-
-    try {
-      recognition.start();
-      setRecording(true);
-    } catch {
-      restartTimerRef.current = setTimeout(() => {
-        if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) return;
-        startRecognitionSession();
-      }, 250);
+    } catch (err) {
+      setErrorMsg('Microphone access denied.');
+      setStateSync(STATES.IDLE);
     }
-  }, [clearRestartTimer, disabled, emit]);
+  }, [onTranscript, onPreview, setStateSync]);
 
-  const startDesktopRecording = useCallback(() => {
-    if (disabled) return;
-
-    manualStopRef.current = false;
-    shouldKeepRecordingRef.current = true;
-    committedRef.current = '';
-    sessionResultsRef.current = {};
-    lastEmittedRef.current = '';
-
-    // Check if Web Speech API is available — if not, fall back to Whisper (same as mobile)
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.log('[VoiceInput] Web Speech API not available on desktop — falling back to Whisper');
-      startMobileRecording();
-      return;
+  // ── Handle mic button press ───────────────────────────────────────────────
+  const handleMicPress = useCallback(() => {
+    if (isRecording) {
+      stopAll();
+      // onstop fires → Whisper transcription
+    } else if (!isTranscribing) {
+      startRecording();
     }
+  }, [isRecording, isTranscribing, stopAll, startRecording]);
 
-    startRecognitionSession();
-  }, [disabled, startMobileRecording, startRecognitionSession]);
-
-  const toggleRecording = useCallback(() => {
-    if (disabled || transcribing) return;
-
-    if (shouldKeepRecordingRef.current || recording) {
-      stopRecording();
-      return;
-    }
-
-    if (isMobileBrowser()) {
-      startMobileRecording();
-      return;
-    }
-
-    startDesktopRecording();
-  }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
-
-  const stopRecordingRef = useRef(stopRecording);
-  useEffect(() => { stopRecordingRef.current = stopRecording; }, [stopRecording]);
-
-  useEffect(() => {
-    if (!stopSignal) return;
-    stopRecordingRef.current();
-  }, [stopSignal]);
-
-  useEffect(() => {
-    return () => {
-      clearRestartTimer();
-
-      try {
-        recognitionRef.current?.abort?.();
-      } catch {}
-
-      try {
-        recognitionRef.current?.stop?.();
-      } catch {}
-
-      try {
-        const recorder = mediaRecorderRef.current;
-        if (recorder && recorder.state !== 'inactive') recorder.stop();
-      } catch {}
-
-      stopMediaTracks();
-    };
-  }, [clearRestartTimer, stopMediaTracks]);
-
-  const active = recording || transcribing;
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <>
-    <style>{`@keyframes voicePulse { 0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,0.2)} 50%{box-shadow:0 0 0 7px rgba(239,68,68,0.35)} }`}</style>
-    <button
-      type="button"
-      className={`voice-btn${active ? ' listening recording' : ''}`}
-      onClick={toggleRecording}
-      disabled={disabled || transcribing}
-      title={transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Voice input'}
-      aria-label={transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Voice input'}
+    <div
+      className={className}
       style={{
-        width: 38,
-        height: 38,
-        borderRadius: '50%',
-        border: 'none',
-        background: active ? 'rgba(239,68,68,0.12)' : 'transparent',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: active ? '#ef4444' : '#9ca3af',
-        cursor: disabled || transcribing ? 'not-allowed' : 'pointer',
-        opacity: disabled || transcribing ? 0.45 : 1,
-        flexShrink: 0,
-        padding: 0,
-        boxShadow: active ? '0 0 0 4px rgba(239,68,68,0.18)' : 'none',
-        transition: 'box-shadow 0.3s, background 0.3s',
-        animation: recording ? 'voicePulse 1.2s ease-in-out infinite' : 'none',
+        display: 'flex', flexDirection: 'column', gap: 0,
+        borderRadius: 14,
+        border: `1.5px solid ${isRecording ? 'var(--blue, #3b82f6)' : 'var(--border, #e5e7eb)'}`,
+        background: 'var(--bg, #fff)',
+        overflow: 'hidden',
+        transition: 'border-color 0.2s ease',
+        boxShadow: isRecording ? '0 0 0 3px rgba(59,130,246,0.12)' : 'none',
       }}
     >
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.65"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" />
-        <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-        <path d="M12 18v4" />
-        <path d="M8 22h8" />
-      </svg>
-    </button>
-    </>
+      {/* Live preview area */}
+      <div style={{ padding: '10px 14px 6px', minHeight: 72 }}>
+        {isTranscribing ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3, #9ca3af)', fontSize: 13 }}>
+            <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+            Transcribing...
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : previewLines.length > 0 ? (
+          <LivePreview lines={previewLines} />
+        ) : (
+          <div style={{ color: 'var(--text3, #9ca3af)', fontSize: 13, paddingTop: 6 }}>
+            {isRecording ? 'Listening...' : placeholder}
+          </div>
+        )}
+        {errorMsg && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errorMsg}</div>}
+      </div>
+
+      {/* Bottom bar — waveform + label + mic button */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        padding: '6px 10px 8px',
+        borderTop: `1px solid ${isRecording ? 'rgba(59,130,246,0.2)' : 'var(--border, #e5e7eb)'}`,
+        gap: 8,
+        background: isRecording ? 'rgba(59,130,246,0.04)' : 'transparent',
+      }}>
+        <div style={{ flex: 1 }}><WaveformBars active={isRecording} /></div>
+        <div style={{ fontSize: 11, color: 'var(--text3, #9ca3af)', minWidth: 70, textAlign: 'right' }}>
+          {isRecording ? 'Tap to send' : isTranscribing ? 'Processing...' : 'Tap to speak'}
+        </div>
+        <button
+          onClick={handleMicPress}
+          disabled={disabled || isTranscribing}
+          style={{
+            width: 38, height: 38, borderRadius: '50%', border: 'none',
+            background: isRecording ? 'var(--blue, #3b82f6)' : 'var(--bg3, #f3f4f6)',
+            color: isRecording ? '#fff' : 'var(--text2, #6b7280)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: disabled || isTranscribing ? 'not-allowed' : 'pointer',
+            opacity: disabled || isTranscribing ? 0.5 : 1,
+            transition: 'all 0.2s ease', flexShrink: 0,
+            boxShadow: isRecording ? '0 0 0 4px rgba(59,130,246,0.2)' : 'none',
+          }}
+        >
+          {isRecording ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <rect x="2" y="2" width="10" height="10" rx="2" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
-
-
-
-
-
-
