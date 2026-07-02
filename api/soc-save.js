@@ -83,7 +83,7 @@ export default async function handler(req, res) {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { action, project_id, ao_id, ao_address, session_id, content } = req.body;
+    const { action, project_id, ao_id, ao_address, session_id, content, force_new } = req.body;
 
     // Init or find session for this project+AO
     if (action === 'init_session') {
