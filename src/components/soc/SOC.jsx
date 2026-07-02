@@ -292,11 +292,30 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const handleSend = useCallback(async (overrideText) => {
     const userContent = (overrideText ?? textInput).trim();
     if (!userContent) return;
+    // Auto-create session on first note if none exists
     if (!socSessionId) {
-      const reason = sessionLoadError
-        ? `SOC session could not be loaded: ${sessionLoadError}`
-        : 'SOC session is not ready yet. This can happen if "Start SOC" was not completed, or the connection dropped.';
-      alert(`${reason}\n\nTry going back to the project and starting the SOC again.`);
+      const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+      const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+      if (!projectId || !aoId) {
+        alert('Please select an Adjoining Owner before dictating.');
+        return;
+      }
+      try {
+        await initSession(aoId, aoAddr);
+        // Wait briefly for state to update
+        await new Promise(r => setTimeout(r, 400));
+      } catch (err) {
+        alert('Could not create SOC session. Please try again.');
+        return;
+      }
+      if (!socSessionId) {
+        alert('SOC session is not ready yet. Please try again.');
+        return;
+      }
+    }
+    if (false) { // removed old error path
+      const reason = '';
+      alert(reason);
       return;
     }
 
