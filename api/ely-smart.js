@@ -371,20 +371,37 @@ async function searchNamedProject(prompt, projectsContext = []) {
   const lower = prompt.toLowerCase();
 
   // Try to match against known project addresses/names
+  // Strategy: score each project by how specifically it matches the prompt
+  // Prefer longer/more specific word matches over short generic ones
   let matchedProject = null;
+  let bestScore = 0;
+
   for (const proj of projectsContext) {
     const addr = (proj.bo_premise_address || proj.address || proj.name || '').toLowerCase();
     const ref = (proj.ref || '').toLowerCase();
     if (!addr && !ref) continue;
 
-    // Extract key words from address (street name, area)
-    const addrWords = addr.split(/[,\s]+/).filter(w => w.length > 3);
-    const matched = addrWords.some(w => lower.includes(w)) || (ref && lower.includes(ref.toLowerCase()));
-    if (matched) {
+    let score = 0;
+
+    // Extract meaningful words from address (5+ chars to avoid common words)
+    const addrWords = addr.split(/[,\s]+/).filter(w => w.length >= 5);
+    for (const w of addrWords) {
+      if (lower.includes(w)) {
+        score += w.length; // longer word match = higher score
+      }
+    }
+
+    // Ref match
+    if (ref && lower.includes(ref)) score += 20;
+
+    if (score > bestScore) {
+      bestScore = score;
       matchedProject = proj;
-      break;
     }
   }
+
+  // Require a minimum score to avoid false matches on short generic words
+  if (bestScore < 5) matchedProject = null;
 
   console.log('[ely-smart] cross-project search: prompt=', prompt.slice(0,80), 'projects=', projectsContext.length);
   if (!matchedProject) {
