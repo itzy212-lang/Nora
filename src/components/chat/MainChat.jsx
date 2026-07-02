@@ -672,6 +672,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         role: 'ely',
         content: result.reply || 'Done.',
         suggestedActions: result.suggestedActions,
+        memorySaveProposal: result.memory_save_proposal || null,
       }]);
       return;
     }
