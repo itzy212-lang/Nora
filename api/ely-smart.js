@@ -375,7 +375,7 @@ async function searchNamedProject(prompt, projectsContext = []) {
   // Try to match against known project addresses/names
   let matchedProject = null;
   for (const proj of projectsContext) {
-    const addr = (proj.bo_premise_address || proj.address || proj.name || '').toLowerCase();
+    const addr = (proj.bo_premise_address || proj.name || '').toLowerCase();
     const ref = (proj.ref || '').toLowerCase();
     if (!addr && !ref) continue;
 
@@ -1355,8 +1355,9 @@ ${projectFacts}
     }
     // Cross-project search — fires from main chat when no project is active
     // but user mentions a project by name ("look at the Sellafield project notes")
-    if (!projectId && body.context?.projectsContext?.length) {
-      const crossResult = await searchNamedProject(userPrompt, body.context.projectsContext);
+    const projectsCtx = body?.context?.projectsContext || body?.projectsContext || [];
+    if (!projectId && projectsCtx.length) {
+      const crossResult = await searchNamedProject(userPrompt, projectsCtx);
       if (crossResult) {
         crossProjectResults = crossResult;
         console.log('[ely-smart] cross-project results found:', crossResult.results.length, 'items from', crossResult.project.bo_premise_address);
