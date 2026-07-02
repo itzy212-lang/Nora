@@ -535,6 +535,11 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         ...extraOpts,
       });
 
+      // Surface memory save proposal if returned
+      if (result.memory_save_proposal) {
+        dispatch({ type: 'SET_MEMORY_SAVE_PROPOSAL', payload: result.memory_save_proposal });
+      }
+
       const assistantText =
         result.reply ||
         result.replyText ||
