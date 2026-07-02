@@ -308,7 +308,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const [messages, setMessages] = useState([]);
   const [memorySaveProposal, setMemorySaveProposal] = useState(null);
-  const [memorySaved, setMemorySaved] = useState(false);
+  const [memorySaved, setMemorySaved] = useState(null);
   const [input, setInput] = useState('');
   const [pendingBooking, setPendingBooking] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
@@ -1116,7 +1116,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     refreshGlobalSessions,
   ]);
 
-  const handleSaveToMemory = async (proposal) => {
+  const handleSaveToMemory = async (proposal, msgId) => {
     try {
       const userId = state.currentUser?.id || state.currentUser?.email || 'itzy212@gmail.com';
       const res = await fetch('/api/save-user-brain', {
@@ -1128,9 +1128,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
         }),
       });
       if (res.ok) {
-        setMemorySaved(true);
-        setMemorySaveProposal(null);
-        setTimeout(() => setMemorySaved(false), 3000);
+        // Remove the proposal from the message and show saved confirmation
+        setMessages(prev => prev.map(m => m.id === msgId ? {...m, memorySaveProposal: null} : m));
+        setMemorySaved(msgId);
+        setTimeout(() => setMemorySaved(null), 3000);
       }
     } catch (err) {
       console.error('[MainChat] save to memory failed:', err);
@@ -1344,17 +1345,34 @@ export default function MainChat({ onOpenComposer, onClose }) {
               />
             ) : (
               messages.map(msg => (
-                <ChatMessage
-                  key={msg.id}
-                  msg={msg}
-                  onUseDraft={(draft) => {
-                    setInput(draft);
-                    requestAnimationFrame(resizeTextarea);
-                  }}
-                  onOpenInComposer={handleOpenInComposer}
-                  onAttachQuote={handleAttachQuote}
-                  onPreviewQuote={handlePreviewQuote}
-                />
+                <div key={msg.id}>
+                  <ChatMessage
+                    msg={msg}
+                    onUseDraft={(draft) => {
+                      setInput(draft);
+                      requestAnimationFrame(resizeTextarea);
+                    }}
+                    onOpenInComposer={handleOpenInComposer}
+                    onAttachQuote={handleAttachQuote}
+                    onPreviewQuote={handlePreviewQuote}
+                  />
+                  {msg.memorySaveProposal && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 16px 12px', padding: '10px 14px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>💾 {msg.memorySaveProposal.suggestion}</span>
+                      <button
+                        onClick={() => handleSaveToMemory(msg.memorySaveProposal, msg.id)}
+                        style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #3b82f6)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}
+                      >Remember this</button>
+                      <button
+                        onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? {...m, memorySaveProposal: null} : m))}
+                        style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}
+                      >No</button>
+                    </div>
+                  )}
+                  {memorySaved === msg.id && (
+                    <div style={{ margin: '0 16px 8px', fontSize: 12, color: 'var(--green, #22c55e)' }}>✓ Saved to your preferences</div>
+                  )}
+                </div>
               ))
             )}
 
