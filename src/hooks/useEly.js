@@ -581,6 +581,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         reply: result.reply || result.replyText || '',
         draft: result.draft || result.documentText || null,
         draftType: result.draftType || result.action || null,
+        memory_save_proposal: result.memory_save_proposal || null,
         recipient: result.recipient || null,
         selectedAO: result.selectedAO || null,
         recipientSuggestions: result.recipientSuggestions || [],
