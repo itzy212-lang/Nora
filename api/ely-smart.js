@@ -1483,7 +1483,27 @@ AUTHORITATIVE PROJECT FACTS:
 ${projectFacts}
 `;
 
-  // ── Semantic search across ALL project content ───────────────────────────
+  // ── User brain memory save detection ─────────────────────────────────────
+// Detects when the user is expressing a preference, rule or personal fact
+// that should be saved to their user brain for future use.
+function detectMemorySaveIntent(prompt = '') {
+  const p = prompt.toLowerCase();
+  return (
+    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|note that|keep in mind|my preference)\b/i.test(p) &&
+    p.length > 10
+  );
+}
+
+function classifyMemoryField(prompt = '') {
+  const p = prompt.toLowerCase();
+  if (/fee|rate|charge|price|cost|quote/.test(p)) return 'fee_structure';
+  if (/sign.?off|sign off|close|regards|yours/.test(p)) return 'sign_off';
+  if (/style|voice|tone|wording|write|phrase|sentence|formal|informal/.test(p)) return 'writing_voice';
+  if (/never use|don't use|avoid|banned|do not use|hate when/.test(p)) return 'banned_phrases';
+  return 'personal_preferences';
+}
+
+// ── Semantic search across ALL project content ───────────────────────────
   // Only runs on first message or when user explicitly requests research.
   // If chatHistory has messages, results are already in context — no need to re-fetch.
   const chatHistoryLength = chatHistory.length;
@@ -3370,11 +3390,24 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const isDraftWithElyMP = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
     const missingPoints = [];
 
+    // Detect if user expressed a preference that should be saved
+    const wantsToRemember = detectMemorySaveIntent(prompt);
+    let memorySaveProposal = null;
+    if (wantsToRemember && modeHint === 'discuss') {
+      const field = classifyMemoryField(prompt);
+      memorySaveProposal = {
+        field,
+        prompt: prompt.slice(0, 200),
+        suggestion: `Save this to your preferences (${field.replace(/_/g, ' ')})?`,
+      };
+    }
+
     return res.status(200).json({
       reply: fullReply,
       ...(isDraftWithEly && missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
       model: modelUsed,
       resolvedProject,
+      memory_save_proposal: memorySaveProposal,
       scopedEmailCount: scopedEmailContext?.length || 0,
       selectedEmailContextLoaded: !!suppliedEmailContext,
       projectContextLoaded: !!projectBundle?.project_raw,
