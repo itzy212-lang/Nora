@@ -2287,6 +2287,11 @@ function parseInvoiceItemsFromChat(prompt = '') {
 
 function parseBookingIntent(prompt = '') {
   const lower = prompt.toLowerCase();
+
+  // Never trigger booking for party wall / construction professional content
+  const isPartyWallContent = /schedule of condition|party wall|financial contribution|enclosure cost|award clause|section 11|section 6|section 2|section 10|adjoining owner|building owner|party structure|notice|dissent|agreed surveyor/i.test(lower);
+  if (isPartyWallContent) return null;
+
   const isBooking = /\b(book|schedule|set|add|create|put in|diary|remind|reminder|block out)\b/i.test(lower) &&
     /\b(in|a|an|me|reminder|appointment|inspection|soc|survey|visit|call|meeting|deadline)\b/i.test(lower);
   if (!isBooking) return null;
