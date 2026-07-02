@@ -3399,6 +3399,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         note: prompt.slice(0, 300),
         suggestion: 'Save this to your preferences?',
       };
+      console.log('[ely-smart] memory_save_proposal set for prompt:', prompt.slice(0, 80));
+    } else {
+      console.log('[ely-smart] no memory save detected for prompt:', prompt.slice(0, 80));
     }
 
     return res.status(200).json({
