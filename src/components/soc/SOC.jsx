@@ -67,8 +67,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [sessionLoadError, setSessionLoadError] = useState(null);
 
   // ── Auto-load existing session on mount if one exists for this project ───────
+  // SOC opens blank — no auto-loading of previous sessions.
+  // Previous sessions are accessed via the history sidebar only.
+  // When AO changes, reset to blank state ready for new dictation.
   useEffect(() => {
     if (!projectId) return;
+    // Reset to blank state when AO selection changes
+    setMessages([]);
+    setSocSessionId(null);
+    setPhase('recording');
+    setPreviewHtml('');
+    setEditableSections([]);
+    setStructuredData(null);
+    setReportId(null);
+    setSessionLoadError(null);
+
     async function autoLoadSession() {
       setSessionLoadError(null);
       try {
@@ -76,20 +89,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         if (!res.ok) throw new Error(`Failed to load SOC sessions (status ${res.status})`);
         const data = await res.json();
         if (!data.sessions?.length) {
-          // No session exists for this project yet — auto-create one so the user
-          // can start dictating immediately without hitting "Start SOC" manually.
-          const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
-          const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
-          if (projectId && aoId) {
-            try {
-              await initSession(aoId, aoAddr);
-              setPhase('recording');
-            } catch (err) {
-              console.warn('[SOC] auto-init session failed:', err.message);
-            }
-          }
+          // No previous sessions — blank state is correct, nothing to do
           return;
         }
+        // Do NOT auto-load any session — user must choose from sidebar
+        // Just pre-fetch session list for sidebar
+        return;
         // Find session matching current AO if possible, otherwise take most recent
         const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
         const match = data.sessions.find(s => s.aoId === String(aoId)) || data.sessions[0];
@@ -577,8 +582,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const s = {
     page: { display: 'flex', height: '100%', position: 'relative', overflow: 'hidden' },
     // Sidebar
-    sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 },
-    sidebar: { position: 'fixed', left: 0, top: 0, bottom: 0, width: 280, background: 'var(--bg)', borderRight: '1px solid var(--border)', zIndex: 101, display: 'flex', flexDirection: 'column', boxShadow: '4px 0 20px rgba(0,0,0,0.15)' },
+    sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 550 },
+    sidebar: { position: 'fixed', left: 0, top: 0, bottom: 0, width: 280, background: 'var(--bg)', borderRight: '1px solid var(--border)', zIndex: 551, display: 'flex', flexDirection: 'column', boxShadow: '4px 0 20px rgba(0,0,0,0.15)' },
     sidebarHeader: { padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     sidebarTitle: { fontSize: 14, fontWeight: 700, color: 'var(--text)' },
     sidebarList: { flex: 1, overflowY: 'auto', padding: '8px 0' },
@@ -589,7 +594,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     sidebarNewBtn: { margin: '12px', padding: '10px', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--blue)', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' },
     // Main content
     main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8 },
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' },
     headerLeft: { display: 'flex', alignItems: 'center', gap: 10 },
     hamburger: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text)', fontSize: 20, lineHeight: 1 },
     titleBlock: { display: 'flex', flexDirection: 'column' },
@@ -605,7 +610,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     // Input
     inputArea: { flexShrink: 0, borderTop: '1px solid var(--border)' },
     // AO bar
-    aoBar: { padding: '8px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 },
+    aoBar: { padding: '8px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, position: 'sticky', top: 57, zIndex: 9, background: 'var(--bg)' },
     aoLabel: { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
     aoSelect: { flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', outline: 'none' },
     // Review page
