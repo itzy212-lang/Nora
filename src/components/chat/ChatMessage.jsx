@@ -154,7 +154,7 @@ async function copyToClipboard(text) {
   }
 }
 
-export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote, onPreviewQuote }) {
+export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote, onPreviewQuote, onSaveToMemory }) {
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
@@ -429,6 +429,22 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
               {action}
             </span>
           ))}
+        </div>
+      )}
+
+      {!isUser && onSaveToMemory && (
+        <div style={{ marginTop: 6, marginLeft: 4 }}>
+          <button
+            type="button"
+            onClick={() => onSaveToMemory(msg.content || msg.draft || '')}
+            style={{
+              border: '1px solid var(--border)', background: 'var(--bg2)',
+              color: 'var(--text3)', borderRadius: 99, padding: '3px 9px',
+              fontSize: 11, cursor: 'pointer', fontWeight: 500,
+            }}
+          >
+            💾 Save to memory
+          </button>
         </div>
       )}
     </div>
