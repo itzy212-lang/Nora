@@ -723,9 +723,16 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
         // Build CC list from all recipients — exclude sender and own email only
         const ownEmails = ['help@sq1consulting.co.uk', 'itzik@sq1consulting.co.uk', 'itzy212@gmail.com'];
         const senderEmail = (email?.sender_email || email?.from_email || '').toLowerCase();
+        // Parse recipients — cc_emails can be string, array, or null
+        const parseCCField = (field) => {
+          if (!field) return [];
+          if (Array.isArray(field)) return field.map(r => r.email || r).filter(Boolean);
+          if (typeof field === 'string') return field.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+          return [];
+        };
         const allRecipients = [
           ...(Array.isArray(email?.to_emails) ? email.to_emails.map(r => r.email || r) : [email?.to_email].filter(Boolean)),
-          ...(Array.isArray(email?.cc_emails) ? email.cc_emails.map(r => r.email || r) : [email?.cc_email].filter(Boolean)),
+          ...parseCCField(email?.cc_emails),
         ];
         return allRecipients
           .filter(e => {
