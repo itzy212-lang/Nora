@@ -3534,7 +3534,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const handleMarkAwardServed = async () => {
     if (!window.confirm('Mark this project as Award Served? It will move out of the active project list.')) return;
     try {
-      const { error } = await supabase
+      const { error } = await sb
         .from('projects')
         .update({ status: 'award_served' })
         .eq('id', project.id);
@@ -3549,7 +3549,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const handleReactivateProject = async () => {
     if (!window.confirm('Reactivate this project? It will return to the active project list.')) return;
     try {
-      const { error } = await supabase
+      const { error } = await sb
         .from('projects')
         .update({ status: 'active' })
         .eq('id', project.id);
