@@ -116,6 +116,25 @@ export function useEmails() {
             type: 'SET_EMAILS',
             payload: [...newRows.map(normalizeEmail), ...(state.emails || [])],
           });
+          // Extract facts from new project-linked emails (fire and forget)
+          newRows.forEach(email => {
+            if (email.project_id && (email.body || email.body_preview)) {
+              fetch('/api/extract-email-memory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  project_id: email.project_id,
+                  email_id: email.id,
+                  subject: email.subject,
+                  body: email.body || email.body_preview || '',
+                  direction: 'received',
+                  from_address: email.from_address || email.from_email || '',
+                  to_address: email.to_address || '',
+                  received_at: email.received_at || email.created_at,
+                }),
+              }).catch(() => {});
+            }
+          });
 
           // Save new emails that have a project_id to project brain
           for (const row of newRows) {
@@ -223,9 +242,20 @@ export function useEmails() {
       throw new Error(message);
     }
 
-    // Save sent email to project brain
+    // Extract key facts into project memory in the background (fire and forget)
     if (projectId) {
-      saveEmailToBrain(projectId, 'user', subject, body, `To: ${to}`);
+      fetch('/api/extract-email-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          subject,
+          body,
+          direction: 'sent',
+          to_address: to,
+          received_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
     }
 
     await loadEmails().catch(() => {});
