@@ -792,12 +792,18 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
 
   if (hasExplicitReviewRequest(p)) return 'review';
 
-  if (hasDiscussionIntent(p)) return 'discuss';
-
   // If an email thread is selected and the prompt looks like an amendment instruction
   // (add this, include that, change this) — stay in draft mode
-  // This catches the case where a draft has been produced and the user is refining it
   if ((body.emailContext || body.threadId || body.emailId) && looksLikeAmendmentInstruction(p)) {
+    return 'draft';
+  }
+
+  if (hasDiscussionIntent(p)) return 'discuss';
+
+  // In project chat — if the prompt is not a question and not a research request,
+  // treat it as a drafting instruction. Project chat is primarily used for drafting.
+  const isProjectChat = surface === 'project_chat' || body.surface === 'project_chat';
+  if (isProjectChat && p.length > 20 && !hasDiscussionIntent(p)) {
     return 'draft';
   }
 
