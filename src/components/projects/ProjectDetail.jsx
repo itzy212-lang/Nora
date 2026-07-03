@@ -3539,7 +3539,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .update({ status: 'award_served' })
         .eq('id', project.id);
       if (error) throw error;
-      await loadProject(project.id);
+      onBack?.(); // Return to project list after marking award served
     } catch (err) {
       console.error('[ProjectDetail] mark award served failed:', err.message);
       alert('Failed to update project status. Please try again.');
@@ -3554,7 +3554,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .update({ status: 'active' })
         .eq('id', project.id);
       if (error) throw error;
-      await loadProject(project.id);
+      onBack?.(); // Return to list after reactivating
     } catch (err) {
       console.error('[ProjectDetail] reactivate failed:', err.message);
     }
