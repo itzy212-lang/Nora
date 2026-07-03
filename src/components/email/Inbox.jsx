@@ -719,7 +719,17 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
   const [cc, setCc]           = useState(mode === 'replyAll'
-    ? (Array.isArray(email?.to_emails) ? email.to_emails.map(r => r.email || r).filter(e => e !== email?.sender_email).join(', ') : email?.to_email || '')
+    ? (Array.isArray(email?.to_emails)
+        ? email.to_emails
+            .map(r => r.email || r)
+            .filter(e => {
+              const lower = (e || '').toLowerCase();
+              return lower !== (email?.sender_email || '').toLowerCase()
+                && lower !== 'help@sq1consulting.co.uk'
+                && !lower.includes('sq1consulting');
+            })
+            .join(', ')
+        : '')
     : '');
   const [subject, setSubject] = useState(prefillSubject || `Re: ${email?.subject || ''}`);
   const [body, setBody]       = useState(toHtml(prefillBody) || '');
