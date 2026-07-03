@@ -3560,8 +3560,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   };
 
-, [project.id, onBack]);
-
 
   const TABS = [
     { id: 'details', label: 'Details' },
