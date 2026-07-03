@@ -73,8 +73,6 @@ export default function ChatInputBar({
   }, [voicePhase]);
 
   const handleVoicePreview = useCallback((preview, meta = {}) => {
-    // Ignore restart gaps — Web Speech API briefly stops between sessions on desktop
-    if (meta.restarting) return;
     if (meta.recording === true) {
       setVoicePhase('recording');
       const p = meta.currentPhrase || meta.interim || preview || '';
@@ -82,7 +80,7 @@ export default function ChatInputBar({
         setLivePreview(p);
         onChange?.(p);
       }
-    } else if (meta.recording === false) {
+    } else if (meta.recording === false && !meta.restarting) {
       setVoicePhase('transcribing');
       setLivePreview('');
     }
@@ -168,63 +166,26 @@ export default function ChatInputBar({
 
         <div style={{
           flex: 1, minWidth: 0,
-          border: `1.5px solid ${isRecording ? 'var(--blue, #3b82f6)' : 'var(--border)'}`,
+          border: `1.5px solid ${isRecording ? '#3b82f6' : 'var(--border)'}`,
           borderRadius: 14,
-          background: 'var(--bg, #fff)',
-          display: 'flex', flexDirection: 'column',
+          background: 'var(--bg2, #f8f8f8)',
+          display: 'flex', alignItems: 'center',
+          padding: '0 14px',
           minHeight: 44,
-          transition: 'border-color 0.2s ease',
-          boxShadow: isRecording ? '0 0 0 3px rgba(59,130,246,0.12)' : 'none',
+          transition: 'border-color 0.15s',
           boxSizing: 'border-box',
-          overflow: 'hidden',
         }}>
-          {/* Live preview lines when recording */}
-          {(isRecording || isTranscribing || previewLines.length > 0) && (
-            <div style={{ padding: '10px 14px 4px', minHeight: 56 }}>
-              {isTranscribing ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text3, #9ca3af)', fontSize: 13 }}>
-                  <span style={{ animation: 'cib-spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-                  Transcribing...
-                  <style>{`@keyframes cib-spin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-              ) : previewLines.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 2, overflow: 'hidden' }}>
-                  {previewLines.slice(-3).map((line, i, arr) => {
-                    const age = arr.length - 1 - i;
-                    return (
-                      <div key={i} style={{
-                        fontSize: 14, lineHeight: 1.5,
-                        color: age === 0 ? 'var(--text, #111)' : `rgba(100,100,100,${age === 1 ? 0.55 : 0.3})`,
-                        fontWeight: age === 0 ? 500 : 400,
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>{line}</div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ color: 'var(--text3, #9ca3af)', fontSize: 13, paddingTop: 4 }}>Listening...</div>
-              )}
-            </div>
-          )}
-
-          {/* Bottom row — waveform when recording, textarea when idle */}
           {isRecording ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', padding: '6px 10px 8px',
-              borderTop: previewLines.length > 0 ? '1px solid rgba(59,130,246,0.2)' : 'none',
-              gap: 8, background: 'rgba(59,130,246,0.04)',
-            }}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 3, height: 20, padding: '0 4px' }}>
-                {WAVEFORM_HEIGHTS.map((h, i) => (
-                  <div key={i} style={{
-                    width: 3, borderRadius: 2, background: 'var(--blue, #3b82f6)',
-                    height: `${8 + h * 12}px`,
-                    animation: `cib-wave 0.8s ease-in-out ${i * 0.06}s infinite alternate`,
-                  }} />
-                ))}
-                <style>{`@keyframes cib-wave { from { transform: scaleY(0.4); } to { transform: scaleY(1); } }`}</style>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text3, #9ca3af)' }}>Tap mic to send</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 24, width: '100%' }}>
+              {WAVEFORM_HEIGHTS.map((h, i) => (
+                <div key={i} style={{
+                  width: 3, borderRadius: 2,
+                  background: '#3b82f6',
+                  height: `${3 + h * 18}px`,
+                  animation: `nora-wave 0.65s ease-in-out ${(i * 0.04).toFixed(2)}s infinite alternate`,
+                }} />
+              ))}
+              <style>{`@keyframes nora-wave{from{transform:scaleY(0.15)}to{transform:scaleY(1)}}`}</style>
             </div>
           ) : (
             <textarea
@@ -247,7 +208,7 @@ export default function ChatInputBar({
                 fontFamily: 'inherit',
                 minHeight: 24,
                 maxHeight: MAX_HEIGHT,
-                padding: '12px 14px',
+                padding: '12px 0',
                 boxSizing: 'border-box',
                 overflowY: 'auto',
               }}
