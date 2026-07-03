@@ -388,6 +388,31 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
       if (err) throw err;
 
+      // Auto-create OneDrive folder for new project
+      const boAddr = boPremise || payload.bo_premise_address || '';
+      if (boAddr) {
+        try {
+          const folderRes = await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'create_project_folder',
+              project_address: boAddr,
+            }),
+          });
+          const folderData = await folderRes.json();
+          if (folderData.success && folderData.folder_id) {
+            await sb.from('projects').update({
+              onedrive_folder_id: folderData.folder_id,
+              onedrive_folder_url: folderData.web_url || null,
+            }).eq('id', data.id);
+          }
+        } catch (folderErr) {
+          console.warn('[NewProjectModal] OneDrive folder creation failed:', folderErr.message);
+        }
+      }
+
       // Save extracted scope items if any
       if (isConstruction && extractedScope?.length && data?.id) {
         for (let i = 0; i < extractedScope.length; i++) {
