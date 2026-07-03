@@ -16,8 +16,6 @@
  */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
-import VoiceInput from './VoiceInput';
-
 const MAX_HEIGHT = 200;
 const WAVEFORM_HEIGHTS = [0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1];
 
@@ -217,12 +215,47 @@ export default function ChatInputBar({
         </div>
 
         <div style={{ position: 'relative', flexShrink: 0, marginBottom: 4 }}>
-          <VoiceInput
-            disabled={disabled || loading}
-            stopSignal={stopSignal + internalStop}
-            onTranscript={handleTranscript}
-            onPreview={handleVoicePreview}
-          />
+          {!hasText && !isRecording && !isTranscribing && (
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={disabled || loading}
+              style={{
+                width: 36, height: 36, borderRadius: '50%', border: 'none',
+                background: 'var(--bg3, #f3f4f6)',
+                color: 'var(--text3, #9ca3af)',
+                cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+          )}
+          {isRecording && (
+            <button
+              type="button"
+              onClick={stopRecording}
+              style={{
+                width: 36, height: 36, borderRadius: '50%', border: 'none',
+                background: '#3b82f6',
+                color: '#fff',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 0 0 4px rgba(59,130,246,0.2)',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+                <rect x="2" y="2" width="10" height="10" rx="2"/>
+              </svg>
+            </button>
+          )}
           {hasText && !isRecording && !isTranscribing && (
             <button
               type="button"
