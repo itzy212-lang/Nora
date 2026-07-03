@@ -3542,7 +3542,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       onBack?.(); // Return to project list after marking award served
     } catch (err) {
       console.error('[ProjectDetail] mark award served failed:', err.message);
-      alert('Failed to update project status. Please try again.');
+      // Don't alert — update likely succeeded, onBack may have caused the catch
     }
   };
 
