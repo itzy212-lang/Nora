@@ -719,17 +719,24 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
   const [cc, setCc]           = useState(mode === 'replyAll'
-    ? (Array.isArray(email?.to_emails)
-        ? email.to_emails
-            .map(r => r.email || r)
-            .filter(e => {
-              const lower = (e || '').toLowerCase();
-              return lower !== (email?.sender_email || '').toLowerCase()
-                && lower !== 'help@sq1consulting.co.uk'
-                && !lower.includes('sq1consulting');
-            })
-            .join(', ')
-        : '')
+    ? (() => {
+        // Build CC list from all recipients — exclude sender and own email only
+        const ownEmails = ['help@sq1consulting.co.uk', 'itzik@sq1consulting.co.uk', 'itzy212@gmail.com'];
+        const senderEmail = (email?.sender_email || email?.from_email || '').toLowerCase();
+        const allRecipients = [
+          ...(Array.isArray(email?.to_emails) ? email.to_emails.map(r => r.email || r) : [email?.to_email].filter(Boolean)),
+          ...(Array.isArray(email?.cc_emails) ? email.cc_emails.map(r => r.email || r) : [email?.cc_email].filter(Boolean)),
+        ];
+        return allRecipients
+          .filter(e => {
+            const lower = (e || '').toLowerCase();
+            return lower
+              && lower !== senderEmail
+              && !ownEmails.some(own => lower === own || lower.includes('sq1consulting'));
+          })
+          .filter((e, i, arr) => arr.indexOf(e) === i) // dedupe
+          .join(', ');
+      })()
     : '');
   const [subject, setSubject] = useState(prefillSubject || `Re: ${email?.subject || ''}`);
   const [body, setBody]       = useState(toHtml(prefillBody) || '');
