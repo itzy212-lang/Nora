@@ -3529,7 +3529,37 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     } catch (err) {
       alert(err.message || 'Could not delete project.');
     }
-  }, [project.id, onBack]);
+  }
+  const handleMarkAwardServed = async () => {
+    if (!window.confirm('Mark this project as Award Served? It will move out of the active project list.')) return;
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ status: 'award_served' })
+        .eq('id', project.id);
+      if (error) throw error;
+      await loadProject(project.id);
+    } catch (err) {
+      console.error('[ProjectDetail] mark award served failed:', err.message);
+      alert('Failed to update project status. Please try again.');
+    }
+  };
+
+  const handleReactivateProject = async () => {
+    if (!window.confirm('Reactivate this project? It will return to the active project list.')) return;
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ status: 'active' })
+        .eq('id', project.id);
+      if (error) throw error;
+      await loadProject(project.id);
+    } catch (err) {
+      console.error('[ProjectDetail] reactivate failed:', err.message);
+    }
+  };
+
+, [project.id, onBack]);
 
 
   const TABS = [
@@ -3670,6 +3700,44 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           }}>
             Edit
           </button>
+
+          {project.status !== 'award_served' && project.status !== 'complete' && (
+            <button
+              onClick={handleMarkAwardServed}
+              style={{
+                cursor: 'pointer',
+                borderRadius: 99,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                minHeight: 30,
+                background: '#f0fdf4',
+                color: '#16a34a',
+                border: '1px solid #bbf7d0',
+              }}
+            >
+              ✓ Award Served
+            </button>
+          )}
+
+          {project.status === 'award_served' && (
+            <button
+              onClick={handleReactivateProject}
+              style={{
+                cursor: 'pointer',
+                borderRadius: 99,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 500,
+                minHeight: 30,
+                background: 'var(--bg2)',
+                color: 'var(--text2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              ↩ Reactivate
+            </button>
+          )}
 
           <button
             className="btn btn-sm btn-ghost"
