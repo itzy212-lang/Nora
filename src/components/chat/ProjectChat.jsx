@@ -1279,6 +1279,20 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     ).join('');
                     onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId, aoAddresses });
                   }}
+                  onSaveToMemory={async (content) => {
+                    if (!content || !projectId) return;
+                    fetch('/api/extract-email-memory', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        project_id: projectId,
+                        subject: 'Project chat',
+                        body: content,
+                        direction: 'chat',
+                        received_at: new Date().toISOString(),
+                      }),
+                    }).catch(() => {});
+                  }}
                 />
 
                 {msg.attachments?.length > 0 && (
