@@ -3529,7 +3529,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     } catch (err) {
       alert(err.message || 'Could not delete project.');
     }
-  }
+  };
+
   const handleMarkAwardServed = async () => {
     if (!window.confirm('Mark this project as Award Served? It will move out of the active project list.')) return;
     try {
