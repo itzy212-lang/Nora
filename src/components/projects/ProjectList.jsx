@@ -219,7 +219,7 @@ export default function ProjectList({ onOpenProject }) {
   const { projects = [] } = state;
 
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('active');
   const [loading, setLoading] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -393,6 +393,7 @@ export default function ProjectList({ onOpenProject }) {
         >
           <option value="all">All statuses</option>
           <option value="active">Active</option>
+          <option value="award_served">Award Served</option>
           <option value="complete">Complete</option>
           <option value="on_hold">On hold</option>
           <option value="dispute">Dispute</option>
