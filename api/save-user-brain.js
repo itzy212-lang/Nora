@@ -20,21 +20,21 @@ export default async function handler(req, res) {
   // Get existing notes
   const { data: existing } = await supabase
     .from('user_brain')
-    .select('notes')
+    .select('brain_content')
     .eq('user_id', user_id)
     .single();
 
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const newEntry = `[${date}] ${note}`;
-  const updatedNotes = existing?.notes
-    ? existing.notes + '\n' + newEntry
+  const updatedContent = existing?.brain_content
+    ? existing.brain_content + '\n\n' + newEntry
     : newEntry;
 
   const { error } = await supabase
     .from('user_brain')
     .upsert({
       user_id,
-      notes: updatedNotes,
+      brain_content: updatedContent,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
 
