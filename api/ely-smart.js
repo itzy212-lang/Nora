@@ -1111,13 +1111,9 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   // Always loads — small, personalised to this user.
   if (brain?.user_brain) {
     const ub = brain.user_brain;
+    // Single brain_content field — all user preferences in one place
     const userParts = [
-      ub.writing_voice ? `WRITING VOICE:\n${ub.writing_voice}` : null,
-      ub.personal_preferences ? `PERSONAL PREFERENCES:\n${ub.personal_preferences}` : null,
-      ub.banned_phrases ? `BANNED PHRASES:\n${ub.banned_phrases}` : null,
-      ub.sign_off ? `SIGN-OFF: Always end correspondence with: ${ub.sign_off}` : null,
-      ub.fee_structure ? `FEE STRUCTURE:\n${ub.fee_structure}` : null,
-      ub.notes ? `USER NOTES & REMEMBERED PREFERENCES:\n${ub.notes}` : null,
+      ub.brain_content || null,
     ].filter(Boolean);
     if (userParts.length) {
       prompt += `\n\n--- USER PREFERENCES ---\n\n${userParts.join('\n\n')}`;
@@ -3401,17 +3397,17 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           // Get existing notes
           const { data: existingBrain } = await sb2
             .from('user_brain')
-            .select('notes')
+            .select('brain_content')
             .eq('user_id', userId)
             .single();
           const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
           const newEntry = '[' + date + '] ' + prompt.slice(0, 400);
-          const updatedNotes = existingBrain?.notes
-            ? existingBrain.notes + '\n' + newEntry
+          const updatedContent = existingBrain?.brain_content
+            ? existingBrain.brain_content + '\n\n' + newEntry
             : newEntry;
           await sb2.from('user_brain').upsert({
             user_id: userId,
-            notes: updatedNotes,
+            brain_content: updatedContent,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
           console.log('[ely-smart] saved to user_brain for user:', userId);
