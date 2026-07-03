@@ -905,12 +905,43 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
 
   const TABS = ['overview', 'scope', 'programme', 'payments', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
+  const handleDeletePMProject = async () => {
+    if (!window.confirm('Delete this project and all its records? This cannot be undone.')) return;
+    try {
+      const cleanupTables = ['scope_items', 'payment_stages', 'programme_tasks', 'materials', 'subcontractors', 'site_visits', 'room_notes', 'snag_items', 'documents', 'ai_messages', 'ai_sessions', 'emails'];
+      for (const table of cleanupTables) {
+        try { await sb.from(table).delete().eq('project_id', project.id); } catch (_) {}
+      }
+      await sb.from('projects').delete().eq('id', project.id);
+      onBack?.();
+    } catch (err) {
+      console.error('[PMProjectDetail] delete failed:', err.message);
+      alert('Delete failed: ' + err.message);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    if (!window.confirm('Mark this project as Complete? It will move out of the active list.')) return;
+    try {
+      const { error } = await sb.from('projects').update({ status: 'complete' }).eq('id', project.id);
+      if (error) throw error;
+      onBack?.();
+    } catch (err) {
+      console.error('[PMProjectDetail] mark complete failed:', err.message);
+    }
+  };
+
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg2)' }}>
       {/* Header */}
       <div style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '12px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
           <button onClick={onBack} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 99, padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)' }}>← Back</button>
+          {project.status !== 'complete' && (
+            <button onClick={handleMarkComplete} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 99, padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: '#16a34a', fontWeight: 600 }}>✓ Complete</button>
+          )}
+          <button onClick={handleDeletePMProject} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 99, padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--red, #dc2626)' }}>Delete</button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {project.site_address || project.bo_premise_address || 'Unnamed Project'}
