@@ -1715,7 +1715,9 @@ if (syncErr) throw syncErr;
     }
 
     // Extract key facts into project memory in background (fire and forget)
-    const linkedProjectId = selectedEmail?.project_id || state.selectedProjectId;
+    // Look up project_id from the email being replied to in state
+    const replyEmail = replyToId ? state.emails?.find(e => e.id === replyToId) : null;
+    const linkedProjectId = replyEmail?.project_id || selectedEmail?.project_id || state.selectedProjectId;
     if (linkedProjectId && emailBody) {
       fetch('/api/extract-email-memory', {
         method: 'POST',
