@@ -136,18 +136,24 @@ export function useEmails() {
             }
           });
 
-          // Save new emails that have a project_id to project brain
-          for (const row of newRows) {
-            if (row.project_id) {
-              saveEmailToBrain(
-                row.project_id,
-                'ely', // received = from external party
-                row.subject || '(No subject)',
-                row.body || row.body_preview || '',
-                `From: ${row.sender_name || row.from_email || 'Unknown'}`
-              );
+          // Extract key facts from new project-linked emails into project memory
+          newRows.forEach(row => {
+            if (row.project_id && (row.body || row.body_preview)) {
+              fetch('/api/extract-email-memory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  project_id: row.project_id,
+                  email_id: row.id,
+                  subject: row.subject || '(No subject)',
+                  body: row.body || row.body_preview || '',
+                  direction: 'received',
+                  from_address: row.sender_email || row.from_email || '',
+                  received_at: row.received_at || row.created_at,
+                }),
+              }).catch(() => {});
             }
-          }
+          });
           // Trigger auto-linking on new emails
           sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
         }
