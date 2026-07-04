@@ -154,6 +154,26 @@ export function useEmails() {
               }).catch(() => {});
             }
           });
+          // Inherit project_id from thread — if any email in same thread is linked, link all
+          const unlinkedWithThread = newRows.filter(r => !r.project_id && r.thread_id);
+          if (unlinkedWithThread.length) {
+            for (const row of unlinkedWithThread) {
+              const { data: linked } = await sb
+                .from('emails')
+                .select('project_id')
+                .eq('thread_id', row.thread_id)
+                .not('project_id', 'is', null)
+                .limit(1)
+                .single();
+              if (linked?.project_id) {
+                await sb.from('emails')
+                  .update({ project_id: linked.project_id })
+                  .eq('id', row.id);
+                row.project_id = linked.project_id;
+              }
+            }
+          }
+
           // Trigger auto-linking on new emails
           sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
         }
