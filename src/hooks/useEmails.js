@@ -268,6 +268,30 @@ export function useEmails() {
       throw new Error(message);
     }
 
+    // Save sent email row to Supabase so to_emails and project_id are recorded
+    let savedEmailId = null;
+    if (sb) {
+      const toList = String(to || '').split(/[;,\n]/).map(s => s.trim()).filter(Boolean);
+      const ccList = cc ? String(cc).split(/[;,\n]/).map(s => s.trim()).filter(Boolean) : [];
+      const sentAt = new Date().toISOString();
+      const { data: inserted } = await sb.from('emails').insert({
+        subject: subject || '(No subject)',
+        body,
+        body_preview: (body || '').slice(0, 300),
+        sender_name: 'Square One Consulting',
+        sender_email: 'help@sq1consulting.co.uk',
+        to_emails: toList.map(e => ({ name: e, email: e })),
+        cc_emails: ccList.map(e => ({ name: e, email: e })),
+        sent_at: sentAt,
+        received_at: sentAt,
+        folder: 'Sent',
+        is_read: true,
+        project_id: projectId || null,
+        user_id: state.currentUser?.id || null,
+      }).select('id').single().catch(() => ({ data: null }));
+      savedEmailId = inserted?.id || null;
+    }
+
     // Extract key facts into project memory in the background (fire and forget)
     if (projectId) {
       fetch('/api/extract-email-memory', {
@@ -275,6 +299,7 @@ export function useEmails() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: projectId,
+          email_id: savedEmailId,
           subject,
           body,
           direction: 'sent',
@@ -284,7 +309,7 @@ export function useEmails() {
       }).catch(() => {});
     }
 
-    await loadEmails().catch(() => {});
+    await loadEmails({ force: true }).catch(() => {});
     return data || { ok: true };
   }, [loadEmails, state.currentUser]);
 
