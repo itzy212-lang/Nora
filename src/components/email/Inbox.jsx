@@ -1713,6 +1713,23 @@ if (syncErr) throw syncErr;
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
     }
+
+    // Extract key facts into project memory in background (fire and forget)
+    const linkedProjectId = selectedEmail?.project_id || state.selectedProjectId;
+    if (linkedProjectId && emailBody) {
+      fetch('/api/extract-email-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: linkedProjectId,
+          subject,
+          body: emailBody,
+          direction: 'sent',
+          to_address: to,
+          received_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    }
   };
 
 
