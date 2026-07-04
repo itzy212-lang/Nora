@@ -3,6 +3,9 @@
 // Global behaviour: analyse first, draft only when clearly requested.
 
 import { createClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
+
+const _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -2758,8 +2761,7 @@ export default async function handler(req, res) {
       const emailCtx = body.emailContext || {};
       const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
 
-      const { default: OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const openai = _openai;
       const silentResult = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 150,
