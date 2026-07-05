@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 
 const NOTICE_TYPES = [
-  { key: 's1', label: 'Section 1 Notice', deadlineDays: 14 },
-  { key: 's3', label: 'Section 3 Notice', deadlineDays: 14 },
-  { key: 's6', label: 'Section 6 Notice', deadlineDays: 14 },
+  { key: 's6', label: 'Section 6(1) Notice', deadlineDays: 14 },
+  { key: 's1', label: 'Section 1(5) Notice', deadlineDays: 14 },
+  { key: 's2', label: 'Section 2(2) Notice', deadlineDays: 14 },
   { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
 
@@ -66,6 +66,7 @@ export default function NoticeServingModal({
   const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
   const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
+  const [s2Subsections, setS2Subsections] = useState('');
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
 
@@ -115,6 +116,7 @@ export default function NoticeServingModal({
           includeCover,
           createDeadlineTask,
           noticeDate,
+          section2Subsections: s2Subsections,
         });
       }
 
@@ -265,6 +267,33 @@ export default function NoticeServingModal({
                 );
               })}
             </div>
+
+            {/* Section 2(2) subsections input — only shown when s2 is selected */}
+            {selected.includes('s2') && (
+              <div style={{ marginTop: 10, padding: '12px 14px', background: '#f0f9ff', borderRadius: 12, border: '1px solid #bae6fd' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#0369a1', marginBottom: 6 }}>
+                  Section 2(2) subsections
+                </label>
+                <input
+                  type="text"
+                  value={s2Subsections}
+                  onChange={e => setS2Subsections(e.target.value)}
+                  placeholder="e.g. a, f, j, k"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #7dd3fc',
+                    fontSize: 13,
+                    background: '#fff',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: 11, color: '#0369a1', marginTop: 4 }}>
+                  Comma separated — brackets added automatically. e.g. "a, f, j, k" → (a)(f)(j)(k)
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
