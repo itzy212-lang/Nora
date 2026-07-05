@@ -144,7 +144,6 @@ export default function ChatInputBar({
 
   const combinedStop = stopSignal + internalStop;
   const hasText = (value || '').trim().length > 0;
-  const showSend = hasText || isTranscribing; // show send as soon as recording stops
 
   return (
     <div style={{ width: '100%' }}>
@@ -252,54 +251,45 @@ export default function ChatInputBar({
           }}
         />
 
-        {/* Right: mic or send */}
+        {/* Right: mic (always rendered) + send overlay after recording stops */}
         <div style={{ flexShrink: 0, marginBottom: 2, position: 'relative', width: 36, height: 36 }}>
 
-          {/* Mic — shown when no text and not transcribing */}
-          {!showSend && !isRecording && !isTranscribing && (
-            <VoiceInput
-              onTranscript={handleVoice}
-              onPreview={handleVoicePreview}
-              disabled={disabled || loading}
-              stopSignal={combinedStop}
-            />
-          )}
+          {/* VoiceInput always rendered — owns its own toggle (start/stop) */}
+          <VoiceInput
+            onTranscript={handleVoice}
+            onPreview={handleVoicePreview}
+            disabled={disabled || loading}
+            stopSignal={combinedStop}
+          />
 
-          {/* Transcribing spinner */}
-          {isTranscribing && (
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%',
-              background: 'var(--bg3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text3)',
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-          )}
-
-          {/* Send — shown when there's text */}
-          {showSend && (
+          {/* Send button overlays mic only when recording has stopped AND there is text */}
+          {!isRecording && hasText && (
             <button
               type="button"
               onClick={handleSend}
               disabled={disabled || loading || isTranscribing}
+              title={isTranscribing ? 'Transcribing…' : 'Send'}
               style={{
                 position: 'absolute', inset: 0,
                 width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: isTranscribing ? 'var(--bg3)' : '#3b82f6',
+                background: isTranscribing ? 'var(--bg3, #f3f4f6)' : '#3b82f6',
                 color: isTranscribing ? 'var(--text3)' : '#fff',
                 cursor: disabled || loading || isTranscribing ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
+              {isTranscribing ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              )}
             </button>
           )}
         </div>
