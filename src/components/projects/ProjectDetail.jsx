@@ -2630,15 +2630,9 @@ function ProjectChat({ project, onOpenComposer }) {
               value={input}
               onChange={setInput}
               onSend={() => handleSend()}
-              onTranscript={(transcript) => {
-                setVoicePhase('idle');
-                setDictationPreview('');
-                setInput(transcript);
-              }}
               placeholder={`Ask about ${projectRef}...`}
               disabled={loading || uploading}
               loading={loading}
-              showAttach={true}
               onAttach={() => fileInputRef.current?.click()}
               stopSignal={voiceStopSignal}
             />
@@ -4446,6 +4440,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     </div>
   );
 }
+
 
 
 
