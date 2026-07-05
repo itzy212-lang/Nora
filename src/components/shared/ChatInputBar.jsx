@@ -140,6 +140,11 @@ export default function ChatInputBar({
       if (meta.interim || meta.currentPhrase) {
         setInterimText(meta.currentPhrase || meta.interim || '');
       }
+    } else {
+      // recording stopped — show send button immediately
+      setIsRecording(false);
+      setStoppedRecording(true);
+      setInterimText('');
     }
   }, []);
 
