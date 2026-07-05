@@ -1088,7 +1088,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   }, [
     input,
     loading,
-    send
+    send,
     lastDraft,
     selectedProjectId,
     selectedEmailContext,
