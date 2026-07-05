@@ -453,10 +453,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
             value={input}
             onChange={setInput}
             onSend={(text) => handleSend(text)}
-            onTranscript={(transcript) => {
-              setInput(transcript);
-              setTimeout(() => handleSend(transcript), 50);
-            }}
             placeholder="Dictate your notes… e.g. 'confirm fee includes VAT, keep it brief'"
             disabled={loading}
             loading={loading}
@@ -470,6 +466,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
     </div>
   );
 }
+
 
 
 
