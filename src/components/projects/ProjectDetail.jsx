@@ -7,7 +7,6 @@ import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
 import PizZip from 'pizzip';
-import VoiceInput from '../shared/VoiceInput';
 import ChatInputBar from '../shared/ChatInputBar';
 
 function useWindowWidth() {
@@ -1788,14 +1787,10 @@ function ProjectChat({ project, onOpenComposer }) {
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [landRegistryAO, setLandRegistryAO] = useState(null); // proposed AO from LR doc
-  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
-  const [dictationPreview, setDictationPreview] = useState('');
-  const [voicePhase, setVoicePhase] = useState('idle'); // idle | recording | transcribing
   const [draftActionStatus, setDraftActionStatus] = useState('');
 
   const endRef = useRef(null);
   const fileInputRef = useRef(null);
-  const dictationPreviewTimerRef = useRef(null);
 
   const flashDraftAction = useCallback((message) => {
     setDraftActionStatus(message);
@@ -1828,8 +1823,6 @@ function ProjectChat({ project, onOpenComposer }) {
     startNewSession?.();
     setMessages([]);
     setInput('');
-    setDictationPreview('');
-    window.clearTimeout(dictationPreviewTimerRef.current);
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
     if (isMobile) setShowHistory(false);
@@ -1956,23 +1949,6 @@ function ProjectChat({ project, onOpenComposer }) {
     setUploading(false);
   }, [projectId, sessionId, insertRecordSafely]);
 
-  const handleVoiceTranscript = useCallback((transcript, meta = {}) => {
-    const fullText = String(transcript || '').trim();
-    const currentPhrase = String(meta?.currentPhrase || meta?.interim || '').trim();
-
-    setInput(prev => {
-      if (prev === fullText) return prev;
-      return fullText;
-    });
-
-    if (currentPhrase) {
-      setDictationPreview(currentPhrase);
-      window.clearTimeout(dictationPreviewTimerRef.current);
-      dictationPreviewTimerRef.current = window.setTimeout(() => {
-        setDictationPreview('');
-      }, 1000);
-    }
-  }, []);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -1980,8 +1956,6 @@ function ProjectChat({ project, onOpenComposer }) {
     if ((!text && attachedFiles.length === 0) || loading || uploading) return;
 
     setVoiceStopSignal(v => v + 1);
-    setDictationPreview('');
-    window.clearTimeout(dictationPreviewTimerRef.current);
 
 
     const attachmentContext = attachedFiles.map(file => ({
@@ -2003,8 +1977,6 @@ function ProjectChat({ project, onOpenComposer }) {
       : displayText;
 
     setInput('');
-    setDictationPreview('');
-    window.clearTimeout(dictationPreviewTimerRef.current);
     setAttachedFiles([]);
     setVoiceStopSignal(v => v + 1);
 
@@ -2563,18 +2535,6 @@ function ProjectChat({ project, onOpenComposer }) {
                   </button>
                 </div>
               ))}
-            </div>
-          )}
-          {dictationPreview && voicePhase !== 'recording' && (
-            <div style={{
-              marginBottom: 6, height: 24, lineHeight: '24px',
-              padding: '0 10px', borderRadius: 10,
-              background: 'var(--bg3)', color: 'var(--text2)',
-              fontSize: 12.5, whiteSpace: 'nowrap',
-              overflow: 'hidden', textOverflow: 'ellipsis',
-              border: '1px solid var(--border)',
-            }}>
-              {dictationPreview}
             </div>
           )}
 
