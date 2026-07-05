@@ -310,9 +310,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [input, setInput] = useState('');
   const [pendingBooking, setPendingBooking] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
-  const [voicePhase, setVoicePhase] = useState('idle');
-  const [liveTop, setLiveTop] = useState('');
-  const [liveBottom, setLiveBottom] = useState('');
   const [activeChatId, setActiveChatId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     try {
@@ -344,9 +341,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
-  const voiceBaseRef = useRef('');
-  const prevPhraseRef = useRef('');
-  const latestTranscriptRef = useRef('');
 
   const {
     send,
@@ -530,29 +524,18 @@ export default function MainChat({ onOpenComposer, onClose }) {
     resizeTextarea();
   }, [input, resizeTextarea]);
 
-  const stopVoice = useCallback(() => {
-    setVoiceStopSignal(v => v + 1);
-    voiceBaseRef.current = '';
-    prevPhraseRef.current = '';
-    latestTranscriptRef.current = '';
-    setVoicePhase('idle');
-    setLiveTop('');
-    setLiveBottom('');
-  }, []);
 
   const closeToDashboard = useCallback(() => {
-    stopVoice();
-
     if (typeof onClose === 'function') {
       onClose();
       return;
     }
 
     window.location.assign('/');
-  }, [onClose, stopVoice]);
+  }, [onClose]);
 
   const startNewChat = useCallback(() => {
-    stopVoice();
+    setVoiceStopSignal(v => v + 1);
     setMessages([]);
     setInput('');
     setAttachments([]);
@@ -565,12 +548,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
     try {
       localStorage.removeItem(ACTIVE_SESSION_KEY);
     } catch {}
-  }, [resetSession, startNewSession, stopVoice]);
+  }, [resetSession, startNewSession]);
 
   const loadChat = useCallback(async (chat) => {
     if (!chat?.id) return;
 
-    stopVoice();
+    setVoiceStopSignal(v => v + 1);
 
     try {
       const bundle = await loadSession(chat.id);
@@ -589,7 +572,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         content: `Sorry, I couldn't load that chat. ${err.message}`,
       }]);
     }
-  }, [loadSession, stopVoice]);
+  }, [loadSession]);
 
   const handleProjectChange = useCallback(async (event) => {
     const nextProjectId = event.target.value || '';
@@ -968,7 +951,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim();
     if (!text || loading) return;
 
-    stopVoice();
+    setVoiceStopSignal(v => v + 1);
     setInput('');
 
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -1105,8 +1088,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
   }, [
     input,
     loading,
-    send,
-    stopVoice,
+    send
     lastDraft,
     selectedProjectId,
     selectedEmailContext,
@@ -1145,45 +1127,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
     }
   };
 
-  const handleVoice = (transcript, meta) => {
-    if (!meta?.recording && transcript) {
-      // Mobile Whisper final result — put straight into input
-      latestTranscriptRef.current = transcript;
-      setInput(transcript);
-      setVoicePhase('preview');
-      return;
-    }
-    if (transcript) latestTranscriptRef.current = transcript;
-  };
-
-  const handleVoicePreview = (phrase, meta) => {
-    if (meta?.recording === false) {
-      if (latestTranscriptRef.current) {
-        // Desktop: populate input with accumulated transcript
-        setInput(latestTranscriptRef.current);
-        setVoicePhase('idle');
-      } else if (voicePhase !== 'idle') {
-        // Mobile: recording stopped, Whisper still processing
-        setVoicePhase('transcribing');
-      }
-      setLiveTop('');
-      setLiveBottom('');
-      prevPhraseRef.current = '';
-      return;
-    }
-    if (meta?.recording === true) {
-      setVoicePhase('recording');
-      // Only update live display for real speech text, not mobile status messages
-      if (phrase && !phrase.includes('Recording')) {
-        setLiveTop(prevPhraseRef.current);
-        setLiveBottom(phrase);
-        prevPhraseRef.current = phrase;
-      }
-    }
-  };
 
   const handleTextChange = (event) => {
-    voiceBaseRef.current = '';
     setInput(event.target.value);
   };
 
