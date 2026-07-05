@@ -1447,8 +1447,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
       <ChatInputBar
               value={input}
               onChange={setInput}
-              onSend={(text) => handleSend(text)}
-              onAttach={() => fileInputRef.current?.click()}
+              onSend={({ text, file }) => handleSend(text, file)}
               placeholder={
                 selectedEmailContext
                   ? 'Ask Ely about the selected email thread, or draft a reply...'
