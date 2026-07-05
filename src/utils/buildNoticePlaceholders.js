@@ -72,6 +72,117 @@ function addAliasFields(base) {
   return out;
 }
 
+
+/**
+ * Format section_2_subsections string into bracketed format.
+ * "a, f, j, k" → "(a)(f)(j)(k)"
+ */
+function formatS2Subsections(raw) {
+  if (!raw) return '';
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => `(${s})`)
+    .join('');
+}
+
+/**
+ * Build the sections string for a single notice run.
+ * Order: Section 6(1) first, Section 1(5) second, Section 2(2)(subsections) last.
+ * e.g. "Sections 6(1), 1(5) and 2(2)(a)(f)(j)(k)"
+ */
+function buildSectionsString(sections, s2Subsections = '') {
+  const parts = [];
+  if (sections.includes('s6')) parts.push('6(1)');
+  if (sections.includes('s1')) parts.push('1(5)');
+  if (sections.includes('s2')) {
+    const sub = formatS2Subsections(s2Subsections);
+    parts.push(`2(2)${sub}`);
+  }
+  if (!parts.length) return '';
+  if (parts.length === 1) return `Section ${parts[0]}`;
+  const last = parts.pop();
+  return `Sections ${parts.join(', ')} and ${last}`;
+}
+
+/**
+ * Build multi-run notice placeholders from an array of notice run records.
+ * Each run: { run_number, notice_date, section_1, section_2, section_6, section_2_subsections }
+ * Returns placeholders for up to 3 runs.
+ */
+export function buildNoticeRunPlaceholders(noticeRuns = []) {
+  const sorted = [...noticeRuns].sort((a, b) => (a.run_number || 1) - (b.run_number || 1));
+  const out = {};
+
+  for (let i = 0; i < 3; i++) {
+    const n = i + 1;
+    const run = sorted[i];
+
+    if (run) {
+      const sections = [];
+      if (run.section_6) sections.push('s6');
+      if (run.section_1) sections.push('s1');
+      if (run.section_2) sections.push('s2');
+
+      const sectionsStr = buildSectionsString(sections, run.section_2_subsections || '');
+      const dateStr = longDate(run.notice_date || '');
+
+      out[`notice_run_${n}_sections`] = sectionsStr;
+      out[`notice_run_${n}_date`] = dateStr;
+      // Connector for the NEXT run — "and a further Notice under" or blank
+      const hasNext = !!sorted[i + 1];
+      out[`notice_run_${n}_and`] = hasNext ? 'and a further Notice under' : '';
+
+      // Also uppercase aliases
+      out[`NOTICE_RUN_${n}_SECTIONS`] = sectionsStr;
+      out[`NOTICE_RUN_${n}_DATE`] = dateStr;
+      out[`NOTICE_RUN_${n}_AND`] = hasNext ? 'and a further Notice under' : '';
+    } else {
+      // Run doesn't exist — blank all placeholders so they disappear in template
+      out[`notice_run_${n}_sections`] = '';
+      out[`notice_run_${n}_date`] = '';
+      out[`notice_run_${n}_and`] = '';
+      out[`NOTICE_RUN_${n}_SECTIONS`] = '';
+      out[`NOTICE_RUN_${n}_DATE`] = '';
+      out[`NOTICE_RUN_${n}_AND`] = '';
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Build SOC schedule placeholders from an array of soc_reports records.
+ * Each: { schedule_number, inspection_date }
+ * Returns placeholders for up to 3 schedules.
+ */
+export function buildSOCSchedulePlaceholders(socReports = []) {
+  const sorted = [...socReports].sort((a, b) => (a.schedule_number || 1) - (b.schedule_number || 1));
+  const out = {};
+
+  for (let i = 0; i < 3; i++) {
+    const n = i + 1;
+    const soc = sorted[i];
+    const dateStr = soc ? longDate(soc.inspection_date || '') : '';
+    const hasNext = soc && !!sorted[i + 1];
+    const andStr = hasNext ? 'and a further Schedule of Conditions dated' : '';
+
+    out[`schedule_${n}_date`] = dateStr;
+    out[`schedule_${n}_and`] = andStr;
+    out[`SCHEDULE_${n}_DATE`] = dateStr;
+    out[`SCHEDULE_${n}_AND`] = andStr;
+
+    // Legacy single placeholder — always set to first SOC for backwards compatibility
+    if (n === 1) {
+      out['SOC_AGREED_DATE'] = dateStr;
+      out['soc_agreed_date'] = dateStr;
+    }
+  }
+
+  return out;
+}
+
 export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
   const noticeDate = clean(options.noticeDate || options.notice_date);
   const noticeType = clean(options.noticeType || options.notice_type);
