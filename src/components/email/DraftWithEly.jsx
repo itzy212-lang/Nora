@@ -208,7 +208,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
   const [pendingCaseReview, setPendingCaseReview] = useState(null); // { project_id }
 
-  const handleSend = useCallback(async (overrideText) => {
+  const handleSend = useCallback(async (overrideText, attachedFile = null) => {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim();
 
     if (!text || loading) return;
@@ -253,7 +253,10 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         setPendingCaseReview(null);
       }
 
-      const result = await send(text, extraOpts);
+      const promptWithFile = attachedFile?.text
+        ? `${text}\n\n[Attached file: ${attachedFile.name}]\n${attachedFile.text}`
+        : text;
+      const result = await send(promptWithFile, extraOpts);
 
       if (result.sessionId) setSessionId(result.sessionId);
 
@@ -402,7 +405,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
           <ChatInputBar
             value={input}
             onChange={setInput}
-            onSend={(text) => handleSend(text)}
+            onSend={({ text, file }) => handleSend(text, file)}
             placeholder="Dictate your notes… e.g. 'confirm fee includes VAT, keep it brief'"
             disabled={loading}
             loading={loading}
