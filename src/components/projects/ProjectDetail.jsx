@@ -1786,6 +1786,7 @@ function ProjectChat({ project, onOpenComposer }) {
   const [showHistory, setShowHistory] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [landRegistryAO, setLandRegistryAO] = useState(null); // proposed AO from LR doc
   const [draftActionStatus, setDraftActionStatus] = useState('');
 
