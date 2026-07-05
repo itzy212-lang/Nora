@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
-import VoiceInput from '../shared/VoiceInput';
+import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 
@@ -244,12 +244,8 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [workingDraft, setWorkingDraft] = useState('');
   const workingDraftRef = useRef(''); // ref always has latest — survives re-renders
   const [loading, setLoading]         = useState(false);
-  const [interimText, setInterimText] = useState('');
-  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(false);
-  const voiceBaseRef  = useRef('');
   const endRef        = useRef(null);
   const hasAutoRun    = useRef(null);
 
@@ -453,43 +449,14 @@ ${threadText}`;
     }
   };
 
-  const handleSend = () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  const handleSend = ({ text, file } = {}) => {
+    const t = (text || input).trim();
+    if (!t || loading) return;
     setInput('');
-    setInterimText('');
-    voiceBaseRef.current = '';
-    setVoiceStopSignal(s => s + 1);
-    callEly(text);
+    callEly(t);
   };
 
-  // VoiceInput handler — accumulates transcript onto typed base
-  const handleVoice = (transcript, meta) => {
-    // Ignore restart gaps during Web Speech API session restarts
-    if (meta?.restarting) return;
 
-    // Track recording state for Enter-to-send blocking
-    if (meta?.recording === false) {
-      setIsVoiceRecording(false);
-    } else if (meta?.recording) {
-      setIsVoiceRecording(true);
-    }
-
-    if (meta?.interim) {
-      setInterimText(meta.interim);
-    } else {
-      setInterimText('');
-    }
-    if (!voiceBaseRef.current) voiceBaseRef.current = input.trim();
-    const base = voiceBaseRef.current;
-    const next = base ? `${base} ${transcript}` : transcript;
-    setInput(next);
-  };
-
-  const handleTextChange = (e) => {
-    voiceBaseRef.current = '';
-    setInput(e.target.value);
-  };
 
   const isHtml = isHtmlEmail(email?.body || '');
   const emailHtml = isHtml ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%}</style></head><body>${email?.body}</body></html>` : null;
@@ -674,30 +641,16 @@ ${threadText}`;
             </div>
           )}
 
-          {/* Live interim voice preview */}
-          {interimText && (
-            <div style={{ padding: '6px 16px', fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
-              🎤 {interimText}
-            </div>
-          )}
-
-          {/* Input row */}
-          <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'flex-end', background: 'var(--bg2)' }}>
-            <div className="main-chat-input-row" style={{ display: 'flex', alignItems: 'flex-end', gap: 7, flex: 1 }}>
-              <VoiceInput onTranscript={handleVoice} disabled={loading} stopSignal={voiceStopSignal} />
-              <textarea
-                value={input}
-                onChange={handleTextChange}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isVoiceRecording) handleSend(); }}}
-                placeholder="Ask Ely to adjust, change tone, add a point…"
-                rows={2}
-                style={{ flex: 1, padding: '8px 10px', fontSize: 13, resize: 'none', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none' }}
-              />
-            </div>
-            <button onClick={handleSend} disabled={loading || !input.trim()} className="btn btn-primary btn-sm"
-              style={{ cursor: 'pointer', borderRadius: 8, fontSize: 12, height: 34, alignSelf: 'flex-end' }}>
-              Send
-            </button>
+          {/* Input row — unified ChatInputBar */}
+          <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
+            <ChatInputBar
+              value={input}
+              onChange={setInput}
+              onSend={handleSend}
+              placeholder="Ask Ely to adjust, change tone, add a point…"
+              disabled={loading}
+              loading={loading}
+            />
           </div>
 
           {/* CSS for voice button and pulse */}
