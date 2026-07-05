@@ -147,6 +147,13 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       out[`NOTICE_RUN_${n}_DATE`] = '';
       out[`NOTICE_RUN_${n}_AND`] = '';
     }
+
+    // Comma placeholders — only for runs 1 and 2
+    if (n < 3) {
+      const hasNext = !!sorted[i + 1];
+      out[`notice_run_${n}_,`] = hasNext ? ', ' : '';
+      out[`NOTICE_RUN_${n}_,`] = hasNext ? ', ' : '';
+    }
   }
 
   return out;
