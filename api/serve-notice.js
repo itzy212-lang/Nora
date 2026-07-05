@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     const templateType = body.template_type || noticeType;
     const createReminder = body.create_reminder !== false;
     const includeCoverLetter = body.include_cover_letter !== false;
+    const section2Subsections = body.section_2_subsections || null;
 
     if (!projectId) throw new Error('project_id is required');
     if (!aoId) throw new Error('ao_id is required');
@@ -71,6 +72,18 @@ export default async function handler(req, res) {
 
     const isS10 = noticeType === 'section_10';
     const deadlineDate = addDaysIso(noticeDate, isS10 ? 10 : 14);
+
+    // Calculate next run_number for this project/AO
+    const { data: existingRuns } = await supabase
+      .from('notices')
+      .select('run_number')
+      .eq('project_id', projectId)
+      .eq('ao_id', aoId)
+      .order('run_number', { ascending: false })
+      .limit(1);
+    const runNumber = existingRuns?.[0]?.run_number
+      ? existingRuns[0].run_number + 1
+      : 1;
 
     const notice = await safeInsert(supabase, 'notices', {
       project_id: projectId,
@@ -86,6 +99,8 @@ export default async function handler(req, res) {
       notice_date: noticeDate,
       status: 'served',
       template_type: templateType,
+      run_number: runNumber,
+      section_2_subsections: noticeType === 'section_2' ? section2Subsections : null,
     });
 
     let task = null;
