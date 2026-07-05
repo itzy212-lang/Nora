@@ -3204,18 +3204,32 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project.id, project.bo_premise_address]);
 
 
-  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate }) => {
+  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '' }) => {
+    // Calculate next run_number for this project/AO
+    const aoId = ao?.id || String(ao?.num || '');
+    const { data: existingRuns } = await sb
+      .from('notices')
+      .select('run_number')
+      .eq('project_id', project.id)
+      .eq('ao_id', aoId)
+      .order('run_number', { ascending: false })
+      .limit(1);
+    const runNumber = existingRuns?.[0]?.run_number ? existingRuns[0].run_number + 1 : 1;
+
     const record = {
       project_id: project.id,
-      ao_id: ao?.id || String(ao?.num || ''),
+      ao_id: aoId,
       section_1: selectedSections.includes('s1'),
       section_3: selectedSections.includes('s3'),
       section_6: selectedSections.includes('s6'),
+      section_2: selectedSections.includes('s2'),
       section_10: selectedSections.includes('s10'),
       notice_cover_letter: !!includeCover,
       notice_date: noticeDate,
       status: 'served',
       template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
+      run_number: runNumber,
+      section_2_subsections: selectedSections.includes('s2') ? section2Subsections : null,
     };
 
     try {
@@ -3281,6 +3295,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     includeCover,
     noticeDate: suppliedNoticeDate,
     createDeadlineTask = true,
+    section2Subsections = '',
   }) => {
     const noticeDate = suppliedNoticeDate || todayIso();
     const generatedDocs = [];
@@ -3290,7 +3305,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (!sections?.length && !includeCover) throw new Error('No notice selected.');
 
     // STEP 1: persist legal/workflow state first
-    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate });
+    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections });
 
     const nonS10 = sections.filter(s => ['s1', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
@@ -3345,7 +3360,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     for (const key of keysToGenerate) {
       try {
-        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate });
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections });
         const result = await generateDocument({
           templateKey: key,
           mergeData,
