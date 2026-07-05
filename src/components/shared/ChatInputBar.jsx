@@ -138,7 +138,7 @@ export default function ChatInputBar({
 
   const combinedStop = stopSignal + internalStop;
   const hasText = (value || '').trim().length > 0;
-  const showSend = hasText && !isRecording;
+  const showSend = hasText || isTranscribing; // show send as soon as recording stops
 
   return (
     <div style={{ width: '100%' }}>
@@ -250,7 +250,7 @@ export default function ChatInputBar({
         <div style={{ flexShrink: 0, marginBottom: 2, position: 'relative', width: 36, height: 36 }}>
 
           {/* Mic — shown when no text and not transcribing */}
-          {!showSend && !isTranscribing && (
+          {!showSend && !isRecording && !isTranscribing && (
             <VoiceInput
               onTranscript={handleVoice}
               onPreview={handleVoicePreview}
@@ -278,15 +278,15 @@ export default function ChatInputBar({
             <button
               type="button"
               onClick={handleSend}
-              disabled={disabled || loading}
+              disabled={disabled || loading || isTranscribing}
               style={{
                 position: 'absolute', inset: 0,
                 width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: '#3b82f6',
-                color: '#fff',
-                cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                background: isTranscribing ? 'var(--bg3)' : '#3b82f6',
+                color: isTranscribing ? 'var(--text3)' : '#fff',
+                cursor: disabled || loading || isTranscribing ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
