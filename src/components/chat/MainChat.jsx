@@ -2,8 +2,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
-import VoiceInput from '../shared/VoiceInput';
-import DictationOverlay from '../shared/DictationOverlay';
 import ChatInputBar from '../shared/ChatInputBar';
 import { uid } from '../../utils/formatters';
 import sb from '../../supabaseClient';
@@ -1505,10 +1503,6 @@ export default function MainChat({ onOpenComposer, onClose }) {
               value={input}
               onChange={setInput}
               onSend={(text) => handleSend(text)}
-              onTranscript={(transcript) => {
-                setInput(transcript);
-              }}
-              showAttach={true}
               onAttach={() => fileInputRef.current?.click()}
               placeholder={
                 selectedEmailContext
@@ -1834,6 +1828,7 @@ function WelcomeScreen({ onSend, userName }) {
     </div>
   );
 }
+
 
 
 
