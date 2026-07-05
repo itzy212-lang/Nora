@@ -1,284 +1,251 @@
 /**
- * ChatInputBar — THE shared input bar for all Nora chats.
+ * ChatInputBar — single source for ALL input bars across Nora.
  *
- * Layout (matches Claude chat):
- *   [+ attach?]  [textarea with waveform when recording]  [mic / send]
+ * Layout:
+ *   [+ attach]  [textarea — grows with content]  [mic → send when text/done]
  *
- * Behaviour:
- *   - Textarea expands up to 200px, then scrolls
- *   - When recording: waveform bars shown inside box, mic turns red
- *   - When transcribing: "Transcribing..." shown inside box
- *   - Enter sends (if text present), Shift+Enter = new line
- *   - While recording, Enter stops recording
- *   - Send button replaces mic when text is present and idle
- *   - Live preview lines shown above input while recording
- *   - Mobile: input bar lifts with keyboard automatically
+ * Props:
+ *   value        {string}    controlled value
+ *   onChange     {fn}        called with new string
+ *   onSend       {fn}        called with final text when user sends
+ *   placeholder  {string}
+ *   disabled     {boolean}
+ *   loading      {boolean}   shows "thinking…" placeholder
+ *   onAttach     {fn}        if provided, shows + button on left
+ *   stopSignal   {number}    increment to stop recording externally
+ *   autoSend     {boolean}   if true, sends immediately after dictation (default false)
  */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
 import VoiceInput from './VoiceInput';
 
-const MAX_HEIGHT = 200;
-const WAVEFORM_HEIGHTS = [0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1];
-
 export default function ChatInputBar({
   value = '',
   onChange,
   onSend,
-  onTranscript,
   placeholder = 'Type or tap mic to speak…',
   disabled = false,
   loading = false,
-  showAttach = false,
   onAttach,
   stopSignal = 0,
+  autoSend = false,
 }) {
   const textareaRef = useRef(null);
-  const [voicePhase, setVoicePhase] = useState('idle');
-  const [livePreview, setLivePreview] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [interimText, setInterimText] = useState('');
   const [internalStop, setInternalStop] = useState(0);
+  const voiceBaseRef = useRef('');
 
+  // Auto-resize textarea
   const resize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, MAX_HEIGHT) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 300) + 'px';
   }, []);
 
   useEffect(() => { resize(); }, [value, resize]);
 
   const handleChange = useCallback((e) => {
+    voiceBaseRef.current = '';
     onChange?.(e.target.value);
   }, [onChange]);
+
+  const handleSend = useCallback(() => {
+    const text = (value || '').trim();
+    if (!text || disabled || loading) return;
+    voiceBaseRef.current = '';
+    setInternalStop(s => s + 1);
+    onSend?.(text);
+  }, [value, disabled, loading, onSend]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (voicePhase === 'recording') {
+      if (isRecording) {
+        // Stop recording, don't send yet
         setInternalStop(s => s + 1);
         return;
       }
-      if (value.trim() && !disabled && !loading) {
-        onSend?.(value);
-      }
+      handleSend();
     }
-  }, [value, voicePhase, disabled, loading, onSend]);
+  }, [isRecording, handleSend]);
 
-  // Safety net — if stuck in transcribing for more than 8s, reset to idle
+  const handleVoice = useCallback((transcript, meta) => {
+    if (meta?.restarting) return;
+
+    if (meta?.recording === false) {
+      setIsRecording(false);
+      setIsTranscribing(true);
+      setInterimText('');
+    } else if (meta?.recording) {
+      setIsRecording(true);
+      setIsTranscribing(false);
+    }
+
+    if (meta?.interim) {
+      setInterimText(meta.interim);
+    }
+
+    if (!meta?.recording && transcript) {
+      // Final transcript received
+      setIsTranscribing(false);
+      setInterimText('');
+      const base = voiceBaseRef.current;
+      const next = base ? `${base} ${transcript}` : transcript;
+      voiceBaseRef.current = '';
+      onChange?.(next);
+      if (autoSend) {
+        setTimeout(() => onSend?.(next), 50);
+      }
+    } else if (meta?.recording && transcript) {
+      // Accumulate during recording
+      if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
+      const base = voiceBaseRef.current;
+      const next = base ? `${base} ${transcript}` : transcript;
+      onChange?.(next);
+    }
+  }, [value, onChange, onSend, autoSend]);
+
+  // Safety net — clear transcribing state after 8s
   useEffect(() => {
-    if (voicePhase !== 'transcribing') return;
-    const t = setTimeout(() => setVoicePhase('idle'), 8000);
+    if (!isTranscribing) return;
+    const t = setTimeout(() => setIsTranscribing(false), 8000);
     return () => clearTimeout(t);
-  }, [voicePhase]);
+  }, [isTranscribing]);
 
-  const handleVoicePreview = useCallback((preview, meta = {}) => {
-    if (meta.recording === true) {
-      setVoicePhase('recording');
-      const p = meta.currentPhrase || meta.interim || preview || '';
-      if (p && !p.toLowerCase().includes('speak now') && !p.toLowerCase().includes('recording')) {
-        setLivePreview(p);
-        onChange?.(p);
-      }
-    } else if (meta.recording === false && !meta.restarting) {
-      setVoicePhase('transcribing');
-      setLivePreview('');
-    }
-  }, [onChange]);
-
-  const handleTranscript = useCallback((transcript, meta) => {
-    if (!meta?.recording) {
-      setVoicePhase('idle');
-      setLivePreview('');
-    }
-    onChange?.(transcript);
-    onTranscript?.(transcript, meta);
-    setTimeout(resize, 50);
-  }, [onChange, onTranscript, resize]);
-
-  const handleSend = useCallback(() => {
-    if (value.trim() && !disabled && !loading) {
-      onSend?.(value);
-    }
-  }, [value, disabled, loading, onSend]);
-
-  const combinedStopSignal = stopSignal + internalStop;
-
-  const isRecording = voicePhase === 'recording';
-  const isTranscribing = voicePhase === 'transcribing';
-  const hasText = value.trim().length > 0;
-
-  const previewLines = (() => {
-    if (!isRecording || !livePreview) return [];
-    const words = livePreview.split(' ');
-    const lines = [];
-    let cur = '';
-    for (const w of words) {
-      if ((cur + ' ' + w).trim().length > 40) {
-        if (cur) lines.push(cur.trim());
-        cur = w;
-      } else {
-        cur = cur ? cur + ' ' + w : w;
-      }
-    }
-    if (cur) lines.push(cur.trim());
-    return lines.slice(-2);
-  })();
+  const combinedStop = stopSignal + internalStop;
+  const hasText = (value || '').trim().length > 0;
+  const showSend = (hasText && !isRecording) || isTranscribing;
 
   return (
     <div style={{ width: '100%' }}>
 
-      {isRecording && previewLines.length > 0 && (
-        <div style={{ padding: '0 4px 6px' }}>
-          {previewLines.map((line, i, arr) => {
-            const age = arr.length - 1 - i;
-            return (
-              <div key={i} style={{
-                fontSize: 13, lineHeight: 1.4,
-                color: age === 0 ? 'var(--text)' : 'rgba(120,120,120,0.4)',
-                fontWeight: age === 0 ? 500 : 400,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{line}</div>
-            );
-          })}
+      {/* Live interim preview above input */}
+      {interimText && isRecording && (
+        <div style={{
+          padding: '4px 14px 6px',
+          fontSize: 12, color: 'var(--text3)',
+          fontStyle: 'italic',
+        }}>
+          🎤 {interimText}
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 8,
+        padding: '8px 10px',
+        background: 'var(--bg2, #f8f9fa)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        boxSizing: 'border-box',
+      }}>
 
-        {showAttach && (
-          <button
-            type="button"
-            onClick={onAttach}
-            disabled={disabled}
-            style={{
-              width: 36, height: 36, borderRadius: '50%',
-              border: '1.5px solid var(--border)',
-              background: 'var(--bg)',
-              color: 'var(--text3)',
-              fontSize: 20, lineHeight: 1,
-              flexShrink: 0, cursor: disabled ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 4,
-            }}
-          >+</button>
-        )}
+        {/* + attach button on left */}
+        <button
+          type="button"
+          onClick={onAttach}
+          disabled={disabled || !onAttach}
+          title="Attach file"
+          style={{
+            width: 32, height: 32,
+            borderRadius: '50%',
+            border: '1.5px solid var(--border)',
+            background: 'var(--bg)',
+            color: onAttach ? 'var(--text2)' : 'var(--border)',
+            fontSize: 18, lineHeight: 1,
+            flexShrink: 0,
+            cursor: onAttach && !disabled ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: 2,
+            opacity: onAttach ? 1 : 0.3,
+          }}
+        >+</button>
 
-        <div style={{
-          flex: 1, minWidth: 0,
-          border: `1.5px solid ${isRecording ? '#3b82f6' : 'var(--border)'}`,
-          borderRadius: 14,
-          background: 'var(--bg2, #f8f8f8)',
-          display: 'flex', alignItems: 'center',
-          padding: '0 14px',
-          minHeight: 44,
-          transition: 'border-color 0.15s',
-          boxSizing: 'border-box',
-        }}>
-          {isRecording ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 24, width: '100%' }}>
-              {WAVEFORM_HEIGHTS.map((h, i) => (
-                <div key={i} style={{
-                  width: 3, borderRadius: 2,
-                  background: '#3b82f6',
-                  height: `${3 + h * 18}px`,
-                  animation: `nora-wave 0.65s ease-in-out ${(i * 0.04).toFixed(2)}s infinite alternate`,
-                }} />
-              ))}
-              <style>{`@keyframes nora-wave{from{transform:scaleY(0.15)}to{transform:scaleY(1)}}`}</style>
-            </div>
-          ) : (
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              placeholder={isTranscribing ? 'Transcribing…' : loading ? 'Thinking…' : placeholder}
-              rows={1}
-              disabled={disabled || isTranscribing}
-              style={{
-                width: '100%',
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                resize: 'none',
-                fontSize: 14,
-                lineHeight: '20px',
-                color: 'var(--text)',
-                fontFamily: 'inherit',
-                minHeight: 24,
-                maxHeight: MAX_HEIGHT,
-                padding: '12px 0',
-                boxSizing: 'border-box',
-                overflowY: 'auto',
-              }}
-            />
-          )}
-        </div>
+        {/* Textarea — grows with content */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            isRecording ? '🔴 Recording… tap mic to stop' :
+            isTranscribing ? 'Transcribing…' :
+            loading ? 'Thinking…' :
+            placeholder
+          }
+          rows={2}
+          disabled={disabled || isTranscribing}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: '6px 8px',
+            fontSize: 13,
+            lineHeight: 1.6,
+            resize: 'none',
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: 'var(--text)',
+            fontFamily: 'inherit',
+            minHeight: 44,
+            maxHeight: 300,
+            boxSizing: 'border-box',
+            overflowY: 'auto',
+          }}
+        />
 
-        <div style={{ position: 'relative', flexShrink: 0, marginBottom: 4 }}>
-          {/* VoiceInput handles its own mic button when idle and no text */}
-          {!hasText && !isRecording && !isTranscribing && (
+        {/* Right side — mic or send */}
+        <div style={{ flexShrink: 0, marginBottom: 2, position: 'relative', width: 36, height: 36 }}>
+
+          {/* VoiceInput mic — shown when no text and not transcribing */}
+          {!showSend && (
             <VoiceInput
-              onTranscript={handleTranscript}
-              onPreview={handleVoicePreview}
+              onTranscript={handleVoice}
+              onPreview={(preview, meta) => {
+                if (meta?.recording) {
+                  setIsRecording(true);
+                  if (meta.interim || meta.currentPhrase) {
+                    setInterimText(meta.currentPhrase || meta.interim || '');
+                  }
+                }
+              }}
               disabled={disabled || loading}
-              stopSignal={combinedStopSignal}
+              stopSignal={combinedStop}
             />
           )}
-          {isRecording && (
-            <button
-              type="button"
-              onClick={() => setInternalStop(s => s + 1)}
-              style={{
-                width: 36, height: 36, borderRadius: '50%', border: 'none',
-                background: '#3b82f6',
-                color: '#fff',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 0 0 4px rgba(59,130,246,0.2)',
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
-                <rect x="2" y="2" width="10" height="10" rx="2"/>
-              </svg>
-            </button>
-          )}
-          {isTranscribing && (
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%',
-              background: 'var(--bg3, #f3f4f6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </div>
-          )}
-          {hasText && !isRecording && !isTranscribing && (
+
+          {/* Send button — shown when there's text or transcribing done */}
+          {showSend && (
             <button
               type="button"
               onClick={handleSend}
-              disabled={disabled || loading}
+              disabled={disabled || loading || isTranscribing || !hasText}
               style={{
                 position: 'absolute', inset: 0,
+                width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: '#3b82f6',
-                color: '#fff',
-                cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                background: hasText && !isTranscribing ? '#3b82f6' : 'var(--bg3)',
+                color: hasText && !isTranscribing ? '#fff' : 'var(--text3)',
+                cursor: hasText && !isTranscribing && !disabled ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 2,
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
+              {isTranscribing ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              )}
             </button>
           )}
         </div>
