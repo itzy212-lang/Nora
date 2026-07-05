@@ -160,23 +160,25 @@ function joinOwnerNames(name1, name2) {
   return a || b || '';
 }
 
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate }) {
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '' }) {
   const noticeDate = suppliedNoticeDate || todayIso();
   const boPremise = project?.bo_premise_address || project?.address || '';
   const aoPremise = aoAddress(ao);
 
   const sectionLabels = {
-    s1: 'Section 1',
+    s1: 'Section 1(5)',
+    s2: 'Section 2(2)',
     s3: 'Section 3',
-    s6: 'Section 6',
+    s6: 'Section 6(1)',
     s10: 'Section 10',
     cover: 'Covering Letter',
   };
 
   const fileLabels = {
-    s1: 'Section 1 Notice',
+    s1: 'Section 1(5) Notice',
+    s2: 'Section 2(2) Notice',
     s3: 'Section 3 Notice',
-    s6: 'Section 6 Notice',
+    s6: 'Section 6(1) Notice',
     s10: 'Section 10 Notice',
     cover: 'Covering Letter',
   };
@@ -202,6 +204,8 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     section10NoticeDate: noticeDate,
     notifiableWorks: project?.works || '',
     includeCover,
+    allSections: allSections.length ? allSections : [sectionKey],
+    section2Subsections,
   });
 
   return {
