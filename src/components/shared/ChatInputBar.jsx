@@ -1,19 +1,20 @@
 /**
- * ChatInputBar — single source for ALL input bars across Nora.
+ * ChatInputBar — THE single source for all input bars across Nora.
+ *
+ * Every surface gets exactly this. No configuration props to toggle features.
+ * Change this file → changes everywhere instantly.
  *
  * Layout:
- *   [+ attach]  [textarea — grows with content]  [mic → send when text/done]
+ *   [+ file]  [textarea — grows with content]  [mic → send]
  *
- * Props:
- *   value        {string}    controlled value
- *   onChange     {fn}        called with new string
- *   onSend       {fn}        called with final text when user sends
+ * Props (minimal — only what genuinely differs per surface):
+ *   value        {string}   controlled value
+ *   onChange     {fn}       called with new string
+ *   onSend       {fn}       called with { text, file? } when user sends
  *   placeholder  {string}
  *   disabled     {boolean}
- *   loading      {boolean}   shows "thinking…" placeholder
- *   onAttach     {fn}        if provided, shows + button on left
- *   stopSignal   {number}    increment to stop recording externally
- *   autoSend     {boolean}   if true, sends immediately after dictation (default false)
+ *   loading      {boolean}
+ *   stopSignal   {number}   increment externally to stop recording
  */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
@@ -26,15 +27,16 @@ export default function ChatInputBar({
   placeholder = 'Type or tap mic to speak…',
   disabled = false,
   loading = false,
-  onAttach,
   stopSignal = 0,
-  autoSend = false,
 }) {
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [internalStop, setInternalStop] = useState(0);
+  const [attachedFile, setAttachedFile] = useState(null); // { name, text }
   const voiceBaseRef = useRef('');
 
   // Auto-resize textarea
@@ -47,6 +49,13 @@ export default function ChatInputBar({
 
   useEffect(() => { resize(); }, [value, resize]);
 
+  // Safety net — clear transcribing after 8s
+  useEffect(() => {
+    if (!isTranscribing) return;
+    const t = setTimeout(() => setIsTranscribing(false), 8000);
+    return () => clearTimeout(t);
+  }, [isTranscribing]);
+
   const handleChange = useCallback((e) => {
     voiceBaseRef.current = '';
     onChange?.(e.target.value);
@@ -57,14 +66,14 @@ export default function ChatInputBar({
     if (!text || disabled || loading) return;
     voiceBaseRef.current = '';
     setInternalStop(s => s + 1);
-    onSend?.(text);
-  }, [value, disabled, loading, onSend]);
+    setAttachedFile(null);
+    onSend?.({ text, file: attachedFile || null });
+  }, [value, disabled, loading, onSend, attachedFile]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (isRecording) {
-        // Stop recording, don't send yet
         setInternalStop(s => s + 1);
         return;
       }
@@ -72,6 +81,22 @@ export default function ChatInputBar({
     }
   }, [isRecording, handleSend]);
 
+  // File attach — read as text client-side, no upload needed
+  const handleFileChange = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result || '';
+      setAttachedFile({ name: file.name, text: text.slice(0, 8000) });
+    };
+    reader.onerror = () => setAttachedFile({ name: file.name, text: '' });
+    reader.readAsText(file);
+  }, []);
+
+  // Voice handlers
   const handleVoice = useCallback((transcript, meta) => {
     if (meta?.restarting) return;
 
@@ -84,52 +109,69 @@ export default function ChatInputBar({
       setIsTranscribing(false);
     }
 
-    if (meta?.interim) {
-      setInterimText(meta.interim);
-    }
+    if (meta?.interim) setInterimText(meta.interim);
 
     if (!meta?.recording && transcript) {
-      // Final transcript received
       setIsTranscribing(false);
       setInterimText('');
       const base = voiceBaseRef.current;
       const next = base ? `${base} ${transcript}` : transcript;
       voiceBaseRef.current = '';
       onChange?.(next);
-      if (autoSend) {
-        setTimeout(() => onSend?.(next), 50);
-      }
     } else if (meta?.recording && transcript) {
-      // Accumulate during recording
       if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
-      const base = voiceBaseRef.current;
-      const next = base ? `${base} ${transcript}` : transcript;
+      const next = voiceBaseRef.current
+        ? `${voiceBaseRef.current} ${transcript}`
+        : transcript;
       onChange?.(next);
     }
-  }, [value, onChange, onSend, autoSend]);
+  }, [value, onChange]);
 
-  // Safety net — clear transcribing state after 8s
-  useEffect(() => {
-    if (!isTranscribing) return;
-    const t = setTimeout(() => setIsTranscribing(false), 8000);
-    return () => clearTimeout(t);
-  }, [isTranscribing]);
+  const handleVoicePreview = useCallback((preview, meta = {}) => {
+    if (meta?.recording) {
+      setIsRecording(true);
+      if (meta.interim || meta.currentPhrase) {
+        setInterimText(meta.currentPhrase || meta.interim || '');
+      }
+    }
+  }, []);
 
   const combinedStop = stopSignal + internalStop;
   const hasText = (value || '').trim().length > 0;
-  const showSend = (hasText && !isRecording) || isTranscribing;
+  const showSend = hasText && !isRecording;
 
   return (
     <div style={{ width: '100%' }}>
 
-      {/* Live interim preview above input */}
+      {/* Live interim preview */}
       {interimText && isRecording && (
         <div style={{
           padding: '4px 14px 6px',
-          fontSize: 12, color: 'var(--text3)',
+          fontSize: 12,
+          color: 'var(--text3)',
           fontStyle: 'italic',
         }}>
           🎤 {interimText}
+        </div>
+      )}
+
+      {/* Attached file badge */}
+      {attachedFile && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 14px 6px',
+          fontSize: 12, color: 'var(--text2)',
+        }}>
+          <span style={{
+            padding: '3px 10px', borderRadius: 99,
+            background: 'var(--bg3)', border: '1px solid var(--border)',
+          }}>
+            📎 {attachedFile.name}
+          </span>
+          <button
+            onClick={() => setAttachedFile(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: 0 }}
+          >×</button>
         </div>
       )}
 
@@ -144,28 +186,34 @@ export default function ChatInputBar({
         boxSizing: 'border-box',
       }}>
 
-        {/* + attach button on left */}
+        {/* + file button — always present */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+          accept=".txt,.pdf,.docx,.doc,.csv,.md,.json"
+        />
         <button
           type="button"
-          onClick={onAttach}
-          disabled={disabled || !onAttach}
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
           title="Attach file"
           style={{
             width: 32, height: 32,
             borderRadius: '50%',
             border: '1.5px solid var(--border)',
             background: 'var(--bg)',
-            color: onAttach ? 'var(--text2)' : 'var(--border)',
+            color: 'var(--text2)',
             fontSize: 18, lineHeight: 1,
             flexShrink: 0,
-            cursor: onAttach && !disabled ? 'pointer' : 'default',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             marginBottom: 2,
-            opacity: onAttach ? 1 : 0.3,
           }}
         >+</button>
 
-        {/* Textarea — grows with content */}
+        {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={value}
@@ -198,54 +246,54 @@ export default function ChatInputBar({
           }}
         />
 
-        {/* Right side — mic or send */}
+        {/* Right: mic or send */}
         <div style={{ flexShrink: 0, marginBottom: 2, position: 'relative', width: 36, height: 36 }}>
 
-          {/* VoiceInput mic — shown when no text and not transcribing */}
-          {!showSend && (
+          {/* Mic — shown when no text and not transcribing */}
+          {!showSend && !isTranscribing && (
             <VoiceInput
               onTranscript={handleVoice}
-              onPreview={(preview, meta) => {
-                if (meta?.recording) {
-                  setIsRecording(true);
-                  if (meta.interim || meta.currentPhrase) {
-                    setInterimText(meta.currentPhrase || meta.interim || '');
-                  }
-                }
-              }}
+              onPreview={handleVoicePreview}
               disabled={disabled || loading}
               stopSignal={combinedStop}
             />
           )}
 
-          {/* Send button — shown when there's text or transcribing done */}
+          {/* Transcribing spinner */}
+          {isTranscribing && (
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'var(--bg3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text3)',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+          )}
+
+          {/* Send — shown when there's text */}
           {showSend && (
             <button
               type="button"
               onClick={handleSend}
-              disabled={disabled || loading || isTranscribing || !hasText}
+              disabled={disabled || loading}
               style={{
                 position: 'absolute', inset: 0,
                 width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: hasText && !isTranscribing ? '#3b82f6' : 'var(--bg3)',
-                color: hasText && !isTranscribing ? '#fff' : 'var(--text3)',
-                cursor: hasText && !isTranscribing && !disabled ? 'pointer' : 'not-allowed',
+                background: '#3b82f6',
+                color: '#fff',
+                cursor: disabled || loading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              {isTranscribing ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              )}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
             </button>
           )}
         </div>
