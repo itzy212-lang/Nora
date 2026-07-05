@@ -193,9 +193,17 @@ export function buildSOCSchedulePlaceholders(socReports = []) {
 export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
   const noticeDate = clean(options.noticeDate || options.notice_date);
   const noticeType = clean(options.noticeType || options.notice_type);
-  const noticeSection = clean(options.noticeSection || options.notice_section || noticeType);
   const notifiableWorks = clean(options.notifiableWorks || options.notifiable_works || project.works);
   const isSection10 = ['s10', 'section_10', 'section 10'].includes(noticeType.toLowerCase());
+
+  // Build combined sections string from allSections (all sections in this run)
+  // Order: Section 6(1) first, Section 1(5) second, Section 2(2)(subsections) last
+  const allSections = options.allSections || [noticeType];
+  const s2Subsections = clean(options.section2Subsections || options.section_2_subsections || '');
+  const noticeSectionsFull = buildSectionsString(allSections, s2Subsections);
+  // Fallback for single-section documents
+  const sectionFallbacks = { s1: 'Section 1(5)', s2: 'Section 2(2)', s6: 'Section 6(1)', s10: 'Section 10', cover: '' };
+  const noticeSection = noticeSectionsFull || sectionFallbacks[noticeType] || clean(options.noticeSection || options.notice_section || noticeType);
 
   const originalNoticeDate = clean(options.originalNoticeDate || options.original_notice_date || options.previousNoticeDate || options.previous_notice_date || ao.notice_served_date || ao.noticeServedDate || ao.notice_date || noticeDate);
   const section10NoticeDate = clean(options.section10NoticeDate || options.section_10_notice_date || options.s10NoticeDate || options.s10_notice_date || noticeDate);
@@ -230,7 +238,11 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTICE_TYPE: noticeType,
     NOTICE_SECTION: noticeSection,
     NOTICE_SECTION_FULL: noticeSection,
+    NOTICE_SECTIONS: noticeSection,
     NOTICE_SUBSECTION: clean(options.noticeSubsection || options.notice_subsection),
+    SECTION_2_SUBSECTIONS: s2Subsections
+      ? s2Subsections.split(',').map(s => `(${s.trim()})`).join('')
+      : '',
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     BO_NAME: boNames,
