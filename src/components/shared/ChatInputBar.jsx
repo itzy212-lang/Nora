@@ -34,6 +34,7 @@ export default function ChatInputBar({
 
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [stoppedRecording, setStoppedRecording] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [internalStop, setInternalStop] = useState(0);
   const [attachedFile, setAttachedFile] = useState(null); // { name, text }
@@ -67,6 +68,7 @@ export default function ChatInputBar({
     voiceBaseRef.current = '';
     setInternalStop(s => s + 1);
     setAttachedFile(null);
+    setStoppedRecording(false);
     onSend?.({ text, file: attachedFile || null });
   }, [value, disabled, loading, onSend, attachedFile]);
 
@@ -117,16 +119,15 @@ export default function ChatInputBar({
     } else {
       // recording === false AND restarting is not set — truly finished
       setIsRecording(false);
+      setStoppedRecording(true); // show send button immediately
       setInterimText('');
       if (transcript) {
-        // Final transcript — land it in the field, switch to send
         setIsTranscribing(false);
         const base = voiceBaseRef.current;
         const next = base ? `${base} ${transcript}` : transcript;
         voiceBaseRef.current = '';
         onChange?.(next);
       } else {
-        // No transcript yet — show transcribing state while Whisper processes
         setIsTranscribing(true);
       }
     }
@@ -263,7 +264,7 @@ export default function ChatInputBar({
           />
 
           {/* Send button overlays mic only when recording has stopped AND there is text */}
-          {!isRecording && hasText && (
+          {!isRecording && (hasText || stoppedRecording) && (
             <button
               type="button"
               onClick={handleSend}
