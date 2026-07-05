@@ -16,6 +16,8 @@
  */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
+import VoiceInput from './VoiceInput';
+
 const MAX_HEIGHT = 200;
 const WAVEFORM_HEIGHTS = [0.5,0.9,0.6,1,0.7,0.8,0.4,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8,0.5,0.9,0.6,1];
 
@@ -53,7 +55,6 @@ export default function ChatInputBar({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (voicePhase === 'recording') {
-        // Actually stop the recorder via stop signal
         setInternalStop(s => s + 1);
         return;
       }
@@ -85,8 +86,6 @@ export default function ChatInputBar({
   }, [onChange]);
 
   const handleTranscript = useCallback((transcript, meta) => {
-    // Only switch to idle when recording has actually finished
-    // If meta.recording is still true, we're mid-session — stay in recording phase
     if (!meta?.recording) {
       setVoicePhase('idle');
       setLivePreview('');
@@ -101,6 +100,8 @@ export default function ChatInputBar({
       onSend?.(value);
     }
   }, [value, disabled, loading, onSend]);
+
+  const combinedStopSignal = stopSignal + internalStop;
 
   const isRecording = voicePhase === 'recording';
   const isTranscribing = voicePhase === 'transcribing';
@@ -215,32 +216,19 @@ export default function ChatInputBar({
         </div>
 
         <div style={{ position: 'relative', flexShrink: 0, marginBottom: 4 }}>
+          {/* VoiceInput handles its own mic button when idle and no text */}
           {!hasText && !isRecording && !isTranscribing && (
-            <button
-              type="button"
-              onClick={startRecording}
+            <VoiceInput
+              onTranscript={handleTranscript}
+              onPreview={handleVoicePreview}
               disabled={disabled || loading}
-              style={{
-                width: 36, height: 36, borderRadius: '50%', border: 'none',
-                background: 'var(--bg3, #f3f4f6)',
-                color: 'var(--text3, #9ca3af)',
-                cursor: disabled || loading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </button>
+              stopSignal={combinedStopSignal}
+            />
           )}
           {isRecording && (
             <button
               type="button"
-              onClick={stopRecording}
+              onClick={() => setInternalStop(s => s + 1)}
               style={{
                 width: 36, height: 36, borderRadius: '50%', border: 'none',
                 background: '#3b82f6',
@@ -255,6 +243,21 @@ export default function ChatInputBar({
                 <rect x="2" y="2" width="10" height="10" rx="2"/>
               </svg>
             </button>
+          )}
+          {isTranscribing && (
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'var(--bg3, #f3f4f6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </div>
           )}
           {hasText && !isRecording && !isTranscribing && (
             <button
@@ -284,4 +287,3 @@ export default function ChatInputBar({
     </div>
   );
 }
-
