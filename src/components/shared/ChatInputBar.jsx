@@ -98,36 +98,42 @@ export default function ChatInputBar({
 
   // Voice handlers
   const handleVoice = useCallback((transcript, meta) => {
+    // Ignore restart gaps — VoiceInput restarts Web Speech sessions continuously
+    // while recording. restarting=true means still recording, not finished.
     if (meta?.restarting) return;
 
-    if (meta?.recording === false) {
-      setIsRecording(false);
-      setIsTranscribing(true);
-      setInterimText('');
-    } else if (meta?.recording) {
+    if (meta?.recording) {
+      // Still recording — accumulate transcript, show interim
       setIsRecording(true);
       setIsTranscribing(false);
-    }
-
-    if (meta?.interim) setInterimText(meta.interim);
-
-    if (!meta?.recording && transcript) {
-      setIsTranscribing(false);
+      if (meta?.interim) setInterimText(meta.interim);
+      if (transcript) {
+        if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
+        const next = voiceBaseRef.current
+          ? `${voiceBaseRef.current} ${transcript}`
+          : transcript;
+        onChange?.(next);
+      }
+    } else {
+      // recording === false AND restarting is not set — truly finished
+      setIsRecording(false);
       setInterimText('');
-      const base = voiceBaseRef.current;
-      const next = base ? `${base} ${transcript}` : transcript;
-      voiceBaseRef.current = '';
-      onChange?.(next);
-    } else if (meta?.recording && transcript) {
-      if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
-      const next = voiceBaseRef.current
-        ? `${voiceBaseRef.current} ${transcript}`
-        : transcript;
-      onChange?.(next);
+      if (transcript) {
+        // Final transcript — land it in the field, switch to send
+        setIsTranscribing(false);
+        const base = voiceBaseRef.current;
+        const next = base ? `${base} ${transcript}` : transcript;
+        voiceBaseRef.current = '';
+        onChange?.(next);
+      } else {
+        // No transcript yet — show transcribing state while Whisper processes
+        setIsTranscribing(true);
+      }
     }
   }, [value, onChange]);
 
   const handleVoicePreview = useCallback((preview, meta = {}) => {
+    if (meta?.restarting) return;
     if (meta?.recording) {
       setIsRecording(true);
       if (meta.interim || meta.currentPhrase) {
