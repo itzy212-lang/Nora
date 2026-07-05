@@ -2590,11 +2590,10 @@ function ProjectChat({ project, onOpenComposer }) {
             <ChatInputBar
               value={input}
               onChange={setInput}
-              onSend={() => handleSend()}
+              onSend={({ text, file }) => handleSend(text, file)}
               placeholder={`Ask about ${projectRef}...`}
               disabled={loading || uploading}
               loading={loading}
-              onAttach={() => fileInputRef.current?.click()}
               stopSignal={voiceStopSignal}
             />
           </div>
