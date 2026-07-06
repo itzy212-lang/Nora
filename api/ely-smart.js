@@ -3292,7 +3292,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         };
 
     // ── DEBUG CAPTURE — fires only when body.debug === true ─────────────────
-    if (body.debug === true) {
+    if (body.debug === true || body.debug === 'true') {
       try {
         const sbDebug = getSupabase();
         if (sbDebug) {
@@ -3366,7 +3366,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     console.log('[ely-smart] responded with model:', modelUsed);
 
     // ── Update debug capture with response ────────────────────────────────
-    if (body.debug === true) {
+    if (body.debug === true || body.debug === 'true') {
       try {
         const sbDebug = getSupabase();
         if (sbDebug) {
