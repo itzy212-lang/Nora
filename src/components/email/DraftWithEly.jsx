@@ -229,6 +229,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const extraOpts = {
         mode: 'draft',
         workflowStage: 'draft_with_ely',
+        debug: localStorage.getItem('nora_debug_mode') === 'true',
         sessionId,
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
