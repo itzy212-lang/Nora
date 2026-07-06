@@ -250,6 +250,9 @@ export default function VoiceInput({
     } finally {
       setTranscribing(false);
       setRecording(false);
+      // Reset refs so mic can be tapped again for a new recording
+      manualStopRef.current = false;
+      shouldKeepRecordingRef.current = false;
       stopMediaTracks();
       mediaRecorderRef.current = null;
       mediaChunksRef.current = [];
@@ -315,9 +318,9 @@ export default function VoiceInput({
       recorder.start();
       setRecording(true);
 
-      onPreview?.('🔴 Recording… speak now, then tap Send', {
+      onPreview?.('', {
         recording: true,
-        currentPhrase: '🔴 Recording… speak now, then tap Send',
+        currentPhrase: '',
         interim: '',
         final: '',
       });
