@@ -377,7 +377,7 @@ ${threadText}`;
         body: JSON.stringify({
           prompt: promptWithDraft,
           surface: 'inbox_draft',
-          mode: 'draft_with_ely',
+          mode: 'draft',
           workflowStage: 'draft_with_ely',
           projectId: email?.project_id || null,
           project_id: email?.project_id || null,
