@@ -174,7 +174,6 @@ Return ONLY valid JSON with no markdown:
 
 
 
-export const config = { api: { bodyParser: false } };
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
