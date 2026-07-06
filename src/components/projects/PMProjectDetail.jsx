@@ -825,7 +825,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [scopeLoading, setScopeLoading] = useState(false);
   const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
   const [drawingExtracting, setDrawingExtracting] = useState(false);
-  const [dualAIEnabled, setDualAIEnabled] = useState(false);
+  const [dualAIEnabled, setDualAIEnabled] = useState(() => localStorage.getItem('nora_dual_ai') === 'true');
   const [dualAIReview, setDualAIReview] = useState(null); // { diff, gptItems, file }
   const [dualAIVerifying, setDualAIVerifying] = useState(false);
   const [drawingError, setDrawingError] = useState('');
@@ -1917,9 +1917,9 @@ Proceed?`
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (drawingExtracting || dualAIVerifying) ? 0.6 : 1 }}>
                   {dualAIVerifying ? '🔎 Claude checking...' : drawingExtracting ? '🔍 Nora\'s on it...' : '📐 Upload drawings'}
                 </button>
-                <label title="Claude independently checks GPT's extraction for mistakes and missing items" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280', cursor: 'pointer', userSelect: 'none' }}>
-                  <input type="checkbox" checked={dualAIEnabled} onChange={e => setDualAIEnabled(e.target.checked)} style={{ cursor: 'pointer' }} />
-                  Dual AI verify
+                <label title="Claude independently checks GPT's extraction for mistakes and missing items" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: dualAIEnabled ? '#7c3aed' : '#6b7280', cursor: 'pointer', userSelect: 'none', padding: '4px 8px', borderRadius: 6, background: dualAIEnabled ? '#f5f3ff' : 'transparent', border: `1px solid ${dualAIEnabled ? '#c4b5fd' : 'transparent'}` }}>
+                  <input type="checkbox" checked={dualAIEnabled} onChange={e => { setDualAIEnabled(e.target.checked); localStorage.setItem('nora_dual_ai', e.target.checked); }} style={{ cursor: 'pointer' }} />
+                  {dualAIEnabled ? '🔎 Dual AI on' : 'Dual AI verify'}
                 </label>
                 <input id="drawing-upload-input" type="file" multiple
                   accept=".pdf,.jpg,.jpeg,.png,.docx,.doc,.txt"
