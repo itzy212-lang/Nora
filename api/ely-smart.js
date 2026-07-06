@@ -3317,7 +3317,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} suppliedEmail=${suppliedEmailContext ? 'yes' : 'no'} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
     );
 
-    const temperature = modeHint === 'draft' ? 0.62 : 0.35;
+    const temperature = modeHint === 'draft' ? 0.25 : 0.35;
     // HARDCODED — do not restore env var override. ELY_MAIN_CHAT_MODEL was silently set to gpt-5.4
     // in Vercel env vars and degraded every response. gpt-4o for everything.
     const activeModel = 'gpt-4o';
