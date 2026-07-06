@@ -238,9 +238,12 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         // causes ely-smart to treat it as a supplied email and fetch all project emails.
         emailContext: (email?.id || email?.body)
           ? {
+              id: email?.id || email?.external_id || '',
               from: email?.from || email?.from_email || '',
               subject: email?.subject || '',
               body: (email?.body || email?.preview || '').slice(0, 6000),
+              thread_id: email?.thread_id || email?.threadId || threadId || '',
+              project_id: projectId || '',
             }
           : null,
       };
