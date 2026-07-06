@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nora Drafting A/B/C Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f9fafb; color: #111; padding: 24px 16px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .sub { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; text-transform: uppercase; }
+  textarea { width: 100%; padding: 10px 12px; font-size: 13px; border-radius: 8px; border: 1px solid #d1d5db; resize: vertical; font-family: inherit; line-height: 1.5; margin-bottom: 16px; }
+  button { padding: 10px 28px; background: #1d4ed8; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 24px; }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tag { padding: 6px 12px; background: #f3f4f6; border-radius: 6px; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { border-radius: 10px; overflow: hidden; border: 1.5px solid #ccc; }
+  .card-a { border-color: #93c5fd; background: #dbeafe; }
+  .card-b { border-color: #86efac; background: #dcfce7; }
+  .card-c { border-color: #fde047; background: #fef9c3; }
+  .card-head { padding: 10px 14px; font-weight: 700; font-size: 13px; border-bottom: 1px solid rgba(0,0,0,0.1); }
+  .card-stats { padding: 8px 14px; font-size: 11px; color: #374151; border-bottom: 1px solid rgba(0,0,0,0.1); display: flex; gap: 14px; flex-wrap: wrap; }
+  .card-output { padding: 12px 14px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; background: rgba(255,255,255,0.65); }
+  .card-roles { padding: 8px 14px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 11px; }
+  .card-roles .role-label { font-weight: 700; text-transform: uppercase; }
+  .card-roles .role-preview { color: #6b7280; }
+  .copy-btn { padding: 8px 20px; background: #374151; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 0; }
+  .copy-btn.done { background: #16a34a; }
+  .error { padding: 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; color: #dc2626; font-size: 13px; margin-bottom: 16px; }
+  #results { display: none; }
+</style>
+</head>
+<body>
+
+<h1>Nora Drafting A/B/C Test</h1>
+<p class="sub">Developer diagnostic only — does not affect production.</p>
+
+<label>Dictation</label>
+<textarea id="dictation" rows="6">Let's respond to Lewis saying I managed to speak to the adjoining owner she is available on Monday this coming Monday at 1 p.m. so let me know if that works for you. With regards to my appointment I believe it's to the leasehold owner of number 19. Regarding the other the remaining freeholder and leaseholder appointments if you have served them a section 10 notice that is now expired I'd happily take on the section 10 for B appointment on this I'll happily I'm happy to discuss these with you based on the basis that is effectively a duplicate award minus any adjoining owner detail change and individual schedule of conditions for each owner so yep I'm happy to have a discussion if the 10 for B appointments come up</textarea>
+
+<button id="runBtn" onclick="runTest()">▶ Run A/B/C Test</button>
+
+<div id="errorBox" class="error" style="display:none"></div>
+
+<div id="results">
+  <div class="meta" id="meta"></div>
+  <div class="grid" id="grid"></div>
+  <button class="copy-btn" id="copyBtn" onclick="copyAll()">Copy full JSON for ChatGPT</button>
+</div>
+
+<script>
+let lastResults = null;
+
+async function runTest() {
+  const btn = document.getElementById('runBtn');
+  const errorBox = document.getElementById('errorBox');
+  const resultsDiv = document.getElementById('results');
+  
+  btn.disabled = true;
+  btn.textContent = 'Running all three configs…';
+  errorBox.style.display = 'none';
+  resultsDiv.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/drafting-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: 'nora-test-2026',
+        dictation: document.getElementById('dictation').value
+      })
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+    lastResults = json;
+    renderResults(json);
+  } catch(err) {
+    errorBox.textContent = 'Error: ' + err.message;
+    errorBox.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run A/B/C Test';
+  }
+}
+
+function renderResults(data) {
+  // Meta
+  document.getElementById('meta').innerHTML = [
+    ['Model', data.model || 'gpt-4o'],
+    ['Temperature', data.temperature],
+    ['Configs', data.results.length],
+  ].map(([k,v]) => `<div class="tag"><span style="color:#6b7280">${k}: </span><strong>${v}</strong></div>`).join('');
+
+  // Cards
+  const cardClasses = ['card-a','card-b','card-c'];
+  document.getElementById('grid').innerHTML = data.results.map((r, i) => {
+    if (r.error) {
+      return `<div class="card ${cardClasses[i]}">
+        <div class="card-head">${r.label}</div>
+        <div class="card-output" style="color:#dc2626">Error: ${r.error}</div>
+      </div>`;
+    }
+    const stats = [
+      ['Prompt tokens', r.prompt_tokens],
+      ['Completion', r.completion_tokens],
+      ['Messages', r.message_count],
+      ['Time', r.elapsed_ms + 'ms'],
+    ].map(([k,v]) => `<span><span style="color:#6b7280">${k}:</span> <strong>${v}</strong></span>`).join('');
+
+    const roles = (r.messages_summary || []).map(m =>
+      `<div><span class="role-label">${m.role}</span> <span style="color:#9ca3af">(${m.length} chars)</span> <span class="role-preview">— ${m.preview}…</span></div>`
+    ).join('');
+
+    return `<div class="card ${cardClasses[i]}">
+      <div class="card-head">${r.label}</div>
+      <div class="card-stats">${stats}</div>
+      <div class="card-output">${escHtml(r.output)}</div>
+      <div class="card-roles">
+        <div style="font-weight:600;font-size:11px;color:#6b7280;margin-bottom:4px">MESSAGE ROLES</div>
+        ${roles}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('results').style.display = 'block';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyAll() {
+  if (!lastResults) return;
+  navigator.clipboard.writeText(JSON.stringify(lastResults, null, 2)).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Copied to clipboard';
+    btn.className = 'copy-btn done';
+    setTimeout(() => { btn.textContent = 'Copy full JSON for ChatGPT'; btn.className = 'copy-btn'; }, 2500);
+  });
+}
+</script>
+</body>
+</html>
