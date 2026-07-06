@@ -792,18 +792,12 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
 
   if (hasExplicitReviewRequest(p)) return 'review';
 
-  // If an email thread is selected and the prompt looks like an amendment instruction
-  // (add this, include that, change this) — stay in draft mode
-  if ((body.emailContext || body.threadId || body.emailId) && looksLikeAmendmentInstruction(p)) {
-    return 'draft';
-  }
-
   if (hasDiscussionIntent(p)) return 'discuss';
 
-  // In project chat — if the prompt is not a question and not a research request,
-  // treat it as a drafting instruction. Project chat is primarily used for drafting.
-  const isProjectChat = surface === 'project_chat' || body.surface === 'project_chat';
-  if (isProjectChat && p.length > 20 && !hasDiscussionIntent(p)) {
+  // If an email thread is selected and the prompt looks like an amendment instruction
+  // (add this, include that, change this) — stay in draft mode
+  // This catches the case where a draft has been produced and the user is refining it
+  if ((body.emailContext || body.threadId || body.emailId) && looksLikeAmendmentInstruction(p)) {
     return 'draft';
   }
 
@@ -817,17 +811,15 @@ function inferModeHint(surface, prompt = '', body = {}) {
   // 1. Explicit discussion/analysis request -> DISCUSS
   // 2. Recipient-facing wording or drafting trigger -> DRAFT
   // 3. No substantive prompt -> EMAIL_SUMMARY
-  // Draft With Ely surface — covers both old workflowStage and new mode/surface values
-  const isDraftWithElySurface = explicitMode.includes('draft_with_ely')
-    || surface === 'inbox_draft'
-    || (explicitMode === 'draft' && (body.surface === 'inbox_draft' || body.workflowStage === 'draft_with_ely'));
-
-  if (isDraftWithElySurface) {
+  if (explicitMode.includes('draft_with_ely')) {
     const p = String(prompt || '').trim();
     if (!p) return 'email_summary';
-    // Discussion wins only if user clearly asks for analysis — not just a question in dictation
+    // Discussion wins if the user clearly asks for analysis
     if (hasDiscussionIntent(p)) return 'discuss';
-    // Everything else on this surface defaults to draft — it exists for drafting
+    // Otherwise treat any content as a draft request — this surface exists for drafting
+    // looksLikeEmailDictation catches recipient-facing wording
+    // hasExplicitDraftRequest catches "respond saying", "reply saying" etc
+    // For anything else on this surface that isn't discussion, default to draft
     return 'draft';
   }
 
@@ -856,26 +848,6 @@ function inferModeHint(surface, prompt = '', body = {}) {
 // NORA V4 DOMAIN LAYER
 // Build Package 2 — June 2026
 // ================================================================
-
-// ── User brain memory save detection ─────────────────────────────────────
-// Detects when the user is expressing a preference, rule or personal fact
-// that should be saved to their user brain for future use.
-function detectMemorySaveIntent(prompt = '') {
-  const p = prompt.toLowerCase();
-  return (
-    /\b(remember|always|never|don't|do not|i prefer|i like|i don't like|i hate|my fee|my rate|my style|from now on|going forward|in future|save this|save that|note that|keep in mind|my preference|add to|add a note|memory brain|to the memory|store that|store this|want you to save|want you to remember|want you to note|want you to add)\b/i.test(p) &&
-    p.length > 10
-  );
-}
-
-function classifyMemoryField(prompt = '') {
-  const p = prompt.toLowerCase();
-  if (/fee|rate|charge|price|cost|quote/.test(p)) return 'fee_structure';
-  if (/sign.?off|sign off|close|regards|yours/.test(p)) return 'sign_off';
-  if (/style|voice|tone|wording|write|phrase|sentence|formal|informal/.test(p)) return 'writing_voice';
-  if (/never use|don't use|avoid|banned|do not use|hate when/.test(p)) return 'banned_phrases';
-  return 'personal_preferences';
-}
 
 function inferDomain({ prompt = '', body = {}, projectBundle = null, scopedEmailContext = [] } = {}) {
   const p = String(prompt || '').toLowerCase();
@@ -1091,27 +1063,9 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
   }
 
-  // ── USER BRAIN — injected early so voice/preferences shape everything that follows ──
-  // Must load before knowledge and drafting layers so personal style is established first.
-  if (brain?.user_brain) {
-    const ub = brain.user_brain;
-    const userParts = [ub.brain_content || null].filter(Boolean);
-    if (userParts.length) {
-      prompt += `\n\n--- THIS USER'S VOICE AND PREFERENCES — APPLY THROUGHOUT ---\n\n${userParts.join('\n\n')}\n\nThe above preferences override any default style. Apply them throughout every draft.`;
-    }
-  }
-
-  // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
-  if (brain?.knowledge_layer?.system_prompt) {
-    prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
-  }
-
-  // ── DRAFTING LAYER — detailed drafting rules ─────────────────────────────
-  if (brain?.drafting_layer?.system_prompt) {
-    prompt += `\n\n--- DRAFTING RULES ---\n\n${brain.drafting_layer.system_prompt}`;
-  }
-
-  // ── DOMAIN LAYER ──────────────────────────────────────────────────────────
+  // ── DOMAIN LAYER — injected when a specific mode is active ────────────
+  // This is the second instruction set loaded from the layered brain loader.
+  // It adds mode-specific rules on top of the global layer without replacing it.
   if (brain?.domain_layer) {
     const dl = brain.domain_layer;
     const parts = [dl.system_prompt, dl.output_rules, dl.behaviour_rules].filter(Boolean);
@@ -1159,19 +1113,275 @@ RULES:
 
 ACTIVE MODE: DRAFT
 
-Your current task is to draft the completed correspondence.
+OUTPUT ONLY THE COMPLETED CORRESPONDENCE.
 
-Apply the drafting philosophy defined in the master brain in full.
+Do not provide:
 
-Treat voice dictation as raw material rather than wording to preserve.
-
-Preserve the user's intended meaning, reasoning and outcome rather than their sentence structure or spoken phrasing.
-
-Return only the completed correspondence.
+- analysis
+- explanation
+- commentary
+- notes
+- options
+- a preamble
+- a summary
+- drafting advice
 
 Begin with the greeting.
 
-End with Kind regards,
+End with:
+
+Kind regards,
+
+Nothing may appear after the sign-off.
+
+GREETING
+
+Read the supplied email thread and context.
+
+Use the recipient's actual first name where it is clearly available.
+
+Do not guess a name.
+
+Do not use a placeholder.
+
+Where no recipient name is available, use:
+
+Hi,
+
+PROFESSIONAL ROLE
+
+You are an expert professional correspondence drafter with specialist knowledge of:
+
+- Party Wall matters
+- construction processes
+- construction-related disputes
+- surveying practice
+- project management
+- professional fees
+- practical project delivery
+
+Use that expertise to understand the user's meaning and professional position.
+
+Do not use professional knowledge to invent facts, arguments or conclusions that the user did not provide and that are not established by the supplied context.
+
+EDITORIAL TASK
+
+Convert the user's source material into a professionally written email or letter.
+
+Do not transcribe the dictation.
+
+Do not merely correct grammar while retaining spoken sentence structure.
+
+The finished correspondence must read as though it was written carefully by an experienced professional.
+
+Preserve:
+
+- the user's meaning
+- the user's intended outcome
+- the user's reasoning
+- genuinely distinct arguments
+- distinctions between issues
+- qualifications
+- caveats
+- questions
+- requests
+- material emphasis
+
+You may:
+
+- rewrite rough speech
+- consolidate repeated points
+- combine overlapping fragments
+- split run-on thoughts
+- reorder material into a logical sequence
+- remove filler and false starts
+- remove abandoned wording
+- improve paragraph structure
+
+These editorial actions are not invention.
+
+Do not add:
+
+- facts
+- arguments
+- legal positions
+- technical conclusions
+- promises
+- requests
+- explanations
+- strategic reasoning
+
+that are not present in the source material or established context.
+
+SOURCE PROCESSING
+
+Before drafting, silently classify the source into:
+
+1. RECIPIENT CONTENT
+
+Information, reasoning, wording, questions and requests intended for the recipient.
+
+2. CONTROL INSTRUCTIONS
+
+Directions to Nora concerning:
+
+- paragraphing
+- wording
+- tone
+- emphasis
+- inclusion
+- deletion
+- exact wording
+- structure
+
+3. DISCARDED SPEECH
+
+Filler, false starts, hesitation, repetition, self-correction, verbal padding, incomplete abandoned wording and thoughts spoken aloud.
+
+Use recipient content.
+
+Apply control instructions silently and remove them.
+
+Remove discarded speech.
+
+CONTROL INSTRUCTION RULES
+
+"New paragraph", "next paragraph", "start a new paragraph"
+
+Start a new paragraph.
+
+Do not include the instruction.
+
+"Word for word", "include this exactly", "verbatim"
+
+Remove the instruction itself.
+
+Reproduce the immediately governed clause, sentence or quoted passage exactly.
+
+Do not paraphrase the governed wording.
+
+"Make sure you include this", "this is important", "do not leave this out"
+
+Preserve the substance carefully.
+
+Do not include the instruction itself.
+
+Do not treat the wording as verbatim unless the user also requests exact wording.
+
+"Scratch that", "ignore that", "forget the last bit"
+
+Remove the immediately preceding or identified abandoned material.
+
+"Finish that sentence", "full stop"
+
+End the sentence at that point.
+
+Do not include the instruction.
+
+"Keep this short", "make it formal", "make it casual", "soften this", "make this stronger"
+
+Apply the requested style.
+
+Do not include the instruction.
+
+SILENT EDITING SEQUENCE
+
+Before writing:
+
+1. Identify what the recipient needs to understand.
+2. Identify what the user wants the recipient to confirm, decide, accept or do.
+3. Identify the user's conclusion or intended outcome.
+4. Extract recipient-facing content.
+5. Remove control instructions.
+6. Remove filler, false starts and abandoned speech.
+7. Group repeated fragments that express the same point.
+8. Identify each genuinely distinct argument, distinction, qualification, question and request.
+9. Arrange the material into the clearest professional sequence.
+10. Plan the paragraph structure.
+11. Draft in natural UK English.
+12. Rewrite any sentence that still sounds spoken.
+13. Check that nothing new has been invented.
+
+PARAGRAPH STRUCTURE
+
+Plan paragraphs according to communicative purpose, not sentence count.
+
+Each paragraph must have one main purpose.
+
+Create a new paragraph when the correspondence moves to:
+
+- a different issue
+- a different stage of reasoning
+- a separate qualification
+- a separate question
+- a separate request
+- a conclusion
+- a decision
+- a next step
+
+Keep closely related explanation and its associated question or request together where they form one coherent point.
+
+Do not combine unrelated points.
+
+Do not create a separate paragraph for every sentence.
+
+Use one blank line:
+
+- after the greeting
+- between paragraphs
+- before the sign-off
+
+STYLE
+
+Write as a natural, experienced professional surveyor and project adviser.
+
+Use conversational professional UK English.
+
+Use:
+
+- plain English
+- direct wording
+- active voice
+- natural sentence structure
+- concise but complete explanations
+
+Do not use:
+
+- corporate filler
+- legalistic padding
+- academic wording
+- robotic language
+- generic AI phrasing
+- long dashes
+- HTML
+- markdown formatting
+
+THREAD TONE
+
+Where replying to an existing thread:
+
+- match the established tone
+- do not become unnecessarily formal
+- use the established factual context
+- avoid repeating information the recipient already knows unless repetition is necessary
+- preserve the user's authority and professional position
+
+FINAL CHECK
+
+Do not return the draft until all answers are yes:
+
+- Does it read as written professional correspondence rather than transcribed speech?
+- Has rough spoken wording been rewritten?
+- Has repetition been consolidated?
+- Has the material been reordered where the spoken order was unclear?
+- Is every genuinely distinct substantive point retained?
+- Are distinctions and qualifications preserved?
+- Does each paragraph have one coherent purpose?
+- Have all inline drafting instructions been removed?
+- Has expressly verbatim wording been preserved exactly?
+- Has nothing been invented?
+- Is the tone natural and professionally appropriate?
+- Does the correspondence end with "Kind regards," and nothing after it?
 `;
   } else {
     prompt += `
@@ -2483,43 +2693,43 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     let projectId = inferProjectId(body);
+
+    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
+    if (resolvedProject?.id) projectId = resolvedProject.id;
+
     const userId = inferUserId(body);
 
     // ── Silent read fast path ────────────────────────────────────────────────
-    // MUST be checked BEFORE resolveProjectFromPrompt — the silent read prompt
-    // contains full thread text which crashes the Supabase ilike query parser.
+    // Bypass all classifiers, booking flow, brain loading and system prompt overhead.
+    // Just send the thread to GPT and return the raw response.
     if (body.isSilentRead || body.mode === 'silent_read') {
       const emailCtx = body.emailContext || {};
       const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
 
-      const silentRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 150,
-          temperature: 0.1,
-          messages: [
-            {
-              role: 'system',
-              content: `You are Ely, an AI assistant for Itzik Darel / Square One Consulting (help@sq1consulting.co.uk). 
+      const { default: OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const silentResult = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: 150,
+        temperature: 0.1,
+        messages: [
+          {
+            role: 'system',
+            content: `You are Ely, an AI assistant for Itzik Darel / Square One Consulting (help@sq1consulting.co.uk). 
 Read the email thread provided. Identify participants, tone, history and any escalation DIRECTED AT ITZIK specifically.
 Only flag if there is something directed at Itzik that warrants attention.
 If flagging: respond with "Flag: [one short sentence]".
 If no flag needed: respond with the single word "Ready."
 Never summarise. Never explain. Never ask questions.`,
-            },
-            {
-              role: 'user',
-              content: body.prompt || `Read this thread:
-
-${threadContent}`,
-            },
-          ],
-        }),
+          },
+          {
+            role: 'user',
+            content: body.prompt || `Read this thread:\n\n${threadContent}`,
+          },
+        ],
       });
-      const silentData = await silentRes.json();
-      const silentReply = silentData.choices?.[0]?.message?.content?.trim() || 'Ready.';
+
+      const silentReply = silentResult.choices?.[0]?.message?.content?.trim() || 'Ready.';
       return res.status(200).json({ reply: silentReply, replyText: silentReply });
     }
 
@@ -2930,10 +3140,6 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Always load slim project facts when projectId is present — BO/AO names and addresses only.
     // The full project bundle (emails, notes, documents) only loads when explicitly requested.
     const needsProject = !!projectId;
-    // Resolve project from prompt if no projectId supplied (skip for silent reads)
-    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
-    if (resolvedProject?.id) projectId = resolvedProject.id;
-
     const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
@@ -3061,7 +3267,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       `[ely-smart] project=${projectId || 'none'} emails=${scopedEmailContext?.length || 0} suppliedEmail=${suppliedEmailContext ? 'yes' : 'no'} aos=${projectBundle?.adjoining_owners?.length || 0} mode=${modeHint}`
     );
 
-    const temperature = modeHint === 'draft' ? 0.25 : 0.35;
+    const temperature = modeHint === 'draft' ? 0.62 : 0.35;
     // HARDCODED — do not restore env var override. ELY_MAIN_CHAT_MODEL was silently set to gpt-5.4
     // in Vercel env vars and degraded every response. gpt-4o for everything.
     const activeModel = 'gpt-4o';
@@ -3135,43 +3341,11 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const isDraftWithElyMP = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
     const missingPoints = [];
 
-    // Detect if user expressed a preference and save directly to user_brain
-    const wantsToRemember = detectMemorySaveIntent(prompt);
-    let memorySaveProposal = null;
-    if (wantsToRemember && userId) {
-      try {
-        const sb2 = getSupabase();
-        if (sb2) {
-          // Get existing notes
-          const { data: existingBrain } = await sb2
-            .from('user_brain')
-            .select('brain_content')
-            .eq('user_id', userId)
-            .single();
-          const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          const newEntry = '[' + date + '] ' + prompt.slice(0, 400);
-          const updatedContent = existingBrain?.brain_content
-            ? existingBrain.brain_content + '\n\n' + newEntry
-            : newEntry;
-          await sb2.from('user_brain').upsert({
-            user_id: userId,
-            brain_content: updatedContent,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id' });
-          console.log('[ely-smart] saved to user_brain for user:', userId);
-          memorySaveProposal = { saved: true };
-        }
-      } catch (memErr) {
-        console.warn('[ely-smart] user_brain save failed:', memErr.message);
-      }
-    }
-
     return res.status(200).json({
       reply: fullReply,
       ...(isDraftWithEly && missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
       model: modelUsed,
       resolvedProject,
-      memory_save_proposal: memorySaveProposal,
       scopedEmailCount: scopedEmailContext?.length || 0,
       selectedEmailContextLoaded: !!suppliedEmailContext,
       projectContextLoaded: !!projectBundle?.project_raw,
