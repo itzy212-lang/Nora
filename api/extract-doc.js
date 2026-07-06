@@ -38,72 +38,171 @@ function getMediaType(fileName) {
   return 'image/jpeg';
 }
 
-// Claude Vision prompt for drawings
-const DRAWING_PROMPT = `You are reading a construction drawing or architectural plan. Your job is to extract a COMPLETE, COUNTED list of every item visible — especially for electrical plans.
+// Drawing prompts — one per drawing type
+const PROMPTS = {
 
-IMPORTANT: Many UK architectural electrical plans do NOT show a separate legend box. Instead they use standard symbols directly on the plan. You must count these even without a legend.
+  general: `You are reading a construction drawing or architectural plan. Extract EVERYTHING visible — this is a general plan and may include architectural, structural, electrical, plumbing and finishing information all at once.
 
-STANDARD ELECTRICAL SYMBOLS TO COUNT (even without a legend):
-- "2" next to an outlet symbol = double switched socket outlet. COUNT EVERY INSTANCE across all rooms.
-- "1" next to an outlet symbol = single switched socket outlet. COUNT EVERY INSTANCE.
-- "P" = pendant ceiling light / ceiling rose. COUNT EVERY INSTANCE.
-- "W" = wall light. COUNT EVERY INSTANCE.
-- "R" = recessed downlight / spotlight. COUNT EVERY INSTANCE.
-- "S" = switch (1-gang unless number shown). COUNT EVERY INSTANCE.
-- "2S" or "S2" = 2-gang switch. COUNT EVERY INSTANCE.
-- "PIR" = PIR motion sensor / occupancy sensor. COUNT EVERY INSTANCE.
-- "TV" = TV aerial point. COUNT EVERY INSTANCE.
-- "CAT" or "DATA" = data/ethernet point. COUNT EVERY INSTANCE.
-- "SPKR" = speaker point. COUNT EVERY INSTANCE.
-- "EV" = electric vehicle charging point. COUNT EVERY INSTANCE.
-- "DC" = doorbell/door chime. COUNT EVERY INSTANCE.
-- "DB" = distribution board / consumer unit. COUNT EVERY INSTANCE.
-- "T" = thermostat. COUNT EVERY INSTANCE.
-- Shaver socket = shaver socket. COUNT EVERY INSTANCE.
-- Extractor fan = extractor fan. COUNT EVERY INSTANCE.
-- Towel rail (electric/dual fuel) = electric towel rail. COUNT EVERY INSTANCE.
-- Smoke detector / fire alarm = smoke/CO detector. COUNT EVERY INSTANCE.
-- Any symbol at a specific height notation (e.g. @450mm, @1050mm) = socket at that height. NOTE the height.
+Extract every scope item you can identify including:
+- New rooms, extensions, loft conversions, basement excavations
+- Wall removals, new walls, structural openings, lintels
+- New or altered bathrooms, en suites, cloakrooms, kitchens
+- Sanitaryware: baths, showers, WCs, basins, trays, enclosures
+- Electrical: sockets, switches, lights, consumer units, EV points, extractor fans
+- Plumbing: boilers, cylinders, underfloor heating, radiators, pipework runs
+- Roofing, windows, doors, glazing, bi-folds, rooflights
+- Flooring, tiling, plastering, decorating
+- Any structural elements: steels, beams, columns, foundations, retaining walls
+- External works: drainage, paving, fencing, landscaping
 
-CIRCUIT REFERENCES (e.g. C1, C2, C20 etc.) are lighting circuit labels — do NOT count these as separate items. They tell you which lighting circuit a fitting is on, not the type of fitting.
-
-METHOD:
-1. Go room by room across the entire plan
-2. Count EVERY symbol in EVERY room
-3. Add up totals per item type across all rooms
-4. Note the room breakdown in the description where useful
+Go area by area across the entire drawing. Do not skip anything. Group items by trade or category.
 
 Return ONLY valid JSON with no markdown:
 {
-  "site_address": "site address if visible",
-  "drawing_type": "floor plan / electrical plan / structural / etc",
-  "rooms": ["list of room names visible"],
+  "site_address": "if visible",
+  "drawing_type": "general architectural",
+  "rooms": ["list of rooms/spaces shown"],
   "scope_items": [
-    { "title": "Double switched socket outlet", "quantity": 24, "unit": "no.", "trade": "Electrical", "description": "Counted across all rooms: Kitchen 6, Living 4, Dining 2, etc." }
-  ],
-  "notes": "any other important notes visible on the drawing",
-  "legend_found": true
-}
-
-CRITICAL: Never return "located throughout the plan" as a quantity. Always give a real number. If you are unsure of an exact count, give your best estimate and note it.`;
-
-// Claude text prompt for written specs/tender packs
-const TEXT_PROMPT = `You are extracting project information from a construction tender package or specification document.
-
-Extract the following and return ONLY valid JSON with no markdown:
-{
-  "site_address": "full site address including postcode",
-  "client_name": "client or employer name",
-  "client_email": "client email if present",
-  "client_phone": "client phone if present",
-  "works_description": "brief description of the works (1-2 sentences)",
-  "contract_duration_weeks": "duration in weeks as number, or null",
-  "scope_items": [
-    { "title": "scope item title", "description": "brief description", "trade": "trade type e.g. Groundworks, Electrical, Plumbing", "quantity": null, "unit": null }
+    {
+      "title": "item title",
+      "description": "detail including quantities, locations, spec where visible",
+      "trade": "Architectural / Structural / Electrical / Plumbing / Finishes / External"
+    }
   ]
+}`,
+
+  electrical: `You are reading an electrical plan. Your job is to extract a COMPLETE, COUNTED list of every electrical item visible.
+
+STANDARD ELECTRICAL SYMBOLS TO COUNT:
+- "2" next to outlet symbol = double switched socket outlet
+- "1" next to outlet symbol = single switched socket outlet
+- "P" = pendant ceiling light / ceiling rose
+- "W" = wall light
+- "R" = recessed downlight / spotlight
+- "S" = switch (1-gang unless number shown)
+- "2S" or "S2" = 2-gang switch
+- "PIR" = PIR motion sensor
+- "TV" = TV aerial point
+- "CAT" or "DATA" = data/ethernet point
+- "SPKR" = speaker point
+- "EV" = electric vehicle charging point
+- "DC" = doorbell/door chime
+- "DB" = distribution board / consumer unit
+- "T" = thermostat
+- Shaver socket, extractor fan, electric towel rail, smoke detector — count each instance
+- Height notations e.g. @450mm, @1050mm — note the height
+
+CIRCUIT REFERENCES (C1, C2 etc.) are circuit labels — do NOT count as separate items.
+
+METHOD: Go room by room, count every symbol, total per item type across all rooms.
+
+Return ONLY valid JSON with no markdown:
+{
+  "site_address": "if visible",
+  "drawing_type": "electrical plan",
+  "rooms": ["list of rooms"],
+  "scope_items": [
+    {
+      "title": "item title e.g. Double switched socket outlet",
+      "description": "total count and room breakdown e.g. Kitchen 3, Living 4, Bedroom 1 2",
+      "trade": "Electrical"
+    }
+  ]
+}`,
+
+  plumbing: `You are reading a plumbing or mechanical services drawing. Extract every plumbing, drainage, heating and water item visible.
+
+Look for:
+- Sanitaryware: baths, showers, shower trays, WCs, basins, bidets, urinals
+- Kitchen: sink, dishwasher connection, washing machine connection
+- Hot water: boiler (type/location), unvented cylinder, megaflo, thermal store
+- Heating: radiators (count per room), underfloor heating zones, towel rails
+- Pipework: soil pipes, waste pipes, hot/cold supplies, gas supply
+- Drainage: gullies, manholes, inspection chambers, soakaways
+- Ventilation: MVHR, extract fans, passive vents
+- Specialist: water softener, heat pump, solar thermal, sprinkler system
+
+Go room by room. Note quantities and locations.
+
+Return ONLY valid JSON with no markdown:
+{
+  "site_address": "if visible",
+  "drawing_type": "plumbing / mechanical",
+  "rooms": ["list of rooms"],
+  "scope_items": [
+    {
+      "title": "item title",
+      "description": "detail including quantity, location, spec where visible",
+      "trade": "Plumbing / Mechanical"
+    }
+  ]
+}`,
+
+  structural: `You are reading a structural drawing or engineers plan. Extract every structural element, alteration and specification visible.
+
+Look for:
+- Wall removals and new structural openings
+- Steel beams (RSJ/UC/UB sections — note sizes if visible e.g. 203x203 UC)
+- Padstone, bearing plates, spreader plates
+- Columns and posts (steel, timber, concrete)
+- Foundations: new, underpinning, pile caps, ground beams
+- Retaining walls, basement construction
+- Roof structure: rafters, joists, purlins, ridge beam, hip/valley rafters
+- Floor structure: timber joists, steel trimmers, concrete slab
+- Lintels: sizes and locations
+- Temporary works notation
+- Load paths and point loads
+- Any demolition items noted
+
+Note sizes, specifications and locations wherever visible.
+
+Return ONLY valid JSON with no markdown:
+{
+  "site_address": "if visible",
+  "drawing_type": "structural",
+  "rooms": ["areas affected"],
+  "scope_items": [
+    {
+      "title": "item title e.g. Steel beam over kitchen opening",
+      "description": "spec, size, location e.g. 203x203 UC 46kg/m spanning 3.2m",
+      "trade": "Structural"
+    }
+  ]
+}`,
+
+};
+
+
+
+export const config = { api: { bodyParser: false } };
+
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
+// Extract text from docx using mammoth
+async function extractDocxText(filePath) {
+  const mammoth = await import('mammoth');
+  const result = await mammoth.extractRawText({ path: filePath });
+  return result.value;
 }
 
-Extract ALL scope items / work sections you can find. Include every line item, work section, or task described.`;
+// Convert file to base64 for Claude Vision
+function fileToBase64(filePath) {
+  const buf = fs.readFileSync(filePath);
+  return buf.toString('base64');
+}
+
+// Get media type for Claude Vision
+function getMediaType(fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.pdf') return 'application/pdf';
+  return 'image/jpeg';
+}
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -115,6 +214,8 @@ export default async function handler(req, res) {
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
     const fileName = file.originalFilename || file.newFilename || '';
+    const drawingType = (Array.isArray(fields.drawing_type) ? fields.drawing_type[0] : fields.drawing_type) || 'general';
+    const selectedPrompt = PROMPTS[drawingType] || PROMPTS.general;
     const ext = path.extname(fileName).toLowerCase();
     const isDrawing = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
     const isPdf = ext === '.pdf';
@@ -137,11 +238,11 @@ export default async function handler(req, res) {
       // produces poor/garbled results rather than a clear error.
       const contentParts = isPdf
         ? [
-            { type: 'text', text: DRAWING_PROMPT },
+            { type: 'text', text: selectedPrompt },
             { type: 'file', file: { filename: fileName || 'drawing.pdf', file_data: dataUrl } },
           ]
         : [
-            { type: 'text', text: DRAWING_PROMPT },
+            { type: 'text', text: selectedPrompt },
             { type: 'image_url', image_url: { url: dataUrl } },
           ];
 
