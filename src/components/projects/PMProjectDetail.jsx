@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
+import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 
 const card = () => ({
   background: 'var(--bg)',
@@ -824,6 +825,9 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [scopeLoading, setScopeLoading] = useState(false);
   const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
   const [drawingExtracting, setDrawingExtracting] = useState(false);
+  const [dualAIEnabled, setDualAIEnabled] = useState(false);
+  const [dualAIReview, setDualAIReview] = useState(null); // { diff, gptItems, file }
+  const [dualAIVerifying, setDualAIVerifying] = useState(false);
   const [drawingError, setDrawingError] = useState('');
 
   // Load scope items
@@ -1909,10 +1913,14 @@ Proceed?`
                   + Add Item
                 </button>
                 <button onClick={() => document.getElementById('drawing-upload-input').click()}
-                  disabled={drawingExtracting}
-                  style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: drawingExtracting ? 0.6 : 1 }}>
-                  {drawingExtracting ? '🔍 Nora\'s on it...' : '📐 Upload drawings'}
+                  disabled={drawingExtracting || dualAIVerifying}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (drawingExtracting || dualAIVerifying) ? 0.6 : 1 }}>
+                  {dualAIVerifying ? '🔎 Claude checking...' : drawingExtracting ? '🔍 Nora\'s on it...' : '📐 Upload drawings'}
                 </button>
+                <label title="Claude independently checks GPT's extraction for mistakes and missing items" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={dualAIEnabled} onChange={e => setDualAIEnabled(e.target.checked)} style={{ cursor: 'pointer' }} />
+                  Dual AI verify
+                </label>
                 <input id="drawing-upload-input" type="file" multiple
                   accept=".pdf,.jpg,.jpeg,.png,.docx,.doc,.txt"
                   style={{ display: 'none' }}
@@ -1924,6 +1932,7 @@ Proceed?`
                     try {
                       // Process all files and merge results
                       const allItems = [];
+                      const allExtractedFiles = [];
                       for (const file of files) {
                         const formData = new FormData();
                         formData.append('file', file);
@@ -1931,12 +1940,42 @@ Proceed?`
                         const json = await res.json();
                         if (json.extracted?.scope_items?.length) {
                           allItems.push(...json.extracted.scope_items);
+                          // If dual AI enabled, store file for verification
+                          if (dualAIEnabled) {
+                            allExtractedFiles.push({ file, items: json.extracted.scope_items, extracted: json.extracted });
+                          }
                         }
                       }
                       if (allItems.length === 0) {
                         setDrawingError('No scope items found in the uploaded files.');
                         return;
                       }
+
+                      // Dual AI verification — send to Claude to check GPT's work
+                      if (dualAIEnabled && allExtractedFiles.length > 0) {
+                        setDrawingExtracting(false);
+                        setDualAIVerifying(true);
+                        try {
+                          const firstFile = allExtractedFiles[0];
+                          const verifyFormData = new FormData();
+                          verifyFormData.append('file', firstFile.file);
+                          verifyFormData.append('gpt_extraction', JSON.stringify(firstFile.extracted));
+                          const verifyRes = await fetch('/api/verify-extraction', { method: 'POST', body: verifyFormData });
+                          const verifyJson = await verifyRes.json();
+                          setDualAIVerifying(false);
+                          if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
+                            // Show review overlay
+                            setDualAIReview({ diff: verifyJson.diff, gptItems: allItems });
+                            e.target.value = '';
+                            return;
+                          }
+                          // No issues — fall through to save normally
+                        } catch (err) {
+                          console.warn('[dual-ai] verification failed, proceeding with GPT only:', err);
+                          setDualAIVerifying(false);
+                        }
+                      }
+
                       // Save all items to scope_items table
                       const saved = [];
                       for (let i = 0; i < allItems.length; i++) {
@@ -1972,6 +2011,33 @@ Proceed?`
               <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#dc2626' }}>
                 {drawingError}
               </div>
+            )}
+            {dualAIReview && (
+              <DualAIReviewOverlay
+                diff={dualAIReview.diff}
+                gptItems={dualAIReview.gptItems}
+                onClose={() => setDualAIReview(null)}
+                onFinalise={async (finalItems) => {
+                  const saved = [];
+                  for (let i = 0; i < finalItems.length; i++) {
+                    const item = finalItems[i];
+                    const { data: newItem } = await sb.from('scope_items').insert([{
+                      project_id: project.id,
+                      title: item.title,
+                      description: item.description || null,
+                      trade: item.trade || null,
+                      position: (scopeItems.length) + i,
+                      extracted_by_ai: true,
+                      markup_type: 'none',
+                      client_charge: 0,
+                      cost: null,
+                    }]).select('*').single();
+                    if (newItem) saved.push(newItem);
+                  }
+                  setScopeItems(prev => [...prev, ...saved]);
+                  setDualAIReview(null);
+                }}
+              />
             )}
             {drawingExtracting && (
               <div style={{ padding: '12px 16px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, marginBottom: 10, fontSize: 13, color: '#7c3aed', fontWeight: 600 }}>
