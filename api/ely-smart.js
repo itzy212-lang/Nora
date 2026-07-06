@@ -3291,6 +3291,30 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           temperature,
         };
 
+    // ── DEBUG CAPTURE — fires only when body.debug === true ─────────────────
+    if (body.debug === true) {
+      try {
+        const sbDebug = getSupabase();
+        if (sbDebug) {
+          const systemMsg = messages.find(m => m.role === 'system');
+          await sbDebug.from('debug_payloads').insert([{
+            model: modelPayload.model || activeModel,
+            temperature: modelPayload.temperature ?? null,
+            mode: modeHint,
+            surface: body.surface || null,
+            messages: messages,
+            system_prompt_length: systemMsg?.content?.length || 0,
+            total_messages: messages.length,
+            openai_response: null,
+          }]);
+          console.log('[ely-smart] debug payload captured');
+        }
+      } catch (dbErr) {
+        console.warn('[ely-smart] debug capture failed:', dbErr.message);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -3340,6 +3364,33 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const fullReply = cleanOutput(data.choices?.[0]?.message?.content || '');
     const modelUsed = data.model || 'gpt-5.4-mini';
     console.log('[ely-smart] responded with model:', modelUsed);
+
+    // ── Update debug capture with response ────────────────────────────────
+    if (body.debug === true) {
+      try {
+        const sbDebug = getSupabase();
+        if (sbDebug) {
+          const { data: latest } = await sbDebug
+            .from('debug_payloads')
+            .select('id')
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .single();
+          if (latest?.id) {
+            await sbDebug.from('debug_payloads').update({
+              openai_response: {
+                model: data.model,
+                usage: data.usage,
+                reply_preview: (data.choices?.[0]?.message?.content || '').slice(0, 2000),
+              }
+            }).eq('id', latest.id);
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[ely-smart] debug response capture failed:', dbErr.message);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     // ── Draft With Ely: missing points analysis ───────────────────────────
     // Disabled: running this synchronously was causing mobile connection drops
