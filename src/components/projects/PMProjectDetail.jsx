@@ -826,6 +826,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
   const [drawingExtracting, setDrawingExtracting] = useState(false);
   const [dualAIEnabled, setDualAIEnabled] = useState(() => localStorage.getItem('nora_dual_ai') === 'true');
+  const [drawingType, setDrawingType] = useState('general');
   const [dualAIReview, setDualAIReview] = useState(null); // { diff, gptItems, file }
   const [dualAIVerifying, setDualAIVerifying] = useState(false);
   const [drawingError, setDrawingError] = useState('');
@@ -1912,6 +1913,20 @@ Proceed?`
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   + Add Item
                 </button>
+                {/* Drawing type selector */}
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {[
+                    { key: 'general', label: '🏗️ General' },
+                    { key: 'electrical', label: '⚡ Electrical' },
+                    { key: 'plumbing', label: '🔧 Plumbing' },
+                    { key: 'structural', label: '🏛️ Structural' },
+                  ].map(t => (
+                    <button key={t.key} onClick={() => setDrawingType(t.key)}
+                      style={{ padding: '5px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1.5px solid', borderColor: drawingType === t.key ? '#7c3aed' : '#d1d5db', background: drawingType === t.key ? '#f5f3ff' : '#fff', color: drawingType === t.key ? '#7c3aed' : '#6b7280' }}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
                 <button onClick={() => document.getElementById('drawing-upload-input').click()}
                   disabled={drawingExtracting || dualAIVerifying}
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (drawingExtracting || dualAIVerifying) ? 0.6 : 1 }}>
@@ -1936,6 +1951,7 @@ Proceed?`
                       for (const file of files) {
                         const formData = new FormData();
                         formData.append('file', file);
+                        formData.append('drawing_type', drawingType);
                         const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
                         const json = await res.json();
                         if (json.extracted?.scope_items?.length) {
@@ -1960,6 +1976,7 @@ Proceed?`
                           const verifyFormData = new FormData();
                           verifyFormData.append('file', firstFile.file);
                           verifyFormData.append('gpt_extraction', JSON.stringify(firstFile.extracted));
+                          verifyFormData.append('drawing_type', drawingType);
                           const verifyRes = await fetch('/api/verify-extraction', { method: 'POST', body: verifyFormData });
                           const verifyJson = await verifyRes.json();
                           setDualAIVerifying(false);
