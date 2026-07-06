@@ -137,8 +137,11 @@ export default function ChatInputBar({
     if (meta?.restarting) return;
     if (meta?.recording) {
       setIsRecording(true);
-      if (meta.interim || meta.currentPhrase) {
-        setInterimText(meta.currentPhrase || meta.interim || '');
+      // Only set interim text if there's actual speech content — not status messages
+      const phrase = meta.currentPhrase || meta.interim || '';
+      const isStatusMessage = phrase.startsWith('🔴') || phrase.toLowerCase().includes('recording');
+      if (phrase && !isStatusMessage) {
+        setInterimText(phrase);
       }
     } else {
       // recording stopped — show send button immediately
