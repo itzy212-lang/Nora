@@ -158,7 +158,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
-  const { send } = useEly({ surface: 'email_composer' });
+  const { send } = useEly({ surface: 'inbox_draft' });
   const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
   useEffect(() => {
@@ -227,7 +227,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     try {
       const extraOpts = {
-        mode: 'draft_with_ely',
+        mode: 'draft',
         workflowStage: 'draft_with_ely',
         sessionId,
         emailId: email?.id || email?.external_id,
