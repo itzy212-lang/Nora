@@ -1159,7 +1159,19 @@ RULES:
 
 ACTIVE MODE: DRAFT
 
-OUTPUT ONLY THE COMPLETED CORRESPONDENCE. Begin with the greeting. End with Kind regards, — nothing after it.
+Your current task is to draft the completed correspondence.
+
+Apply the drafting philosophy defined in the master brain in full.
+
+Treat voice dictation as raw material rather than wording to preserve.
+
+Preserve the user's intended meaning, reasoning and outcome rather than their sentence structure or spoken phrasing.
+
+Return only the completed correspondence.
+
+Begin with the greeting.
+
+End with Kind regards,
 `;
   } else {
     prompt += `
