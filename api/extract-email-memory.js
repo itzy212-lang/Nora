@@ -1,7 +1,6 @@
-import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -57,14 +56,18 @@ ${emailContext}
 EMAIL BODY:
 ${body.slice(0, 6000)}`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 800,
-      temperature: 0.1,
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 800,
+        temperature: 0.1,
+      }),
     });
-
-    const raw = completion.choices[0]?.message?.content?.trim() || '[]';
+    const openaiData = await openaiRes.json();
+    const raw = openaiData.choices?.[0]?.message?.content?.trim() || '[]';
     
     let facts = [];
     try {
