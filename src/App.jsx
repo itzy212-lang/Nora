@@ -28,6 +28,7 @@ import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
 import DisputeAgreement from './components/dispute/DisputeAgreement';
 import NotepadOverlay from './components/shared/NotepadOverlay';
+import DebugPayloadViewer from './components/shared/DebugPayloadViewer';
 import QuickRefOverlay from './components/shared/QuickRefOverlay';
 
 function StubView({ icon, title, subtitle }) {
