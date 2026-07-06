@@ -696,6 +696,12 @@ function hasExplicitDraftRequest(prompt = '') {
     /\bi want to draft\b/i.test(p) ||
     /\bcan (you|we) draft\b/i.test(p) ||
     /\blet'?s (draft|write|prepare|compose)\b/i.test(p) ||
+    /\blet'?s (respond|reply)\b/i.test(p) ||
+    /\blet'?s (respond|reply) to\b/i.test(p) ||
+    /\brespond to (lewis|him|her|them|this|the email)\b/i.test(p) ||
+    /\breply to (lewis|him|her|them|this|the email)\b/i.test(p) ||
+    /\b(can|could) (you|we) (respond|reply)\b/i.test(p) ||
+    /\b(respond|reply) (to|saying|with)\b/i.test(p) ||
     /\bjust (draft|write|give me a draft)\b/i.test(p) ||
     /\bgive me (a |the )?(draft|email)\b/i.test(p) ||
     /\bproduce (a |the )?(draft|email|letter)\b/i.test(p);
