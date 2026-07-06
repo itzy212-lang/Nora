@@ -2471,15 +2471,11 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     let projectId = inferProjectId(body);
-
-    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
-    if (resolvedProject?.id) projectId = resolvedProject.id;
-
     const userId = inferUserId(body);
 
     // ── Silent read fast path ────────────────────────────────────────────────
-    // Bypass all classifiers, booking flow, brain loading and system prompt overhead.
-    // Just send the thread to GPT and return the raw response.
+    // MUST be checked BEFORE resolveProjectFromPrompt — the silent read prompt
+    // contains full thread text which crashes the Supabase ilike query parser.
     if (body.isSilentRead || body.mode === 'silent_read') {
       const emailCtx = body.emailContext || {};
       const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
@@ -2922,6 +2918,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Always load slim project facts when projectId is present — BO/AO names and addresses only.
     // The full project bundle (emails, notes, documents) only loads when explicitly requested.
     const needsProject = !!projectId;
+    // Resolve project from prompt if no projectId supplied (skip for silent reads)
+    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
+    if (resolvedProject?.id) projectId = resolvedProject.id;
+
     const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
