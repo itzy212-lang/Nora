@@ -1069,6 +1069,33 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
   }
 
+  // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
+  // Loads when on a party wall surface or drafting/reviewing party wall matters.
+  // Does NOT load for simple general chat with no party wall content.
+  if (brain?.knowledge_layer?.system_prompt) {
+    prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
+  }
+
+  // ── DRAFTING LAYER — detailed drafting rules ─────────────────────────────
+  // Loads only when actively drafting correspondence.
+  // Only injects if the database returns an active drafting layer record.
+  if (brain?.drafting_layer?.system_prompt) {
+    prompt += `\n\n--- DRAFTING RULES ---\n\n${brain.drafting_layer.system_prompt}`;
+  }
+
+  // ── USER BRAIN — personal preferences, writing voice, fees ──────────────
+  // Always loads — small, personalised to this user.
+  if (brain?.user_brain) {
+    const ub = brain.user_brain;
+    // Single brain_content field — all user preferences in one place
+    const userParts = [
+      ub.brain_content || null,
+    ].filter(Boolean);
+    if (userParts.length) {
+      prompt += `\n\n--- USER PREFERENCES ---\n\n${userParts.join('\n\n')}`;
+    }
+  }
+
   // ── DOMAIN LAYER — injected when a specific mode is active ────────────
   // This is the second instruction set loaded from the layered brain loader.
   // It adds mode-specific rules on top of the global layer without replacing it.
@@ -3415,6 +3442,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
