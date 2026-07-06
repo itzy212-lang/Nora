@@ -817,15 +817,17 @@ function inferModeHint(surface, prompt = '', body = {}) {
   // 1. Explicit discussion/analysis request -> DISCUSS
   // 2. Recipient-facing wording or drafting trigger -> DRAFT
   // 3. No substantive prompt -> EMAIL_SUMMARY
-  if (explicitMode.includes('draft_with_ely')) {
+  // Draft With Ely surface — covers both old workflowStage and new mode/surface values
+  const isDraftWithElySurface = explicitMode.includes('draft_with_ely')
+    || surface === 'inbox_draft'
+    || (explicitMode === 'draft' && (body.surface === 'inbox_draft' || body.workflowStage === 'draft_with_ely'));
+
+  if (isDraftWithElySurface) {
     const p = String(prompt || '').trim();
     if (!p) return 'email_summary';
-    // Discussion wins if the user clearly asks for analysis
+    // Discussion wins only if user clearly asks for analysis — not just a question in dictation
     if (hasDiscussionIntent(p)) return 'discuss';
-    // Otherwise treat any content as a draft request — this surface exists for drafting
-    // looksLikeEmailDictation catches recipient-facing wording
-    // hasExplicitDraftRequest catches "respond saying", "reply saying" etc
-    // For anything else on this surface that isn't discussion, default to draft
+    // Everything else on this surface defaults to draft — it exists for drafting
     return 'draft';
   }
 
@@ -2750,30 +2752,34 @@ export default async function handler(req, res) {
       const emailCtx = body.emailContext || {};
       const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
 
-      const { default: OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const silentResult = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        max_tokens: 150,
-        temperature: 0.1,
-        messages: [
-          {
-            role: 'system',
-            content: `You are Ely, an AI assistant for Itzik Darel / Square One Consulting (help@sq1consulting.co.uk). 
+      const silentRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 150,
+          temperature: 0.1,
+          messages: [
+            {
+              role: 'system',
+              content: `You are Ely, an AI assistant for Itzik Darel / Square One Consulting (help@sq1consulting.co.uk). 
 Read the email thread provided. Identify participants, tone, history and any escalation DIRECTED AT ITZIK specifically.
 Only flag if there is something directed at Itzik that warrants attention.
 If flagging: respond with "Flag: [one short sentence]".
 If no flag needed: respond with the single word "Ready."
 Never summarise. Never explain. Never ask questions.`,
-          },
-          {
-            role: 'user',
-            content: body.prompt || `Read this thread:\n\n${threadContent}`,
-          },
-        ],
-      });
+            },
+            {
+              role: 'user',
+              content: body.prompt || `Read this thread:
 
-      const silentReply = silentResult.choices?.[0]?.message?.content?.trim() || 'Ready.';
+${threadContent}`,
+            },
+          ],
+        }),
+      });
+      const silentData = await silentRes.json();
+      const silentReply = silentData.choices?.[0]?.message?.content?.trim() || 'Ready.';
       return res.status(200).json({ reply: silentReply, replyText: silentReply });
     }
 
