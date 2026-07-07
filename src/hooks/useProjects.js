@@ -47,8 +47,14 @@ export function useProjects() {
           };
         });
 
-        dispatch({ type: 'SET_PROJECTS', payload: enriched });
-        return enriched;
+        // Sort by ref number so all project dropdowns are in numerical order
+        const sorted = [...enriched].sort((a, b) => {
+          const na = parseInt((a.ref || '').replace(/\D/g, ''), 10) || 0;
+          const nb = parseInt((b.ref || '').replace(/\D/g, ''), 10) || 0;
+          return na - nb;
+        });
+        dispatch({ type: 'SET_PROJECTS', payload: sorted });
+        return sorted;
       }
 
       dispatch({ type: 'SET_PROJECTS', payload: [] });
