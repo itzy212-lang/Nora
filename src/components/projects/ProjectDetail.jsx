@@ -2253,9 +2253,8 @@ function ProjectChat({ project, onOpenComposer }) {
           overscrollBehavior: 'contain',
           display: 'flex',
           flexDirection: 'column',
-          paddingBottom: isMobile ? 120 : 0,
           gap: 10,
-          padding: isMobile ? '0 0 10px' : '0 0 12px',
+          padding: isMobile ? '0 0 130px' : '0 0 12px',
         }}>
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', padding: isMobile ? '50px 16px' : '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
