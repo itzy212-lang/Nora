@@ -1147,7 +1147,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       ub.brain_content || null,
     ].filter(Boolean);
     if (userParts.length) {
-      prompt += `\n\n--- USER PREFERENCES ---\n\n${userParts.join('\n\n')}`;
+      prompt += `\n\n--- USER PREFERENCES — APPLY THROUGHOUT ---\n\n${userParts.join('\n\n')}\n\nThe above preferences represent Itzik's established voice, style and fee structure. They override any default style. Apply them throughout every draft.`;
     }
   }
 
