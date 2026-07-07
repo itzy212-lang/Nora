@@ -1808,11 +1808,19 @@ if (syncErr) throw syncErr;
     const q = search.toLowerCase();
     const rawName = e.raw_recipients?.from?.name || '';
     const toNames = (e.raw_recipients?.to || []).map(r => r.name || '').join(' ');
+    // to_emails can be JSON array [{name, email}] or a plain string
+    const toEmailsRaw = e.to_emails || e.to_email || '';
+    const toEmailsStr = typeof toEmailsRaw === 'string'
+      ? toEmailsRaw
+      : Array.isArray(toEmailsRaw)
+        ? toEmailsRaw.map(r => `${r.name || ''} ${r.email || ''}`).join(' ')
+        : JSON.stringify(toEmailsRaw);
     return (
       (e.sender_name || rawName).toLowerCase().includes(q) ||
       (e.sender_email || '').toLowerCase().includes(q) ||
       (e.subject || '').toLowerCase().includes(q) ||
-      toNames.toLowerCase().includes(q)
+      toNames.toLowerCase().includes(q) ||
+      toEmailsStr.toLowerCase().includes(q)
     );
   });
 
