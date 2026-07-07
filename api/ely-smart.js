@@ -1095,526 +1095,63 @@ ${cleanEmailBody(email.body || '')}
 }
 
 async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '' }) {
-  // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
-  // When instructions conflict, apply this order:
-  // 1. Current user instruction
-  // 2. Detected intent (modeHint from classifier)
-  // 3. Active mode rules (injected below based on modeHint)
-  // 4. Domain rules (party wall, award review etc.)
-  // 5. Supplied project/email/document context
-  // 6. User preferences and standing memory
-  // 7. General style preferences
-  //
-  // Memory must NEVER override the current user instruction or detected intent.
-  // Surface must NEVER override detected intent.
-  // Draft With Ely is a context surface, not a command to draft.
-  //
-  // Build Package 2: Memory filtering implemented in buildMessages() via isMemoryExcluded().
-  // Excluded from runtime: preserve_working_features, soc_template, email_style, assistant_role.
-  // ──────────────────────────────────────────────────────────────────────────
-  let prompt = brain?.instruction_set?.system_prompt || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
+  // ── ELY V4 PROMPT ASSEMBLY ─────────────────────────────────────────────
+  // Layer order per 06_LOADING_ARCHITECTURE.md:
+  // 1. global_core
+  // 2. global_drafting
+  // 3. global_party_wall_knowledge (when relevant)
+  // 4. user_profile (from user_brain)
+  // 5. project facts and project context
+  // 6. project memory facts
+  // 7. relevant project emails
+  // ──────────────────────────────────────────────────────────────────────
 
-  // Append output rules if present
-  if (brain?.instruction_set?.output_rules) {
-    prompt += `\n\n${brain.instruction_set.output_rules}`;
+  // Layer 1: Global Core
+  let prompt = brain?.global_core?.system_prompt
+    || brain?.instruction_set?.system_prompt
+    || 'You are Ely, an AI assistant for a Party Wall surveying practice. Always use British English spelling and terminology.';
 
+  // Layer 2: Global Drafting — always injected (controls how Ely writes on all surfaces)
+  if (brain?.global_drafting?.system_prompt) {
+    prompt += `\n\n--- GLOBAL DRAFTING ---\n\n${brain.global_drafting.system_prompt}`;
   }
 
-  // Append behaviour rules if present
-  if (brain?.instruction_set?.behaviour_rules) {
-    prompt += `\n\n${brain.instruction_set.behaviour_rules}`;
-  }
-
-  // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
-  // Loads when on a party wall surface or drafting/reviewing party wall matters.
+  // Layer 3: Global Party Wall Knowledge — injected when surface/mode is relevant
   if (brain?.knowledge_layer?.system_prompt) {
-    prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
+    prompt += `\n\n--- PARTY WALL & CONSTRUCTION KNOWLEDGE ---\n\n${brain.knowledge_layer.system_prompt}`;
   }
 
-  // ── DRAFTING LAYER — detailed drafting rules ─────────────────────────────
-  // Loads only when actively drafting correspondence.
-  // Only injects if the database returns an active drafting layer record.
-  if (brain?.drafting_layer?.system_prompt) {
-    prompt += `\n\n--- DRAFTING RULES ---\n\n${brain.drafting_layer.system_prompt}`;
+  // Layer 4: User Profile — writing voice, fees, banned phrases, sign-off
+  if (brain?.user_brain?.brain_content) {
+    prompt += `\n\n--- USER PROFILE ---\n\n${brain.user_brain.brain_content}`;
   }
 
-  // ── USER BRAIN — merged into ely_master_v3 system_prompt directly ────────
-  // Writing voice, fees, banned phrases, and personal preferences are now part
-  // of the core brain. No separate injection needed.
-
-    // ── DOMAIN LAYER — injected when a specific mode is active ────────────
-  // This is the second instruction set loaded from the layered brain loader.
-  // It adds mode-specific rules on top of the global layer without replacing it.
-  if (brain?.domain_layer) {
-    const dl = brain.domain_layer;
-    const parts = [dl.system_prompt, dl.output_rules, dl.behaviour_rules].filter(Boolean);
-    if (parts.length) {
-      prompt += `\n\n--- DOMAIN LAYER: ${dl.name || dl.layer_type || 'specialist'} ---\n\n${parts.join('\n\n')}`;
-    }
-  }
-
-  // ── party_wall_drafting — test injection for draft mode ─────────────────
-  // Loads the party_wall_drafting record by name from the DB for draft mode only.
-  // This record was active on 27 June and may be the missing drafting identity layer.
-  // It is NOT renamed in the DB — this is a controlled test only.
-  // Remove this block if the test is inconclusive. Merge into get_ely_brain_v2 if confirmed.
-  if (modeHint === 'draft') {
-    try {
-      const sbPwd = getSupabase();
-      if (sbPwd) {
-        const { data: pwdRecord } = await sbPwd
-          .from('ai_instruction_sets')
-          .select('name, system_prompt, output_rules, behaviour_rules')
-          .eq('name', 'party_wall_drafting')
-          .eq('active', true)
-          .maybeSingle();
-
-        if (pwdRecord) {
-          const pwdParts = [pwdRecord.system_prompt, pwdRecord.output_rules, pwdRecord.behaviour_rules].filter(Boolean);
-          if (pwdParts.length) {
-            prompt += `\n\n--- DRAFTING IDENTITY: party_wall_drafting ---\n\n${pwdParts.join('\n\n')}`;
-            console.log('[ely-smart] party_wall_drafting injected:', pwdParts.length, 'parts');
-          }
-        } else {
-          console.log('[ely-smart] party_wall_drafting not found or inactive — skipped');
-        }
-      }
-    } catch (pwdErr) {
-      console.warn('[ely-smart] party_wall_drafting load failed silently:', pwdErr.message);
-    }
-  }
-
+  // Runtime standard block (fee quoting tag, AO subject ref tag)
   prompt += `\n\n${GLOBAL_AI_STANDARD}\n`;
 
+  // Mode-specific block
   if (modeHint === 'email_summary') {
-    prompt += `
-
-ACTIVE MODE: email_thread_summary
-
-YOUR TASK:
-You are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary and strategic first view. Do not draft correspondence.
-
-Structure your response in plain text like this:
-
-From:
-[sender name and firm]
-
-Latest email is asking for:
-[concise points from the latest email]
-
-Context from the thread:
-[relevant earlier history, changes of position, pattern or narrative]
-
-What stands out:
-[the issue beneath the surface, including whether the points appear to be Award matters, Act matters, damage claims, neighbour disputes or outside jurisdiction]
-
-Suggested approach:
-[1 to 3 plain sentences on what to think through before drafting]
-
-RULES:
-- Do not focus only on the latest email if earlier messages change the meaning.
-- Do not invent anything not stated in the emails.
-- Do not produce a full draft at this stage.
-- Do not use markdown, asterisks, hashtags or bold text.
-- Treat Square One Consulting, Itzik and help@sq1consulting.co.uk as us.
-`;
-    } else if (modeHint === 'draft') {
-    prompt += `
-
-ACTIVE MODE: DRAFT
-
-OUTPUT ONLY THE COMPLETED CORRESPONDENCE.
-
-Do not provide:
-
-- analysis
-- explanation
-- commentary
-- notes
-- options
-- a preamble
-- a summary
-- drafting advice
-
-Begin with the greeting.
-
-End with:
-
-Kind regards,
-
-Nothing may appear after the sign-off.
-
-GREETING
-
-Read the supplied email thread and context.
-
-Use the recipient's actual first name where it is clearly available.
-
-Do not guess a name.
-
-Do not use a placeholder.
-
-Where no recipient name is available, use:
-
-Hi,
-
-PROFESSIONAL ROLE
-
-You are an expert professional correspondence drafter with specialist knowledge of:
-
-- Party Wall matters
-- construction processes
-- construction-related disputes
-- surveying practice
-- project management
-- professional fees
-- practical project delivery
-
-Use that expertise to understand the user's meaning and professional position.
-
-Do not use professional knowledge to invent facts, arguments or conclusions that the user did not provide and that are not established by the supplied context.
-
-EDITORIAL PHILOSOPHY
-
-Your role is not to transcribe dictation.
-
-Your role is to produce the email, letter or correspondence the user would have written if they had sat down and written it carefully.
-
-The spoken wording is only raw material.
-
-The finished wording is your responsibility.
-
-The finished correspondence should read exactly as though it had been deliberately written by the sender.
-
-If rewriting produces clearer, more natural or more professional correspondence, rewrite it.
-
-Do not preserve dictated wording simply because it appeared in the dictation.
-
-When choosing between two equally accurate versions, always choose the version that reads as naturally authored professional correspondence rather than lightly edited speech.
-
-Do not optimise for fidelity to spoken wording.
-
-Optimise for the quality of the finished correspondence.
-
-Fidelity is measured by preserving meaning, reasoning and intent, not preserving phrasing.
-
-These editorial improvements are expected and required. They are not considered invention provided the meaning, facts, reasoning, requests and conclusions remain unchanged.
-
-REFERENCES TO PEOPLE
-
-Do not infer or introduce gendered language unless the user has explicitly used it or the source material clearly requires it.
-
-Where possible, use neutral professional references such as:
-
-- they
-- them
-- their
-- the adjoining owner
-- the leaseholder
-- the freeholder
-- the surveyor
-- the contractor
-- the architect
-- the engineer
-- the recipient
-
-Do not replace neutral references with "he", "she", "his" or "her" based on assumptions or context alone.
-
-Do not preserve gendered wording simply because it appeared in spoken dictation. Unless gender is legally relevant, explicitly requested by the user, or essential for clarity, use neutral professional references such as 'they', 'their', 'the adjoining owner', 'the leaseholder', 'the freeholder', 'the surveyor', or the person's role.
-
-EDITORIAL TASK
-
-Convert the user's source material into a professionally written email or letter.
-
-Do not transcribe the dictation.
-
-Do not merely correct grammar while retaining spoken sentence structure.
-
-The finished correspondence must read as though it was written carefully by an experienced professional.
-
-Preserve:
-
-- the user's meaning
-- the user's intended outcome
-- the user's reasoning
-- genuinely distinct arguments
-- distinctions between issues
-- qualifications
-- caveats
-- questions
-- requests
-- material emphasis
-
-You may:
-
-- rewrite rough speech
-- consolidate repeated points
-- combine overlapping fragments
-- split run-on thoughts
-- reorder material into a logical sequence
-- remove filler and false starts
-- remove abandoned wording
-- improve paragraph structure
-
-These editorial actions are not invention.
-
-Do not add:
-
-- facts
-- arguments
-- legal positions
-- technical conclusions
-- promises
-- requests
-- explanations
-- strategic reasoning
-
-that are not present in the source material or established context.
-
-SOURCE PROCESSING
-
-Before drafting, silently classify the source into:
-
-1. RECIPIENT CONTENT
-
-Information, reasoning, wording, questions and requests intended for the recipient.
-
-2. CONTROL INSTRUCTIONS
-
-Directions to Nora concerning:
-
-- paragraphing
-- wording
-- tone
-- emphasis
-- inclusion
-- deletion
-- exact wording
-- structure
-
-3. DISCARDED SPEECH
-
-Filler, false starts, hesitation, repetition, self-correction, verbal padding, incomplete abandoned wording and thoughts spoken aloud.
-
-Use recipient content.
-
-Apply control instructions silently and remove them.
-
-Remove discarded speech.
-
-CONTROL INSTRUCTION RULES
-
-"New paragraph", "next paragraph", "start a new paragraph"
-
-Start a new paragraph.
-
-Do not include the instruction.
-
-"Word for word", "include this exactly", "verbatim"
-
-Remove the instruction itself.
-
-Reproduce the immediately governed clause, sentence or quoted passage exactly.
-
-Do not paraphrase the governed wording.
-
-"Make sure you include this", "this is important", "do not leave this out"
-
-Preserve the substance carefully.
-
-Do not include the instruction itself.
-
-Do not treat the wording as verbatim unless the user also requests exact wording.
-
-"Scratch that", "ignore that", "forget the last bit"
-
-Remove the immediately preceding or identified abandoned material.
-
-"Finish that sentence", "full stop"
-
-End the sentence at that point.
-
-Do not include the instruction.
-
-"Keep this short", "make it formal", "make it casual", "soften this", "make this stronger"
-
-Apply the requested style.
-
-Do not include the instruction.
-
-SILENT EDITING SEQUENCE
-
-Before writing:
-
-1. Identify what the recipient needs to understand.
-2. Identify what the user wants the recipient to confirm, decide, accept or do.
-3. Identify the user's conclusion or intended outcome.
-4. Extract recipient-facing content.
-5. Remove control instructions.
-6. Remove filler, false starts and abandoned speech.
-7. Group repeated fragments that express the same point.
-8. Identify each genuinely distinct argument, distinction, qualification, question and request.
-9. Arrange the material into the clearest professional sequence.
-10. Plan the paragraph structure.
-11. Draft in natural UK English.
-12. Rewrite any sentence that still sounds spoken.
-13. Check that nothing new has been invented.
-
-PARAGRAPH STRUCTURE
-
-Plan paragraphs according to communicative purpose, not sentence count.
-
-Each paragraph must have one main purpose.
-
-Create a new paragraph when the correspondence moves to:
-
-- a different issue
-- a different stage of reasoning
-- a separate qualification
-- a separate question
-- a separate request
-- a conclusion
-- a decision
-- a next step
-
-Keep closely related explanation and its associated question or request together where they form one coherent point.
-
-Do not combine unrelated points.
-
-Do not create a separate paragraph for every sentence.
-
-Use one blank line:
-
-- after the greeting
-- between paragraphs
-- before the sign-off
-
-STYLE
-
-Write as a natural, experienced professional surveyor and project adviser.
-
-Use conversational professional UK English.
-
-Use:
-
-- plain English
-- direct wording
-- active voice
-- natural sentence structure
-- concise but complete explanations
-
-Do not use:
-
-- corporate filler
-- legalistic padding
-- academic wording
-- robotic language
-- generic AI phrasing
-- long dashes
-- HTML
-- markdown formatting
-
-THREAD TONE
-
-Where replying to an existing thread:
-
-- match the established tone
-- do not become unnecessarily formal
-- use the established factual context
-- avoid repeating information the recipient already knows unless repetition is necessary
-- preserve the user's authority and professional position
-
-FINAL CHECK
-
-Do not return the draft until all answers are yes:
-
-- Does it read as written professional correspondence rather than transcribed speech?
-- Has rough spoken wording been rewritten?
-- Has repetition been consolidated?
-- Has the material been reordered where the spoken order was unclear?
-- Is every genuinely distinct substantive point retained?
-- Are distinctions and qualifications preserved?
-- Does each paragraph have one coherent purpose?
-- Have all inline drafting instructions been removed?
-- Has expressly verbatim wording been preserved exactly?
-- Has nothing been invented?
-- Is the tone natural and professionally appropriate?
-- Does the correspondence end with "Kind regards," and nothing after it?
-`;
+    prompt += `\n\nACTIVE MODE: email_thread_summary\n\nYOUR TASK:\nYou are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary and strategic first view. Do not draft correspondence.\n\nStructure your response in plain text like this:\n\nFrom:\n[sender name and firm]\n\nLatest email is asking for:\n[concise points from the latest email]\n\nContext from the thread:\n[relevant earlier history, changes of position, pattern or narrative]\n\nWhat stands out:\n[the issue beneath the surface, including whether the points appear to be Award matters, Act matters, damage claims, neighbour disputes or outside jurisdiction]\n\nSuggested approach:\n[1 to 3 plain sentences on what to think through before drafting]\n\nRULES:\n- Do not focus only on the latest email if earlier messages change the meaning.\n- Do not invent anything not stated in the emails.\n- Do not produce a full draft at this stage.\n- Do not use markdown, asterisks, hashtags or bold text.\n- Treat Square One Consulting, Itzik and help@sq1consulting.co.uk as us.\n`;
+  } else if (modeHint === 'draft') {
+    prompt += `\n\nACTIVE MODE: DRAFT\n\nOUTPUT ONLY THE COMPLETED CORRESPONDENCE.\n\nDo not provide:\n\n- analysis\n- explanation\n- commentary\n- notes\n- options\n- a preamble\n- a summary\n- drafting advice\n\nBegin with the greeting.\n\nEnd with:\n\nKind regards,\n\nNothing may appear after the sign-off.\n\nGREETING\n\nRead the supplied email thread and context.\n\nUse the recipient's actual first name where it is clearly available.\n\nDo not guess a name.\n\nDo not use a placeholder.\n\nWhere no recipient name is available, use:\n\nHi,\n\nPROFESSIONAL ROLE\n\nYou are an expert professional correspondence drafter with specialist knowledge of:\n\n- Party Wall matters\n- construction processes\n- construction-related disputes\n- surveying practice\n- project management\n- professional fees\n- practical project delivery\n\nUse that expertise to understand the user's meaning and professional position.\n\nDo not use professional knowledge to invent facts, arguments or conclusions that the user did not provide and that are not established by the supplied context.\n\nKNOWLEDGE REFERENCES IN DICTATION:\n\nIf the dictation contains a reference to case law, a legal principle, a statutory provision, or existing knowledge, you must:\n\n1. Identify what is being referenced from the knowledge available to you.\n2. Locate the relevant principle, case, section or rule.\n3. Incorporate it accurately into the draft at the appropriate point.\n\nDo not ignore knowledge references. Do not strip them as discarded speech.\n\nIf the reference is ambiguous, include a bracketed note: [Itzik — please confirm which case/principle to reference here].\n\nDo not invent case law.\n`;
   } else {
-    prompt += `
-
-ACTIVE MODE:
-${modeHint || 'discuss'}
-
-HARD RUNTIME RULES:
-Project facts loaded below are authoritative. Use the party names, addresses and roles from the project facts before asking the user for them.
-If a project is active, answer from the active project context first.
-Never invent party names, meetings, inspections, instructions or actions.
-Do not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.
-In discussion mode, do not draft correspondence unless explicitly asked.
-In review mode, review and analyse before suggesting changes. Do not rewrite unless explicitly asked.
-In drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.
-
-INVOICE MODE:
-When the user asks to raise, create, generate or send an invoice, switch into invoice mode.
-Extract line items from their dictation. Each item needs: description and amount (£).
-Format amounts as numbers without currency symbols in the structured data.
-Respond with a clean summary card showing the line items and total.
-Ask the user to confirm or amend.
-When the user says "generate it", "looks good", "confirm", "yes" or similar — indicate you are ready to generate.
-Always bill to the Building Owner from the project data.
-Never suggest or invent fee amounts — use only amounts the user states.
-
-INVOICE JSON FORMAT — when returning invoice data, include it as a JSON block at the end of your reply:
-<invoice_data>
-{
-  "items": [{"description": "...", "total": 350, "qty": 1, "unitPrice": "350"}],
-  "bill_to_name": "...",
-  "bill_to_address": "...",
-  "property_address": "...",
-  "bo_email": "..."
-}
-</invoice_data>
-
-EMAIL CONTEXT RULE:
-If selected email context is provided, it is authoritative. Read the whole available thread before responding. For Draft With Ely and email composer workflows, do not assume the user wants an email drafted simply because the selected context is an email. If the user prompt is blank, summarise the selected email/thread and suggest the response strategy. If the user asks to talk it through, analyse. Draft only when the user clearly asks for drafting.
-
-When drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.
-When drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.
-The finished draft must look like a real manually written professional email or letter, not ChatGPT output.
-Refer to the legislation as the Act.
-Treat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.
-`;
-
+    prompt += `\n\nACTIVE MODE:\n${modeHint || 'discuss'}\n\nHARD RUNTIME RULES:\nProject facts loaded below are authoritative. Use the party names, addresses and roles from the project facts before asking the user for them.\nIf a project is active, answer from the active project context first.\nNever invent party names, meetings, inspections, instructions or actions.\nDo not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.\nIn discussion mode, do not draft correspondence unless explicitly asked.\nIn review mode, review and analyse before suggesting changes. Do not rewrite unless explicitly asked.\nIn drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.\n\nINVOICE MODE:\nWhen the user asks to raise, create, generate or send an invoice, switch into invoice mode.\nExtract line items from their dictation. Each item needs: description and amount (£).\nFormat amounts as numbers without currency symbols in the structured data.\nRespond with a clean summary card showing the line items and total.\nAsk the user to confirm or amend.\nWhen the user says "generate it", "looks good", "confirm", "yes" or similar — indicate you are ready to generate.\nAlways bill to the Building Owner from the project data.\nNever suggest or invent fee amounts — use only amounts the user states.\n\nINVOICE JSON FORMAT — when returning invoice data, include it as a JSON block at the end of your reply:\n<invoice_data>\n{\n  "items": [{"description": "...", "total": 350, "qty": 1, "unitPrice": "350"}],\n  "bill_to_name": "...",\n  "bill_to_address": "...",\n  "property_address": "...",\n  "bo_email": "..."\n}\n</invoice_data>\n\nEMAIL CONTEXT RULE:\nIf selected email context is provided, it is authoritative. Read the whole available thread before responding. For Draft With Ely and email composer workflows, do not assume the user wants an email drafted simply because the selected context is an email. If the user prompt is blank, summarise the selected email/thread and suggest the response strategy. If the user asks to talk it through, analyse. Draft only when the user clearly asks for drafting.\n\nWhen drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.\nWhen drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.\nThe finished draft must look like a real manually written professional email or letter, not ChatGPT output.\nRefer to the legislation as the Act.\nTreat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.\n`;
   }
 
-  // Inject domain guidance block (Part 5/6 Build Package 2)
+  // Domain guidance block
   const domain = inferDomain({ prompt: userPrompt, body: {}, projectBundle, scopedEmailContext });
   const domainBlock = DOMAIN_PROMPTS[domain] || '';
   if (domainBlock) {
-    prompt += `
-
-${domainBlock}
-`;
+    prompt += `\n\n${domainBlock}\n`;
   }
 
-  prompt += `
-
-PROJECT ID:
-${projectId || 'none'}
-`;
+  // Layer 5: Project facts
+  prompt += `\n\nPROJECT ID:\n${projectId || 'none'}\n`;
 
   const projectFacts = buildProjectFactsText(projectBundle);
-  if (projectFacts) prompt += `
+  if (projectFacts) prompt += `\n\nAUTHORITATIVE PROJECT FACTS:\n${projectFacts}\n`;
 
-AUTHORITATIVE PROJECT FACTS:
-${projectFacts}
-`;
-
-  // ── Semantic search across ALL project content ───────────────────────────
-  // Only runs on first message or when user explicitly requests research.
-  // If chatHistory has messages, results are already in context — no need to re-fetch.
+  // Semantic search across project content
   const chatHistoryLength = chatHistory.length;
   const isFirstMessage = chatHistoryLength === 0;
   const isExplicitResearch = /\b(check|find|look up|search|go through|look at|pull up|review.*notes?|project notes?|find.*email|search.*email|look.*email|what.*notes?|any.*notes?)\b/i.test(userPrompt);
@@ -1630,9 +1167,6 @@ ${projectFacts}
     } else {
       console.log('[ely-smart] skipping semantic search — chat in progress, no explicit research request');
     }
-    // Cross-project search — fires from main chat when no project is active
-    // but user mentions a project by name ("look at the Sellafield project notes")
-    // Only runs when explicitly requested — never on follow-up messages
     const projectsCtx = isExplicitResearch ? (projectsContext || []) : [];
     if (!projectId && projectsCtx.length) {
       const crossResult = await searchNamedProject(userPrompt, projectsCtx);
@@ -1646,7 +1180,6 @@ ${projectFacts}
     semanticResults = null;
   }
 
-  // Inject cross-project results into context
   if (crossProjectResults?.results?.length) {
     const cp = crossProjectResults;
     const cpTitle = cp.project.bo_premise_address || cp.project.address || cp.project.ref || 'Named Project';
@@ -1655,7 +1188,6 @@ ${projectFacts}
   }
 
   if (semanticResults?.length) {
-    // Semantic search succeeded — use it for emails, chat, memory
     const byType = { email: [], chat: [], memory: [] };
     for (const r of semanticResults) {
       if (byType[r.content_type]) byType[r.content_type].push(r);
@@ -1690,7 +1222,6 @@ ${projectFacts}
     }
 
   } else if (projectBundle?.project_emails?.length) {
-    // Fallback — embeddings not yet generated, use keyword-scored emails
     const promptLower = (userPrompt || '').toLowerCase();
     const topicWords = promptLower.split(/\s+/).filter(w => w.length > 3);
     let relevantEmails = projectBundle.project_emails;
@@ -1717,7 +1248,6 @@ ${projectFacts}
     prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailsText.slice(0, 15000)}\n`;
   }
 
-  // Inject ALL project chat notes across all sessions — no session boundary
   if (projectBundle?.project_chat_notes?.length) {
     const notesText = projectBundle.project_chat_notes
       .map(m => `[${new Date(m.created_at).toLocaleDateString('en-GB')}] ${m.content}`)
@@ -1725,16 +1255,8 @@ ${projectFacts}
     prompt += `\n\nALL PROJECT NOTES & CHAT (every message from this project across all sessions):\n${notesText.slice(0, 8000)}\n`;
   }
 
+  // Layer 6: Project memory facts
   if (projectBundle) {
-    // ── Filter project_memory before bundle injection ─────────────────────
-    // source_type='email' records are raw email bodies saved from the inbox UI
-    // (meta_source: manual_preview_banner, manual_attachment_popup).
-    // They are NOT extracted facts — they are full email bodies that are already
-    // present in the PROJECT EMAILS section above. Injecting them again inside
-    // the bundle JSON creates duplication and adds noise as opaque JSON blobs.
-    //
-    // KEEP: email_received, email_sent (GPT-extracted facts), chat_upload, manual
-    // EXCLUDE: source_type='email' (raw bodies from UI preview/attachment actions)
     const rawMemory = projectBundle.project_memory || [];
     const cleanMemory = [];
     const excludedMemory = [];
@@ -1751,17 +1273,11 @@ ${projectFacts}
       }
     }
 
-    // Log for test visibility
     console.log(`[ely-smart] project_memory: total=${rawMemory.length} kept=${cleanMemory.length} excluded=${excludedMemory.length}`);
-    if (excludedMemory.length) {
-      console.log(`[ely-smart] excluded memory records:`, JSON.stringify(excludedMemory));
-    }
 
-    // Inject bundle WITHOUT project_memory (separated below as clean labelled block)
     const { project_chat_notes: _notes, project_emails: _emails, project_memory: _mem, ...bundleWithoutNotes } = projectBundle;
     prompt += `\n\nPROJECT BUNDLE:\n${compactJson(bundleWithoutNotes, 14000)}\n`;
 
-    // Inject clean extracted memory as a separate clearly-labelled readable block
     if (cleanMemory.length > 0) {
       const memFacts = cleanMemory
         .map(r => `- ${String(r.content || r.summary || '').trim()}`)
@@ -1775,113 +1291,48 @@ ${projectFacts}
     prompt += `\n\nRESOLVED PROJECT:\n${compactJson(resolvedProject)}\n`;
   }
 
-  // Inject SOC reports if available
+  // SOC reports
   const socReports = projectBundle?.soc_reports || [];
   if (socReports.length > 0) {
     const aoCount = (projectBundle?.adjoining_owners || []).length || 1;
-
-    let socBlock = `
-
-SCHEDULE OF CONDITION REPORTS (${socReports.length} report${socReports.length > 1 ? 's' : ''}):
-`;
-
+    let socBlock = `\n\nSCHEDULE OF CONDITION REPORTS (${socReports.length} report${socReports.length > 1 ? 's' : ''}):\n`;
     if (aoCount > 1 || socReports.length > 1) {
-      socBlock += `This project has multiple adjoining owners. There is a separate Schedule of Condition for each AO.
-`;
-      socBlock += `When the user refers to a schedule of conditions, ask which adjoining owner they mean if it is not clear from context.
-`;
-      socBlock += `Match by AO name or address — do not mix up observations from different AOs.
-
-`;
+      socBlock += `This project has multiple adjoining owners. There is a separate Schedule of Condition for each AO.\n`;
+      socBlock += `When the user refers to a schedule of conditions, ask which adjoining owner they mean if it is not clear from context.\n`;
+      socBlock += `Match by AO name or address — do not mix up observations from different AOs.\n\n`;
     }
-
     socReports.forEach((soc, i) => {
       const aoLabel = soc.ao_names || soc.ao_address || `AO ${i + 1}`;
-      socBlock += `--- SOC ${i + 1}: ${aoLabel} ---
-`;
-      socBlock += `Adjoining Owner: ${soc.ao_names || 'Unknown'}
-`;
-      socBlock += `AO Property: ${soc.ao_address || 'Unknown'}
-`;
-      socBlock += `Inspection Date: ${soc.inspection_date || 'Unknown'}
-`;
-      socBlock += `Status: ${soc.status || 'draft'}
-`;
-
-      if (soc.raw_notes) {
-        socBlock += `
-Raw Dictated Notes:
-${soc.raw_notes.slice(0, 4000)}
-`;
-      }
-
+      socBlock += `--- SOC ${i + 1}: ${aoLabel} ---\n`;
+      socBlock += `Adjoining Owner: ${soc.ao_names || 'Unknown'}\n`;
+      socBlock += `AO Property: ${soc.ao_address || 'Unknown'}\n`;
+      socBlock += `Inspection Date: ${soc.inspection_date || 'Unknown'}\n`;
+      socBlock += `Status: ${soc.status || 'draft'}\n`;
+      if (soc.raw_notes) socBlock += `\nRaw Dictated Notes:\n${soc.raw_notes.slice(0, 4000)}\n`;
       if (soc.structured_data) {
         const sd = typeof soc.structured_data === 'string' ? JSON.parse(soc.structured_data) : soc.structured_data;
-
-        // Sections / observations
         if (sd.sections?.length) {
-          socBlock += `
-Condition Observations by Section:
-`;
+          socBlock += `\nCondition Observations by Section:\n`;
           sd.sections.forEach(sec => {
-            socBlock += `  ${sec.title || 'Section'}:
-`;
-            (sec.rows || []).forEach(row => {
-              socBlock += `    - [${row.ref || ''}] ${row.observation || ''}
-`;
-            });
+            socBlock += `  ${sec.title || 'Section'}:\n`;
+            (sec.rows || []).forEach(row => { socBlock += `    - [${row.ref || ''}] ${row.observation || ''}\n`; });
           });
         }
-
-        // Award notes
         if (sd.award_notes?.length) {
-          socBlock += `
-Award Notes (matters for the Party Wall Award):
-`;
-          sd.award_notes.forEach(n => {
-            socBlock += `  [${n.topic || 'note'}] ${n.description || ''}
-`;
-          });
+          socBlock += `\nAward Notes:\n`;
+          sd.award_notes.forEach(n => { socBlock += `  [${n.topic || 'note'}] ${n.description || ''}\n`; });
         }
-
-        // Actions
         if (sd.actions?.length) {
-          socBlock += `
-Actions Required:
-`;
-          sd.actions.forEach(a => {
-            socBlock += `  [${a.party || ''}] ${a.description || ''}
-`;
-          });
-        }
-
-        // Emails required
-        if (sd.emails_required?.length) {
-          socBlock += `
-Emails Required:
-`;
-          sd.emails_required.forEach(e => {
-            socBlock += `  To: ${e.recipient_type || ''} — ${e.subject || ''}: ${e.reason || ''}
-`;
-          });
+          socBlock += `\nActions Required:\n`;
+          sd.actions.forEach(a => { socBlock += `  [${a.party || ''}] ${a.description || ''}\n`; });
         }
       }
-
-      socBlock += `
-`;
+      socBlock += `\n`;
     });
-
     prompt += socBlock;
   }
 
-  // SCOPED EMAIL CONTEXT removed from Message 1 — duplicates Message 2.
-  // The selected email and thread are already in the email context message (Message 2).
-  // Injecting them again as raw JSON added ~20,000 chars of noise with no benefit.
-
-  // Gold standard examples: suppress for ordinary conversational inbox/draft replies.
-  // The Brenda structural escalation example anchors GPT toward formal analytical output,
-  // which is the wrong style for casual replies. Only inject when the request is clearly
-  // a complex or formal matter, not a routine email response.
+  // Gold standard examples — only for complex/formal drafts, not conversational inbox replies
   const isConversationalDraftSurface = (surface === 'inbox_draft' || surface === 'draft_with_ely');
   const isComplexDraftRequest = /\b(award|dispute|legal|section \d|tribunal|court|injunction|breach|liability|structural|engineer|underpinning|expert|claim|damages|compensation|enforcement)\b/i.test(userPrompt);
   const shouldInjectExample = draftingExamples?.length && modeHint === 'draft' && (!isConversationalDraftSurface || isComplexDraftRequest);
@@ -1889,26 +1340,24 @@ Emails Required:
     prompt += `\n\nGOLD STANDARD DRAFTING EXAMPLES:\n${JSON.stringify(draftingExamples, null, 2)}\n`;
   }
 
-  // ── Test logging — final prompt size ─────────────────────────────────
-  console.log(`[ely-smart] buildSystemPrompt complete: ${prompt.length} chars`);
-  // ──────────────────────────────────────────────────────────────────────────
+  console.log(`[ely-smart] v4 buildSystemPrompt complete: ${prompt.length} chars`);
   return prompt;
 }
 
 async function buildMessages({ body, systemPrompt, scopedEmailContext = [], modeHint = 'discuss' }) {
   const { prompt, chatHistory = [], brainContext = [] } = body;
+
+  // Message 1: System prompt (global_core + global_drafting + knowledge + user_profile + project context)
   const messages = [{ role: 'system', content: systemPrompt }];
 
+  // Message 2: Selected email and recent thread context — injected once here, not duplicated in Message 1
   const emailContextText = buildEmailContextText({ body, scopedEmailContext });
   if (emailContextText) messages.push({ role: 'system', content: emailContextText });
 
-  // Auto-fetch attachments from the loaded email if it has them
+  // Auto-fetch attachments from the loaded email if requested
   if (scopedEmailContext?.length > 0) {
     const primaryEmail = scopedEmailContext[0];
     const emailDbId = primaryEmail?.id;
-
-    // Only fetch attachments when explicitly requested OR when cached (no Vision cost)
-    // Prevents burning Anthropic credits on every email interaction
     const wantsAttachments = /read.*attach|attach.*read|open.*attach|attach.*open|drawing|pdf|document/i.test(prompt);
     console.log('[ely-smart] checking attachments for email:', emailDbId, 'wantsAttachments:', wantsAttachments);
     if (emailDbId && wantsAttachments) {
@@ -1933,14 +1382,13 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
     }
   }
 
-  // ── Inject uploaded document text ────────────────────────────────────────
+  // Uploaded document text
   const uploadedFiles = body.context?.uploadedExtractedText || body.uploadContext || [];
   if (uploadedFiles?.length) {
     const docBlocks = uploadedFiles
       .filter(f => f.extracted_text && String(f.extracted_text).trim().length > 20)
       .map(f => `UPLOADED DOCUMENT: ${f.file_name || 'file'}\n\n${String(f.extracted_text).slice(0, 6000)}`)
       .join('\n\n---\n\n');
-
     if (docBlocks) {
       messages.push({
         role: 'system',
@@ -1949,7 +1397,7 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
     }
   }
 
-  // ── Land Registry document detection ────────────────────────────────────
+  // Land Registry detection
   if (uploadedFiles?.length && body.surface === 'project_chat') {
     for (const f of uploadedFiles) {
       const text = String(f.extracted_text || '').trim();
@@ -1960,7 +1408,6 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
         /proprietorship register/i.test(text) ||
         /(title plan|official copy)/i.test(text)
       );
-
       if (isLandReg && ANTHROPIC_KEY) {
         try {
           const lrPrompt = 'Extract the registered proprietor details from this Land Registry title register. Return ONLY a JSON object with no markdown:\n' +
@@ -1972,21 +1419,11 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
             '}\n\n' +
             'If multiple proprietors, put all names in proprietor_name separated by " and ".\n\n' +
             'TITLE REGISTER TEXT:\n' + text.slice(0, 8000);
-
           const lrRes = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': ANTHROPIC_KEY,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-6', // Sonnet sufficient for drawing analysis, 40% cheaper than Opus
-              max_tokens: 800,
-              messages: [{ role: 'user', content: lrPrompt }],
-            }),
+            headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: lrPrompt }] }),
           });
-
           if (lrRes.ok) {
             const lrData = await lrRes.json();
             const rawText = lrData?.content?.[0]?.text || '';
@@ -1995,49 +1432,33 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
               if (extracted.proprietor_name && extracted.property_address) {
                 return res.status(200).json({
                   reply: 'I can see this is a Land Registry title register for **' + extracted.property_address + '**.\n\nThe registered proprietor is **' + extracted.proprietor_name + (extracted.title_number ? ' (Title No. ' + extracted.title_number + ')' : '') + '.\n\nWould you like me to add them as an Adjoining Owner on this project?',
-                  land_registry_ao: {
-                    name: extracted.proprietor_name,
-                    premise: extracted.property_address,
-                    service_address: extracted.proprietor_address || extracted.property_address,
-                    title_number: extracted.title_number || null,
-                    source: 'land_registry',
-                  },
+                  land_registry_ao: { name: extracted.proprietor_name, premise: extracted.property_address, service_address: extracted.proprietor_address || extracted.property_address, title_number: extracted.title_number || null, source: 'land_registry' },
                   sessionId: Date.now() + '-' + Math.random().toString(36).slice(2),
                 });
               }
-            } catch (e) { /* JSON parse failed — fall through */ }
+            } catch (e) { /* JSON parse failed */ }
           }
-        } catch (lrErr) {
-          console.warn('[ely-smart] Land Registry extraction failed:', lrErr.message);
-        }
+        } catch (lrErr) { console.warn('[ely-smart] Land Registry extraction failed:', lrErr.message); }
         break;
       }
     }
   }
 
-  // Inject documents previously uploaded to this project (from project_memory chat_upload records)
+  // Previously uploaded project documents
   const memoryUploads = (body.context?.projectMemoryUploads || []);
   if (memoryUploads.length > 0) {
     const memoryDocBlocks = memoryUploads
       .filter(m => m.content && String(m.content).trim().length > 20)
       .map(m => `PREVIOUSLY UPLOADED DOCUMENT: ${m.title || 'file'}\n\n${String(m.content).slice(0, 6000)}`)
       .join('\n\n---\n\n');
-
     if (memoryDocBlocks) {
-      messages.push({
-        role: 'system',
-        content: `The following document(s) were previously uploaded to this project and are available for reference:\n\n${memoryDocBlocks}`,
-      });
+      messages.push({ role: 'system', content: `The following document(s) were previously uploaded to this project and are available for reference:\n\n${memoryDocBlocks}` });
     }
   }
 
-  // Inject project brain — persistent memory from previous sessions
-  // Cap at ~4000 chars per entry and ~8000 chars total to stay within token budget
+  // Project brain / persistent memory
   const BRAIN_ENTRY_CAP = 4000;
   const BRAIN_TOTAL_CAP = 8000;
-
-  // v4 memory filter: exclude records flagged as v4_runtime_excluded
-  // Also exclude by key/type for belt-and-braces safety
   const V4_EXCLUDED_KEYS = new Set(['preserve_working_features']);
   const V4_EXCLUDED_TYPES = new Set(['soc_template', 'email_style', 'assistant_role']);
   function isMemoryExcluded(m) {
@@ -2049,74 +1470,43 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
   }
 
   const filteredBrainContext = (brainContext || []).filter(m => !isMemoryExcluded(m));
-
   if (filteredBrainContext?.length) {
     const summaryEntry = filteredBrainContext.find(m => m.is_summary);
     const regularEntries = filteredBrainContext.filter(m => !m.is_summary);
-
     let brainText = '';
-
     if (summaryEntry) {
-      const summaryTrimmed = String(summaryEntry.content || '').slice(0, BRAIN_ENTRY_CAP);
-      brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${summaryTrimmed}\n\nRECENT ENTRIES:\n`;
+      brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${String(summaryEntry.content || '').slice(0, BRAIN_ENTRY_CAP)}\n\nRECENT ENTRIES:\n`;
     }
-
     brainText += regularEntries.map(m => {
-      const label = m.role === 'user' ? 'Surveyor' :
-        m.content_type === 'email_received' ? 'Received email' :
-        m.content_type === 'email_sent' ? 'Sent email' : 'Ely';
+      const label = m.role === 'user' ? 'Surveyor' : m.content_type === 'email_received' ? 'Received email' : m.content_type === 'email_sent' ? 'Sent email' : 'Ely';
       const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
       const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       const content = String(m.content || '').slice(0, BRAIN_ENTRY_CAP);
       return `${label}${date ? ` (${date})` : ''}: ${prefix}${content}`;
     }).join('\n\n');
-
-    // Hard cap total brain text
     const brainTextFinal = brainText.slice(0, BRAIN_TOTAL_CAP);
-
     if (brainTextFinal.trim()) {
-      messages.push({
-        role: 'system',
-        content: `PROJECT BRAIN — persistent memory for this project (use this to answer questions about status, timeline, correspondence history):\n\n${brainTextFinal}`,
-      });
+      messages.push({ role: 'system', content: `PROJECT BRAIN — persistent memory for this project (use this to answer questions about status, timeline, correspondence history):\n\n${brainTextFinal}` });
     }
   }
 
-  // ── Inject project chat workflow instruction ─────────────────────────────
+  // Project chat workflow instruction
   const projectChatInstruction = body.context?.projectChatInstruction || body.projectChatInstruction || '';
-  // v4: inject instruction only when it does not contain draft-forcing language
-  // unless the classifier has already determined draft intent
   if (projectChatInstruction && (modeHint === 'draft' || !projectChatInstruction.toLowerCase().includes('draft'))) {
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
-  // ── Draft mode collaboration rules ───────────────────────────────────────
-  // When a draft is requested in project chat or main chat, enforce collaboration-first
-  // v4: isDraftMode driven by classifier, not by workflow strings in body
-  const isDraftMode = modeHint === 'draft';
-
-  // ── Inline response mode ──────────────────────────────────────────────
-  // Triggered when user wants to respond point-by-point inline in blue
+  // Inline response mode
   const isInlineResponseMode = /respond.*inline|inline.*respond|paste.*points|point.*by.*point|respond.*each|each.*point|reply.*inline|inline.*reply|respond.*line.*by.*line|line.*by.*line/i.test(prompt);
-
   if (isInlineResponseMode) {
     messages.push({
       role: 'system',
-      content: `INLINE RESPONSE MODE — the user wants to respond to the other party's email points inline.
-
-INSTRUCTIONS:
-1. Extract all numbered or bulleted points from the email in context. If there are no clear points, extract each distinct sentence or paragraph as a separate item.
-2. List them clearly and ask the user to give their response to each point — either one at a time or all at once (e.g. "Point 1 — yes confirmed. Point 2 — Stephen Cornish nominated.")
-3. Once the user provides their responses, produce the formatted HTML email body with:
-   - Each of the other party's original points in their original black text
-   - Immediately after each point (no line break), the user's response in blue: <span style="color:#1d4ed8;font-weight:500"> [response]</span>
-4. The output must be valid HTML that can be pasted directly into the email composer.
-5. Do not add any commentary inside the HTML — just the formatted content.
-6. Wrap the whole thing in a clean div with font-family: inherit; font-size: 13.5px; line-height: 1.7;`,
+      content: `INLINE RESPONSE MODE — the user wants to respond to the other party's email points inline.\n\nINSTRUCTIONS:\n1. Extract all numbered or bulleted points from the email in context. If there are no clear points, extract each distinct sentence or paragraph as a separate item.\n2. List them clearly and ask the user to give their response to each point — either one at a time or all at once (e.g. "Point 1 — yes confirmed. Point 2 — Stephen Cornish nominated.")\n3. Once the user provides their responses, produce the formatted HTML email body with:\n   - Each of the other party's original points in their original black text\n   - Immediately after each point (no line break), the user's response in blue: <span style="color:#1d4ed8;font-weight:500"> [response]</span>\n4. The output must be valid HTML that can be pasted directly into the email composer.\n5. Do not add any commentary inside the HTML — just the formatted content.\n6. Wrap the whole thing in a clean div with font-family: inherit; font-size: 13.5px; line-height: 1.7;`,
     });
   }
 
-  if (isDraftMode) {
+  // Message 3: Runtime Draft Authoring Standard — FINAL system message before user turn
+  if (modeHint === 'draft') {
     messages.push({
       role: 'system',
       content: `AUTHORING STANDARD
@@ -2149,40 +1539,22 @@ These constraints apply to the content. They do not apply to the prose.
 
 Unless gender is legally relevant, explicitly requested by the user, or essential for clarity, use neutral professional references such as "they", "their", "the adjoining owner", "the leaseholder", "the freeholder", "the surveyor", or the person's role.
 
-Output only the email. Begin with the greeting. End with:
+Output only the correspondence. Begin with the greeting. End with:
 
 Kind regards,
 
-LEGAL GROUNDING — MANDATORY:
-
-Before drafting, read the email thread and identify the legal or professional position you are writing from. Ask: does this email involve fees, access, jurisdiction, damage, notice, award compliance, or any matter where the Act or established case law applies?
-
-If yes, identify the relevant principle from your knowledge — the case, section, or rule that governs the point — and incorporate it into the draft at the right place. Do not reason through the legal position and then leave it out of the draft. The output of that reasoning belongs in the correspondence.
-
-This is not commentary. This is professional grounding. A surveyor writing this email would cite the basis for their position. Do the same.
-
-KNOWLEDGE REFERENCES IN DICTATION:
-
-If the dictation contains a reference to case law, a legal principle, a statutory provision, or existing knowledge — such as "refer to Reeve v Youngs", "we have something in our case law about this", "there is a case about this", "use the principle about fees", "refer to the Act on this", "we covered this" — you must:
-
-1. Identify what is being referenced from the knowledge available to you.
-2. Locate the relevant principle, case, section or rule.
-3. Incorporate it accurately into the draft at the appropriate point.
-
-Do not ignore knowledge references. Do not strip them as discarded speech. Do not substitute a vague phrase like "relevant authorities" when a specific case, section or principle is available and applicable.
-
-If the reference is ambiguous and you cannot identify exactly what is meant, include a bracketed note in the draft: [Itzik — please confirm which case/principle to reference here].
-
-Do not invent case law. Use only what is established in the knowledge layer or the supplied context.`,
+Nothing may appear after the sign-off.`,
     });
   }
 
+  // Chat history
   if (chatHistory?.length) {
     chatHistory.slice(-24).forEach((msg) => {
       if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
     });
   }
 
+  // User message
   if (prompt?.trim()) {
     messages.push({ role: 'user', content: prompt.trim() });
   } else if (emailContextText) {
