@@ -224,6 +224,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           id: np.id,
           ref: np.ref,
           address: np.address,
+          bo_premise_address: np.bo_premise_address || np.address,
           status: np.status,
           role: np.role,
           boName: np.building_owner.name,
