@@ -288,8 +288,8 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                   <select style={styles.input} value={form.project_id}
                     onChange={e => setField('project_id', e.target.value)}>
                     <option value="">— No project linked —</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.ref || p.reference || p.id} — {p.bo_premise_address || p.address || ''}</option>
+                    {[...projects].sort((a,b) => { const na=parseInt((a.ref||'').replace(/\D/g,''),10)||0; const nb=parseInt((b.ref||'').replace(/\D/g,''),10)||0; return na-nb; }).map(p => (
+                      <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.ref || p.id}</option>
                     ))}
                   </select>
                 </div>
