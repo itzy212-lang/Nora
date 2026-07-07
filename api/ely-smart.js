@@ -2162,6 +2162,14 @@ Output only the email. Begin with the greeting. End with:
 
 Kind regards,
 
+LEGAL GROUNDING — MANDATORY:
+
+Before drafting, read the email thread and identify the legal or professional position you are writing from. Ask: does this email involve fees, access, jurisdiction, damage, notice, award compliance, or any matter where the Act or established case law applies?
+
+If yes, identify the relevant principle from your knowledge — the case, section, or rule that governs the point — and incorporate it into the draft at the right place. Do not reason through the legal position and then leave it out of the draft. The output of that reasoning belongs in the correspondence.
+
+This is not commentary. This is professional grounding. A surveyor writing this email would cite the basis for their position. Do the same.
+
 KNOWLEDGE REFERENCES IN DICTATION:
 
 If the dictation contains a reference to case law, a legal principle, a statutory provision, or existing knowledge — such as "refer to Reeve v Youngs", "we have something in our case law about this", "there is a case about this", "use the principle about fees", "refer to the Act on this", "we covered this" — you must:
