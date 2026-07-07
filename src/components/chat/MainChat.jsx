@@ -1191,7 +1191,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
           style={{ display: 'none' }}
         >
           <option value="">No project linked</option>
-          {(state.projects || []).map(project => (
+          {[...(state.projects || [])].sort((a,b) => { const na=parseInt((a.ref||'').replace(/\D/g,''),10)||0; const nb=parseInt((b.ref||'').replace(/\D/g,''),10)||0; return na-nb; }).map(project => (
             <option key={project.id} value={project.id}>
               {projectLabel(project)}
             </option>
