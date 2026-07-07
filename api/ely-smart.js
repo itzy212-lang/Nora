@@ -2318,14 +2318,9 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body || {};
-    let projectId = inferProjectId(body);
 
-    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
-    if (resolvedProject?.id) projectId = resolvedProject.id;
-
-    const userId = inferUserId(body);
-
-    // ── Silent read fast path ────────────────────────────────────────────────
+    // ── Silent read fast path — must come FIRST before any expensive lookups
+// ── Silent read fast path ────────────────────────────────────────────────
     // Bypass all classifiers, booking flow, brain loading and system prompt overhead.
     // Just send the thread to GPT and return the raw response.
     if (body.isSilentRead || body.mode === 'silent_read') {
@@ -2358,6 +2353,15 @@ Never summarise. Never explain. Never ask questions.`,
       const silentReply = silentResult.choices?.[0]?.message?.content?.trim() || 'Ready.';
       return res.status(200).json({ reply: silentReply, replyText: silentReply });
     }
+
+    let projectId = inferProjectId(body);
+
+    const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
+    if (resolvedProject?.id) projectId = resolvedProject.id;
+
+    const userId = inferUserId(body);
+
+    // ── Silent read fast path
 
     const modeHint = inferModeHint(body.surface, body.prompt, body);
     const prompt = String(body.prompt || '').trim();
