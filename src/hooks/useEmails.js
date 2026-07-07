@@ -68,6 +68,7 @@ export function useEmails() {
       let res = await sb
         .from('emails')
         .select('*')
+        .in('folder', ['Inbox', 'inbox', 'INBOX'])
         .order('received_at', { ascending: false })
         .limit(200);
 
@@ -75,6 +76,7 @@ export function useEmails() {
         res = await sb
           .from('emails')
           .select('*')
+          .in('folder', ['Inbox', 'inbox', 'INBOX'])
           .order('received_at', { ascending: false })
           .limit(200);
       }
