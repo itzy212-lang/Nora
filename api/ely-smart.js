@@ -1496,8 +1496,9 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
     messages.push({ role: 'system', content: projectChatInstruction });
   }
 
-  // Inline response mode
-  const isInlineResponseMode = /respond.*inline|inline.*respond|paste.*points|point.*by.*point|respond.*each|each.*point|reply.*inline|inline.*reply|respond.*line.*by.*line|line.*by.*line/i.test(prompt);
+  // Inline response mode — never on drafting surfaces (inbox_draft, draft_with_ely)
+  const isDraftingSurface = body.surface === 'inbox_draft' || body.surface === 'draft_with_ely' || String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
+  const isInlineResponseMode = !isDraftingSurface && /respond.*inline|inline.*respond|paste.*points|point.*by.*point|reply.*inline|inline.*reply|respond.*line.*by.*line|line.*by.*line/i.test(prompt);
   if (isInlineResponseMode) {
     messages.push({
       role: 'system',
