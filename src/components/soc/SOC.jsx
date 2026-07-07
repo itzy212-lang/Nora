@@ -879,6 +879,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const hasContent = messages.some(m => m.role === 'user');
 
   return (
+    <>
       {dualAISkipped && (
         <div style={{
           background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 10,
@@ -1058,5 +1059,6 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         <SaveToOneDriveOverlay {...oneDriveOverlay} onClose={() => setOneDriveOverlay(null)} onOpenComposer={onOpenComposer} />
       )}
     </div>
+    </>
   );
 }
