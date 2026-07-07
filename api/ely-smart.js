@@ -1600,14 +1600,53 @@ ${projectFacts}
   }
 
   if (projectBundle) {
-    const { project_chat_notes: _notes, project_emails: _emails, ...bundleWithoutNotes } = projectBundle;
-    prompt += `\n\nPROJECT BUNDLE:\n${compactJson(bundleWithoutNotes, 14000)}\n`;
-  } else if (resolvedProject) {
-    prompt += `
+    // ── Filter project_memory before bundle injection ─────────────────────
+    // source_type='email' records are raw email bodies saved from the inbox UI
+    // (meta_source: manual_preview_banner, manual_attachment_popup).
+    // They are NOT extracted facts — they are full email bodies that are already
+    // present in the PROJECT EMAILS section above. Injecting them again inside
+    // the bundle JSON creates duplication and adds noise as opaque JSON blobs.
+    //
+    // KEEP: email_received, email_sent (GPT-extracted facts), chat_upload, manual
+    // EXCLUDE: source_type='email' (raw bodies from UI preview/attachment actions)
+    const rawMemory = projectBundle.project_memory || [];
+    const cleanMemory = [];
+    const excludedMemory = [];
+    for (const rec of rawMemory) {
+      const st = rec.source_type || '';
+      const metaSrc = rec.metadata?.source || '';
+      const isRawBody = st === 'email' ||
+        metaSrc === 'manual_preview_banner' ||
+        metaSrc === 'manual_attachment_popup';
+      if (isRawBody) {
+        excludedMemory.push({ id: rec.id, source_type: st, meta_source: metaSrc, len: (rec.content || '').length });
+      } else {
+        cleanMemory.push(rec);
+      }
+    }
 
-RESOLVED PROJECT:
-${compactJson(resolvedProject)}
-`;
+    // Log for test visibility
+    console.log(`[ely-smart] project_memory: total=${rawMemory.length} kept=${cleanMemory.length} excluded=${excludedMemory.length}`);
+    if (excludedMemory.length) {
+      console.log(`[ely-smart] excluded memory records:`, JSON.stringify(excludedMemory));
+    }
+
+    // Inject bundle WITHOUT project_memory (separated below as clean labelled block)
+    const { project_chat_notes: _notes, project_emails: _emails, project_memory: _mem, ...bundleWithoutNotes } = projectBundle;
+    prompt += `\n\nPROJECT BUNDLE:\n${compactJson(bundleWithoutNotes, 14000)}\n`;
+
+    // Inject clean extracted memory as a separate clearly-labelled readable block
+    if (cleanMemory.length > 0) {
+      const memFacts = cleanMemory
+        .map(r => `- ${String(r.content || r.summary || '').trim()}`)
+        .filter(s => s.length > 2)
+        .join('\n');
+      if (memFacts.trim()) {
+        prompt += `\n\nPROJECT MEMORY FACTS (extracted from correspondence — standing project knowledge):\n${memFacts}\n`;
+      }
+    }
+  } else if (resolvedProject) {
+    prompt += `\n\nRESOLVED PROJECT:\n${compactJson(resolvedProject)}\n`;
   }
 
   // Inject SOC reports if available
@@ -1725,6 +1764,9 @@ ${JSON.stringify(draftingExamples, null, 2)}
 `;
   }
 
+  // ── Test logging — final prompt size ─────────────────────────────────
+  console.log(`[ely-smart] buildSystemPrompt complete: ${prompt.length} chars`);
+  // ──────────────────────────────────────────────────────────────────────────
   return prompt;
 }
 
