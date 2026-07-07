@@ -1104,8 +1104,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     } else {
       console.log('[ely-smart] skipping semantic search — chat in progress, no explicit research request');
     }
-    const projectsCtx = isExplicitResearch ? (projectsContext || []) : [];
-    if (!projectId && projectsCtx.length) {
+    // Cross-project search runs whenever no project is active — not just on explicit research.
+    // The user may casually mention a project by address in any message.
+    const projectsCtx = (!projectId && (projectsContext || []).length > 0) ? (projectsContext || []) : [];
+    if (projectsCtx.length) {
       const crossResult = await searchNamedProject(userPrompt, projectsCtx);
       if (crossResult) {
         crossProjectResults = crossResult;
