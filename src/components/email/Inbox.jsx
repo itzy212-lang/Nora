@@ -315,6 +315,10 @@ ${threadText}`;
           subject: email.subject || '',
           threadText,
           body: threadText,
+          // selectedEmailBody: the raw body of the selected email ONLY — not the thread.
+          // This lets ely-smart extract the sender's actual new message
+          // without confusing it with the full concatenated thread.
+          selectedEmailBody: email?.body_preview || email?.body || '',
         },
         chatHistory: [],
         isSilentRead: true,
