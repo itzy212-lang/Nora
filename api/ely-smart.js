@@ -1071,9 +1071,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
 
   // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
   // Loads when on a party wall surface or drafting/reviewing party wall matters.
-  // TEST: temporarily disabled for draft_with_ely/inbox_draft to isolate dilution effect
-  const isDraftWithElySurface = surface === 'inbox_draft' || surface === 'draft_with_ely';
-  if (brain?.knowledge_layer?.system_prompt && !isDraftWithElySurface) {
+  if (brain?.knowledge_layer?.system_prompt) {
     prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
   }
 
