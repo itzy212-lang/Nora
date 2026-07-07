@@ -380,6 +380,12 @@ async function searchNamedProject(prompt, projectsContext = []) {
 
   const lower = prompt.toLowerCase();
 
+  // DEBUG — log what fields the first project has
+  if (projectsContext.length > 0) {
+    const sample = projectsContext[0];
+    console.log('[ely-smart] projectsContext sample keys:', Object.keys(sample).join(','), 'addr:', sample.bo_premise_address || sample.address || 'NONE');
+  }
+
   // Score every project against the prompt — support multiple matches
   const scored = [];
   for (const proj of projectsContext) {
