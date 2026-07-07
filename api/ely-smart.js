@@ -1332,10 +1332,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += socBlock;
   }
 
-  // Gold standard examples — only for complex/formal drafts, not conversational inbox replies
+  // Gold standard examples — never inject on inbox_draft or draft_with_ely surfaces.
+  // These are ordinary email reply surfaces. Examples anchor GPT toward the wrong style.
   const isConversationalDraftSurface = (surface === 'inbox_draft' || surface === 'draft_with_ely');
-  const isComplexDraftRequest = /\b(award|dispute|legal|section \d|tribunal|court|injunction|breach|liability|structural|engineer|underpinning|expert|claim|damages|compensation|enforcement)\b/i.test(userPrompt);
-  const shouldInjectExample = draftingExamples?.length && modeHint === 'draft' && (!isConversationalDraftSurface || isComplexDraftRequest);
+  const shouldInjectExample = false; // disabled on all drafting surfaces — causes style anchoring
   if (shouldInjectExample) {
     prompt += `\n\nGOLD STANDARD DRAFTING EXAMPLES:\n${JSON.stringify(draftingExamples, null, 2)}\n`;
   }
