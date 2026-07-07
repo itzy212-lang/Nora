@@ -193,8 +193,20 @@ function buildSuppliedEmailContext(body = {}) {
   const supplied = body.emailContext || body.context?.selectedEmailContext || null;
   if (!supplied) return null;
 
+  // selectedEmailBody is the raw body of the selected email only (not the thread concatenation).
+  // Inbox.jsx passes this separately. Fall back to body_preview if not present.
+  // This prevents threadText from being treated as the selected email body.
+  const selectedBody = firstNonEmpty(
+    supplied.selectedEmailBody,   // set by Inbox.jsx
+    supplied.body_preview,
+    supplied.preview,
+    supplied.snippet
+    // intentionally excludes supplied.body and supplied.threadText — those are the full thread
+  );
+
   return normaliseEmailRecord({
     ...supplied,
+    body: selectedBody || supplied.body || '',  // selectedBody first; fall back to body only if no separate field
     id: firstNonEmpty(supplied.id, supplied.emailId, body.emailId),
     thread_id: firstNonEmpty(supplied.threadId, supplied.thread_id, supplied.conversationId, body.threadId),
     project_id: firstNonEmpty(supplied.projectId, supplied.project_id, body.projectId, body.project_id),
@@ -977,6 +989,30 @@ function buildProjectFactsText(projectBundle) {
 }
 
 // Strip signatures, legal disclaimers, and repeated boilerplate from email bodies
+// extractLatestMessage: strips quoted reply chains from an email body.
+// Returns only the sender's new content above the first quoted divider.
+// Handles Outlook (--- date | From ---), Gmail (> ), and standard (From: header) patterns.
+function extractLatestMessage(text = '') {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const cleaned = [];
+  for (const line of lines) {
+    const l = line.trim();
+    // Stop at Outlook-style quoted divider: "--- DD Mon, HH:MM | From: ..."
+    if (/^---\s+\d/.test(l)) break;
+    // Stop at standard quoted reply header (From: on its own line after some content)
+    if (/^from:\s+/i.test(l) && cleaned.length > 2) break;
+    // Stop at Outlook forwarded/reply header block
+    if (/^(sent|to|cc):\s+/i.test(l) && cleaned.length > 2 && cleaned.some(c => /^from:\s+/i.test(c.trim()))) break;
+    // Stop at Gmail quote marker
+    if (/^On .+ wrote:$/.test(l)) break;
+    // Stop at horizontal rule separating quoted content
+    if (/^_{5,}$/.test(l) || /^-{5,}$/.test(l)) break;
+    cleaned.push(line);
+  }
+  return cleaned.join('\n').trim().slice(0, 1500);
+}
+
 function cleanEmailBody(text = '') {
   if (!text) return '';
   const lines = text.split('\n');
@@ -989,53 +1025,73 @@ function cleanEmailBody(text = '') {
     if (/^from:\s+/i.test(l) && cleaned.length > 3) break; // stop at quoted reply chain
     cleaned.push(line);
   }
-  return cleaned.join('\n').trim().slice(0, 800);
+  return cleaned.join('\n').trim().slice(0, 1500);
 }
 
 function buildEmailContextText({ body = {}, scopedEmailContext = [] }) {
   const supplied = buildSuppliedEmailContext(body);
-  const emails = [];
 
-  if (supplied) emails.push(supplied);
-  (scopedEmailContext || []).forEach(email => {
-    const normalised = normaliseEmailRecord(email);
-    if (!normalised) return;
-    const key = normalised.id || `${normalised.thread_id}-${normalised.date}-${normalised.subject}`;
-    if (!emails.some(existing => (existing.id || `${existing.thread_id}-${existing.date}-${existing.subject}`) === key)) emails.push(normalised);
+  // Sort scopedEmailContext DESCENDING (newest first) before processing.
+  // This ensures the newest emails are never truncated when there are more than 20 messages.
+  const sortedScope = [...(scopedEmailContext || [])].sort((a, b) => {
+    const da = new Date(a.received_at || a.sent_at || a.date || 0);
+    const db = new Date(b.received_at || b.sent_at || b.date || 0);
+    return db - da; // descending: newest first
   });
+
+  // Build deduplicated email list.
+  // supplied (the selected email) is always first regardless of date.
+  const emails = [];
+  const seen = new Set();
+
+  const addEmail = (raw) => {
+    const normalised = normaliseEmailRecord(raw);
+    if (!normalised) return;
+    const key = normalised.id || `${normalised.thread_id}|${normalised.date}|${normalised.subject}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    emails.push(normalised);
+  };
+
+  if (supplied) addEmail({ ...supplied, _isSelected: true });
+
+  // Add newest-first thread emails (up to 29 more after the selected)
+  for (const email of sortedScope) {
+    if (emails.length >= 30) break;
+    addEmail(email);
+  }
 
   if (!emails.length) return '';
 
   const selected = emails[0];
-  const thread = emails.slice(0, 20);
+
+  // Extract only the sender's latest message from the selected email body,
+  // stripping quoted reply chains so GPT sees the actual new content.
+  const selectedBodyRaw = selected.body || '';
+  const selectedBodyClean = extractLatestMessage(selectedBodyRaw);
+
+  // Thread context: all emails after the selected, up to 20 (already newest-first)
+  const thread = emails.slice(1, 21);
 
   return `
 ACTIVE SELECTED EMAIL CONTEXT:
-The user is discussing, analysing, drafting or preparing a response in relation to the selected email/thread below. Treat this email/thread as primary context. Do not ignore it. Do not answer generically if this context is present.
+The user is drafting or preparing a response to the email below. This is the LATEST email that triggered the response. Read the sender's message carefully before the quoted history.
 
-Selected email:
+LATEST EMAIL — from ${selected.from || 'unknown'}:
 From: ${selected.from || ''}
 From email: ${selected.from_email || ''}
-To: ${Array.isArray(selected.to) ? selected.to.join(', ') : selected.to || ''}
-Cc: ${Array.isArray(selected.cc) ? selected.cc.join(', ') : selected.cc || ''}
 Subject: ${selected.subject || ''}
 Date: ${selected.date || ''}
-Thread ID: ${selected.thread_id || ''}
-Email ID: ${selected.id || ''}
 
-Selected email body:
-${cleanEmailBody(selected.body || '')}
+${selectedBodyClean || '(body not available)'}
 
-Available thread context (${thread.length} message${thread.length === 1 ? '' : 's'}):
+${thread.length > 0 ? `THREAD CONTEXT — ${thread.length} most recent email${thread.length === 1 ? '' : 's'} (newest first):
 ${thread.map((email, index) => `
-Message ${index + 1}
-From: ${email.from || ''}
+[${index + 1}] ${new Date(email.date || 0).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} — From: ${email.from || 'unknown'}
 Subject: ${email.subject || ''}
-Date: ${email.date || ''}
-Body:
 ${cleanEmailBody(email.body || '')}
-`).join('\n')}
-`.trim().slice(0, 8000);
+`).join('\n---\n')}` : ''}
+`.trim().slice(0, 10000);
 }
 
 async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '' }) {
