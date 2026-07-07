@@ -399,6 +399,7 @@ async function searchNamedProject(prompt, projectsContext = []) {
       if (lower.includes(w)) score += w.length;
     }
     if (ref && lower.includes(ref)) score += 20;
+    if (score > 0) console.log('[ely-smart] score debug:', addr.slice(0,40), 'score=', score, 'prompt includes mitcham=', lower.includes('mitcham'));
     if (score >= 5) scored.push({ proj, score });
   }
 
