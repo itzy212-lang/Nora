@@ -1786,6 +1786,24 @@ if (syncErr) throw syncErr;
 
   const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filtered = (state.emails || []).filter(e => {
+    // Filter by active folder first
+    if (folder === 'Inbox') {
+      const f = (e.folder || '').toLowerCase();
+      const isSent = e.is_sent || f === 'sent' || f === 'sent items';
+      const isDraft = e.is_draft;
+      if (isSent || isDraft) return false;
+    } else if (folder === 'Sent') {
+      const f = (e.folder || '').toLowerCase();
+      const isSent = e.is_sent || f === 'sent' || f === 'sent items';
+      if (!isSent) return false;
+    } else if (folder === 'Drafts') {
+      if (!e.is_draft) return false;
+    } else if (folder === 'Unread') {
+      if (e.is_read) return false;
+    } else if (folder === 'Flagged') {
+      if (!e.flagged) return false;
+    }
+    // Then apply search
     if (!search) return true;
     const q = search.toLowerCase();
     const rawName = e.raw_recipients?.from?.name || '';
