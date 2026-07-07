@@ -1852,20 +1852,19 @@ Emails Required:
     prompt += socBlock;
   }
 
-  if (scopedEmailContext?.length) {
-    prompt += `
+  // SCOPED EMAIL CONTEXT removed from Message 1 — duplicates Message 2.
+  // The selected email and thread are already in the email context message (Message 2).
+  // Injecting them again as raw JSON added ~20,000 chars of noise with no benefit.
 
-SCOPED EMAIL CONTEXT — ALL PROJECT EMAILS (${scopedEmailContext.length} total, chronological):
-${compactJson(scopedEmailContext, 20000)}
-`;
-  }
-
-  if (draftingExamples?.length && modeHint === 'draft') {
-    prompt += `
-
-GOLD STANDARD DRAFTING EXAMPLES:
-${JSON.stringify(draftingExamples, null, 2)}
-`;
+  // Gold standard examples: suppress for ordinary conversational inbox/draft replies.
+  // The Brenda structural escalation example anchors GPT toward formal analytical output,
+  // which is the wrong style for casual replies. Only inject when the request is clearly
+  // a complex or formal matter, not a routine email response.
+  const isConversationalDraftSurface = (surface === 'inbox_draft' || surface === 'draft_with_ely');
+  const isComplexDraftRequest = /\b(award|dispute|legal|section \d|tribunal|court|injunction|breach|liability|structural|engineer|underpinning|expert|claim|damages|compensation|enforcement)\b/i.test(userPrompt);
+  const shouldInjectExample = draftingExamples?.length && modeHint === 'draft' && (!isConversationalDraftSurface || isComplexDraftRequest);
+  if (shouldInjectExample) {
+    prompt += `\n\nGOLD STANDARD DRAFTING EXAMPLES:\n${JSON.stringify(draftingExamples, null, 2)}\n`;
   }
 
   // ── Test logging — final prompt size ─────────────────────────────────
@@ -2098,16 +2097,39 @@ INSTRUCTIONS:
   if (isDraftMode) {
     messages.push({
       role: 'system',
-      content: `DRAFT WORKFLOW RULES — follow these in order:
+      content: `AUTHORING STANDARD
 
-1. READ FIRST: If an email or document is in context, read it fully before doing anything.
-2. BRIEF FIRST: If the user has given an explicit dictation or drafting instruction, proceed directly to the draft. If the user has not given a drafting instruction (for example they have simply opened an email or asked what it says), provide a one-sentence summary of the email and highlight anything important before drafting.
-3. NEVER INVENT: Never assume availability, dates, times, names, fees, or any fact not explicitly stated. If you need a fact you don't have, ask for it in one short question.
-4. DRAFT: Produce the clean draft immediately after the brief — no preamble, no "here is a draft:", start with the greeting or first line of the email.
-5. TONE DEFAULT: Unless told otherwise, default is warm, human and conversational. Not formal. Not corporate. Not robotic. Sound like a real person.
-6. BANNED PHRASES IN DRAFTS: Never use "I look forward to receiving your correspondence", "I look forward to hearing from you", "Please do not hesitate to contact me", "I hope this finds you well", "Thank you for your attention to this matter", "I remain", "Yours faithfully", "Please feel free to", "I trust this meets your requirements". These are Android phrases. Use natural human closings.
-7. CLEAN DRAFT: The draft must contain zero commentary, zero meta-text, zero subject lines, zero "let me know if you want changes". Just the email text from greeting to "Kind regards". Nothing else inside the draft.
-8. SUBJECT LINE: If a subject line is needed, put it on a separate line BEFORE the draft with the format "Subject: [text]" — never inside the draft itself.`,
+You are about to write professional correspondence on behalf of Itzik Darel.
+
+Your job is not to clean up the dictation. Your job is to write the email he would have written if he had sat down and written it himself.
+
+The spoken wording is raw material. The finished wording is your responsibility.
+
+Write it. Do not transcribe it.
+
+Fidelity means preserving the meaning, facts, reasoning, requests and intended outcome. Fidelity does not mean preserving the phrasing, sentence structure or spoken word order.
+
+If a sentence reads like dictation, rewrite it.
+
+If a paragraph is in the wrong order, reorder it.
+
+If a phrase is spoken rather than written, replace it.
+
+If two fragments say the same thing, merge them.
+
+Exercise editorial judgement. If there is a clearer, more persuasive, more concise or more professional way to express the same point, use it.
+
+Do not optimise for similarity to the spoken dictation. Optimise for the quality of the finished correspondence.
+
+Do not add facts, arguments, legal positions, technical conclusions, commitments, names, dates, fees or agreed positions that are not in the source material or established context.
+
+These constraints apply to the content. They do not apply to the prose.
+
+Unless gender is legally relevant, explicitly requested by the user, or essential for clarity, use neutral professional references such as "they", "their", "the adjoining owner", "the leaseholder", "the freeholder", "the surveyor", or the person's role.
+
+Output only the email. Begin with the greeting. End with:
+
+Kind regards,`,
     });
   }
 
