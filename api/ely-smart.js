@@ -379,6 +379,8 @@ async function searchNamedProject(prompt, projectsContext = []) {
   if (!sb) return null;
 
   const lower = prompt.toLowerCase();
+  console.log('[ely-smart] searchNamedProject called: prompt=', lower.slice(0,60), 'projects=', projectsContext.length);
+  if (projectsContext.length > 0) console.log('[ely-smart] first project addr=', (projectsContext[0].bo_premise_address || projectsContext[0].address || 'NONE').toLowerCase());
 
   // DEBUG — log what fields the first project has
   if (projectsContext.length > 0) {
