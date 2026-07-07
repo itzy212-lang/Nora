@@ -1267,7 +1267,11 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     const htmlBody = isHtml ? raw : raw.split(/\n\n+/).map((p, i, arr) =>
                       `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
                     ).join('');
-                    onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId, aoAddresses });
+                    const projectAddress = project?.bo_premise_address || project?.address || project?.name || '';
+                    const composerSubject = projectAddress
+                      ? `Party Wall etc. Act 1996 — ${projectAddress}`
+                      : '';
+                    onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId, aoAddresses, subject: composerSubject });
                   }}
                   onSaveToMemory={async (content) => {
                     if (!content || !projectId) return;
