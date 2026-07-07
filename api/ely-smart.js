@@ -398,7 +398,11 @@ async function searchNamedProject(prompt, projectsContext = []) {
     let score = 0;
     const addrWords = addr.split(/[,\s]+/).filter(w => w.length >= 5);
     for (const w of addrWords) {
-      if (lower.includes(w)) score += w.length;
+      if (lower.includes(w)) {
+        score += w.length; // exact match
+      } else if (w.length >= 6 && lower.includes(w.slice(0, 5))) {
+        score += 4; // fuzzy prefix match — catches Whisper mishearing e.g. mitchum vs mitcham
+      }
     }
     if (ref && lower.includes(ref)) score += 20;
     if (score > 0) console.log('[ely-smart] score debug:', addr.slice(0,40), 'score=', score, 'prompt includes mitcham=', lower.includes('mitcham'));
