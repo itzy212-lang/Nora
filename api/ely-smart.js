@@ -2320,39 +2320,7 @@ export default async function handler(req, res) {
     const body = req.body || {};
 
     // ── Silent read fast path — must come FIRST before any expensive lookups
-// ── Silent read fast path ────────────────────────────────────────────────
-    // Bypass all classifiers, booking flow, brain loading and system prompt overhead.
-    // Just send the thread to GPT and return the raw response.
-    if (body.isSilentRead || body.mode === 'silent_read') {
-      const emailCtx = body.emailContext || {};
-      const threadContent = emailCtx.threadText || emailCtx.body || body.prompt || '';
 
-      const { default: OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const silentResult = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        max_tokens: 150,
-        temperature: 0.1,
-        messages: [
-          {
-            role: 'system',
-            content: `You are Ely, an AI assistant for Itzik Darel / Square One Consulting (help@sq1consulting.co.uk). 
-Read the email thread provided. Identify participants, tone, history and any escalation DIRECTED AT ITZIK specifically.
-Only flag if there is something directed at Itzik that warrants attention.
-If flagging: respond with "Flag: [one short sentence]".
-If no flag needed: respond with the single word "Ready."
-Never summarise. Never explain. Never ask questions.`,
-          },
-          {
-            role: 'user',
-            content: body.prompt || `Read this thread:\n\n${threadContent}`,
-          },
-        ],
-      });
-
-      const silentReply = silentResult.choices?.[0]?.message?.content?.trim() || 'Ready.';
-      return res.status(200).json({ reply: silentReply, replyText: silentReply });
-    }
 
     let projectId = inferProjectId(body);
 
