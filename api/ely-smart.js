@@ -2160,7 +2160,21 @@ Unless gender is legally relevant, explicitly requested by the user, or essentia
 
 Output only the email. Begin with the greeting. End with:
 
-Kind regards,`,
+Kind regards,
+
+KNOWLEDGE REFERENCES IN DICTATION:
+
+If the dictation contains a reference to case law, a legal principle, a statutory provision, or existing knowledge — such as "refer to Reeve v Youngs", "we have something in our case law about this", "there is a case about this", "use the principle about fees", "refer to the Act on this", "we covered this" — you must:
+
+1. Identify what is being referenced from the knowledge available to you.
+2. Locate the relevant principle, case, section or rule.
+3. Incorporate it accurately into the draft at the appropriate point.
+
+Do not ignore knowledge references. Do not strip them as discarded speech. Do not substitute a vague phrase like "relevant authorities" when a specific case, section or principle is available and applicable.
+
+If the reference is ambiguous and you cannot identify exactly what is meant, include a bracketed note in the draft: [Itzik — please confirm which case/principle to reference here].
+
+Do not invent case law. Use only what is established in the knowledge layer or the supplied context.`,
     });
   }
 
