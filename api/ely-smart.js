@@ -634,39 +634,34 @@ function hasDiscussionIntent(prompt = '') {
   if (!p) return false;
 
   return (
-    /what do you think/i.test(p) ||
-    /what's your view/i.test(p) ||
-    /whats your view/i.test(p) ||
-    /what's your read/i.test(p) ||
-    /whats your read/i.test(p) ||
-    /thoughts\??/i.test(p) ||
-    /can (he|she|they|we|i) do that/i.test(p) ||
-    /is that right/i.test(p) ||
-    /is that correct/i.test(p) ||
-    /is that a breach/i.test(p) ||
-    /talk me through/i.test(p) ||
-    /(let'?s|let us) discuss/i.test(p) ||
-    /chat through/i.test(p) ||
-    /am i missing/i.test(p) ||
-    /what('?s| is) his angle/i.test(p) ||
-    /what('?s| is) her angle/i.test(p) ||
-    /what('?s| is) their angle/i.test(p) ||
-    /why is (he|she|they) saying this/i.test(p) ||
-    /how would a judge view this/i.test(p) ||
-    /how would a third surveyor view this/i.test(p) ||
-    /help me form a response/i.test(p) ||
-    /we need to discuss/i.test(p) ||
-    /i think/i.test(p) ||
-    /i am concerned/i.test(p) ||
-    /i'm concerned/i.test(p) ||
-    /the issue is/i.test(p) ||
-    /the risk is/i.test(p) ||
-    /the difficulty is/i.test(p) ||
-    /i'?ve reviewed the thread and i think/i.test(p) ||
-    /i'?ve read the thread and i think/i.test(p)
+    // Explicit discussion / analysis requests
+    /\bwhat do you think\b/i.test(p) ||
+    /\bwhat'?s your (view|read|take|opinion|advice)\b/i.test(p) ||
+    /\byour thoughts\b/i.test(p) ||
+    /\bthoughts\?/i.test(p) ||
+    /\b(let'?s|let us|i want to|can we|need to) discuss\b/i.test(p) ||
+    /\btalk me through\b/i.test(p) ||
+    /\bwalk me through\b/i.test(p) ||
+    /\bchat (through|about)\b/i.test(p) ||
+    // Questions about what to do or how to handle something
+    /\bcan (he|she|they|we|i) do that\b/i.test(p) ||
+    /\bis that (right|correct|a breach|allowed|permitted|valid|enforceable)\b/i.test(p) ||
+    /\bam i (right|correct|missing|wrong)\b/i.test(p) ||
+    /\bwhat should (i|we) do\b/i.test(p) ||
+    /\bhow should (i|we) (handle|approach|respond|deal with|play this)\b/i.test(p) ||
+    /\bwhat'?s (happening|going on|the situation|the position|the status)\b/i.test(p) ||
+    /\bwhat'?s (his|her|their) angle\b/i.test(p) ||
+    /\bwhy is (he|she|they) saying\b/i.test(p) ||
+    /\bhow would a (judge|third surveyor|court)\b/i.test(p) ||
+    /\bhelp me (think|form|work out|understand)\b/i.test(p) ||
+    /\bi need (your help|to think|to understand|advice)\b/i.test(p) ||
+    /\bi'?m (not sure|unsure|confused|concerned|worried)\b/i.test(p) ||
+    /\bi am concerned\b/i.test(p) ||
+    /\bthe (issue|risk|problem|difficulty|concern) is\b/i.test(p) ||
+    /\bwe need to (discuss|talk about|think about)\b/i.test(p) ||
+    /\bi'?ve (reviewed|read) the thread and i think\b/i.test(p)
   );
 }
-
 function looksLikeEmailDictation(prompt = '') {
   const p = normalisePromptForIntent(prompt);
 
