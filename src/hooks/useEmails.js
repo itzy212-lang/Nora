@@ -288,8 +288,8 @@ export function useEmails() {
         is_read: true,
         project_id: projectId || null,
         user_id: state.currentUser?.id || null,
-      }).select('id').single().catch(() => ({ data: null }));
-      savedEmailId = inserted?.id || null;
+      }).select('id').maybeSingle();
+      savedEmailId = inserted?.data?.id || null;
     }
 
     // Extract key facts into project memory in the background (fire and forget)
