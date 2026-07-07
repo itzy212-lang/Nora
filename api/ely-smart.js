@@ -1162,6 +1162,37 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     }
   }
 
+  // ── party_wall_drafting — test injection for draft mode ─────────────────
+  // Loads the party_wall_drafting record by name from the DB for draft mode only.
+  // This record was active on 27 June and may be the missing drafting identity layer.
+  // It is NOT renamed in the DB — this is a controlled test only.
+  // Remove this block if the test is inconclusive. Merge into get_ely_brain_v2 if confirmed.
+  if (modeHint === 'draft') {
+    try {
+      const sbPwd = getSupabase();
+      if (sbPwd) {
+        const { data: pwdRecord } = await sbPwd
+          .from('ai_instruction_sets')
+          .select('name, system_prompt, output_rules, behaviour_rules')
+          .eq('name', 'party_wall_drafting')
+          .eq('active', true)
+          .maybeSingle();
+
+        if (pwdRecord) {
+          const pwdParts = [pwdRecord.system_prompt, pwdRecord.output_rules, pwdRecord.behaviour_rules].filter(Boolean);
+          if (pwdParts.length) {
+            prompt += `\n\n--- DRAFTING IDENTITY: party_wall_drafting ---\n\n${pwdParts.join('\n\n')}`;
+            console.log('[ely-smart] party_wall_drafting injected:', pwdParts.length, 'parts');
+          }
+        } else {
+          console.log('[ely-smart] party_wall_drafting not found or inactive — skipped');
+        }
+      }
+    } catch (pwdErr) {
+      console.warn('[ely-smart] party_wall_drafting load failed silently:', pwdErr.message);
+    }
+  }
+
   prompt += `\n\n${GLOBAL_AI_STANDARD}\n`;
 
   if (modeHint === 'email_summary') {
