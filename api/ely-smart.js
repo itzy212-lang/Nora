@@ -1118,8 +1118,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       const crossResult = await searchNamedProject(userPrompt, projectsCtx);
       if (crossResult) {
         crossProjectResults = crossResult;
-        console.log('[ely-smart] cross-project results found:', crossResult.results.length, 'items from', (crossResult.projects || [crossResult.project]).map(p=>p?.bo_premise_address||p?.address).join(', '));
-        const _dummy = crossResult.project?.bo_premise_address);
+        console.log('[ely-smart] cross-project results found:', crossResult.results.length, 'items');
       }
     }
   } catch (semErr) {
