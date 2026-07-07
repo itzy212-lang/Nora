@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
@@ -33,6 +34,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [draftSaved, setDraftSaved] = useState(false);
   const [editPersistPending, setEditPersistPending] = useState(false);
   const [generationIncomplete, setGenerationIncomplete] = useState(false);
+  const [dualAIEnabled, setDualAIEnabled] = useState(() => localStorage.getItem('nora_dual_ai_soc') === 'true');
+  const [dualAIVerifying, setDualAIVerifying] = useState(false);
+  const [dualAIReview, setDualAIReview] = useState(null); // { diff, rawNotes, structuredData }
   const [generationWarning, setGenerationWarning] = useState(null);
 
   // ── Sidebar state ────────────────────────────────────────────────────────
@@ -357,6 +361,26 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setPartyDrafts(payload.partyDrafts || []);
       setUnresolvedOverridden(false);
       setPhase('review');
+
+      // ── Dual AI verification — Claude cross-checks GPT's SOC ──────────
+      if (dualAIEnabled && payload.structured_data) {
+        setDualAIVerifying(true);
+        try {
+          const verifyRes = await fetch('/api/verify-soc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ raw_notes: text, structured_data: payload.structured_data }),
+          });
+          const verifyJson = await verifyRes.json();
+          if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
+            setDualAIReview({ diff: verifyJson.diff, rawNotes: text, structuredData: payload.structured_data });
+          }
+        } catch (err) {
+          console.warn('[dual-ai-soc] verification failed, proceeding with GPT only:', err.message);
+        } finally {
+          setDualAIVerifying(false);
+        }
+      }
     } catch (err) {
       alert('Error generating SOC: ' + (err.message || err));
     } finally {
@@ -850,7 +874,19 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const hasContent = messages.some(m => m.role === 'user');
 
   return (
-    <div style={s.page}>
+      {dualAIReview && (
+        <DualAIReviewOverlay
+          diff={dualAIReview.diff}
+          gptItems={dualAIReview.structuredData?.sections?.flatMap(s => s.rows || []) || []}
+          onFinalise={(finalItems) => {
+            // Merge Claude's accepted corrections back into structuredData
+            // For now just close the overlay — the SOC is already in review phase
+            setDualAIReview(null);
+          }}
+          onClose={() => setDualAIReview(null)}
+        />
+      )}
+      <div style={s.page}>
       {/* Sidebar overlay */}
       {sidebarOpen && (
         <>
@@ -900,6 +936,18 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           >
             {processing ? 'Generating…' : 'Generate SOC'}
           </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={dualAIEnabled}
+              onChange={e => {
+                setDualAIEnabled(e.target.checked);
+                localStorage.setItem('nora_dual_ai_soc', e.target.checked ? 'true' : 'false');
+              }}
+            />
+            Verify with Claude
+            {dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 4 }}>Checking…</span>}
+          </label>
         </div>
 
         {/* AO selector bar */}
