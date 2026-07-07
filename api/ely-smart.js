@@ -1138,20 +1138,11 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += `\n\n--- DRAFTING RULES ---\n\n${brain.drafting_layer.system_prompt}`;
   }
 
-  // ── USER BRAIN — personal preferences, writing voice, fees ──────────────
-  // Always loads — small, personalised to this user.
-  if (brain?.user_brain) {
-    const ub = brain.user_brain;
-    // Single brain_content field — all user preferences in one place
-    const userParts = [
-      ub.brain_content || null,
-    ].filter(Boolean);
-    if (userParts.length) {
-      prompt += `\n\n--- USER PREFERENCES — APPLY THROUGHOUT ---\n\n${userParts.join('\n\n')}\n\nThe above preferences represent Itzik's established voice, style and fee structure. They override any default style. Apply them throughout every draft.`;
-    }
-  }
+  // ── USER BRAIN — merged into ely_master_v3 system_prompt directly ────────
+  // Writing voice, fees, banned phrases, and personal preferences are now part
+  // of the core brain. No separate injection needed.
 
-  // ── DOMAIN LAYER — injected when a specific mode is active ────────────
+    // ── DOMAIN LAYER — injected when a specific mode is active ────────────
   // This is the second instruction set loaded from the layered brain loader.
   // It adds mode-specific rules on top of the global layer without replacing it.
   if (brain?.domain_layer) {
