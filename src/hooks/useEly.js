@@ -217,7 +217,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
 
     return projects
       .filter(p => p.status !== 'complete' && p.status !== 'archived')
-      .slice(0, 20)
+      .slice(0, 50)
       .map(p => {
         const np = normaliseProject(p);
         return {
