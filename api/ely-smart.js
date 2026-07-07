@@ -1038,7 +1038,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 8000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [] }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '' }) {
   // ── NORA V4 INSTRUCTION HIERARCHY ─────────────────────────────────────────
   // When instructions conflict, apply this order:
   // 1. Current user instruction
@@ -1071,8 +1071,9 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
 
   // ── KNOWLEDGE LAYER — party wall knowledge, case law, enclosure formula ──
   // Loads when on a party wall surface or drafting/reviewing party wall matters.
-  // Does NOT load for simple general chat with no party wall content.
-  if (brain?.knowledge_layer?.system_prompt) {
+  // TEST: temporarily disabled for draft_with_ely/inbox_draft to isolate dilution effect
+  const isDraftWithElySurface = surface === 'inbox_draft' || surface === 'draft_with_ely';
+  if (brain?.knowledge_layer?.system_prompt && !isDraftWithElySurface) {
     prompt += `\n\n--- KNOWLEDGE: PARTY WALL & CONSTRUCTION ---\n\n${brain.knowledge_layer.system_prompt}`;
   }
 
@@ -3213,6 +3214,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       userPrompt: prompt,
       projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
       chatHistory: body?.chatHistory || [],
+      surface: body.surface || '',
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
