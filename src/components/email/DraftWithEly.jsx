@@ -161,9 +161,6 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
   const { send } = useEly({ surface: 'inbox_draft' });
   const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
-  // TEMP: force debug capture — remove after payload is captured
-  useEffect(() => { localStorage.setItem('nora_debug_mode', 'true'); }, []);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
@@ -232,7 +229,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
       const extraOpts = {
         mode: 'draft',
         workflowStage: 'draft_with_ely',
-        debug: localStorage.getItem('nora_debug_mode') === 'true',
+        debug: true, // TEMP: hardcoded for payload capture — remove after
         sessionId,
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
