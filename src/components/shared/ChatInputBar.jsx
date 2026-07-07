@@ -260,10 +260,10 @@ export default function ChatInputBar({
           }}
         />
 
-        {/* Right: mic (always rendered) + send overlay after recording stops */}
-        <div style={{ flexShrink: 0, marginBottom: 2, position: 'relative', width: 36, height: 36 }}>
+        {/* Right side: mic always visible + send appears alongside (never overlaid) */}
+        <div style={{ flexShrink: 0, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
 
-          {/* VoiceInput always rendered — owns its own toggle (start/stop) */}
+          {/* VoiceInput — always rendered and always tappable, even after recording stops */}
           <VoiceInput
             onTranscript={handleVoice}
             onPreview={handleVoicePreview}
@@ -271,7 +271,7 @@ export default function ChatInputBar({
             stopSignal={combinedStop}
           />
 
-          {/* Send button overlays mic only when recording has stopped AND there is text */}
+          {/* Send button appears next to mic when there is text — does NOT overlay mic */}
           {!isRecording && (hasText || stoppedRecording) && (
             <button
               type="button"
@@ -279,7 +279,6 @@ export default function ChatInputBar({
               disabled={disabled || loading || isTranscribing}
               title={isTranscribing ? 'Transcribing…' : 'Send'}
               style={{
-                position: 'absolute', inset: 0,
                 width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
@@ -287,6 +286,7 @@ export default function ChatInputBar({
                 color: isTranscribing ? 'var(--text3)' : '#fff',
                 cursor: disabled || loading || isTranscribing ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               {isTranscribing ? (
