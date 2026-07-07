@@ -378,118 +378,54 @@ async function searchNamedProject(prompt, projectsContext = []) {
   const sb = getSupabase();
   if (!sb) return null;
 
-  // Extract project name mentions from prompt
-  // Match patterns like "the X project", "X project notes", "from X", "in X"
   const lower = prompt.toLowerCase();
 
-  // Try to match against known project addresses/names
-  // Strategy: score each project by how specifically it matches the prompt
-  // Prefer longer/more specific word matches over short generic ones
-  let matchedProject = null;
-  let bestScore = 0;
-
+  // Score every project against the prompt — support multiple matches
+  const scored = [];
   for (const proj of projectsContext) {
     const addr = (proj.bo_premise_address || proj.address || proj.name || '').toLowerCase();
     const ref = (proj.ref || '').toLowerCase();
     if (!addr && !ref) continue;
 
     let score = 0;
-
-    // Extract meaningful words from address (5+ chars to avoid common words)
     const addrWords = addr.split(/[,\s]+/).filter(w => w.length >= 5);
     for (const w of addrWords) {
-      if (lower.includes(w)) {
-        score += w.length; // longer word match = higher score
-      }
+      if (lower.includes(w)) score += w.length;
     }
-
-    // Ref match
     if (ref && lower.includes(ref)) score += 20;
+    if (score >= 5) scored.push({ proj, score });
+  }
 
-    if (score > bestScore) {
-      bestScore = score;
-      matchedProject = proj;
+  // Sort by score descending — take up to 3 matched projects
+  scored.sort((a, b) => b.score - a.score);
+  const matched = scored.slice(0, 3).map(s => s.proj);
+
+  console.log('[ely-smart] cross-project search matched:', matched.length, 'projects:', matched.map(p => p.bo_premise_address || p.address).join(' | '));
+  if (!matched.length) return null;
+
+  // For each matched project, load basic facts — no semantic search needed for a list/summary request
+  const allResults = [];
+  for (const matchedProject of matched) {
+    const projectId = matchedProject.id;
+
+    // Try semantic search first
+    let results = await semanticSearchProject(projectId, prompt, 8);
+
+    if (!results?.length) {
+      // Fallback: just include the project address/ref as a result so GPT can list it
+      allResults.push({
+        content_type: 'project_summary',
+        content_id: projectId,
+        content: `Project: ${matchedProject.bo_premise_address || matchedProject.address} (${matchedProject.ref || 'no ref'}) — Status: ${matchedProject.status || 'active'}`,
+        similarity: 1.0,
+        project: matchedProject,
+      });
+    } else {
+      for (const r of results) allResults.push({ ...r, project: matchedProject });
     }
   }
 
-  // Require a minimum score to avoid false matches on short generic words
-  if (bestScore < 5) matchedProject = null;
-
-  console.log('[ely-smart] cross-project search: prompt=', prompt.slice(0,80), 'projects=', projectsContext.length);
-  if (!matchedProject) {
-    console.log('[ely-smart] cross-project search: no project matched');
-    return null;
-  }
-
-  const projectId = matchedProject.id;
-  console.log('[ely-smart] cross-project search matched:', matchedProject.bo_premise_address || matchedProject.address || matchedProject.ref);
-
-  // Try semantic search first
-  let results = await semanticSearchProject(projectId, prompt, 20);
-
-  // Fallback to plain text search if semantic returns nothing (e.g. no embeddings yet)
-  if (!results?.length) {
-    console.log('[ely-smart] semantic search empty — falling back to text search');
-    const sb = getSupabase();
-    if (sb) {
-      // Extract key search terms from prompt (skip common words)
-      const stopWords = new Set(['the','and','for','from','with','this','that','have','find','look','notes','project','please','can','you','use','apply']);
-      const searchTerms = prompt.toLowerCase().split(/\s+/)
-        .filter(w => w.length > 3 && !stopWords.has(w))
-        .slice(0, 5);
-
-      if (searchTerms.length) {
-        const textResults = [];
-
-        // Search chat messages
-        for (const term of searchTerms) {
-          const { data: msgs } = await sb
-            .from('ai_messages')
-            .select('id, content, created_at, role')
-            .eq('project_id', projectId)
-            .eq('role', 'user')
-            .ilike('content', '%' + term + '%')
-            .limit(10);
-          if (msgs?.length) {
-            for (const m of msgs) {
-              if (!textResults.find(r => r.content_id === m.id)) {
-                textResults.push({ content_type: 'chat', content_id: m.id, content: m.content, similarity: 0.5 });
-              }
-            }
-          }
-        }
-
-        // Search emails
-        for (const term of searchTerms) {
-          const { data: emails } = await sb
-            .from('emails')
-            .select('id, subject, body, body_preview')
-            .eq('project_id', projectId)
-            .or('subject.ilike.%' + term + '%,body.ilike.%' + term + '%,body_preview.ilike.%' + term + '%')
-            .limit(10);
-          if (emails?.length) {
-            for (const e of emails) {
-              if (!textResults.find(r => r.content_id === e.id)) {
-                textResults.push({ content_type: 'email', content_id: e.id, subject: e.subject, content: e.body_preview || (e.body || '').slice(0, 500), similarity: 0.4 });
-              }
-            }
-          }
-        }
-
-        if (textResults.length) {
-          console.log('[ely-smart] text search fallback found:', textResults.length, 'results');
-          results = textResults;
-        }
-      }
-    }
-  }
-
-  if (!results?.length) return null;
-
-  return {
-    project: matchedProject,
-    results,
-  };
+  return { projects: matched, results: allResults };
 }
 
 function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext = null, threadId = null, emailId = null) {
@@ -1175,11 +1111,22 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     semanticResults = null;
   }
 
-  if (crossProjectResults?.results?.length) {
+  if (crossProjectResults) {
     const cp = crossProjectResults;
-    const cpTitle = cp.project.bo_premise_address || cp.project.address || cp.project.ref || 'Named Project';
-    const cpContent = cp.results.map(r => '[' + (r.content_type || 'note') + '] ' + (r.content || '')).join('\n\n');
-    prompt += '\n\nCROSS-PROJECT RESEARCH — ' + cpTitle + ':\nThe following was found in the notes and content of this project:\n\n' + cpContent;
+    // Support multiple matched projects
+    const projects = cp.projects || (cp.project ? [cp.project] : []);
+    if (projects.length > 0) {
+      const projectTitles = projects.map(p => p.bo_premise_address || p.address || p.ref || 'Project').join(', ');
+      prompt += `\n\nCROSS-PROJECT CONTEXT — ${projectTitles}:\n`;
+      prompt += `The user is asking about ${projects.length > 1 ? 'these projects' : 'this project'}. Here are the key details:\n\n`;
+      for (const proj of projects) {
+        prompt += `PROJECT: ${proj.bo_premise_address || proj.address || 'Unknown address'} (${proj.ref || 'no ref'}) — Status: ${proj.status || 'active'}\n`;
+      }
+      if (cp.results?.length) {
+        const cpContent = cp.results.map(r => '[' + (r.content_type || 'note') + '] ' + (r.content || '')).join('\n\n');
+        prompt += '\n' + cpContent;
+      }
+    }
   }
 
   if (semanticResults?.length) {
