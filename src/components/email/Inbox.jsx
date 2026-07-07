@@ -17,8 +17,12 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
 
   const [projects, setProjects] = useState([]);
   useEffect(() => {
-    sb.from('projects').select('id,ref,bo_premise_address').order('created_at', { ascending: false })
-      .then(({ data }) => setProjects(data || []));
+    sb.from('projects').select('id,ref,bo_premise_address').order('ref', { ascending: true })
+      .then(({ data }) => setProjects((data || []).sort((a,b) => {
+        const na = parseInt((a.ref||'').replace(/\D/g,''),10)||0;
+        const nb = parseInt((b.ref||'').replace(/\D/g,''),10)||0;
+        return na - nb;
+      })));
   }, []);
 
   const inp = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
@@ -1162,7 +1166,7 @@ function ProjectLinkBanner({ email, onLinked }) {
         <option value="">Select project…</option>
         {projects.map(p => (
           <option key={p.id} value={p.id}>
-            {p.ref} — {p.bo_premise_address || p.bo || 'Unknown'}
+            {p.bo_premise_address || p.bo || 'Unknown'}
           </option>
         ))}
       </select>
