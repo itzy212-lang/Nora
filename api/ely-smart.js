@@ -3318,13 +3318,14 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           temperature,
         };
 
-    // ── DEBUG CAPTURE — fires only when body.debug === true ─────────────────
-    if (body.debug === true || body.debug === 'true') {
+    let captureRowId = null;
+    // ── PAYLOAD CAPTURE — fires on every inbox_draft/draft_with_ely request ──
+    if (isDraftWithEly || body.surface === 'inbox_draft') {
       try {
         const sbDebug = getSupabase();
         if (sbDebug) {
           const systemMsg = messages.find(m => m.role === 'system');
-          await sbDebug.from('debug_payloads').insert([{
+          const { data: captureRow, error: captureErr } = await sbDebug.from('debug_payloads').insert([{
             model: modelPayload.model || activeModel,
             temperature: modelPayload.temperature ?? null,
             mode: modeHint,
@@ -3333,11 +3334,16 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
             system_prompt_length: systemMsg?.content?.length || 0,
             total_messages: messages.length,
             openai_response: null,
-          }]);
-          console.log('[ely-smart] debug payload captured');
+          }]).select('id').single();
+          if (captureErr) {
+            console.warn('[ely-smart] payload capture insert error:', captureErr.message);
+          } else {
+            captureRowId = captureRow?.id || null;
+            console.log('[ely-smart] payload captured id:', captureRowId, 'messages:', messages.length, 'system_len:', systemMsg?.content?.length || 0);
+          }
         }
       } catch (dbErr) {
-        console.warn('[ely-smart] debug capture failed:', dbErr.message);
+        console.warn('[ely-smart] payload capture failed:', dbErr.message);
       }
     }
     // ──────────────────────────────────────────────────────────────────────────
@@ -3392,29 +3398,23 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const modelUsed = data.model || 'gpt-5.4-mini';
     console.log('[ely-smart] responded with model:', modelUsed);
 
-    // ── Update debug capture with response ────────────────────────────────
-    if (body.debug === true || body.debug === 'true') {
+    // ── Update payload capture with response ─────────────────────────────
+    if (captureRowId) {
       try {
         const sbDebug = getSupabase();
         if (sbDebug) {
-          const { data: latest } = await sbDebug
-            .from('debug_payloads')
-            .select('id')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .single();
-          if (latest?.id) {
-            await sbDebug.from('debug_payloads').update({
-              openai_response: {
-                model: data.model,
-                usage: data.usage,
-                reply_preview: (data.choices?.[0]?.message?.content || '').slice(0, 2000),
-              }
-            }).eq('id', latest.id);
-          }
+          await sbDebug.from('debug_payloads').update({
+            openai_response: {
+              model: data.model,
+              usage: data.usage,
+              finish_reason: data.choices?.[0]?.finish_reason || null,
+              reply_full: (data.choices?.[0]?.message?.content || ''),
+            }
+          }).eq('id', captureRowId);
+          console.log('[ely-smart] payload capture updated with response');
         }
       } catch (dbErr) {
-        console.warn('[ely-smart] debug response capture failed:', dbErr.message);
+        console.warn('[ely-smart] payload response update failed:', dbErr.message);
       }
     }
     // ──────────────────────────────────────────────────────────────────────
