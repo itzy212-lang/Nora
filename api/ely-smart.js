@@ -1242,7 +1242,7 @@ Where possible, use neutral professional references such as:
 
 Do not replace neutral references with "he", "she", "his" or "her" based on assumptions or context alone.
 
-If the user's dictation uses a gendered reference deliberately, preserve it.
+Do not preserve gendered wording simply because it appeared in spoken dictation. Unless gender is legally relevant, explicitly requested by the user, or essential for clarity, use neutral professional references such as 'they', 'their', 'the adjoining owner', 'the leaseholder', 'the freeholder', 'the surveyor', or the person's role.
 
 EDITORIAL TASK
 
