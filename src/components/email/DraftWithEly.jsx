@@ -227,9 +227,9 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     try {
       const extraOpts = {
-        mode: 'draft',
+        mode: 'draft_with_ely',
         workflowStage: 'draft_with_ely',
-        debug: true, // TEMP: hardcoded for payload capture — remove after
+        debug: localStorage.getItem('nora_debug_mode') === 'true',
         sessionId,
         emailId: email?.id || email?.external_id,
         threadId: threadId || email?.thread_id,
