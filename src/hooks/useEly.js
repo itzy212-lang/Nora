@@ -448,9 +448,9 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     // Do not hardcode 'discuss' as the default mode.
     // Let ely-smart's inferModeHint classify from the prompt and surface.
     // Only pass an explicit mode when it is genuinely known.
-    const modeHint =
-      extraOpts.mode ||
-      (extraOpts.mainChatWorkflow === 'draft_clean_bubble_only' ? 'draft' : null);
+    // Do NOT force 'draft' from projectChatWorkflow — the classifier handles draft
+    // detection correctly. Forcing it here overrides discussion intent on project chat.
+    const modeHint = extraOpts.mode || null;
 
     try {
       const actualSessionId = await ensureSession({
