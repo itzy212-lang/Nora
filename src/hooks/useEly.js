@@ -451,7 +451,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     // Only pass an explicit mode when it is genuinely known.
     // Do NOT force 'draft' from projectChatWorkflow — the classifier handles draft
     // detection correctly. Forcing it here overrides discussion intent on project chat.
-    const modeHint = extraOpts.mode || null;
+    const modeHint = extraOpts.mode || 'discuss';
 
     try {
       const actualSessionId = await ensureSession({
