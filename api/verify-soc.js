@@ -95,8 +95,8 @@ Return ONLY valid JSON with no markdown:
 
     return res.status(200).json({ diff });
   } catch (err) {
-    console.warn('[verify-soc] bypassing — Claude unavailable:', err.message);
-    // Return empty diff so frontend falls through to GPT-only result
-    return res.status(200).json({ diff: { corrections: [], additions: [], notes: '' } });
+    console.warn('[verify-soc] Claude unavailable:', err.message);
+    // Return skipped flag so frontend can offer retry option
+    return res.status(200).json({ skipped: true, reason: err.message });
   }
 }
