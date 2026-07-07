@@ -327,7 +327,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
           <Field label="Project">
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inputStyle}>
               <option value="">No project</option>
-              {projects.map(p => (
+              {[...projects].sort((a,b) => { const na=parseInt((a.ref||'').replace(/\D/g,''),10)||0; const nb=parseInt((b.ref||'').replace(/\D/g,''),10)||0; return na-nb; }).map(p => (
                 <option key={p.id} value={p.id}>{projectDisplay(p)}</option>
               ))}
             </select>
