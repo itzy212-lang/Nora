@@ -585,7 +585,7 @@ ${FEW_SHOT_EXAMPLES}`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
-  const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt54';
+  const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o'; // default: gpt-4o
   // Model selection — gpt55=gpt-5.5, gpt54=gpt-5.4, gpt5=gpt-5, anything else=gpt-4o
   const model = resolvedMode === 'gpt55' ? 'gpt-5.5'
               : resolvedMode === 'gpt54' ? 'gpt-5.4'
