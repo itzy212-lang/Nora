@@ -444,11 +444,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           continue;
         }
         const row = sections[target.sectionIdx].rows[target.rowIdx];
-        const expectedOriginal = normaliseText(correction.gpt_version);
-        if (expectedOriginal && normaliseText(row.observation) !== expectedOriginal) {
-          warnings.push(`Skipped ${correction.ref || 'a correction'} because the row has changed since Claude reviewed it.`);
-          continue;
-        }
+        // Apply correction — no stale-row guard since the overlay fires immediately after
+        // generation before any user edits. Claude's gpt_version may be a paraphrase
+        // rather than exact text so text comparison is unreliable.
         sections[target.sectionIdx].rows[target.rowIdx] = withAppliedReviewMetadata(
           { ...row, observation: correction.claude_version },
           recommendation,
@@ -553,9 +551,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setUnresolvedOverridden(false);
       setDualAISkipped(null);
       setQaReviewRawNotes(text);
-      setPhase('review');
-
       // ── QA Review Mode — Claude cross-checks GPT's SOC and returns recommendations only ──────────
+      // Phase transitions to 'review' AFTER the overlay is resolved (or skipped/no recommendations).
       if (dualAIEnabled && payload.structured_data) {
         setDualAIVerifying(true);
         try {
@@ -566,21 +563,30 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           });
           const verifyJson = await verifyRes.json();
           if (verifyJson.skipped) {
-            // Claude was unavailable — store reason and offer retry
+            // Claude was unavailable — go to review and offer retry
             setDualAISkipped(verifyJson.reason || 'Claude verification unavailable');
+            setPhase('review');
           } else if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
+            // Show QA overlay BEFORE entering review phase — user decides first
             setDualAIReview({
               diff: verifyJson.diff,
               rawNotes: text,
               structuredData: payload.structured_data,
               recommendations: buildSocQaRecommendations(verifyJson.diff),
             });
+            // phase stays at 'recording' — handleQaReviewFinalise will call setPhase('review')
+          } else {
+            // No recommendations — proceed directly to review
+            setPhase('review');
           }
         } catch (err) {
           console.warn('[qa-review-soc] verification failed, proceeding with GPT only:', err.message);
+          setPhase('review');
         } finally {
           setDualAIVerifying(false);
         }
+      } else {
+        setPhase('review');
       }
     } catch (err) {
       alert('Error generating SOC: ' + (err.message || err));
@@ -606,8 +612,36 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     if (!res.ok) throw new Error(data.error || data.details || 'Could not re-render SOC');
     if (data.preview_html) setPreviewHtml(data.preview_html);
     if (data.structured_data) {
-      setStructuredData(data.structured_data);
-      if (data.structured_data.sections) setEditableSections(JSON.parse(JSON.stringify(data.structured_data.sections)));
+      // normaliseSections in the fast-path strips canonical fields (row_id, source_note_ids,
+      // source_claim_ids, qa_review). Re-merge them from the original socData by ref.
+      const canonicalByRef = {};
+      for (const sec of (socData.sections || [])) {
+        for (const row of (sec.rows || [])) {
+          if (row.ref) canonicalByRef[row.ref] = row;
+        }
+      }
+      const mergedStructuredData = {
+        ...data.structured_data,
+        sections: (data.structured_data.sections || []).map(sec => ({
+          ...sec,
+          rows: (sec.rows || []).map(row => {
+            const canonical = canonicalByRef[row.ref];
+            if (!canonical) return row;
+            return {
+              ...row,
+              row_id: canonical.row_id || row.row_id,
+              source_note_ids: canonical.source_note_ids || row.source_note_ids,
+              source_claim_ids: canonical.source_claim_ids || row.source_claim_ids,
+              qa_review: canonical.qa_review || row.qa_review,
+              flag_reason: canonical.flag_reason || row.flag_reason,
+              flagged: canonical.flagged || row.flagged,
+              qa_review_added: canonical.qa_review_added || row.qa_review_added,
+            };
+          }),
+        })),
+      };
+      setStructuredData(mergedStructuredData);
+      if (mergedStructuredData.sections) setEditableSections(JSON.parse(JSON.stringify(mergedStructuredData.sections)));
     }
     if (data.report_id) setReportId(data.report_id);
     return data.preview_html;
@@ -799,12 +833,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const handleQaReviewFinalise = useCallback(async ({ action, acceptedRecommendationIds = [] }) => {
     if (action === 'use_original') {
       setDualAIReview(null);
+      setPhase('review');
       return;
     }
 
     const recommendations = dualAIReview?.recommendations || buildSocQaRecommendations(dualAIReview?.diff || {});
     if (!acceptedRecommendationIds.length) {
       setDualAIReview(null);
+      setPhase('review');
       return;
     }
 
@@ -831,6 +867,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setEditableSections(sections);
       await renderSocData(updatedData);
       setDualAIReview(null);
+      setPhase('review');
 
       if (warnings.length) {
         alert(`Some QA Review recommendations could not be applied:\n\n${warnings.join('\n')}`);
@@ -956,6 +993,19 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
     return (
       <div style={s.reviewPage}>
+        {/* QA overlay renders over review phase when active */}
+        {dualAIReview && (
+          <QAReviewOverlay
+            title="QA Review Mode"
+            subtitle="Claude has reviewed GPT's Schedule of Conditions and returned recommendations only."
+            reviewerName="Claude"
+            primaryAuthorName="GPT"
+            notes={dualAIReview.diff?.notes || ''}
+            recommendations={dualAIReview.recommendations || buildSocQaRecommendations(dualAIReview.diff)}
+            onFinalise={handleQaReviewFinalise}
+            onClose={() => { setDualAIReview(null); setPhase('review'); }}
+          />
+        )}
         {/* Header */}
         <div style={s.reviewHeader}>
           <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>← Back</button>
@@ -975,6 +1025,24 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             </button>
           </div>
         </div>
+
+        {/* Claude unavailable banner — shown in review phase */}
+        {dualAISkipped && (
+          <div style={{
+            background: '#fef3c7', border: '1px solid #f59e0b',
+            padding: '10px 16px', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between', fontSize: 13,
+          }}>
+            <span>⚠️ Claude verification unavailable — SOC generated by GPT only. {dualAISkipped}</span>
+            <button
+              onClick={() => setDualAISkipped(null)}
+              style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12,
+                background: 'transparent', border: '1px solid #f59e0b', cursor: 'pointer', marginLeft: 12 }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <div style={s.reviewContent}>
           {/* Generation incomplete warning */}
@@ -1135,68 +1203,6 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
   return (
     <>
-      {dualAISkipped && (
-        <div style={{
-          background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 10,
-          padding: '10px 14px', marginBottom: 12, display: 'flex',
-          alignItems: 'center', justifyContent: 'space-between', fontSize: 13,
-        }}>
-          <span>⚠️ Claude verification unavailable — SOC generated by GPT only.</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={async () => {
-                setDualAISkipped(null);
-                setDualAIVerifying(true);
-                try {
-                  const verifyRes = await fetch('/api/verify-soc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ raw_notes: dualAIReview?.rawNotes || qaReviewRawNotes, structured_data: structuredData }),
-                  });
-                  const verifyJson = await verifyRes.json();
-                  if (verifyJson.skipped) {
-                    setDualAISkipped(verifyJson.reason || 'Claude still unavailable');
-                  } else if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
-                    setDualAIReview({
-                      diff: verifyJson.diff,
-                      rawNotes: dualAIReview?.rawNotes || qaReviewRawNotes,
-                      structuredData,
-                      recommendations: buildSocQaRecommendations(verifyJson.diff),
-                    });
-                  }
-                } catch (err) {
-                  setDualAISkipped('Claude still unavailable: ' + err.message);
-                } finally {
-                  setDualAIVerifying(false);
-                }
-              }}
-              style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}
-            >
-              {dualAIVerifying ? 'Retrying…' : 'Retry'}
-            </button>
-            <button
-              onClick={() => setDualAISkipped(null)}
-              style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12,
-                background: 'transparent', border: '1px solid #f59e0b', cursor: 'pointer' }}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-      {dualAIReview && (
-        <QAReviewOverlay
-          title="QA Review Mode"
-          subtitle="Claude has reviewed GPT's Schedule of Conditions and returned recommendations only."
-          reviewerName="Claude"
-          primaryAuthorName="GPT"
-          notes={dualAIReview.diff?.notes || ''}
-          recommendations={dualAIReview.recommendations || buildSocQaRecommendations(dualAIReview.diff)}
-          onFinalise={handleQaReviewFinalise}
-          onClose={() => setDualAIReview(null)}
-        />
-      )}
       <div style={s.page}>
       {/* Sidebar overlay */}
       {sidebarOpen && (
