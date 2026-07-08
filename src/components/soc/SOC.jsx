@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
+import QAReviewOverlay from '../shared/QAReviewOverlay';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
@@ -36,8 +36,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [generationIncomplete, setGenerationIncomplete] = useState(false);
   const [dualAIEnabled, setDualAIEnabled] = useState(() => localStorage.getItem('nora_dual_ai_soc') === 'true');
   const [dualAIVerifying, setDualAIVerifying] = useState(false);
-  const [dualAIReview, setDualAIReview] = useState(null); // { diff, rawNotes, structuredData }
+  const [dualAIReview, setDualAIReview] = useState(null); // { diff, rawNotes, structuredData, recommendations }
   const [dualAISkipped, setDualAISkipped] = useState(null); // reason string when Claude was unavailable
+  const [qaReviewRawNotes, setQaReviewRawNotes] = useState('');
   const [generationWarning, setGenerationWarning] = useState(null);
 
   // ── Sidebar state ────────────────────────────────────────────────────────
@@ -84,6 +85,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setEditableSections([]);
     setStructuredData(null);
     setReportId(null);
+    setQaReviewRawNotes('');
+    setDualAIReview(null);
+    setDualAISkipped(null);
     setSessionLoadError(null);
     // Pre-fetch session list for sidebar only
     fetch('/api/soc-save?project_id=' + projectId)
@@ -198,6 +202,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setMessages([]);
     setPreviewHtml('');
     setStructuredData(null);
+    setQaReviewRawNotes('');
+    setDualAIReview(null);
+    setDualAISkipped(null);
     setSidebarOpen(false);
 
     const res = await fetch(`/api/soc-save?session_id=${session.sessionId}`);
@@ -215,6 +222,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setMessages([]);
     setPreviewHtml('');
     setStructuredData(null);
+    setQaReviewRawNotes('');
+    setDualAIReview(null);
+    setDualAISkipped(null);
   }, []);
 
   // ── Scroll chat to bottom ────────────────────────────────────────────────
@@ -311,6 +321,186 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     }
   }, [isRecording, handleSend, startRecording, stopRecording, textInput]);
 
+
+  function buildSocQaRecommendations(diff = {}) {
+    const corrections = Array.isArray(diff.corrections) ? diff.corrections : [];
+    const additions = Array.isArray(diff.additions) ? diff.additions : [];
+    return [
+      ...corrections.map((correction, index) => ({
+        id: `soc-correction-${index}`,
+        type: 'correction',
+        severity: 'important',
+        target: {
+          path: `sections[title=${correction.section || ''}].rows[ref=${correction.ref || ''}].observation`,
+          label: [correction.section, correction.ref].filter(Boolean).join(' · ') || 'SOC observation',
+        },
+        original: correction.gpt_version || '',
+        recommended: correction.claude_version || '',
+        reason: correction.reason || '',
+        evidence: correction.reason || '',
+        meta: { diffType: 'correction', index },
+      })),
+      ...additions.map((addition, index) => ({
+        id: `soc-addition-${index}`,
+        type: 'addition',
+        severity: 'important',
+        target: {
+          path: `sections[title=${addition.section || ''}].rows`,
+          label: addition.section || 'SOC section',
+        },
+        original: 'Not included in the generated SOC',
+        recommended: addition.observation || addition.title || '',
+        reason: addition.reason || '',
+        evidence: addition.reason || '',
+        meta: { diffType: 'addition', index },
+      })),
+    ];
+  }
+
+  function normaliseText(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function makeSectionPrefix(title) {
+    const words = String(title || 'QA').match(/[A-Za-z0-9]+/g) || ['QA'];
+    return words.slice(0, 2).map(w => w[0]).join('').toUpperCase().padEnd(2, 'Q');
+  }
+
+  function nextRowRef(section) {
+    const prefix = makeSectionPrefix(section?.title);
+    const max = (section?.rows || []).reduce((highest, row) => {
+      const match = String(row?.ref || '').match(/(\d+)$/);
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0);
+    return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+  }
+
+  function findSectionIndex(sections, title) {
+    const wanted = normaliseText(title);
+    if (!wanted) return -1;
+    return sections.findIndex(section => normaliseText(section.title) === wanted);
+  }
+
+  function findCorrectionTarget(sections, correction) {
+    const sectionIdx = findSectionIndex(sections, correction.section);
+    const candidateSections = sectionIdx >= 0
+      ? [{ section: sections[sectionIdx], sectionIdx }]
+      : sections.map((section, idx) => ({ section, sectionIdx: idx }));
+
+    for (const candidate of candidateSections) {
+      const rowIdx = (candidate.section.rows || []).findIndex(row => String(row.ref || '') === String(correction.ref || ''));
+      if (rowIdx >= 0) return { sectionIdx: candidate.sectionIdx, rowIdx };
+    }
+
+    const expected = normaliseText(correction.gpt_version);
+    if (expected) {
+      for (const candidate of candidateSections) {
+        const rowIdx = (candidate.section.rows || []).findIndex(row => normaliseText(row.observation) === expected);
+        if (rowIdx >= 0) return { sectionIdx: candidate.sectionIdx, rowIdx };
+      }
+    }
+
+    return null;
+  }
+
+  function withAppliedReviewMetadata(row, recommendation, extra = {}) {
+    const existing = Array.isArray(row.qa_review?.accepted_recommendations)
+      ? row.qa_review.accepted_recommendations
+      : [];
+    return {
+      ...row,
+      qa_review: {
+        ...(row.qa_review || {}),
+        mode: 'qa_review',
+        reviewer: 'claude',
+        accepted_recommendations: [
+          ...existing,
+          {
+            id: recommendation.id,
+            type: recommendation.type,
+            applied_at: new Date().toISOString(),
+            reason: recommendation.reason || '',
+            ...extra,
+          },
+        ],
+      },
+    };
+  }
+
+  function applySocQaReviewDecisions(currentData, diff, recommendations, acceptedRecommendationIds) {
+    const accepted = new Set(acceptedRecommendationIds || []);
+    const sections = JSON.parse(JSON.stringify(currentData.sections || []));
+    const warnings = [];
+
+    for (const recommendation of recommendations) {
+      if (!accepted.has(recommendation.id)) continue;
+
+      if (recommendation.meta?.diffType === 'correction') {
+        const correction = diff.corrections?.[recommendation.meta.index];
+        if (!correction?.claude_version) continue;
+        const target = findCorrectionTarget(sections, correction);
+        if (!target) {
+          warnings.push(`Could not find SOC row ${correction.ref || ''} in ${correction.section || 'the report'}; recommendation was not applied.`);
+          continue;
+        }
+        const row = sections[target.sectionIdx].rows[target.rowIdx];
+        const expectedOriginal = normaliseText(correction.gpt_version);
+        if (expectedOriginal && normaliseText(row.observation) !== expectedOriginal) {
+          warnings.push(`Skipped ${correction.ref || 'a correction'} because the row has changed since Claude reviewed it.`);
+          continue;
+        }
+        sections[target.sectionIdx].rows[target.rowIdx] = withAppliedReviewMetadata(
+          { ...row, observation: correction.claude_version },
+          recommendation,
+          { original_observation: row.observation }
+        );
+      }
+
+      if (recommendation.meta?.diffType === 'addition') {
+        const addition = diff.additions?.[recommendation.meta.index];
+        const observation = addition?.observation || addition?.title;
+        if (!observation) continue;
+        let sectionIdx = findSectionIndex(sections, addition.section);
+        if (sectionIdx < 0) {
+          sections.push({
+            title: addition.section || 'QA Review Additions',
+            rows: [],
+          });
+          sectionIdx = sections.length - 1;
+        }
+        const section = sections[sectionIdx];
+        const newRow = withAppliedReviewMetadata({
+          ref: nextRowRef(section),
+          row_id: uid(),
+          observation,
+          action: 'Record only',
+          source_note_ids: [],
+          source_claim_ids: [],
+          qa_review_added: true,
+        }, recommendation, { addition_reason: addition.reason || '' });
+        section.rows = [...(section.rows || []), newRow];
+      }
+    }
+
+    const updatedData = {
+      ...currentData,
+      sections,
+      edit_state: {
+        ...(currentData.edit_state || {}),
+        sections,
+      },
+      qa_review: {
+        ...(currentData.qa_review || {}),
+        mode: 'qa_review',
+        reviewer: 'claude',
+        last_applied_at: new Date().toISOString(),
+        accepted_recommendation_ids: Array.from(accepted),
+      },
+    };
+
+    return { updatedData, sections, warnings };
+  }
+
   // ── Generate SOC ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     const allNotes = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
@@ -362,9 +552,10 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setPartyDrafts(payload.partyDrafts || []);
       setUnresolvedOverridden(false);
       setDualAISkipped(null);
+      setQaReviewRawNotes(text);
       setPhase('review');
 
-      // ── Dual AI verification — Claude cross-checks GPT's SOC ──────────
+      // ── QA Review Mode — Claude cross-checks GPT's SOC and returns recommendations only ──────────
       if (dualAIEnabled && payload.structured_data) {
         setDualAIVerifying(true);
         try {
@@ -378,10 +569,15 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             // Claude was unavailable — store reason and offer retry
             setDualAISkipped(verifyJson.reason || 'Claude verification unavailable');
           } else if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
-            setDualAIReview({ diff: verifyJson.diff, rawNotes: text, structuredData: payload.structured_data });
+            setDualAIReview({
+              diff: verifyJson.diff,
+              rawNotes: text,
+              structuredData: payload.structured_data,
+              recommendations: buildSocQaRecommendations(verifyJson.diff),
+            });
           }
         } catch (err) {
-          console.warn('[dual-ai-soc] verification failed, proceeding with GPT only:', err.message);
+          console.warn('[qa-review-soc] verification failed, proceeding with GPT only:', err.message);
         } finally {
           setDualAIVerifying(false);
         }
@@ -391,21 +587,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     } finally {
       setProcessing(false);
     }
-  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, stopRecording, textInput]);
+  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, socType, stopRecording, textInput, dualAIEnabled]);
 
-  // ── Get re-rendered HTML from current edited sections ───────────────────
-  const getRenderedHtml = useCallback(async () => {
-    // Always use the current edited sections — these are the authoritative state
-    const editedData = {
-      ...(structuredData || {}),
-      sections: editableSections,
-      report_id: reportId,
-    };
+  const renderSocData = useCallback(async (socData) => {
     const res = await fetch('/api/generate-soc', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        final_soc_data: editedData,
+        final_soc_data: socData,
         project_id: projectId,
         ao_id: aoIdValue(selectedAO, Number(selectedAOIndex)),
         ao_name: aoName(selectedAO),
@@ -413,11 +602,32 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         ao_premise_address: selectedAOAddress,
       }),
     });
-    if (!res.ok) throw new Error('Could not re-render SOC');
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.details || 'Could not re-render SOC');
     if (data.preview_html) setPreviewHtml(data.preview_html);
+    if (data.structured_data) {
+      setStructuredData(data.structured_data);
+      if (data.structured_data.sections) setEditableSections(JSON.parse(JSON.stringify(data.structured_data.sections)));
+    }
+    if (data.report_id) setReportId(data.report_id);
     return data.preview_html;
-  }, [structuredData, editableSections, reportId, projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
+  }, [projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
+
+  // ── Get re-rendered HTML from current edited sections ───────────────────
+  const getRenderedHtml = useCallback(async () => {
+    // Always use the current edited sections — these are the authoritative state
+    const editedData = {
+      ...(structuredData || {}),
+      sections: editableSections,
+      edit_state: {
+        ...((structuredData || {}).edit_state || {}),
+        sections: editableSections,
+      },
+      report_id: reportId,
+      session_id: socSessionId,
+    };
+    return renderSocData(editedData);
+  }, [structuredData, editableSections, reportId, socSessionId, renderSocData]);
 
   // ── Save draft ────────────────────────────────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
@@ -459,7 +669,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     } finally {
       setPdfProcessing(false);
     }
-  }, [previewHtml, projectAddress, selectedAOAddress]);
+  }, [editableSections, getRenderedHtml, previewHtml, projectAddress, selectedAOAddress]);
 
   const handleSaveAndEmail = useCallback(async () => {
     setPdfProcessing(true);
@@ -487,7 +697,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     } finally {
       setPdfProcessing(false);
     }
-  }, [onOpenComposer, previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
+  }, [editableSections, getRenderedHtml, onOpenComposer, previewHtml, projectAddress, projectId, selectedAO, selectedAOAddress]);
 
   // ── Section list + review-phase helpers ─────────────────────────────────
   const STANDARD_SECTIONS = [
@@ -584,6 +794,51 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       }
     }, 1500); // debounce 1.5s
   }
+
+
+  const handleQaReviewFinalise = useCallback(async ({ action, acceptedRecommendationIds = [] }) => {
+    if (action === 'use_original') {
+      setDualAIReview(null);
+      return;
+    }
+
+    const recommendations = dualAIReview?.recommendations || buildSocQaRecommendations(dualAIReview?.diff || {});
+    if (!acceptedRecommendationIds.length) {
+      setDualAIReview(null);
+      return;
+    }
+
+    const effectiveData = {
+      ...(structuredData || dualAIReview?.structuredData || {}),
+      sections: editableSections,
+      edit_state: {
+        ...((structuredData || dualAIReview?.structuredData || {}).edit_state || {}),
+        sections: editableSections,
+      },
+      report_id: reportId,
+      session_id: socSessionId,
+    };
+
+    try {
+      const { updatedData, sections, warnings } = applySocQaReviewDecisions(
+        effectiveData,
+        dualAIReview?.diff || {},
+        recommendations,
+        acceptedRecommendationIds
+      );
+
+      setStructuredData(updatedData);
+      setEditableSections(sections);
+      await renderSocData(updatedData);
+      setDualAIReview(null);
+
+      if (warnings.length) {
+        alert(`Some QA Review recommendations could not be applied:\n\n${warnings.join('\n')}`);
+      }
+    } catch (err) {
+      alert('Could not apply QA Review recommendations: ' + (err.message || err));
+    }
+  }, [dualAIReview, structuredData, editableSections, reportId, socSessionId, renderSocData]);
 
   // ── Styles ───────────────────────────────────────────────────────────────
   const s = {
@@ -896,13 +1151,18 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                   const verifyRes = await fetch('/api/verify-soc', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ raw_notes: structuredData?.raw_notes || '', structured_data: structuredData }),
+                    body: JSON.stringify({ raw_notes: dualAIReview?.rawNotes || qaReviewRawNotes, structured_data: structuredData }),
                   });
                   const verifyJson = await verifyRes.json();
                   if (verifyJson.skipped) {
                     setDualAISkipped(verifyJson.reason || 'Claude still unavailable');
                   } else if (verifyJson.diff && (verifyJson.diff.corrections?.length > 0 || verifyJson.diff.additions?.length > 0)) {
-                    setDualAIReview({ diff: verifyJson.diff, structuredData });
+                    setDualAIReview({
+                      diff: verifyJson.diff,
+                      rawNotes: dualAIReview?.rawNotes || qaReviewRawNotes,
+                      structuredData,
+                      recommendations: buildSocQaRecommendations(verifyJson.diff),
+                    });
                   }
                 } catch (err) {
                   setDualAISkipped('Claude still unavailable: ' + err.message);
@@ -926,14 +1186,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         </div>
       )}
       {dualAIReview && (
-        <DualAIReviewOverlay
-          diff={dualAIReview.diff}
-          gptItems={dualAIReview.structuredData?.sections?.flatMap(s => s.rows || []) || []}
-          onFinalise={(finalItems) => {
-            // Merge Claude's accepted corrections back into structuredData
-            // For now just close the overlay — the SOC is already in review phase
-            setDualAIReview(null);
-          }}
+        <QAReviewOverlay
+          title="QA Review Mode"
+          subtitle="Claude has reviewed GPT's Schedule of Conditions and returned recommendations only."
+          reviewerName="Claude"
+          primaryAuthorName="GPT"
+          notes={dualAIReview.diff?.notes || ''}
+          recommendations={dualAIReview.recommendations || buildSocQaRecommendations(dualAIReview.diff)}
+          onFinalise={handleQaReviewFinalise}
           onClose={() => setDualAIReview(null)}
         />
       )}
@@ -996,8 +1256,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                 localStorage.setItem('nora_dual_ai_soc', e.target.checked ? 'true' : 'false');
               }}
             />
-            Verify with Claude
-            {dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 4 }}>Checking…</span>}
+            QA Review Mode
+            {dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 4 }}>Reviewing…</span>}
           </label>
         </div>
 
