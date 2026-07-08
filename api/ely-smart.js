@@ -129,6 +129,94 @@ AO_SUBJECT_REF: 8 Park Avenue, 6 Park Avenue
 List the full address of each relevant adjoining owner exactly as known from the project context, separated by a comma if there is more than one. Do not include this tag unless the user has specifically indicated the correspondence relates to one or more named adjoining owners.
 `;
 
+
+function normaliseRepresentationRole(value = '') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+  if (/agreed|both|joint/.test(raw)) return 'AGREED_SURVEYOR';
+  if (/\bao\b|adjoining|neighbour|neighbor/.test(raw)) return 'AO_SURVEYOR';
+  if (/\bbo\b|building|owner/.test(raw)) return 'BO_SURVEYOR';
+  return '';
+}
+
+function representationLabel(role = '') {
+  if (role === 'AO_SURVEYOR') return 'Adjoining Owner surveyor';
+  if (role === 'AGREED_SURVEYOR') return 'Agreed Surveyor';
+  return 'Building Owner surveyor';
+}
+
+function resolveRuntimeProject(body = {}) {
+  return body.currentProject || body.project || body.context?.currentProject || body.context?.project || null;
+}
+
+function buildRuntimeAoContext(body = {}, projectBundle = null) {
+  const runtimeProject = resolveRuntimeProject(body) || {};
+  const selectedAO = body.selectedAO || body.selected_ao || body.context?.selectedAO || body.context?.selected_ao || runtimeProject.selectedAO || runtimeProject.selected_ao || null;
+  const runtimeAos = Array.isArray(runtimeProject.aos) ? runtimeProject.aos : [];
+  const bundleAos = Array.isArray(projectBundle?.adjoining_owners) ? projectBundle.adjoining_owners : [];
+  return { selectedAO, aos: bundleAos.length ? bundleAos : runtimeAos };
+}
+
+function resolveRepresentation({ body = {}, projectBundle = null } = {}) {
+  const runtimeProject = resolveRuntimeProject(body) || {};
+  const project = projectBundle?.project_raw || projectBundle?.project || runtimeProject || {};
+  const role = normaliseRepresentationRole(firstNonEmpty(
+    body.representation,
+    body.representationRole,
+    body.context?.representation,
+    body.context?.representationRole,
+    runtimeProject.role,
+    runtimeProject.appointment_role,
+    runtimeProject.surveyor_role,
+    project.role,
+    project.appointment_role,
+    project.surveyor_role
+  )) || 'BO_SURVEYOR';
+
+  const aoContext = buildRuntimeAoContext(body, projectBundle);
+  return {
+    role,
+    label: representationLabel(role),
+    source: projectBundle?.project_raw ? 'linked project' : 'runtime project',
+    selectedAO: aoContext.selectedAO,
+    aos: aoContext.aos,
+  };
+}
+
+function buildRepresentationLockText(representation) {
+  const role = representation?.role || 'BO_SURVEYOR';
+  const label = representationLabel(role);
+  const prohibited = role === 'AO_SURVEYOR'
+    ? "Do not write as Building Owner surveyor, do not say we act for the Building Owner, and do not advance the Building Owner's position as our own."
+    : role === 'AGREED_SURVEYOR'
+      ? 'Do not write as separately appointed BO surveyor or separately appointed AO surveyor. Maintain neutral Agreed Surveyor positioning.'
+      : "Do not write as Adjoining Owner surveyor, do not say we act for the Adjoining Owner, and do not advance the Adjoining Owner's position as our own.";
+
+  const selectedAO = representation?.selectedAO;
+  const selectedAoText = selectedAO
+    ? `\nSelected AO/runtime target: ${compactJson(selectedAO, 2000)}`
+    : '';
+
+  return `REPRESENTATION LOCK — AUTHORITATIVE\nSquare One / Itzik's role on this matter is: ${label}.\nThis role is resolved from the ${representation?.source || 'project/runtime context'} and overrides any ambiguous wording in emails, chat history, memory, examples or dictation.\n${prohibited}\nBefore summarising or drafting, interpret “we”, “us”, “our”, “I”, “my client” and “the client” consistently with this role unless the source text is clearly quoting someone else.${selectedAoText}`;
+}
+
+function validateRoleConsistency(reply = '', representation = null, modeHint = '') {
+  if (!reply || !representation || modeHint !== 'draft') return null;
+  const text = String(reply).toLowerCase();
+  const role = representation.role;
+  const failures = [];
+
+  if (role === 'BO_SURVEYOR') {
+    if (/we act for (the )?adjoining owner|acting for (the )?adjoining owner|on behalf of (the )?adjoining owner/.test(text)) failures.push('Draft says Square One acts for the Adjoining Owner while project role is Building Owner surveyor.');
+  } else if (role === 'AO_SURVEYOR') {
+    if (/we act for (the )?building owner|acting for (the )?building owner|on behalf of (the )?building owner/.test(text)) failures.push('Draft says Square One acts for the Building Owner while project role is Adjoining Owner surveyor.');
+  } else if (role === 'AGREED_SURVEYOR') {
+    if (/we act for (the )?(building owner|adjoining owner)|acting for (the )?(building owner|adjoining owner)|on behalf of (the )?(building owner|adjoining owner)/.test(text)) failures.push('Draft uses separate-party representation wording while project role is Agreed Surveyor.');
+  }
+
+  return failures.length ? failures : null;
+}
+
 function normaliseProject(project = {}) {
   if (!project) return null;
 
@@ -1038,7 +1126,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 10000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '' }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null }) {
   // ── ELY V4 PROMPT ASSEMBLY ─────────────────────────────────────────────
   // Layer order per 06_LOADING_ARCHITECTURE.md:
   // 1. global_core
@@ -1073,6 +1161,8 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   // Runtime standard block (fee quoting tag, AO subject ref tag)
   prompt += `\n\n${GLOBAL_AI_STANDARD}\n`;
 
+  const representationLock = buildRepresentationLockText(representation);
+
   // Mode-specific block
   if (modeHint === 'email_summary') {
     prompt += `\n\nACTIVE MODE: email_thread_summary\n\nYOUR TASK:\nYou are reading an email thread on behalf of Itzik Darel / Square One Consulting. Produce a clean, focused summary and strategic first view. Do not draft correspondence.\n\nStructure your response in plain text like this:\n\nFrom:\n[sender name and firm]\n\nLatest email is asking for:\n[concise points from the latest email]\n\nContext from the thread:\n[relevant earlier history, changes of position, pattern or narrative]\n\nWhat stands out:\n[the issue beneath the surface, including whether the points appear to be Award matters, Act matters, damage claims, neighbour disputes or outside jurisdiction]\n\nSuggested approach:\n[1 to 3 plain sentences on what to think through before drafting]\n\nRULES:\n- Do not focus only on the latest email if earlier messages change the meaning.\n- Do not invent anything not stated in the emails.\n- Do not produce a full draft at this stage.\n- Do not use markdown, asterisks, hashtags or bold text.\n- Treat Square One Consulting, Itzik and help@sq1consulting.co.uk as us.\n`;
@@ -1080,6 +1170,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     prompt += `\n\nACTIVE MODE: DRAFT\n\nOUTPUT ONLY THE COMPLETED CORRESPONDENCE.\n\nDo not provide:\n\n- analysis\n- explanation\n- commentary\n- notes\n- options\n- a preamble\n- a summary\n- drafting advice\n\nBegin with the greeting.\n\nEnd with:\n\nKind regards,\n\nNothing may appear after the sign-off.\n\nGREETING\n\nRead the supplied email thread and context.\n\nUse the recipient's actual first name where it is clearly available.\n\nDo not guess a name.\n\nDo not use a placeholder.\n\nWhere no recipient name is available, use:\n\nHi,\n\nPROFESSIONAL ROLE\n\nYou are an expert professional correspondence drafter with specialist knowledge of:\n\n- Party Wall matters\n- construction processes\n- construction-related disputes\n- surveying practice\n- project management\n- professional fees\n- practical project delivery\n\nUse that expertise to understand the user's meaning and professional position.\n\nDo not use professional knowledge to invent facts, arguments or conclusions that the user did not provide and that are not established by the supplied context.\n\nKNOWLEDGE REFERENCES IN DICTATION:\n\nIf the dictation contains a reference to case law, a legal principle, a statutory provision, or existing knowledge, you must:\n\n1. Identify what is being referenced from the knowledge available to you.\n2. Locate the relevant principle, case, section or rule.\n3. Incorporate it accurately into the draft at the appropriate point.\n\nDo not ignore knowledge references. Do not strip them as discarded speech.\n\nIf the reference is ambiguous, include a bracketed note: [Itzik — please confirm which case/principle to reference here].\n\nDo not invent case law.\n`;
   } else {
     prompt += `\n\nACTIVE MODE:\n${modeHint || 'discuss'}\n\nHARD RUNTIME RULES:\nProject facts loaded below are authoritative. Use the party names, addresses and roles from the project facts before asking the user for them.\nIf a project is active, answer from the active project context first.\nNever invent party names, meetings, inspections, instructions or actions.\nDo not fixate on one issue. Before responding, consider the legal, procedural, evidential, engineering, strategic, practical and correspondence angles, then answer naturally.\nIn discussion mode, do not draft correspondence unless explicitly asked.\nIn review mode, review and analyse before suggesting changes. Do not rewrite unless explicitly asked.\nIn drafting mode, produce natural professional correspondence, not reports, templates, educational notes or explanatory guides.\n\nINVOICE MODE:\nWhen the user asks to raise, create, generate or send an invoice, switch into invoice mode.\nExtract line items from their dictation. Each item needs: description and amount (£).\nFormat amounts as numbers without currency symbols in the structured data.\nRespond with a clean summary card showing the line items and total.\nAsk the user to confirm or amend.\nWhen the user says "generate it", "looks good", "confirm", "yes" or similar — indicate you are ready to generate.\nAlways bill to the Building Owner from the project data.\nNever suggest or invent fee amounts — use only amounts the user states.\n\nINVOICE JSON FORMAT — when returning invoice data, include it as a JSON block at the end of your reply:\n<invoice_data>\n{\n  "items": [{"description": "...", "total": 350, "qty": 1, "unitPrice": "350"}],\n  "bill_to_name": "...",\n  "bill_to_address": "...",\n  "property_address": "...",\n  "bo_email": "..."\n}\n</invoice_data>\n\nEMAIL CONTEXT RULE:\nIf selected email context is provided, it is authoritative. Read the whole available thread before responding. For Draft With Ely and email composer workflows, do not assume the user wants an email drafted simply because the selected context is an email. If the user prompt is blank, summarise the selected email/thread and suggest the response strategy. If the user asks to talk it through, analyse. Draft only when the user clearly asks for drafting.\n\nWhen drafting emails or letters, never use hashtags, markdown headings, asterisks, bold formatting, consultant formatting, horizontal separators, excessive bullet points or long dashes.\nWhen drafting emails or letters, use ordinary paragraphs and natural human structure. Numbered points are allowed only when the subject matter genuinely requires numbered options or steps.\nThe finished draft must look like a real manually written professional email or letter, not ChatGPT output.\nRefer to the legislation as the Act.\nTreat Square One Consulting, Itzik, outgoing emails from help@sq1consulting.co.uk, I and we as Itzik/Square One unless context clearly says otherwise.\n`;
+  }
+
+  if (modeHint === 'email_summary' || modeHint === 'draft') {
+    prompt += `\n\n${representationLock}\n`;
   }
 
   // Domain guidance block
@@ -2714,6 +2808,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       needsBrain ? loadBrain({ userId, projectId, surface: body.surface, modeHint }) : Promise.resolve(null),
     ]);
 
+    const representation = resolveRepresentation({ body, projectBundle });
+
     let draftingExamples = [];
 
     try {
@@ -2741,6 +2837,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
+      representation,
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
@@ -2923,6 +3020,18 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     const data = await response.json();
     const fullReply = cleanOutput(data.choices?.[0]?.message?.content || '');
+    const roleConsistencyFailures = validateRoleConsistency(fullReply, representation, modeHint);
+    if (roleConsistencyFailures) {
+      console.error('[ely-smart] role consistency validation failed:', roleConsistencyFailures.join(' | '));
+      return res.status(200).json({
+        reply: 'I stopped this draft because it appeared to conflict with the project representation role. Please try again, or check the project role if it is wrong.',
+        role_consistency_failed: true,
+        role_consistency_errors: roleConsistencyFailures,
+        representation: representation?.role || null,
+        resolvedProject,
+        sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
+    }
     const modelUsed = data.model || 'gpt-5.4-mini';
     console.log('[ely-smart] responded with model:', modelUsed);
 
@@ -2963,6 +3072,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       projectContextLoaded: !!projectBundle?.project_raw,
       adjoiningOwnerCount: projectBundle?.adjoining_owners?.length || 0,
       brainLoaded: !!brain,
+      representation: representation?.role || null,
       sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     });
   } catch (err) {
