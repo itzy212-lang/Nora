@@ -1408,14 +1408,22 @@ export default async function handler(req, res) {
       };
       const renderedContent = renderSocContent(renderData, config, projectMeta);
       const preview_html = htmlTemplate.replace('{{SOC_CONTENT}}', renderedContent);
-      // Save edit state
+      // Save the updated canonical SOC data and regenerated preview so the saved report
+      // stays consistent after QA Review Mode or manual edit re-renders.
       if (final_soc_data.report_id) {
         try {
           await supabase.rpc('save_soc_structured_data', {
             report_id: final_soc_data.report_id,
             structured_data: renderData,
           });
-        } catch (_) {}
+          await supabase.rpc('save_soc_preview', {
+            report_id: final_soc_data.report_id,
+            session_id: final_soc_data.session_id || session_id || null,
+            content_html: preview_html,
+          });
+        } catch (saveError) {
+          console.warn('[generate-soc] final_soc_data save warning:', saveError.message);
+        }
       }
       return res.status(200).json({ preview_html, structured_data: renderData, report_id: final_soc_data.report_id || null });
     }
