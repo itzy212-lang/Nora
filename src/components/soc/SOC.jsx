@@ -1203,6 +1203,19 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
   return (
     <>
+      {/* QA Review overlay — renders over recording phase when recommendations arrive before phase transitions */}
+      {dualAIReview && (
+        <QAReviewOverlay
+          title="QA Review Mode"
+          subtitle="Claude has reviewed GPT's Schedule of Conditions and returned recommendations only."
+          reviewerName="Claude"
+          primaryAuthorName="GPT"
+          notes={dualAIReview.diff?.notes || ''}
+          recommendations={dualAIReview.recommendations || buildSocQaRecommendations(dualAIReview.diff)}
+          onFinalise={handleQaReviewFinalise}
+          onClose={() => { setDualAIReview(null); setPhase('review'); }}
+        />
+      )}
       <div style={s.page}>
       {/* Sidebar overlay */}
       {sidebarOpen && (
