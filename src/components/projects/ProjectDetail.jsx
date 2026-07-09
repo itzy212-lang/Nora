@@ -3568,13 +3568,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask }) =>
+          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections }) =>
             handleServeNoticePack({
               ao: servedAO || noticeModal.ao,
               sections,
               includeCover,
               noticeDate,
               createDeadlineTask,
+              section2Subsections,
             })
           }
           onClose={() => setNoticeModal(null)}
