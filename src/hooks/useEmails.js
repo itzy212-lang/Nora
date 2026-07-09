@@ -118,6 +118,13 @@ export function useEmails() {
           });
           // Extract facts from new project-linked emails (fire and forget)
           newRows.forEach(email => {
+            // Embed every new email (fire and forget) — enables semantic search
+            fetch('/api/embed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'embed_record', record_id: email.id, table: 'emails' }),
+            }).catch(() => {});
+            // Extract facts into project memory if linked to a project
             if (email.project_id && (email.body || email.body_preview)) {
               fetch('/api/extract-email-memory', {
                 method: 'POST',
