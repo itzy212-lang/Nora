@@ -1198,21 +1198,14 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   const projectFacts = buildProjectFactsText(projectBundle);
   if (projectFacts) prompt += `\n\nAUTHORITATIVE PROJECT FACTS:\n${projectFacts}\n`;
 
-  // Semantic search across project content
-  const chatHistoryLength = chatHistory.length;
-  const isFirstMessage = chatHistoryLength === 0;
-  const isExplicitResearch = /\b(check|find|look up|search|go through|look at|pull up|review.*notes?|project notes?|find.*email|search.*email|look.*email|what.*notes?|any.*notes?)\b/i.test(userPrompt);
-  const shouldRunSearch = isFirstMessage || isExplicitResearch;
-
+  // Semantic search across project content — runs on every project chat message
+  // Finds the most semantically relevant emails and chat history for the current prompt
+  // regardless of where we are in the conversation
   let semanticResults = null;
   let crossProjectResults = null;
   try {
-    if (shouldRunSearch) {
-      if (projectBundle?.project?.id) {
-        semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
-      }
-    } else {
-      console.log('[ely-smart] skipping semantic search — chat in progress, no explicit research request');
+    if (projectBundle?.project?.id) {
+      semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
     }
     // Cross-project search runs whenever no project is active — not just on explicit research.
     // The user may casually mention a project by address in any message.
@@ -1282,13 +1275,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     }
 
   } else if (projectBundle?.project_emails?.length) {
-    const isProjectChatLoad = surface === 'project_chat';
     const promptLower = (userPrompt || '').toLowerCase();
     const topicWords = promptLower.split(/\s+/).filter(w => w.length > 3);
     let relevantEmails = projectBundle.project_emails;
-    // Project chat: load all emails in full — no topic scoring, no arbitrary cap
-    // Other surfaces: score by relevance and cap at 30
-    if (!isProjectChatLoad && topicWords.length > 0) {
+    if (topicWords.length > 0) {
       const scored = relevantEmails.map(e => {
         const text = ((e.subject || '') + ' ' + (e.body || '') + ' ' + (e.sender_name || '')).toLowerCase();
         const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
@@ -1296,7 +1286,6 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       }).sort((a, b) => b._score - a._score);
       relevantEmails = scored.slice(0, 30);
     }
-    const emailCharLimit = isProjectChatLoad ? 40000 : 15000;
     const emailsText = relevantEmails
       .map(e => {
         const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
@@ -1309,7 +1298,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
         return `[${date}] ${dirLabel} — ${fromTo}\nSubject: ${e.subject || '(no subject)'}\n${bodyText.slice(0, 1500)}`;
       })
       .join('\n\n---\n\n');
-    prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailsText.slice(0, emailCharLimit)}\n`;
+    prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailsText.slice(0, 15000)}\n`;
   }
 
   if (projectBundle?.project_chat_notes?.length) {
