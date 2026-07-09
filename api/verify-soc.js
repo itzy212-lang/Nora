@@ -9,7 +9,7 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY missing' });
+  if (!ANTHROPIC_KEY) return res.status(200).json({ skipped: true, reason: 'Anthropic API key not configured' });
 
   const { raw_notes, structured_data } = req.body || {};
   if (!raw_notes) return res.status(400).json({ error: 'raw_notes required' });
