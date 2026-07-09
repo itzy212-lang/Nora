@@ -1550,7 +1550,7 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
       brainText += `SUMMARY OF EARLIER PROJECT HISTORY:\n${String(summaryEntry.content || '').slice(0, BRAIN_ENTRY_CAP)}\n\nRECENT ENTRIES:\n`;
     }
     brainText += regularEntries.map(m => {
-      const label = m.role === 'user' ? 'Surveyor' : m.content_type === 'email_received' ? 'Received email' : m.content_type === 'email_sent' ? 'Sent email' : 'Ely';
+      const label = m.role === 'user' ? 'Surveyor' : m.content_type === 'email_received' ? 'Received email' : m.content_type === 'email_sent' ? 'Sent email' : 'Nora';
       const prefix = m.content_type === 'upload' ? `[Uploaded: ${m.file_name || 'file'}] ` : '';
       const date = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       const content = String(m.content || '').slice(0, BRAIN_ENTRY_CAP);
@@ -2249,14 +2249,14 @@ async function callClaude(messages = []) {
   if (!ANTHROPIC_KEY) throw new Error('Missing ANTHROPIC_API_KEY');
 
   // Convert OpenAI message format to Anthropic format
-  const systemMsg = messages.find(m => m.role === 'system')?.content || 'You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.';
+  const systemMsg = messages.find(m => m.role === 'system')?.content || 'You are Nora, an AI assistant for a Party Wall surveying practice. Use British English.';
   const userMessages = messages.filter(m => m.role !== 'system').map(m => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
     content: m.content,
   }));
 
   // Prepend the handoff message as a system note
-  const systemWithHandoff = `You are Ely, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
+  const systemWithHandoff = `You are Nora, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -3119,6 +3119,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
