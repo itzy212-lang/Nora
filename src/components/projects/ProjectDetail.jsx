@@ -3365,7 +3365,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       try {
         const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections });
         const result = await generateDocument({
-          templateKey: key,
+          templateKey: key === 's2' ? 's3' : key, // s2 (Section 2(2)) uses the s3 template
           mergeData,
           fileName: mergeData.file_name,
           projectId: project.id,
