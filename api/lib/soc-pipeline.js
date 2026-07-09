@@ -56,11 +56,17 @@ const SECTION_ALIASES = {
   'existing rear room':           'Ground Floor Rear Elevation Room',
   'rear elevation room':          'Ground Floor Rear Elevation Room',
   'existing rear elevation':      'Ground Floor Rear Elevation Room',
-  'ground floor':                 'Ground Floor Rear Extension',
+  // 'ground floor' alias removed — too broad, was forcing Ground Floor Rear Outrigger
+  // and any other ground floor section into Ground Floor Rear Extension incorrectly.
+  // The title-case fallback in canonicalSection() handles unmatched names correctly.
   'extended area':                'Rear Extension',
   'rear extension':               'Rear Extension',
   'first floor rear bedroom':     'First Floor Rear Bedroom',
-  'rear bedroom':                 'First Floor Rear Bedroom',
+  'first floor rear bathroom':    'First Floor Rear Bathroom',
+  // 'rear bedroom' alias removed — was forcing all rear bedroom references to First Floor
+  // regardless of the actual floor level dictated. Specific 'first floor rear bedroom'
+  // alias above handles the first-floor case; ground floor rear bedroom falls through
+  // to the title-case fallback which preserves the correct name.
   'first floor front elevation':  'First Floor Front Elevation Room',
   'external':                     'External Areas',
   'external areas':               'External Areas',
@@ -108,7 +114,7 @@ SPEECH-TO-TEXT CORRECTIONS (apply automatically):
 "kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC"
 
 SECTION NAMES — use exactly:
-Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
+Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | Ground Floor Rear Bedroom | Ground Floor Hallway | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
 
 SELF-CORRECTION / FALSE STARTS — critical rule:
 When a speaker starts a phrase and immediately corrects themselves in the same sentence or next breath, ignore the false start entirely and use only the corrected version.
