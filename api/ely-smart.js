@@ -1437,9 +1437,11 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     const pwDrafting = brain?.party_wall_drafting
       ? [brain.party_wall_drafting.system_prompt, brain.party_wall_drafting.behaviour_rules].filter(Boolean).join('\n\n')
       : '';
+    const userBrain = brain?.user_brain?.brain_content || '';
 
     const stage2Prompt = '# IDENTITY\n\n' + globalCore +
       (globalDrafting ? '\n\n# WRITING RULES\n\n' + globalDrafting : '') +
+      (userBrain ? '\n\n# USER PROFILE — THIS IS HOW ITZIK WRITES\n\n' + userBrain : '') +
       (pwDrafting ? '\n\n# DRAFTING IDENTITY — READ THIS BEFORE ACTING\n\n' + pwDrafting : '') +
       '\n\n# YOUR TASK FOR THIS REQUEST\n\n' +
       'A research assistant has already read all project context, emails and correspondence and produced the structured brief below.\n\n' +
@@ -3559,6 +3561,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
