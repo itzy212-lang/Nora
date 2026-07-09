@@ -523,6 +523,196 @@ async function semanticSearchProject(projectId, userPrompt, limit = 20) {
   }
 }
 
+
+// ── MILESTONE 1: Stage 1 Brief Generation ─────────────────────────────────
+// Reads all project context and produces a structured brief for inspection.
+// Feature-flagged via STAGE1_DRAFTING env var (default: false).
+// In Milestone 1: brief is logged only — does NOT affect live drafting.
+// ──────────────────────────────────────────────────────────────────────────
+async function generateStage1Brief({
+  projectId, userId, surface, modeHint,
+  projectBundle, scopedEmailContext, semanticResults,
+  chatHistory = [], userPrompt = '', brain,
+}) {
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) return null;
+
+  const t0 = Date.now();
+
+  // Build a concise context block for Stage 1
+  const projectFacts = projectBundle ? (() => {
+    const p = projectBundle.project || {};
+    const aos = (projectBundle.adjoining_owners || []).slice(0, 6).map(ao => {
+      const name = [ao.name, ao.name2].filter(Boolean).join(' and ') || ao.owner_name || 'Unknown AO';
+      const address = ao.premise || ao.address || '';
+      const status = ao.status || '';
+      return `${name}${address ? ' of ' + address : ''}${status ? ' (status: ' + status + ')' : ''}`;
+    }).join('; ');
+    const bo = p.bo || {};
+    return [
+      bo.name ? `Building Owner: ${[bo.name, bo.name2].filter(Boolean).join(' and ')}` : null,
+      bo.premise ? `BO premises: ${bo.premise}` : null,
+      aos ? `Adjoining Owners: ${aos}` : null,
+      p.ref ? `Project ref: ${p.ref}` : null,
+    ].filter(Boolean).join('\n');
+  })() : '';
+
+  // Selected email thread (reply target)
+  const emailBlock = (scopedEmailContext || []).slice(0, 3).map(e => {
+    const body = (e.body || e.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+    const dir = e.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
+    const from = e.sender_name || e.sender_email || 'Unknown';
+    const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
+    return `[${date}] ${dir} — From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${body}`;
+  }).join('\n\n---\n\n');
+
+  // Semantic results — pass as-is, Stage 1 will distil to 3-5 findings
+  const semanticBlock = (semanticResults || []).slice(0, 25).map(r => {
+    const date = new Date(r.metadata?.received_at || r.metadata?.created_at || '').toLocaleDateString('en-GB');
+    return `[${date}] ${r.content_type || 'note'}: ${(r.content || '').slice(0, 400)}`;
+  }).join('\n\n');
+
+  // Recent chat history — last 6 turns
+  const historyBlock = (chatHistory || []).slice(-6).map(m =>
+    `${m.role === 'user' ? 'USER' : 'NORA'}: ${String(m.content || '').slice(0, 500)}`
+  ).join('\n\n');
+
+  const stage1System = `You are a retrieval and reasoning assistant for a party wall surveyor practice.
+
+Your job is NOT to draft correspondence.
+
+Your job is to read all supplied context and produce a structured brief that a separate drafting assistant will use.
+
+Read everything carefully. Extract only what is certain. Flag what is missing.
+
+ACTIVE RETRIEVAL — before completing the brief, explicitly search the supplied context for:
+- Exact quotes relevant to the user's objective (quote verbatim, do not paraphrase)
+- Previous promises, commitments or agreements made by either party
+- Previous concessions or positions taken by either party
+- Specific terminology the user has used for walls, areas, locations or conditions
+
+For each relevant quote: include it verbatim in exact_quotes_relevant.
+If nothing relevant exists: write "none found" — do not invent.
+
+Return ONLY valid JSON matching the schema below. No preamble. No explanation. No markdown.
+
+{
+  "parties": {
+    "building_owner": "",
+    "adjoining_owner": "",
+    "ao_surveyor": "",
+    "bo_surveyor": "",
+    "third_surveyor": "",
+    "other": []
+  },
+  "representation": "bo_surveyor | ao_surveyor | agreed_surveyor | commercial | unknown",
+  "role_in_this_correspondence": "",
+  "reply_target": {
+    "sender": "",
+    "email_date": "",
+    "subject": "",
+    "key_points_raised": [],
+    "exact_quotes_relevant": []
+  },
+  "user_objective": "",
+  "key_facts": [],
+  "prior_commitments": [],
+  "prior_concessions": [],
+  "previous_positions": [],
+  "constraints": [],
+  "user_terminology_to_preserve": {},
+  "missing_facts": [],
+  "mode": "draft | correction | briefing | discussion",
+  "if_correction": {
+    "what_was_wrong": "",
+    "corrected_position": "",
+    "previous_draft_to_amend": false
+  },
+  "reasoning": {
+    "what_the_user_is_actually_trying_to_achieve": "",
+    "why": "",
+    "what_the_email_should_do": ""
+  },
+  "recommended_drafting_strategy": "",
+  "tone_register": "formal | professional-conversational | warm | firm",
+  "do_not_include": [],
+  "must_include": []
+}`;
+
+  const stage1User = [
+    projectFacts ? `PROJECT FACTS:\n${projectFacts}` : null,
+    emailBlock ? `SELECTED EMAIL / REPLY TARGET:\n${emailBlock}` : null,
+    semanticBlock ? `SEMANTICALLY RELEVANT CONTEXT (distil to 3-5 key findings):\n${semanticBlock}` : null,
+    historyBlock ? `RECENT CONVERSATION:\n${historyBlock}` : null,
+    `USER DICTATION:\n${userPrompt}`,
+  ].filter(Boolean).join('\n\n---\n\n');
+
+  let brief = null;
+  let tokensUsed = null;
+  let errorMsg = null;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-2024-08-06',
+        temperature: 0.1,
+        max_completion_tokens: 1500,
+        messages: [
+          { role: 'system', content: stage1System },
+          { role: 'user', content: stage1User },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content || '{}';
+      tokensUsed = data.usage?.total_tokens || null;
+      try {
+        brief = JSON.parse(raw);
+      } catch (parseErr) {
+        errorMsg = 'JSON parse failed: ' + parseErr.message;
+        console.warn('[stage1] JSON parse failed:', parseErr.message);
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      errorMsg = err.error?.message || `HTTP ${res.status}`;
+      console.warn('[stage1] GPT call failed:', errorMsg);
+    }
+  } catch (err) {
+    errorMsg = err.message;
+    console.warn('[stage1] fetch error:', err.message);
+  }
+
+  const durationMs = Date.now() - t0;
+
+  // Log to stage1_briefs table (fire and forget — never blocks drafting)
+  try {
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('stage1_briefs').insert([{
+        project_id: projectId || null,
+        user_id: userId || null,
+        surface: surface || null,
+        model: 'gpt-4o-2024-08-06',
+        prompt_snippet: (userPrompt || '').slice(0, 200),
+        brief: brief || null,
+        stage1_tokens_used: tokensUsed,
+        stage1_duration_ms: durationMs,
+        error: errorMsg || null,
+      }]);
+    }
+  } catch (logErr) {
+    console.warn('[stage1] logging failed (non-fatal):', logErr.message);
+  }
+
+  console.log(`[stage1] brief generated in ${durationMs}ms, tokens=${tokensUsed}, error=${errorMsg || 'none'}`);
+  return brief;
+}
+
 // ── Cross-project search — finds project by name then searches its content ──
 // Used from main chat when user says "look at the Sellafield project notes"
 async function searchNamedProject(prompt, projectsContext = []) {
@@ -2955,6 +3145,27 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
 
+    // ── MILESTONE 1: Stage 1 Brief (logged only — does not affect drafting yet) ──
+    // STAGE1_DRAFTING env var must be 'true' to enable even logging.
+    // In Milestone 1, the brief is generated and logged but never passed to buildSystemPrompt.
+    // This lets us inspect brief quality before enabling Stage 2 integration.
+    const stage1Enabled = process.env.STAGE1_DRAFTING === 'true';
+    if (stage1Enabled && modeHint === 'draft' && projectId) {
+      // Fire and forget — must never block or affect the draft
+      generateStage1Brief({
+        projectId,
+        userId,
+        surface: body.surface || '',
+        modeHint,
+        projectBundle,
+        scopedEmailContext,
+        semanticResults,
+        chatHistory: body.chatHistory || [],
+        userPrompt: prompt,
+        brain,
+      }).catch(err => console.warn('[stage1] non-fatal error:', err.message));
+    }
+
         const systemPrompt = await buildSystemPrompt({
       brain,
       projectId,
@@ -3210,6 +3421,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
