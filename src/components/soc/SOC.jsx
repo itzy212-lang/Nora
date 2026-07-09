@@ -581,6 +581,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           }
         } catch (err) {
           console.warn('[qa-review-soc] verification failed, proceeding with GPT only:', err.message);
+          setDualAISkipped('QA Review unavailable. The Schedule of Condition has still been generated.');
           setPhase('review');
         } finally {
           setDualAIVerifying(false);
