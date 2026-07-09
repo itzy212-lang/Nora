@@ -114,7 +114,13 @@ SPEECH-TO-TEXT CORRECTIONS (apply automatically):
 "kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC"
 
 SECTION NAMES — use exactly:
-Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Extension | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | Ground Floor Rear Bedroom | Ground Floor Hallway | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
+Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | Ground Floor Rear Bedroom | Ground Floor Hallway | Ground Floor Rear Extension | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
+
+SECTION ASSIGNMENT RULES — CRITICAL:
+- Use "Ground Floor Rear Extension" ONLY if the surveyor explicitly uses the word "extension" or "rear extension" to describe the area. Do NOT default to this section when the area could be an outrigger, corridor, hallway or any other ground floor space.
+- Use "Ground Floor Rear Outrigger" when the surveyor says "outrigger".
+- Use "Ground Floor Hallway" when the surveyor describes a hallway, corridor or passageway without naming it as an extension or outrigger.
+- If the surveyor does not name the section explicitly, use the most specific description available from the dictation. Do not guess "Ground Floor Rear Extension" as a default.
 
 SELF-CORRECTION / FALSE STARTS — critical rule:
 When a speaker starts a phrase and immediately corrects themselves in the same sentence or next breath, ignore the false start entirely and use only the corrected version.
