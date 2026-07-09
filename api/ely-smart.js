@@ -1406,6 +1406,13 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   }
 
   console.log(`[ely-smart] v4 buildSystemPrompt complete: ${prompt.length} chars`);
+  console.log('[ely-smart] prompt layers assembled:', [
+    'global_core',
+    brain?.global_drafting?.system_prompt ? 'global_drafting(V4.1)' : 'global_drafting:MISSING',
+    brain?.knowledge_layer?.system_prompt ? 'knowledge' : 'knowledge:MISSING',
+    brain?.user_brain?.brain_content ? 'user_brain' : 'user_brain:MISSING',
+    modeHint === 'draft' ? 'ACTIVE_MODE_DRAFT' : `ACTIVE_MODE_${modeHint}`,
+  ].join(' | '));
   return prompt;
 }
 
@@ -2824,6 +2831,21 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       }) : Promise.resolve(suppliedEmailContext ? [suppliedEmailContext] : []),
       needsBrain ? loadBrain({ userId, projectId, surface: body.surface, modeHint }) : Promise.resolve(null),
     ]);
+
+    // ── Brain layer diagnostic logging ───────────────────────────────────────
+    console.log('[ely-smart] brain layers:', JSON.stringify({
+      global_core:    brain?.global_core?.system_prompt ? brain.global_core.system_prompt.length + 'ch' : 'MISSING',
+      global_drafting: brain?.global_drafting?.system_prompt ? brain.global_drafting.system_prompt.length + 'ch' : 'MISSING',
+      knowledge_layer: brain?.knowledge_layer?.system_prompt ? brain.knowledge_layer.system_prompt.length + 'ch' : 'MISSING',
+      user_brain:     brain?.user_brain?.brain_content ? brain.user_brain.brain_content.length + 'ch' : 'MISSING',
+      brain_null:     brain === null,
+    }));
+    console.log('[ely-smart] project bundle:', JSON.stringify({
+      has_project:    !!projectBundle?.project?.id,
+      ao_count:       (projectBundle?.adjoining_owners || []).length,
+      email_count:    (projectBundle?.project_emails || []).length,
+      memory_count:   (projectBundle?.project_memory || []).length,
+    }));
 
     const representation = resolveRepresentation({ body, projectBundle });
 
