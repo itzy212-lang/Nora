@@ -426,6 +426,70 @@ async function loadProjectBundle(projectId) {
   };
 }
 
+// ── Slim project facts loader — party names, AOs, notices, memory only ──
+// Used for drafting surfaces where full email load is not needed.
+// Semantic search provides relevant emails on demand.
+async function loadProjectFacts(projectId) {
+  const sb = getSupabase();
+  if (!sb || !projectId) return null;
+
+  const { data: project, error } = await sb
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .maybeSingle();
+
+  if (error) console.warn('[ely-smart] project facts load failed:', error.message);
+
+  const adjoiningOwners = await safeSelect('adjoining_owners', '*', q =>
+    q.eq('project_id', projectId).limit(20)
+  );
+  const legacyAos = adjoiningOwners.length ? [] : await safeSelect('aos', '*', q =>
+    q.eq('project_id', projectId).limit(20)
+  );
+  const projectJsonAos = (!adjoiningOwners.length && !legacyAos.length && project?.aos)
+    ? (Array.isArray(project.aos) ? project.aos : [])
+    : [];
+
+  const notices = await safeSelect('notices', '*', q =>
+    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(20)
+  );
+
+  const projectMemory = await safeSelect('project_memory', '*', q =>
+    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
+  );
+
+  const socReports = await safeSelect(
+    'soc_reports',
+    'id, ao_id, ao_names, ao_address, bo_address, inspection_date, raw_notes, structured_data, proposed_works, status, created_at',
+    q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
+  );
+
+  // Slim fallback email load — only used if semantic search fails
+  // Cap at 10 most recent to avoid prompt bloat
+  const fallbackEmails = await safeSelect(
+    'emails',
+    'id, subject, sender_name, sender_email, to_email, direction, received_at, sent_at, body, body_preview, raw_recipients',
+    q => q
+      .eq('project_id', projectId)
+      .order('received_at', { ascending: false })
+      .limit(10)
+  );
+
+  return {
+    project_raw: project || null,
+    project: normaliseProject(project || {}),
+    adjoining_owners: adjoiningOwners.length ? adjoiningOwners : (legacyAos.length ? legacyAos : projectJsonAos),
+    notices,
+    documents: [],
+    project_memory: projectMemory,
+    soc_reports: socReports,
+    project_chat_notes: [],
+    project_emails: [],          // not injected directly — semantic search handles this
+    fallback_emails: fallbackEmails, // only used if semantic search returns nothing
+  };
+}
+
 // ── Semantic search across all project content ───────────────────────────
 async function semanticSearchProject(projectId, userPrompt, limit = 20) {
   const sb = getSupabase();
@@ -1202,10 +1266,36 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   // Finds the most semantically relevant emails and chat history for the current prompt
   // regardless of where we are in the conversation
   let semanticResults = null;
+  let semanticSearchFailed = false;
   let crossProjectResults = null;
   try {
-    if (projectBundle?.project?.id) {
-      semanticResults = await semanticSearchProject(projectBundle.project.id || projectId, userPrompt, 25);
+    if (projectBundle?.project?.id && projectId) {
+      const effectiveProjectId = projectBundle.project.id || projectId;
+      try {
+        semanticResults = await semanticSearchProject(effectiveProjectId, userPrompt, 25);
+        // Log the result (fire and forget)
+        getSupabase()?.from('semantic_search_log').insert([{
+          project_id: effectiveProjectId,
+          surface: surface || 'unknown',
+          prompt_snippet: (userPrompt || '').slice(0, 120),
+          results_count: semanticResults?.length || 0,
+          success: !!(semanticResults?.length),
+          fallback_used: false,
+          error_message: null,
+        }]).then(() => {}).catch(() => {});
+      } catch (semErr) {
+        semanticSearchFailed = true;
+        // Log the failure (fire and forget)
+        getSupabase()?.from('semantic_search_log').insert([{
+          project_id: effectiveProjectId,
+          surface: surface || 'unknown',
+          prompt_snippet: (userPrompt || '').slice(0, 120),
+          results_count: 0,
+          success: false,
+          fallback_used: true,
+          error_message: semErr.message || 'unknown error',
+        }]).then(() => {}).catch(() => {});
+      }
     }
     // Cross-project search runs whenever no project is active — not just on explicit research.
     // The user may casually mention a project by address in any message.
@@ -1274,19 +1364,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       prompt += `\n\nRELEVANT PROJECT DOCUMENTS & NOTES:\n${memText}\n`;
     }
 
-  } else if (projectBundle?.project_emails?.length) {
-    const promptLower = (userPrompt || '').toLowerCase();
-    const topicWords = promptLower.split(/\s+/).filter(w => w.length > 3);
-    let relevantEmails = projectBundle.project_emails;
-    if (topicWords.length > 0) {
-      const scored = relevantEmails.map(e => {
-        const text = ((e.subject || '') + ' ' + (e.body || '') + ' ' + (e.sender_name || '')).toLowerCase();
-        const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
-        return { ...e, _score: score };
-      }).sort((a, b) => b._score - a._score);
-      relevantEmails = scored.slice(0, 30);
-    }
-    const emailsText = relevantEmails
+  } else if (projectBundle?.fallback_emails?.length) {
+    // Semantic search returned nothing — use slim fallback (10 most recent emails)
+    const fallbackEmails = projectBundle.fallback_emails;
+    const emailsText = fallbackEmails
       .map(e => {
         const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
         const isOutgoing = e.direction === 'outgoing';
@@ -1298,7 +1379,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
         return `[${date}] ${dirLabel} — ${fromTo}\nSubject: ${e.subject || '(no subject)'}\n${bodyText.slice(0, 1500)}`;
       })
       .join('\n\n---\n\n');
-    prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailsText.slice(0, 15000)}\n`;
+    prompt += `\n\nPROJECT EMAILS — RECENT CORRESPONDENCE (semantic search unavailable — showing 10 most recent):\n${emailsText.slice(0, 10000)}\n`;
   }
 
   if (projectBundle?.project_chat_notes?.length) {
@@ -2808,13 +2889,17 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const needsEmails = isDraftingSurface
       ? explicitResearchRequest
       : (hasSuppliedEmail || wantsEmailContext(prompt, projectId, suppliedEmailContext, body.threadId, body.emailId));
-    // Always load slim project facts when projectId is present — BO/AO names and addresses only.
-    // The full project bundle (emails, notes, documents) only loads when explicitly requested.
-    const needsProject = !!projectId;
-    const needsBrain = true; // always load brain — instruction set must be available on all surfaces regardless of project
+    // Project loading strategy:
+    // - Drafting surfaces (draft_with_ely, inbox_draft, project_chat): load slim facts only
+    //   (BO/AO names, notices, memory). Semantic search provides relevant emails on demand.
+    // - Full bundle only loads when emails are explicitly requested or on non-project surfaces.
+    const needsFullBundle = !isProjectChatSurface && !isDraftingSurface;
+    const needsBrain = true; // always load brain
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
-      needsProject ? loadProjectBundle(projectId) : Promise.resolve(null),
+      projectId
+        ? (needsFullBundle ? loadProjectBundle(projectId) : loadProjectFacts(projectId))
+        : Promise.resolve(null),
       needsEmails ? buildScopedEmailContext({
         prompt: body.prompt,
         projectId,
