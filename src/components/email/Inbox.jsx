@@ -1652,9 +1652,10 @@ if (syncErr) throw syncErr;
       throw new Error('Could not send email: ' + msg);
     }
 
-    // Save as sent in DB without using .catch() on the Supabase query builder
+    // Save as sent in DB — select() returns the row ID so we can embed it
+    let sentEmailId = null;
     try {
-      const { error: insertError } = await sb.from('emails').insert([{
+      const { data: sentRows, error: insertError } = await sb.from('emails').insert([{
         subject,
         body: emailBody,
         is_sent: true,
@@ -1664,8 +1665,17 @@ if (syncErr) throw syncErr;
         thread_id: replyToId || null,
         received_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
-      }]);
+      }]).select('id');
       if (insertError) console.warn('Sent email DB insert warning:', insertError.message);
+      sentEmailId = sentRows?.[0]?.id || null;
+      // Embed the sent email now we have the ID (fire and forget)
+      if (sentEmailId) {
+        fetch('/api/embed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'embed_record', record_id: sentEmailId, table: 'emails' }),
+        }).catch(() => {});
+      }
     } catch (insertErr) {
       console.warn('Sent email DB insert warning:', insertErr?.message || insertErr);
     }
@@ -1675,6 +1685,8 @@ if (syncErr) throw syncErr;
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
     }
 
+    // Embed the sent email (fire and forget) — enables semantic search
+    // We don't have the DB row ID at this point, so embed after insert via the replyToId thread
     // Extract key facts into project memory in background (fire and forget)
     // Look up project_id from the email being replied to in state
     const replyEmail = replyToId ? state.emails?.find(e => e.id === replyToId) : null;
@@ -1721,6 +1733,13 @@ if (syncErr) throw syncErr;
           project_match_source: prev.id === email.id ? 'manual_preview_banner' : 'thread_inherited',
         }
       : prev);
+
+    // Embed the linked email (fire and forget) — enables semantic search
+    fetch('/api/embed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'embed_record', record_id: email.id, table: 'emails' }),
+    }).catch(() => {});
 
     // Fire GPT-4o extraction for the linked email (fire and forget)
     const emailBody = email.body || email.body_preview || '';
