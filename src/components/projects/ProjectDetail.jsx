@@ -3310,7 +3310,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // STEP 1: persist legal/workflow state first
     await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections });
 
-    const nonS10 = sections.filter(s => ['s1', 's3', 's6'].includes(s));
+    const nonS10 = sections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
       const deadline = addDaysIsoFromDate(noticeDate, 14);
 
