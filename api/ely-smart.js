@@ -3152,6 +3152,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const stage1Enabled = process.env.STAGE1_DRAFTING === 'true';
     if (stage1Enabled && modeHint === 'draft' && projectId) {
       // Fire and forget — must never block or affect the draft
+      // semanticResults is built inside buildSystemPrompt — not in scope here.
+      // Stage 1 uses projectBundle emails and scopedEmailContext instead.
       generateStage1Brief({
         projectId,
         userId,
@@ -3159,7 +3161,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         modeHint,
         projectBundle,
         scopedEmailContext,
-        semanticResults,
+        semanticResults: null,
         chatHistory: body.chatHistory || [],
         userPrompt: prompt,
         brain,
