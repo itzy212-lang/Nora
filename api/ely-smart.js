@@ -1994,7 +1994,26 @@ Output only the correspondence. Begin with the greeting. End with:
 
 Kind regards,
 
-Nothing may appear after the sign-off.`,
+Nothing may appear after the sign-off.
+
+CLOSING SENTENCE RULE:
+
+The email must not end abruptly on the last substantive point before Kind regards.
+
+Add one brief natural closing sentence before the sign-off. It should be short, warm and conversational — not a stock phrase.
+
+Good examples:
+- Worth a conversation at least.
+- Let me know what you think.
+- Happy to talk it through if that would help.
+- Give it some thought and let me know.
+- Just let me know how you'd like to proceed.
+
+Do not use:
+- Let me know your thoughts on these options.
+- Please do not hesitate to contact me.
+- I look forward to hearing from you.
+- If you have any questions, please let me know.`,
     });
   }
 
