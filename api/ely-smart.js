@@ -366,11 +366,17 @@ async function loadProjectBundle(projectId) {
     q.eq('project_id', projectId).limit(20)
   );
 
+  // Fallback: read AOs from projects.aos JSON when both table queries return empty.
+  // This is the source of truth for most projects — AO data lives in the JSON column.
+  const projectJsonAos = (!adjoiningOwners.length && !legacyAos.length && project?.aos)
+    ? (Array.isArray(project.aos) ? project.aos : [])
+    : [];
+
   const notices = await safeSelect('notices', '*', q =>
     q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(20)
   );
 
-  const documents = await safeSelect('documents', 'id, project_id, title, name, file_name, category, section_type, created_at, updated_at, metadata', q =>
+  const documents = await safeSelect('documents', 'id, project_id, file_name, file_type, category, section_type, created_at, ao_id', q =>
     q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
   );
 
@@ -410,7 +416,7 @@ async function loadProjectBundle(projectId) {
   return {
     project_raw: project || null,
     project: normaliseProject(project || {}),
-    adjoining_owners: adjoiningOwners.length ? adjoiningOwners : legacyAos,
+    adjoining_owners: adjoiningOwners.length ? adjoiningOwners : (legacyAos.length ? legacyAos : projectJsonAos),
     notices,
     documents,
     project_memory: projectMemory,
@@ -1000,13 +1006,23 @@ function buildProjectFactsText(projectBundle) {
 
   const aos = projectBundle.adjoining_owners || [];
   if (aos.length) {
-    facts.push('Adjoining Owners loaded from structured records:');
+    facts.push('Adjoining Owners:');
     aos.slice(0, 12).forEach((ao, i) => {
       const name = [ao.name, ao.name2].filter(Boolean).join(' and ') || ao.owner_name || ao.ao_name || `AO ${i + 1}`;
       const address = ao.premise || ao.reg_addr || ao.address || ao.ao_premise_address || '';
       const email = ao.email || ao.ao_email || '';
-      const surveyor = ao.surv_name || ao.surveyor_name || ao.surveyorName || '';
-      facts.push(`${i + 1}. ${name}${address ? `, ${address}` : ''}${email ? `, ${email}` : ''}${surveyor ? `, surveyor: ${surveyor}` : ''}`);
+      const status = ao.status || '';
+      const surveyorName = ao.surv_name || ao.surveyor_name || ao.surveyorName || '';
+      const surveyorFirm = ao.surv_firm || ao.surveyor_firm || ao.surveyorFirm || '';
+      const thirdSurveyor = ao.third_surveyor_name || ao.thirdSurveyorName || '';
+      const thirdFirm = ao.third_surveyor_firm || ao.thirdSurveyorFirm || '';
+      let aoLine = `AO${ao.num || i + 1}: ${name}`;
+      if (address) aoLine += `, ${address}`;
+      if (email) aoLine += `, email: ${email}`;
+      if (status) aoLine += `, status: ${status}`;
+      if (surveyorName) aoLine += `, AO surveyor: ${surveyorName}${surveyorFirm ? ` (${surveyorFirm})` : ''}`;
+      if (thirdSurveyor) aoLine += `, Third surveyor: ${thirdSurveyor}${thirdFirm ? ` (${thirdFirm})` : ''}`;
+      facts.push(aoLine);
     });
   }
 
