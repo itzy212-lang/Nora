@@ -136,24 +136,7 @@ export function useEmails() {
             }
           });
 
-          // Extract key facts from new project-linked emails into project memory
-          newRows.forEach(row => {
-            if (row.project_id && (row.body || row.body_preview)) {
-              fetch('/api/extract-email-memory', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  project_id: row.project_id,
-                  email_id: row.id,
-                  subject: row.subject || '(No subject)',
-                  body: row.body || row.body_preview || '',
-                  direction: 'received',
-                  from_address: row.sender_email || row.from_email || '',
-                  received_at: row.received_at || row.created_at,
-                }),
-              }).catch(() => {});
-            }
-          });
+          // Deduped: extraction handled by the forEach above
           // Inherit project_id from thread — if any email in same thread is linked, link all
           const unlinkedWithThread = newRows.filter(r => !r.project_id && r.thread_id);
           if (unlinkedWithThread.length) {
@@ -391,5 +374,6 @@ function isUrgentEmail(e) {
     b.includes('structural damage') || b.includes('urgent')
   );
 }
+
 
 
