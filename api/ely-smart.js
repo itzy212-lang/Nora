@@ -1430,23 +1430,32 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       ? '\n\nDO NOT INCLUDE:\n' + stage1Brief.do_not_include.map(i => '- ' + i).join('\n')
       : '';
 
-    const stage2Prompt = 'You are Nora, Itzik Darel\'s professional drafting assistant.\n\n' +
+    // Stage 2 receives: identity + writing rules + brief + output rules
+    // Identity and voice come from brain layers so Stage 2 knows WHO it is and HOW to write
+    const globalCore = brain?.global_core?.system_prompt || '';
+    const globalDrafting = brain?.global_drafting?.system_prompt || '';
+    const pwDrafting = brain?.party_wall_drafting
+      ? [brain.party_wall_drafting.system_prompt, brain.party_wall_drafting.behaviour_rules].filter(Boolean).join('\n\n')
+      : '';
+
+    const stage2Prompt = '# IDENTITY\n\n' + globalCore +
+      (globalDrafting ? '\n\n# WRITING RULES\n\n' + globalDrafting : '') +
+      (pwDrafting ? '\n\n# DRAFTING IDENTITY — READ THIS BEFORE ACTING\n\n' + pwDrafting : '') +
+      '\n\n# YOUR TASK FOR THIS REQUEST\n\n' +
       'A research assistant has already read all project context, emails and correspondence and produced the structured brief below.\n\n' +
       'Treat the structured brief as the authoritative understanding of the supplied context. If the user\'s current instruction explicitly conflicts with the brief, follow the user\'s latest instruction.\n\n' +
-      'Do not go looking for additional context. Do not second-guess party names, roles or facts in the brief.\n\n' +
-      'Your job is to write the correspondence described in the brief, using the user\'s dictation as raw material.' +
+      'Do not go looking for additional context. Do not second-guess party names, roles or facts in the brief.' +
       (repLock ? '\n\n' + repLock : '') +
-      '\n\nSTRUCTURED BRIEF FROM RESEARCH ASSISTANT:\n' + briefJson +
+      '\n\n# STRUCTURED BRIEF FROM RESEARCH ASSISTANT\n\n' + briefJson +
       terminologyBlock + concessionsBlock + mustBlock + dontBlock +
-      '\n\nOUTPUT RULES:' +
+      '\n\n# OUTPUT RULES' +
       '\n- Output only the completed correspondence' +
       '\n- Begin with the greeting. Use the recipient\'s actual first name from the brief — not Whisper transcription' +
       '\n- End with: Kind regards,' +
       '\n- Nothing may appear after the sign-off' +
-      '\n- Do not use numbered lists unless content genuinely requires numbered options' +
-      '\n- Do not use markdown, asterisks, bold, headers or horizontal separators' +
+      '\n- Do not use numbered lists unless the content genuinely requires it' +
       '\n- Write in flowing professional prose' +
-      '\n- Do not open by stating the subject — the recipient already knows the context' +
+      '\n- Do not open by stating the subject of the email' +
       '\n- Do not overexplain. Every sentence earns its place.' +
       '\n- Tone: ' + (stage1Brief.tone_register || 'professional-conversational') +
       '\n- Do not end with: Let me know your thoughts / Let me know how you\'d like to proceed / If there\'s anything else / Please do not hesitate';
@@ -3550,6 +3559,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
