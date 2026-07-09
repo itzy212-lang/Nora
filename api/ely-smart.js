@@ -656,7 +656,7 @@ Return ONLY valid JSON matching the schema below. No preamble. No explanation. N
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
       body: JSON.stringify({
-        model: 'gpt-4o-2024-08-06',
+        model: 'gpt-4o',
         temperature: 0.1,
         max_completion_tokens: 1500,
         messages: [
@@ -697,7 +697,7 @@ Return ONLY valid JSON matching the schema below. No preamble. No explanation. N
         project_id: projectId || null,
         user_id: userId || null,
         surface: surface || null,
-        model: 'gpt-4o-2024-08-06',
+        model: 'gpt-4o',
         prompt_snippet: (userPrompt || '').slice(0, 200),
         brief: brief || null,
         stage1_tokens_used: tokensUsed,
