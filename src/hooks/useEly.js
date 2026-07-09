@@ -467,7 +467,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
       const projectsContext = buildProjectsContext();
       const recentEmails = buildRecentEmails();
       if (actualSessionId) {
-        await saveAiMessage({
+        const savedUserMsg = await saveAiMessage({
           sessionId: actualSessionId,
           userId,
           projectId: effectiveProjectId,
@@ -475,6 +475,14 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           role: 'user',
           content: prompt,
         });
+        // Embed user message for semantic search (project chat only, fire and forget)
+        if (effectiveProjectId && savedUserMsg?.id) {
+          fetch('/api/embed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'embed_record', record_id: savedUserMsg.id, table: 'ai_messages' }),
+          }).catch(() => {});
+        }
       }
 
       const result = await callEly({
@@ -552,7 +560,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         '';
 
       if (actualSessionId && assistantText) {
-        await saveAiMessage({
+        const savedAssistantMsg = await saveAiMessage({
           sessionId: actualSessionId,
           userId,
           projectId: effectiveProjectId,
@@ -561,6 +569,28 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           content: assistantText,
           model: result.model || null,
         });
+        // Embed + extract assistant reply for semantic search and project memory (project chat only)
+        if (effectiveProjectId && savedAssistantMsg?.id) {
+          fetch('/api/embed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'embed_record', record_id: savedAssistantMsg.id, table: 'ai_messages' }),
+          }).catch(() => {});
+          // Extract key facts from substantive assistant responses into project memory
+          if (assistantText.length > 200) {
+            fetch('/api/extract-email-memory', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                project_id: effectiveProjectId,
+                subject: 'Project chat',
+                body: assistantText,
+                direction: 'chat',
+                received_at: new Date().toISOString(),
+              }),
+            }).catch(() => {});
+          }
+        }
       }
 
       if (actualSessionId && !sessionId) {
@@ -683,5 +713,6 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     saveMessage,
   };
 }
+
 
 
