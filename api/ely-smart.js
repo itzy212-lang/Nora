@@ -3220,7 +3220,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // - Drafting surfaces (draft_with_ely, inbox_draft, project_chat): load slim facts only
     //   (BO/AO names, notices, memory). Semantic search provides relevant emails on demand.
     // - Full bundle only loads when emails are explicitly requested or on non-project surfaces.
-    const needsFullBundle = !isProjectChatSurface && !isDraftingSurface;
+    // Project chat needs full bundle for emails (name correction, context)
+    // Only drafting surfaces (inbox_draft, draft_with_ely) use slim loader
+    const needsFullBundle = !isDraftingSurface;
     const needsBrain = true; // always load brain
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
@@ -3561,6 +3563,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
