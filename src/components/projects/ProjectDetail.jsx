@@ -183,7 +183,7 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     cover: 'Covering Letter',
   };
 
-  const fileAddress = boPremise || aoPremise || 'Address not recorded';
+  const fileAddress = aoPremise || 'Address not recorded';
   const fileBase = `${safeNoticeFilePart(fileLabels[sectionKey] || sectionKey)} - ${safeNoticeFilePart(fileAddress)}`;
 
   const originalNoticeDate =
