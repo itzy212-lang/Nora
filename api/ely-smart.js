@@ -1472,6 +1472,18 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   // complex-letter style onto simple routine replies.
   const isConversationalDraftSurface = (surface === 'inbox_draft' || surface === 'draft_with_ely');
   const isComplexDraftRequest = /\b(award|dispute|legal|section \d|tribunal|court|injunction|breach|liability|structural|engineer|underpinning|expert|claim|damages|compensation|enforcement)\b/i.test(userPrompt);
+  // Inject party_wall_drafting layer here — late position, after all context,
+  // so it fires fresh in the model's attention just before the dictation.
+  // Contains: YOU ARE THE WRITER, STEP ZERO classifier, MODE A/B/C signals,
+  // REASONING RULE, ABSOLUTE PROHIBITIONS.
+  if (modeHint === 'draft' && brain?.party_wall_drafting) {
+    const pwd = brain.party_wall_drafting;
+    const parts = [pwd.system_prompt, pwd.behaviour_rules, pwd.output_rules].filter(Boolean);
+    if (parts.length) {
+      prompt += `\n\nDRAFTING IDENTITY — READ THIS LAST BEFORE ACTING:\n\n${parts.join('\n\n')}`;
+    }
+  }
+
   const shouldInjectExample = draftingExamples?.length
     && modeHint === 'draft'
     && (!isConversationalDraftSurface || isComplexDraftRequest);
@@ -3197,6 +3209,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
