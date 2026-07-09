@@ -1498,7 +1498,8 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
     brain?.knowledge_layer?.system_prompt ? 'knowledge' : 'knowledge:MISSING',
     brain?.user_brain?.brain_content ? 'user_brain' : 'user_brain:MISSING',
     modeHint === 'draft' ? 'ACTIVE_MODE_DRAFT' : `ACTIVE_MODE_${modeHint}`,
-  ].join(' | '));
+    modeHint === 'draft' ? (brain?.party_wall_drafting?.system_prompt ? 'party_wall_drafting(LATE)' : 'party_wall_drafting:MISSING') : null,
+  ].filter(Boolean).join(' | '));
   return prompt;
 }
 
@@ -3209,6 +3210,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
