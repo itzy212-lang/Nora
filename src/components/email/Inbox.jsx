@@ -1721,6 +1721,25 @@ if (syncErr) throw syncErr;
           project_match_source: prev.id === email.id ? 'manual_preview_banner' : 'thread_inherited',
         }
       : prev);
+
+    // Fire GPT-4o extraction for the linked email (fire and forget)
+    const emailBody = email.body || email.body_preview || '';
+    if (projectId && emailBody) {
+      fetch('/api/extract-email-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          email_id: email.id,
+          subject: email.subject || '(No subject)',
+          body: emailBody,
+          direction: email.direction || (email.sender_email === 'help@sq1consulting.co.uk' ? 'sent' : 'received'),
+          from_address: email.sender_email || email.sender_name || '',
+          to_address: email.to_email || '',
+          received_at: email.received_at || email.created_at,
+        }),
+      }).catch(() => {});
+    }
   };
 
   const handleBulkLinkToProject = async () => {
@@ -2060,6 +2079,7 @@ if (syncErr) throw syncErr;
     </>
   );
 }
+
 
 
 
