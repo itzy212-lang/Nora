@@ -1407,7 +1407,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   if (stage1Brief && modeHint === 'draft') {
     const briefJson = JSON.stringify(stage1Brief, null, 2);
 
-    const repLock = representation ? buildRepresentationLock(representation) : '';
+    const repLock = representation ? buildRepresentationLockText(representation) : '';
 
     const terminologyBlock = stage1Brief.user_terminology_to_preserve
       && Object.keys(stage1Brief.user_terminology_to_preserve).length > 0
