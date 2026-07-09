@@ -531,7 +531,7 @@ async function semanticSearchProject(projectId, userPrompt, limit = 20) {
 // ──────────────────────────────────────────────────────────────────────────
 async function generateStage1Brief({
   projectId, userId, surface, modeHint,
-  projectBundle, scopedEmailContext, semanticResults,
+  projectBundle, scopedEmailContext, selectedEmail, semanticResults,
   chatHistory = [], userPrompt = '', brain,
 }) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -557,13 +557,21 @@ async function generateStage1Brief({
     ].filter(Boolean).join('\n');
   })() : '';
 
-  // Selected email thread (reply target)
-  const emailBlock = (scopedEmailContext || []).slice(0, 3).map(e => {
-    const body = (e.body || e.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+  // Selected email (reply target) — passed explicitly so Stage 1 finds the right one
+  // Falls back to scopedEmailContext if no explicit selection
+  const replyTarget = selectedEmail || (scopedEmailContext || [])[0] || null;
+  const emailBlock = replyTarget ? (() => {
+    const b = (replyTarget.body || replyTarget.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
+    const dir = replyTarget.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
+    const from = replyTarget.sender_name || replyTarget.sender_email || 'Unknown';
+    const date = new Date(replyTarget.received_at || replyTarget.sent_at || '').toLocaleDateString('en-GB');
+    return `[${date}] ${dir} — From: ${from}\nSubject: ${replyTarget.subject || '(no subject)'}\n${b}`;
+  })() : (scopedEmailContext || []).slice(0, 2).map(e => {
+    const b = (e.body || e.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
     const dir = e.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
     const from = e.sender_name || e.sender_email || 'Unknown';
     const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
-    return `[${date}] ${dir} — From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${body}`;
+    return `[${date}] ${dir} — From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${b}`;
   }).join('\n\n---\n\n');
 
   // Semantic results — pass as-is, Stage 1 will distil to 3-5 findings
@@ -1389,7 +1397,75 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 10000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null }) {
+
+  // ── MILESTONE 2: Stage 2 Lean Prompt ──────────────────────────────────────
+  // When a Stage 1 brief is available, bypass the full 70k prompt and build a
+  // lean Stage 2 prompt instead. Stage 2 receives: brief + output rules only.
+  // Fallback: if stage1Brief is null, the full single-pass prompt runs as before.
+  // ──────────────────────────────────────────────────────────────────────────
+  if (stage1Brief && modeHint === 'draft') {
+    const briefJson = JSON.stringify(stage1Brief, null, 2);
+
+    const repLock = representation ? buildRepresentationLock(representation) : '';
+
+    const terminologyBlock = stage1Brief.user_terminology_to_preserve
+      && Object.keys(stage1Brief.user_terminology_to_preserve).length > 0
+      ? '\n\nTERMINOLOGY RULE — DO NOT PARAPHRASE THESE TERMS:\n' +
+        Object.entries(stage1Brief.user_terminology_to_preserve)
+          .map(([term, note]) => '- "' + term + '" — ' + note)
+          .join('\n')
+      : '';
+
+    const concessionsBlock = (stage1Brief.prior_concessions || []).length > 0
+      ? '\n\nPRIOR CONCESSIONS ALREADY MADE (use to strengthen arguments):\n' +
+        stage1Brief.prior_concessions.map(c => '- ' + c).join('\n')
+      : '';
+
+    const mustBlock = (stage1Brief.must_include || []).length > 0
+      ? '\n\nMUST INCLUDE:\n' + stage1Brief.must_include.map(i => '- ' + i).join('\n')
+      : '';
+
+    const dontBlock = (stage1Brief.do_not_include || []).length > 0
+      ? '\n\nDO NOT INCLUDE:\n' + stage1Brief.do_not_include.map(i => '- ' + i).join('\n')
+      : '';
+
+    const stage2Prompt = 'You are Nora, Itzik Darel\'s professional drafting assistant.\n\n' +
+      'A research assistant has already read all project context, emails and correspondence and produced the structured brief below.\n\n' +
+      'Treat the structured brief as the authoritative understanding of the supplied context. If the user\'s current instruction explicitly conflicts with the brief, follow the user\'s latest instruction.\n\n' +
+      'Do not go looking for additional context. Do not second-guess party names, roles or facts in the brief.\n\n' +
+      'Your job is to write the correspondence described in the brief, using the user\'s dictation as raw material.' +
+      (repLock ? '\n\n' + repLock : '') +
+      '\n\nSTRUCTURED BRIEF FROM RESEARCH ASSISTANT:\n' + briefJson +
+      terminologyBlock + concessionsBlock + mustBlock + dontBlock +
+      '\n\nOUTPUT RULES:' +
+      '\n- Output only the completed correspondence' +
+      '\n- Begin with the greeting. Use the recipient\'s actual first name from the brief — not Whisper transcription' +
+      '\n- End with: Kind regards,' +
+      '\n- Nothing may appear after the sign-off' +
+      '\n- Do not use numbered lists unless content genuinely requires numbered options' +
+      '\n- Do not use markdown, asterisks, bold, headers or horizontal separators' +
+      '\n- Write in flowing professional prose' +
+      '\n- Do not open by stating the subject — the recipient already knows the context' +
+      '\n- Do not overexplain. Every sentence earns its place.' +
+      '\n- Tone: ' + (stage1Brief.tone_register || 'professional-conversational') +
+      '\n- Do not end with: Let me know your thoughts / Let me know how you\'d like to proceed / If there\'s anything else / Please do not hesitate';
+
+    const shouldInjectExample = draftingExamples?.length
+      && (!['inbox_draft','draft_with_ely'].includes(surface) ||
+          /\b(award|dispute|legal|section \d|structural|engineer|underpinning|claim|damages)\b/i.test(userPrompt));
+
+    let finalPrompt = stage2Prompt;
+    if (shouldInjectExample) {
+      finalPrompt += '\n\nGOLD STANDARD DRAFTING EXAMPLE (match this quality and style):\n' +
+        JSON.stringify(draftingExamples[0], null, 2);
+    }
+
+    console.log('[ely-smart] STAGE2 lean prompt: ' + finalPrompt.length + ' chars');
+    console.log('[ely-smart] prompt layers assembled: stage1_brief | stage2_lean | output_rules' + (shouldInjectExample ? ' | gold_standard' : ''));
+    return finalPrompt;
+  }
+
   // ── ELY V4 PROMPT ASSEMBLY ─────────────────────────────────────────────
   // Layer order per 06_LOADING_ARCHITECTURE.md:
   // 1. global_core
@@ -1911,10 +1987,47 @@ Nothing may appear after the sign-off.`,
     });
   }
 
-  // Chat history
+  // Chat history — cap at 6 turns in draft mode (Stage 1 has the context)
   if (chatHistory?.length) {
-    chatHistory.slice(-24).forEach((msg) => {
+    const histCap = modeHint === 'draft' ? 6 : 24;
+    chatHistory.slice(-histCap).forEach((msg) => {
       if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
+    });
+  }
+
+  // Previous draft preservation — when user is correcting (Mode A), inject prior draft
+  if (modeHint === 'draft') {
+    const priorDraft = (chatHistory || []).slice().reverse().find(m =>
+      m.role === 'assistant' && String(m.content || '').length > 200
+    );
+    const isCorrectionSignal = /\b(that'?s? wrong|you missed|i meant|change that|not right|remove that|doesn'?t make sense|rewrite it|scratch that|ignore that|that paragraph|just that bit|only that|not the whole)\b/i.test(prompt || '');
+    if (priorDraft && isCorrectionSignal) {
+      messages.push({
+        role: 'system',
+        content: 'PREVIOUS DRAFT — AUTHORITATIVE:\n\n' + String(priorDraft.content || '') +
+          '\n\nThe user is amending this draft, not replacing it entirely.' +
+          '\nApply the correction to the above draft.' +
+          '\nPreserve all content not referenced in the correction.' +
+          '\nReturn the complete revised draft.',
+      });
+    }
+  }
+
+  // Mode A/B/C resolution — separate system message immediately before user turn
+  if (modeHint === 'draft') {
+    messages.push({
+      role: 'system',
+      content: 'BEFORE READING THE DICTATION — RESOLVE THE MODE:\n\n' +
+        'MODE A — CORRECTION OR FEEDBACK\n' +
+        'Signals: "that\'s wrong", "you missed", "I meant", "change that", "not right", "remove that", "rewrite it", "scratch that"\n' +
+        'If Mode A: confirm the corrected position, apply to full draft, do not delete content unless told to.\n\n' +
+        'MODE B — ROUGH BRIEFING / DICTATION NOTES\n' +
+        'Signals: flowing description, strategic context, "tell them", long voice dictation explaining a position\n' +
+        'If Mode B: treat as raw material. Extract. Reason. Write from first principles. Do not transcribe. Do not number the user\'s points.\n\n' +
+        'MODE C — DIRECT DRAFT INSTRUCTION\n' +
+        'Signals: "draft a reply", "write to", "respond saying", "let\'s draft"\n' +
+        'If Mode C: produce completed correspondence immediately. No preamble. No options. No explanation.\n\n' +
+        'RESOLVE THE MODE NOW. Then proceed accordingly.',
     });
   }
 
@@ -3145,34 +3258,47 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
 
-    // ── MILESTONE 1: Stage 1 Brief (logged only — does not affect drafting yet) ──
-    // STAGE1_DRAFTING env var must be 'true' to enable even logging.
-    // In Milestone 1, the brief is generated and logged but never passed to buildSystemPrompt.
-    // This lets us inspect brief quality before enabling Stage 2 integration.
+    // ── MILESTONE 2: Two-Stage Drafting Architecture ─────────────────────────
+    // STAGE1_DRAFTING=true enables Stage 1 brief generation.
+    // Stage 1 runs awaited — brief is passed to buildSystemPrompt for Stage 2.
+    // Stage 2 receives: brief + selected email + authoring standard (not 70k of context).
+    // Fallback: if Stage 1 fails, falls back to current single-pass architecture.
     const stage1Enabled = process.env.STAGE1_DRAFTING === 'true';
+    let stage1Brief = null;
+
     if (stage1Enabled && modeHint === 'draft' && projectId) {
-      // Fire and forget — must never block or affect the draft
-      // semanticResults is built inside buildSystemPrompt — not in scope here.
-      // Stage 1 uses projectBundle emails and scopedEmailContext instead.
-      generateStage1Brief({
-        projectId,
-        userId,
-        surface: body.surface || '',
-        modeHint,
-        projectBundle,
-        scopedEmailContext,
-        semanticResults: null,
-        chatHistory: body.chatHistory || [],
-        userPrompt: prompt,
-        brain,
-      }).catch(err => console.warn('[stage1] non-fatal error:', err.message));
+      try {
+        // Pass selected email explicitly so Stage 1 finds the right reply target
+        const selectedEmail = scopedEmailContext?.[0] || null;
+        stage1Brief = await generateStage1Brief({
+          projectId,
+          userId,
+          surface: body.surface || '',
+          modeHint,
+          projectBundle,
+          scopedEmailContext,
+          selectedEmail,
+          semanticResults: null,
+          chatHistory: body.chatHistory || [],
+          userPrompt: prompt,
+          brain,
+        });
+        if (stage1Brief) {
+          console.log('[stage1] brief ready — using two-stage architecture');
+        } else {
+          console.warn('[stage1] brief null — falling back to single-pass');
+        }
+      } catch (err) {
+        console.warn('[stage1] failed — falling back to single-pass:', err.message);
+        stage1Brief = null;
+      }
     }
 
         const systemPrompt = await buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
-      projectBundle, // always pass full bundle — Claude brief is injected separately after
+      projectBundle,
       scopedEmailContext,
       modeHint,
       draftingExamples,
@@ -3181,6 +3307,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
       representation,
+      stage1Brief, // null in single-pass mode, populated in two-stage mode
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
@@ -3423,6 +3550,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
