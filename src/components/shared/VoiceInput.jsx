@@ -396,14 +396,16 @@ export default function VoiceInput({
 
       let latestInterim = '';
 
-      for (let i = 0; i < event.results.length; i += 1) {
+      // Process only new results from event.resultIndex onwards to prevent
+      // repetition on Android Chrome where onresult fires very rapidly
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
 
         if (!spoken) continue;
 
         sessionResultsRef.current[i] = spoken;
 
-        if (!event.results[i].isFinal && i >= event.resultIndex) {
+        if (!event.results[i].isFinal) {
           latestInterim = spoken;
         }
       }
@@ -602,6 +604,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
