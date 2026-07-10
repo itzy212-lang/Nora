@@ -508,12 +508,19 @@ export default function VoiceInput({
       return;
     }
 
-    if (isMobileBrowser()) {
-      startMobileRecording();
+    // Use Web Speech API if available — works on desktop Chrome, Android Chrome,
+    // and any browser with reliable Web Speech support. Text appears in real time,
+    // no upload delay, no Whisper round-trip needed.
+    // Falls back to Whisper (startMobileRecording) automatically on iOS Safari
+    // where Web Speech is unreliable or unavailable.
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      startDesktopRecording();
       return;
     }
 
-    startDesktopRecording();
+    // No Web Speech API available (iOS Safari) — use Whisper
+    startMobileRecording();
   }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
 
   const stopRecordingRef = useRef(stopRecording);
@@ -595,6 +602,7 @@ export default function VoiceInput({
     </>
   );
 }
+
 
 
 
