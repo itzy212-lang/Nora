@@ -3425,16 +3425,43 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     );
 
     const temperature = modeHint === 'draft' ? 0.62 : 0.35;
-    // HARDCODED — do not restore env var override. ELY_MAIN_CHAT_MODEL was silently set to gpt-5.4
-    // in Vercel env vars and degraded every response. gpt-4o for everything.
-    const activeModel = 'gpt-4o';
-    const isReasoningModel = false;
 
-    const modelPayload = isReasoningModel
+    // ── MODEL ROUTING ──────────────────────────────────────────────────────
+    // Route by mode, not surface. DRAFTING_MODEL applies to any request that
+    // resolves to draft mode. DEFAULT_MODEL applies to everything else.
+    // Instant rollback: set DRAFTING_MODEL=gpt-4o or delete the env var.
+    //
+    // MODEL_CONFIG defines behaviour per model — do not infer from model name.
+    // Add new models here when testing.
+    const MODEL_CONFIG = {
+      'gpt-4o': {
+        reasoning: false,
+        temperature: true,
+      },
+      'gpt-5.6-terra': {
+        reasoning: true,
+        reasoning_effort: process.env.DRAFTING_REASONING_EFFORT || 'medium',
+      },
+      'gpt-5.6-sol': {
+        reasoning: true,
+        reasoning_effort: process.env.DRAFTING_REASONING_EFFORT || 'medium',
+      },
+      'gpt-5.6-luna': {
+        reasoning: false,
+        temperature: true,
+      },
+    };
+
+    const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'gpt-4o';
+    const DRAFTING_MODEL = process.env.DRAFTING_MODEL || DEFAULT_MODEL;
+    const activeModel = modeHint === 'draft' ? DRAFTING_MODEL : DEFAULT_MODEL;
+    const modelCfg = MODEL_CONFIG[activeModel] || MODEL_CONFIG['gpt-4o'];
+
+    const modelPayload = modelCfg.reasoning
       ? {
           model: activeModel,
           max_completion_tokens: 3500,
-          reasoning_effort: isDraftWithEly ? 'medium' : 'low',
+          reasoning_effort: modelCfg.reasoning_effort || 'medium',
         }
       : {
           model: activeModel,
@@ -3442,6 +3469,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           temperature,
         };
 
+    console.log('[ely-smart] model routing:', activeModel, '| mode:', modeHint, '| reasoning:', modelCfg.reasoning);
+    // ──────────────────────────────────────────────────────────────────────
+
+    const requestStart = Date.now();
     let captureRowId = null;
     // ── PAYLOAD CAPTURE — fires on every inbox_draft/draft_with_ely request ──
     if (isDraftWithEly || body.surface === 'inbox_draft') {
@@ -3450,8 +3481,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         if (sbDebug) {
           const systemMsg = messages.find(m => m.role === 'system');
           const { data: captureRow, error: captureErr } = await sbDebug.from('debug_payloads').insert([{
-            model: modelPayload.model || activeModel,
-            temperature: modelPayload.temperature ?? null,
+            model: activeModel,
+            temperature: modelCfg.reasoning ? null : temperature,
             mode: modeHint,
             surface: body.surface || null,
             messages: messages,
@@ -3539,15 +3570,27 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       try {
         const sbDebug = getSupabase();
         if (sbDebug) {
+          const latencyMs = Date.now() - requestStart;
+          const usage = data.usage || {};
           await sbDebug.from('debug_payloads').update({
             openai_response: {
               model: data.model,
-              usage: data.usage,
+              usage: usage,
               finish_reason: data.choices?.[0]?.finish_reason || null,
               reply_full: (data.choices?.[0]?.message?.content || ''),
+              benchmark: {
+                model: activeModel,
+                latency_ms: latencyMs,
+                prompt_tokens: usage.prompt_tokens || 0,
+                completion_tokens: usage.completion_tokens || 0,
+                reasoning_tokens: usage.completion_tokens_details?.reasoning_tokens || 0,
+                cached_tokens: usage.prompt_tokens_details?.cached_tokens || 0,
+                // Cost intentionally not calculated here — use pricing table in dashboard
+                // Terra: $2.50/$15 per 1M. GPT-4o: $2.50/$10 per 1M. Sol: $5/$30 per 1M.
+              },
             }
           }).eq('id', captureRowId);
-          console.log('[ely-smart] payload capture updated with response');
+          console.log('[ely-smart] payload capture updated | model:', activeModel, '| latency:', latencyMs + 'ms | tokens:', (usage.prompt_tokens||0) + '+' + (usage.completion_tokens||0));
         }
       } catch (dbErr) {
         console.warn('[ely-smart] payload response update failed:', dbErr.message);
@@ -3588,6 +3631,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
