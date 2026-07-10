@@ -105,28 +105,36 @@ export default function ChatInputBar({
     if (meta?.restarting) return;
 
     if (meta?.recording) {
-      // Still recording — update recording state only.
-      // Do NOT write interim transcript to the textarea — this causes
-      // aggressive repetition on Android Chrome where onresult fires
-      // overlapping phrases continuously. Only finals go to the textarea.
       setIsRecording(true);
       setIsTranscribing(false);
-      // Show interim in preview overlay only (via handleVoicePreview)
+      // Write finalised transcript to textarea during recording.
+      // Only update if transcript has actually changed to avoid repetition.
+      if (transcript) {
+        if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
+        const next = voiceBaseRef.current
+          ? `${voiceBaseRef.current} ${transcript}`
+          : transcript;
+        // Only call onChange if text actually changed — prevents redundant re-renders
+        // that cause the repetition loop on Android Chrome
+        if (next !== value) {
+          onChange?.(next);
+        }
+      }
     } else {
-      // recording === false — final committed transcript ready
+      // recording === false — truly finished
       setIsRecording(false);
       setStoppedRecording(true);
       setInterimText('');
       if (transcript) {
         setIsTranscribing(false);
-        // Only now write to the textarea — with the final clean transcript
-        if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
         const base = voiceBaseRef.current;
         const next = base ? `${base} ${transcript}` : transcript;
         voiceBaseRef.current = '';
         onChange?.(next);
       } else {
-        setIsTranscribing(true);
+        // No final transcript — keep whatever is in the textarea already
+        setIsTranscribing(false);
+        voiceBaseRef.current = '';
       }
     }
   }, [value, onChange]);
