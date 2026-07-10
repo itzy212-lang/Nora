@@ -394,26 +394,37 @@ export default function VoiceInput({
     recognition.onresult = (event) => {
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
+      // On mobile, interim results from Web Speech come in as overlapping phrases
+      // (e.g. "let's", "let's respond", "let's respond to Shirley") rather than
+      // incremental words. Accumulating them causes aggressive repetition.
+      // Instead: only commit final results, show latest interim as live preview only.
+      const isMobile = isMobileBrowser();
+
       let latestInterim = '';
 
-      // Process only new results from event.resultIndex onwards to prevent
-      // repetition on Android Chrome where onresult fires very rapidly
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const spoken = cleanText(event.results[i]?.[0]?.transcript || '');
-
         if (!spoken) continue;
 
-        sessionResultsRef.current[i] = spoken;
-
-        if (!event.results[i].isFinal) {
+        if (event.results[i].isFinal) {
+          // Final result — commit it
+          sessionResultsRef.current[i] = spoken;
+        } else if (!isMobile) {
+          // Desktop only — accumulate interim results for live display
+          sessionResultsRef.current[i] = spoken;
+          latestInterim = spoken;
+        } else {
+          // Mobile — show latest interim as preview only, don't accumulate
           latestInterim = spoken;
         }
       }
 
       const sessionText = removeImmediateDuplicateWords(orderedResultText(sessionResultsRef.current));
-      const fullText = mergeWithoutRepeating(committedRef.current, sessionText);
+      const displayText = isMobile && latestInterim
+        ? mergeWithoutRepeating(committedRef.current, sessionText) + (latestInterim ? ' ' + latestInterim : '')
+        : mergeWithoutRepeating(committedRef.current, sessionText);
 
-      emit(fullText, latestInterim, sessionText);
+      emit(displayText.trim(), latestInterim, sessionText);
     };
 
     recognition.onend = () => {
