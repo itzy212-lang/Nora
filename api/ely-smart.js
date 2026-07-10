@@ -1994,7 +1994,27 @@ Output only the correspondence. Begin with the greeting. End with:
 
 Kind regards,
 
-Nothing may appear after the sign-off.`,
+Nothing may appear after the sign-off.
+
+REPLY COMPLETENESS CHECK:
+If you are replying to a specific incoming email, after producing the draft, silently check:
+- What distinct questions, requests or points did the incoming email raise?
+- Does the draft address each one?
+- Were any points deliberately excluded by the user's dictation?
+
+If any points from the incoming email were NOT addressed in the draft and NOT excluded by the user, add a brief note after the sign-off in this format:
+
+---
+Points in the incoming email not covered in this draft:
+- [point 1]
+- [point 2]
+
+Let me know if you'd like to address any of these.
+---
+
+Do not add this note if everything was addressed.
+Do not invent points that were not in the incoming email.
+Do not add this note if there is no incoming email context.`,
     });
   }
 
