@@ -383,7 +383,10 @@ export default function VoiceInput({
 
     recognition.lang = 'en-GB';
     recognition.continuous = true;
-    recognition.interimResults = true;
+    // On mobile, interim results cause aggressive repetition because Android Chrome
+    // fires overlapping phrases. Disable entirely on mobile — text appears in
+    // committed chunks only. Desktop keeps live interim display.
+    recognition.interimResults = !isMobileBrowser();
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
