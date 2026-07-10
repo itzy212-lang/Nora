@@ -1461,20 +1461,10 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       '\n- Tone: ' + (stage1Brief.tone_register || 'professional-conversational') +
       '\n- Do not end with: Let me know your thoughts / Let me know how you\'d like to proceed / If there\'s anything else / Please do not hesitate';
 
-    const shouldInjectExample = draftingExamples?.length
-      && (!['inbox_draft','draft_with_ely'].includes(surface) ||
-          /\b(award|dispute|legal|section \d|structural|engineer|underpinning|claim|damages)\b/i.test(userPrompt));
-
-    let finalPrompt = stage2Prompt;
-    if (shouldInjectExample) {
-      finalPrompt += '\n\nGOLD STANDARD DRAFTING EXAMPLE (match this quality and style):\n' +
-        JSON.stringify(draftingExamples[0], null, 2);
-    }
-
-    console.log('[ely-smart] STAGE2 lean prompt: ' + finalPrompt.length + ' chars');
-    console.log('[ely-smart] prompt layers assembled: stage1_brief | stage2_lean | output_rules' + (shouldInjectExample ? ' | gold_standard' : ''));
-    return finalPrompt;
-  }
+    // Select the most relevant gold standard example based on prompt complexity
+  // Gold standard example injection — main path (single-pass, non-Stage1)
+  // This block intentionally left as placeholder — actual injection below at line ~1754
+  // (deferred to after party_wall_drafting late injection)
 
   // ── ELY V4 PROMPT ASSEMBLY ─────────────────────────────────────────────
   // Layer order per 06_LOADING_ARCHITECTURE.md:
