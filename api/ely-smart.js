@@ -1747,7 +1747,8 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
   // For inbox_draft / draft_with_ely (conversational surfaces): only inject when the topic
   // is complex or formal (award, dispute, structural, legal etc.) to avoid anchoring a
   // complex-letter style onto simple routine replies.
-  const isConversationalDraftSurface = (surface === 'inbox_draft' || surface === 'draft_with_ely');
+  // inbox_draft only — draft_with_ely always gets gold standard example (restored pre-adc693cf)
+  const isConversationalDraftSurface = (surface === 'inbox_draft');
   const isComplexDraftRequest = /\b(award|dispute|legal|section \d|tribunal|court|injunction|breach|liability|structural|engineer|underpinning|expert|claim|damages|compensation|enforcement)\b/i.test(userPrompt);
   // Inject party_wall_drafting layer here — late position, after all context,
   // so it fires fresh in the model's attention just before the dictation.
@@ -1994,26 +1995,7 @@ Output only the correspondence. Begin with the greeting. End with:
 
 Kind regards,
 
-Nothing may appear after the sign-off.
-
-CLOSING SENTENCE RULE:
-
-The email must not end abruptly on the last substantive point before Kind regards.
-
-Add one brief natural closing sentence before the sign-off. It should be short, warm and conversational — not a stock phrase.
-
-Good examples:
-- Worth a conversation at least.
-- Let me know what you think.
-- Happy to talk it through if that would help.
-- Give it some thought and let me know.
-- Just let me know how you'd like to proceed.
-
-Do not use:
-- Let me know your thoughts on these options.
-- Please do not hesitate to contact me.
-- I look forward to hearing from you.
-- If you have any questions, please let me know.`,
+Nothing may appear after the sign-off.`,
     });
   }
 
@@ -3239,9 +3221,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // - Drafting surfaces (draft_with_ely, inbox_draft, project_chat): load slim facts only
     //   (BO/AO names, notices, memory). Semantic search provides relevant emails on demand.
     // - Full bundle only loads when emails are explicitly requested or on non-project surfaces.
-    // Project chat needs full bundle for emails (name correction, context)
-    // Only drafting surfaces (inbox_draft, draft_with_ely) use slim loader
-    const needsFullBundle = !isDraftingSurface;
+    const needsFullBundle = !isProjectChatSurface && !isDraftingSurface;
     const needsBrain = true; // always load brain
 
     const [projectBundle, scopedEmailContext, brain] = await Promise.all([
