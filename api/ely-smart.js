@@ -2002,19 +2002,17 @@ If you are replying to a specific incoming email, after producing the draft, sil
 - Does the draft address each one?
 - Were any points deliberately excluded by the user's dictation?
 
-If any points from the incoming email were NOT addressed in the draft and NOT excluded by the user, add a brief note after the sign-off in this format:
+If any points from the incoming email were NOT addressed in the draft and NOT excluded by the user, append the following block at the very end of your response, after the sign-off:
 
----
-Points in the incoming email not covered in this draft:
-- [point 1]
-- [point 2]
+[COMPLETENESS_NOTE]
+- [point 1 not addressed]
+- [point 2 not addressed]
+[/COMPLETENESS_NOTE]
 
-Let me know if you'd like to address any of these.
----
-
-Do not add this note if everything was addressed.
+Do not add this block if everything was addressed.
 Do not invent points that were not in the incoming email.
-Do not add this note if there is no incoming email context.`,
+Do not add this block if there is no incoming email context.
+Do not include this block inside the email body — it must come after Kind regards.`,
     });
   }
 
@@ -3557,15 +3555,24 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
     // ──────────────────────────────────────────────────────────────────────
 
-    // ── Draft With Ely: missing points analysis ───────────────────────────
-    // Disabled: running this synchronously was causing mobile connection drops
-    // on long drafts. Will re-enable as async when architecture supports it.
+    // ── Draft With Ely: parse completeness note from reply ───────────────
+    // Model appends [COMPLETENESS_NOTE]...[/COMPLETENESS_NOTE] after sign-off.
+    // Strip it from reply and return as separate missing_points field.
     const isDraftWithElyMP = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
-    const missingPoints = [];
+    let cleanReply = fullReply;
+    let missingPoints = [];
+    const completenessMatch = fullReply.match(/\[COMPLETENESS_NOTE\]([\s\S]*?)\[\/COMPLETENESS_NOTE\]/);
+    if (completenessMatch) {
+      cleanReply = fullReply.replace(/\[COMPLETENESS_NOTE\][\s\S]*?\[\/COMPLETENESS_NOTE\]/, '').trim();
+      missingPoints = completenessMatch[1]
+        .split('\n')
+        .map(l => l.replace(/^[-•*]\s*/, '').trim())
+        .filter(Boolean);
+    }
 
     return res.status(200).json({
-      reply: fullReply,
-      ...(isDraftWithEly && missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
+      reply: cleanReply,
+      ...(missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
       model: modelUsed,
       resolvedProject,
       scopedEmailCount: scopedEmailContext?.length || 0,
