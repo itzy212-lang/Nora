@@ -955,7 +955,6 @@ function hasDiscussionIntent(prompt = '') {
     /\bhow would a third surveyor view this\b/i.test(p) ||
     /\bhelp me form a response\b/i.test(p) ||
     /\bwe need to discuss\b/i.test(p) ||
-    /\bi think\b/i.test(p) ||
     /\bi am concerned\b/i.test(p) ||
     /\bi'm concerned\b/i.test(p)
   );
@@ -3607,6 +3606,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
