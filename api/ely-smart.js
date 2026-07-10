@@ -933,32 +933,31 @@ function hasDiscussionIntent(prompt = '') {
   if (!p) return false;
 
   return (
-    // Explicit discussion / analysis requests
     /\bwhat do you think\b/i.test(p) ||
-    /\bwhat'?s your (view|read|take|opinion|advice)\b/i.test(p) ||
-    /\byour thoughts\b/i.test(p) ||
-    /\bthoughts\?/i.test(p) ||
-    /\b(let'?s|let us|i want to|can we|need to) discuss\b/i.test(p) ||
-    /\btalk me through\b/i.test(p) ||
-    /\bwalk me through\b/i.test(p) ||
-    /\bchat (through|about)\b/i.test(p) ||
-    // Questions about what to do or how to handle something
+    /\bwhat'?s your view\b/i.test(p) ||
+    /\bwhats your view\b/i.test(p) ||
+    /\bwhat'?s your read\b/i.test(p) ||
+    /\bwhats your read\b/i.test(p) ||
+    /\bthoughts\?\?\b/i.test(p) ||
     /\bcan (he|she|they|we|i) do that\b/i.test(p) ||
-    /\bis that (right|correct|a breach|allowed|permitted|valid|enforceable)\b/i.test(p) ||
-    /\bam i (right|correct|missing|wrong)\b/i.test(p) ||
-    /\bwhat should (i|we) do\b/i.test(p) ||
-    /\bhow should (i|we) (handle|approach|respond|deal with|play this)\b/i.test(p) ||
-    /\bwhat'?s (happening|going on|the situation|the position|the status)\b/i.test(p) ||
-    /\bwhat'?s (his|her|their) angle\b/i.test(p) ||
-    /\bwhy is (he|she|they) saying\b/i.test(p) ||
-    /\bhow would a (judge|third surveyor|court)\b/i.test(p) ||
-    /\bhelp me (think|form|work out|understand)\b/i.test(p) ||
-    /\bi need (your help|to think|to understand|advice)\b/i.test(p) ||
-    /\bi'?m (not sure|unsure|confused|concerned|worried)\b/i.test(p) ||
+    /\bis that right\b/i.test(p) ||
+    /\bis that correct\b/i.test(p) ||
+    /\bis that a breach\b/i.test(p) ||
+    /\btalk me through\b/i.test(p) ||
+    /\b(let'?s|let us) discuss\b/i.test(p) ||
+    /\bchat through\b/i.test(p) ||
+    /\bam i missing\b/i.test(p) ||
+    /\bwhat('?s| is) his angle\b/i.test(p) ||
+    /\bwhat('?s| is) her angle\b/i.test(p) ||
+    /\bwhat('?s| is) their angle\b/i.test(p) ||
+    /\bwhy is (he|she|they) saying this\b/i.test(p) ||
+    /\bhow would a judge view this\b/i.test(p) ||
+    /\bhow would a third surveyor view this\b/i.test(p) ||
+    /\bhelp me form a response\b/i.test(p) ||
+    /\bwe need to discuss\b/i.test(p) ||
+    /\bi think\b/i.test(p) ||
     /\bi am concerned\b/i.test(p) ||
-    /\bthe (issue|risk|problem|difficulty|concern) is\b/i.test(p) ||
-    /\bwe need to (discuss|talk about|think about)\b/i.test(p) ||
-    /\bi'?ve (reviewed|read) the thread and i think\b/i.test(p)
+    /\bi'm concerned\b/i.test(p)
   );
 }
 function looksLikeEmailDictation(prompt = '') {
