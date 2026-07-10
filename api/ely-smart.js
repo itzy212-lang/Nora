@@ -2001,7 +2001,7 @@ Nothing may appear after the sign-off.`,
 
   // Chat history — cap at 6 turns in draft mode (Stage 1 has the context)
   if (chatHistory?.length) {
-    const histCap = modeHint === 'draft' ? 6 : 24;
+    const histCap = 24;
     chatHistory.slice(-histCap).forEach((msg) => {
       if (msg?.role === 'user' || msg?.role === 'assistant') messages.push({ role: msg.role, content: String(msg.content || '') });
     });
@@ -3562,6 +3562,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     return res.status(500).json({ error: err.message });
   }
 }
+
 
 
 
