@@ -3531,7 +3531,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       }
 
       // Model not available — fall back to gpt-4o
-      if (errMsg.toLowerCase().includes('model') && (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('does not exist') || errMsg.toLowerCase().includes('invalid'))) {
+      if (errMsg.toLowerCase().includes('model') && (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('does not exist') || errMsg.toLowerCase().includes('invalid') || errMsg.toLowerCase().includes('does not have access'))) {
         console.log('[ely-smart] Model not available, falling back to gpt-4o');
         const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
