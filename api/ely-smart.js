@@ -1125,12 +1125,11 @@ function inferModeHint(surface, prompt = '', body = {}) {
   if (explicitMode.includes('draft_with_ely')) {
     const p = String(prompt || '').trim();
     if (!p) return 'email_summary';
-    // Discussion wins if the user clearly asks for analysis
-    if (hasDiscussionIntent(p)) return 'discuss';
-    // Otherwise treat any content as a draft request — this surface exists for drafting
-    // looksLikeEmailDictation catches recipient-facing wording
-    // hasExplicitDraftRequest catches "respond saying", "reply saying" etc
-    // For anything else on this surface that isn't discussion, default to draft
+    // Draft with Ely exists for drafting. Default is always draft.
+    // Only route to discuss if the prompt is SHORT (under 40 words) AND
+    // clearly asks for analysis — never override a substantial dictation.
+    const wordCount = p.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 40 && hasDiscussionIntent(p)) return 'discuss';
     return 'draft';
   }
 
