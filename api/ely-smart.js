@@ -1779,7 +1779,7 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
 
     if (selectedExample) {
       const useWhen = selectedExample.use_when ? `\nSelection rule: ${selectedExample.use_when}` : '';
-      prompt += \`\n\nGOLD STANDARD DRAFTING EXAMPLE — ${selectedExample.category?.toUpperCase() || 'CORRESPONDENCE'}${useWhen}\n\nMatch the quality, voice and style of this example:\n\n${selectedExample.example_prompt ? 'TASK:\n' + selectedExample.example_prompt + '\n\n' : ''}EXAMPLE OUTPUT:\n${selectedExample.example_response}\n\nSTYLE NOTES:\n${selectedExample.style_notes || ''}\n\`;
+      prompt += `\n\nGOLD STANDARD DRAFTING EXAMPLE — ${selectedExample.category?.toUpperCase() || 'CORRESPONDENCE'}${useWhen}\n\nMatch the quality, voice and style of this example:\n\n${selectedExample.example_prompt ? 'TASK:\n' + selectedExample.example_prompt + '\n\n' : ''}EXAMPLE OUTPUT:\n${selectedExample.example_response}\n\nSTYLE NOTES:\n${selectedExample.style_notes || ''}\n`;
     }
   }
 
