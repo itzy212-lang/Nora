@@ -2345,8 +2345,13 @@ function ProjectChat({ project, onOpenComposer }) {
     intro: split.intro,
   });
 
+  const boAddress = project?.bo_premise_address || project?.boPremiseAddress || '';
   const inferredSubject = split.intro?.match(/subject[:\s]+(.+)/i)?.[1]?.trim()
-    || (project?.ref ? `Re: ${project.ref}` : '');
+    || (() => {
+      if (!boAddress) return '';
+      if (split.aoSubjectRef) return 'Re: ' + boAddress + ' / ' + split.aoSubjectRef;
+      return 'Re: ' + boAddress;
+    })();
 
   return (
     <div
@@ -2720,7 +2725,15 @@ function getProjectDraftRecipient({ project, draft = '', intro = '' }) {
 
 
 function splitDraftMessage(content = '') {
-  const text = String(content || '').trim();
+  let text = String(content || '').trim();
+
+  // Extract and strip AO_SUBJECT_REF tag before any other processing
+  let aoSubjectRef = '';
+  const aoRefMatch = text.match(/^AO_SUBJECT_REF:\s*(.+)$/m);
+  if (aoRefMatch) {
+    aoSubjectRef = aoRefMatch[1].trim();
+    text = text.replace(/\n?AO_SUBJECT_REF:\s*.+$/m, '').trim();
+  }
 
   const markers = ['Subject:', 'Dear ', 'Hi ', 'Hello '];
   let idx = -1;
@@ -2731,7 +2744,7 @@ function splitDraftMessage(content = '') {
   }
 
   if (idx === -1) {
-    return { intro: text, draft: '', outro: '' };
+    return { intro: text, draft: '', outro: '', aoSubjectRef };
   }
 
   const intro = text.slice(0, idx).trim();
@@ -2758,7 +2771,7 @@ function splitDraftMessage(content = '') {
     }
   }
 
-  return { intro, draft, outro };
+  return { intro, draft, outro, aoSubjectRef };
 }
 
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement }) {
