@@ -3572,6 +3572,25 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         return res.status(200).json({ reply: fallbackReply, resolvedProject, model: 'gpt-4o', sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
       }
 
+      // Transient permissions error from Terra — silent retry once, never fall back to gpt-4o
+      if (errMsg.toLowerCase().includes('insufficient permissions')) {
+        console.log('[ely-smart] Terra permissions error — retrying once after 1s');
+        await new Promise(r => setTimeout(r, 1000));
+        const retryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+          body: JSON.stringify({ ...modelPayload, messages }),
+        });
+        if (!retryResponse.ok) {
+          const retryErr = await retryResponse.json().catch(() => ({}));
+          throw new Error(retryErr.error?.message || errMsg);
+        }
+        const retryData = await retryResponse.json();
+        const retryReply = cleanOutput(retryData.choices?.[0]?.message?.content || '');
+        console.log('[ely-smart] Terra retry succeeded');
+        return res.status(200).json({ reply: retryReply, resolvedProject, model: activeModel, sessionId: `${Date.now()}-${Math.random().toString(36).slice(2)}` });
+      }
+
       throw new Error(errMsg);
     }
 
