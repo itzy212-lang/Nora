@@ -363,7 +363,7 @@ Thread:
         setMessages([{
           id: Date.now(),
           role: 'ely',
-          content: '⚠️ ' + flagText,
+          content: '(!!) ' + flagText,
           isFlag: true,
           urgency,
         }]);
@@ -373,7 +373,7 @@ Thread:
         if (linkedProjectId && sb) {
           sb.from('tasks').insert([{
             project_id: linkedProjectId,
-            title: `Email action — ${email?.sender_name || email?.sender_email || 'sender'}`,
+            title: 'Email action - ' + (email?.sender_name || email?.sender_email || 'sender'),
             description: flagText,
             status: 'open',
             due_date: dueIso,
