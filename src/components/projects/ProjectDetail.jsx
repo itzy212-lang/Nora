@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
@@ -2797,6 +2798,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
+  const [projectTasks, setProjectTasks] = useState([]);
+  const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task object}
 
   // Defensive cleanup: remove legacy floating Notices card only.
   useEffect(() => {
@@ -2872,6 +2875,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     : aos.some(ao => aoNotice(ao) || (ao.status || '').toLowerCase() === 'notice_served') ? 1
     : 0;
 
+  // Load all open tasks for this project
+  useEffect(() => {
+    if (!sb || !project?.id) return;
+    sb.from('tasks')
+      .select('*')
+      .eq('project_id', project.id)
+      .neq('status', 'closed')
+      .neq('status', 'complete')
+      .order('due_date', { ascending: true })
+      .then(({ data }) => setProjectTasks(data || []));
+  }, [project?.id]);
+
   // Load open email_response tasks for this project
   useEffect(() => {
     if (!project?.id || !sb) return;
@@ -2894,6 +2909,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       if (sd) upcoming.push({ label: `S.10 deadline -- ${ao.name}`, date: sd, days: daysUntil(sd) });
     });
   }
+
+  // Merge DB tasks into upcoming (exclude deadline types already shown as AO date events)
+  const HIDDEN_TASK_TYPES = ['notice_consent_deadline', 'notice_section10_deadline', 'section_10_deadline'];
+  projectTasks.forEach(t => {
+    if (!t.due_date || HIDDEN_TASK_TYPES.includes(t.task_type)) return;
+    upcoming.push({
+      label: t.title,
+      date: t.due_date,
+      days: daysUntil(t.due_date),
+      task: t,
+    });
+  });
 
   upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -4109,7 +4136,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   📅 Upcoming & tasks
                 </div>
 
-                <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', fontSize: 11, borderRadius: 99 }}>
+                <button className="btn btn-sm btn-primary" style={{ cursor: 'pointer', fontSize: 11, borderRadius: 99 }}
+                onClick={() => setTaskModal('new')}>
                   + Task
                 </button>
               </div>
@@ -4120,7 +4148,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 </div>
               ) : (
                 upcoming.map((u, i) => (
-                  <div key={i} style={{ fontSize: 12, padding: '6px 0', borderBottom: i < upcoming.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div key={i}
+                    onClick={() => u.task && setTaskModal(u.task)}
+                    style={{ fontSize: 12, padding: '6px 0', borderBottom: i < upcoming.length - 1 ? '1px solid var(--border)' : 'none', cursor: u.task ? 'pointer' : 'default' }}>
                     <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                       {fmtDate(u.date)}
                     </div>
@@ -4534,6 +4564,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       )}
 
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
+
+      {/* Task create/edit modal */}
+      {taskModal && (
+        <TaskEditModal
+          task={taskModal === 'new' ? null : taskModal}
+          projectId={project.id}
+          onClose={() => setTaskModal(null)}
+          onSaved={(saved) => {
+            setProjectTasks(prev =>
+              taskModal === 'new'
+                ? [...prev, saved]
+                : prev.map(t => t.id === saved.id ? saved : t)
+            );
+            setTaskModal(null);
+          }}
+          onDeleted={(id) => {
+            setProjectTasks(prev => prev.filter(t => t.id !== id));
+            setTaskModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
