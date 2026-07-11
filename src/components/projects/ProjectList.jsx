@@ -6,35 +6,69 @@ import NewProjectModal from './NewProjectModal';
 function getProjectColour(project) {
   const aos = project.aos || [];
 
+  // Grey — no AOs added
   if (aos.length === 0) return '#9ca3af';
 
   const now = Date.now();
 
-  const hasOverdue = aos.some(ao => {
+  // Check for any AO with an overdue deadline or stalled 14+ days
+  const hasRed = aos.some(ao => {
     const cd = ao.consentDeadline || ao.ao_consent_deadline || ao.consent_deadline;
     const sd = ao.s10Deadline || ao.ao_s10_deadline || ao.s10_deadline;
     const st = (ao.status || ao.ao_status || '').toLowerCase();
-
-    if (cd && new Date(cd).getTime() < now && st !== 'consent' && st !== 'dissent' && st !== 'appointed_ao') return true;
+    const resolved = ['consent', 'complete', 'award_served'].includes(st);
+    const awardServed = !!(ao.award_served_date || ao.awardServedDate);
+    if (resolved || awardServed) return false;
+    // Overdue consent deadline
+    if (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) return true;
+    // Overdue S10 deadline
     if (sd && new Date(sd).getTime() < now) return true;
-
+    // Stale — no progress for 14+ days
+    const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
+    const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
+    if (noticed && lastChange && Math.floor((now - lastChange.getTime()) / 86400000) >= 14) return true;
     return false;
   });
+  if (hasRed) return '#ef4444';
 
-  if (hasOverdue) return '#ef4444';
+  // Amber — deadline approaching (≤3 days) or dissent with no surveyor
+  const hasAmber = aos.some(ao => {
+    const cd = ao.consentDeadline || ao.ao_consent_deadline || ao.consent_deadline;
+    const sd = ao.s10Deadline || ao.ao_s10_deadline || ao.s10_deadline;
+    const st = (ao.status || ao.ao_status || '').toLowerCase();
+    if (cd) {
+      const daysLeft = Math.ceil((new Date(cd).getTime() - now) / 86400000);
+      if (daysLeft >= 0 && daysLeft <= 3) return true;
+    }
+    if (sd) {
+      const daysLeft = Math.ceil((new Date(sd).getTime() - now) / 86400000);
+      if (daysLeft >= 0 && daysLeft <= 3) return true;
+    }
+    // Dissent with no surveyor and no agreed surveyor
+    if (st === 'dissent' && !ao.agreed_surveyor && !ao.surv_name && !ao.surveyorName) return true;
+    // Stale 10-13 days
+    const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
+    const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
+    if (noticed && lastChange) {
+      const days = Math.floor((now - lastChange.getTime()) / 86400000);
+      if (days >= 10 && days < 14) return true;
+    }
+    return false;
+  });
+  if (hasAmber) return '#f59e0b';
 
+  // Check if any notice has been served
   const hasNotices = aos.some(ao =>
-    ao.consentDeadline ||
-    ao.noticeServedDate ||
-    ao.ao_notice_served_date ||
-    ao.ao_consent_deadline ||
-    ao.consent_deadline ||
-    ao.notice_served_date
+    ao.consentDeadline || ao.noticeServedDate ||
+    ao.ao_notice_served_date || ao.ao_consent_deadline ||
+    ao.consent_deadline || ao.notice_served_date
   );
 
+  // Green — notice served and on track
   if (hasNotices) return '#22c55e';
 
-  return '#a855f7';
+  // Blue — AOs added but no notice served yet
+  return '#3b82f6';
 }
 
 function streetSortKey(address) {
@@ -80,6 +114,11 @@ function getAppointmentName(project) {
 function ProjectCard({ project, onClick }) {
   const colour = getProjectColour(project);
   const aoCount = (project.aos || []).length;
+
+  // No-AO warning — project older than 3 days with no AOs
+  const createdAt = project.created_at ? new Date(project.created_at) : null;
+  const projectAgeDays = createdAt ? Math.floor((Date.now() - createdAt.getTime()) / 86400000) : 0;
+  const showNoAOWarning = aoCount === 0 && projectAgeDays >= 3;
   const date = project.created_at
     ? new Date(project.created_at).toLocaleDateString('en-GB', {
         day: 'numeric',
@@ -203,6 +242,14 @@ function ProjectCard({ project, onClick }) {
             {aoCount} {aoCount === 1 ? 'AO' : 'AOs'}
             {project.fee ? ` · £${parseFloat(project.fee).toLocaleString('en-GB')}` : ''}
           </span>
+          {showNoAOWarning && (
+            <span style={{
+              fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+              background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca',
+            }}>
+              ⚠️ No AO
+            </span>
+          )}
 
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>
             {date}
