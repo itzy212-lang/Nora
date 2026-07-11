@@ -403,7 +403,7 @@ Thread:
     if (!isAuto) {
       setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
     } else {
-      setMessages([{ id: 0, role: 'system', content: `(*) Reading ${(threadEmails || []).length > 1 ? `thread (${(threadEmails || []).length} emails)` : 'email'} and drafting...` }]);
+      setMessages([{ id: 0, role: 'system', content: `• Reading ${(threadEmails || []).length > 1 ? `thread (${(threadEmails || []).length} emails)` : 'email'} and drafting...` }]);
     }
 
     try {
