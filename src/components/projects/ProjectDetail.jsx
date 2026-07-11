@@ -2974,26 +2974,34 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       try {
         const { data: noticeRows } = await sb
           .from('notices')
-          .select('section_1, section_3, section_6, notice_date')
+          .select('section_1, section_2, section_3, section_6, section_2_subsections, notice_date')
           .eq('project_id', String(project.id))
           .eq('status', 'served')
           .order('notice_date', { ascending: true });
 
         if (noticeRows && noticeRows.length > 0) {
-          // Aggregate sections across all served notices for this project
           const hasS1 = noticeRows.some(n => n.section_1);
+          const hasS2 = noticeRows.some(n => n.section_2);
           const hasS3 = noticeRows.some(n => n.section_3);
           const hasS6 = noticeRows.some(n => n.section_6);
+          const s2Subs = noticeRows
+            .filter(n => n.section_2 && n.section_2_subsections)
+            .map(n => n.section_2_subsections)
+            .join(',');
+          const s2SubFormatted = s2Subs
+            ? s2Subs.split(',').map(s => '(' + s.trim() + ')').filter(Boolean).join('')
+            : '';
+
           const parts = [];
-          if (hasS1) parts.push('Section 1');
-          if (hasS3) parts.push('Section 3');
-          if (hasS6) parts.push('Section 6');
+          if (hasS6) parts.push('Section 6(1)');
+          if (hasS1) parts.push('Section 1(5)');
+          if (hasS2) parts.push('Section 2(2)' + s2SubFormatted);
+          if (hasS3 && !hasS2) parts.push('Section 3');
           if (parts.length > 0) {
             noticeSection = parts.length === 1
               ? parts[0]
               : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
           }
-          // Use earliest notice date
           noticeServedDate = noticeRows[0].notice_date;
         }
       } catch (e) {
