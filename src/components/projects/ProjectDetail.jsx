@@ -285,14 +285,19 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
     return { label: 'Consent received', colour: '#22c55e', action: null };
   }
 
-  // Dissent — surveyor appointed
+  // Dissent — agreed surveyor
+  if (st === 'dissent' && ao?.agreed_surveyor) {
+    return { label: 'Agreed surveyor', colour: '#22c55e', action: null };
+  }
+
+  // Dissent — named surveyor appointed
   if (st === 'dissent' && surveyorAppointed) {
     return { label: 'Surveyor appointed', colour: '#22c55e', action: null };
   }
 
   // Dissent — no surveyor yet
   if (st === 'dissent') {
-    return { label: 'Dissent received', colour: '#ef4444', action: null };
+    return { label: 'Dissent received', colour: '#f59e0b', action: null };
   }
 
   // 104b served — awaiting surveyor appointment
@@ -1181,6 +1186,7 @@ function AOCard({
   onOpenSOCForAO,
   loaLoading,
   awardLoading,
+  emailResponseTasks = [],
 }) {
   const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
   const colour = getAOColour(ao, projectRole);
@@ -1194,6 +1200,24 @@ function AOCard({
   const survPhone = aoSurvPhone(ao);
 
   const statusMeta = getAOStatusMeta(ao, projectRole);
+
+  // Find open email_response task for this AO (matched by surveyor email or any task on this project)
+  const aoEmail = ao?.surv_email || ao?.surveyorEmail || ao?.email || '';
+  const emailTask = emailResponseTasks.find(t => {
+    if (!t.due_date) return false;
+    try {
+      const meta = typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {});
+      return aoEmail && meta.to_email && meta.to_email.toLowerCase() === aoEmail.toLowerCase();
+    } catch { return false; }
+  }) || null;
+  const emailTaskDays = emailTask ? daysUntil(emailTask.due_date) : null;
+
+  // Stale inactivity — days since last status change
+  const resolvedStatuses = ['consent', 'complete', 'award_served'];
+  const isResolved = resolvedStatuses.includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
+  const lastChange = ao?.last_status_change ? new Date(ao.last_status_change) : null;
+  const daysSinceChange = lastChange ? Math.floor((Date.now() - lastChange.getTime()) / 86400000) : null;
+  const isStale = !isResolved && noticed && daysSinceChange !== null && daysSinceChange >= 10;
   const statusLabel = statusMeta.label;
   const statusColour = statusMeta.colour || colour;
   const socDate = aoSOCDate(ao);
@@ -1331,6 +1355,36 @@ function AOCard({
                   color: s10Days !== null && s10Days <= 0 ? 'var(--red)' : s10Days !== null && s10Days <= 3 ? 'var(--amber)' : 'var(--green)',
                 }}>
                   ⏱ {s10Days === null ? fmtDate(s10Dd) : s10Days < 0 ? `S.10 expired — ${Math.abs(s10Days)}d overdue` : s10Days === 0 ? 'S.10 expires TODAY' : `S.10 expires — ${s10Days}d`}
+                </div>
+              );
+            }
+
+            // Email response tracker badge
+            if (!isAOAppointment && emailTask) {
+              return (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  margin: '6px 0', padding: '4px 12px', borderRadius: 99,
+                  fontSize: 12, fontWeight: 600,
+                  background: emailTaskDays !== null && emailTaskDays <= 0 ? 'var(--red-bg)' : emailTaskDays !== null && emailTaskDays <= 3 ? 'var(--amber-bg)' : 'var(--blue-bg)',
+                  color: emailTaskDays !== null && emailTaskDays <= 0 ? 'var(--red)' : emailTaskDays !== null && emailTaskDays <= 3 ? 'var(--amber)' : 'var(--blue)',
+                }}>
+                  📬 {emailTaskDays === null ? 'Awaiting response' : emailTaskDays <= 0 ? `Awaiting response — ${Math.abs(emailTaskDays)}d overdue` : emailTaskDays === 0 ? 'Response due today' : `Awaiting response — ${emailTaskDays}d`}
+                </div>
+              );
+            }
+
+            // Stale inactivity badge
+            if (!isAOAppointment && isStale) {
+              return (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  margin: '6px 0', padding: '4px 12px', borderRadius: 99,
+                  fontSize: 12, fontWeight: 600,
+                  background: daysSinceChange >= 14 ? 'var(--red-bg)' : 'var(--amber-bg)',
+                  color: daysSinceChange >= 14 ? 'var(--red)' : 'var(--amber)',
+                }}>
+                  ⏸ No progress — {daysSinceChange}d
                 </div>
               );
             }
@@ -2718,6 +2772,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showAddAO, setShowAddAO] = useState(false);
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
+  const [emailResponseTasks, setEmailResponseTasks] = useState([]);
 
   // Defensive cleanup: remove legacy floating Notices card only.
   useEffect(() => {
@@ -2792,6 +2847,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     : aos.some(ao => ['consent', 'dissent', 's10'].includes((ao.status || '').toLowerCase())) ? 2
     : aos.some(ao => aoNotice(ao) || (ao.status || '').toLowerCase() === 'notice_served') ? 1
     : 0;
+
+  // Load open email_response tasks for this project
+  useEffect(() => {
+    if (!project?.id || !sb) return;
+    sb.from('tasks')
+      .select('id, title, due_date, status, metadata, task_type')
+      .eq('project_id', project.id)
+      .eq('task_type', 'email_response')
+      .eq('status', 'open')
+      .then(({ data }) => setEmailResponseTasks(data || []));
+  }, [project?.id]);
 
   const upcoming = [];
 
@@ -3407,7 +3473,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
   const handleSetAOStatus = useCallback(async (ao, status) => {
-    const patch = { status };
+    const patch = { status, last_status_change: new Date().toISOString() };
 
     if (status === 'consent') {
       patch.consent_received_date = todayISODate();
@@ -3429,6 +3495,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       agreedSurveyor: next,
       status: next ? 'dissent' : (ao.status || 'notice_served'),
       agreed_surveyor_updated_at: todayISODate(),
+      last_status_change: new Date().toISOString(),
     });
   }, [updateAORecord]);
 
@@ -3990,6 +4057,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onOpenSOCForAO={handleOpenSOCForAO}
                       loaLoading={loaLoading === aoKey}
                       awardLoading={awardLoading === aoKey}
+                      emailResponseTasks={emailResponseTasks}
                     />
                   );
                 })
