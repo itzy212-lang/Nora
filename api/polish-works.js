@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: `You are a Party Wall surveyor drafting a statutory notice under the Party Wall etc. Act 1996. Rewrite the following description of notifiable works into precise, professional party wall notice language. Context: ${sectionContext}. Output one concise sentence or short phrase only — no preamble, no explanation, no full stop at the end unless the sentence naturally requires one. UK English.`,
+            content: `You are a Party Wall surveyor drafting a statutory notice under the Party Wall etc. Act 1996. Rewrite the following description of notifiable works into precise, professional party wall notice language. Context: ${sectionContext}. Output one concise sentence or short phrase only -- no preamble, no explanation, no full stop at the end unless the sentence naturally requires one. UK English.`,
           },
           {
             role: 'user',

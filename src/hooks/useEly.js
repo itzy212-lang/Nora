@@ -674,7 +674,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   // UI messages (brief / draft / after) client-side can persist each one with
   // its correct messageType — the auto-save inside send() happens before that
   // split occurs and can't know the classification yet.
-  // Accepts an optional sessionId override — the hook's own `sessionId` state
+  // Accepts an optional sessionId override -- the hook's own `sessionId` state
   // can lag behind the actual session ID returned by send() due to React's
   // async state updates, which intermittently caused this to silently return
   // null right after a fresh send and lose the message's draft classification.

@@ -22,7 +22,7 @@ function useIsMobile() {
 // specified and share a street with the BO/each other, a compact form like
 // "Party Wall etc. Act 1996 — 12 Oak Road (Adjoining Owner: 8 & 6 Oak Road)".
 function buildSubjectWithAoRef(baseAddress, aoList = []) {
-  const base = `Party Wall etc. Act 1996 — ${baseAddress || ''}`.trim();
+  const base = `Party Wall etc. Act 1996 -- ${baseAddress || ''}`.trim();
   if (!aoList.length) return base;
 
   // Extract "<number(s)> <street name>" from a free-text address.
@@ -345,7 +345,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                       onMouseDown={(e) => { e.preventDefault(); setTo(c.email); setToSuggestions([]); }}
                     >
                       <strong>{c.name || c.email}</strong>
-                      {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` · ${c.role}` : ''}</div>}
+                      {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` . ${c.role}` : ''}</div>}
                     </div>
                   ))}
                 </div>
@@ -386,7 +386,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                         onMouseDown={(e) => { e.preventDefault(); addCcSuggestion(c.email); }}
                       >
                         <strong>{c.name || c.email}</strong>
-                        {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` · ${c.role}` : ''}</div>}
+                        {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` . ${c.role}` : ''}</div>}
                       </div>
                     ))}
                   </div>

@@ -1379,7 +1379,7 @@ Proceed?`
                           const net = total * (1 - retentionPct);
                           const { data: newStage } = await sb.from('payment_stages').insert([{
                             project_id: project.id,
-                            title: `Payment — ${checked.length > 1 ? `${checked.length} tasks` : checked[0].title}`,
+                            title: `Payment -- ${checked.length > 1 ? `${checked.length} tasks` : checked[0].title}`,
                             description: taskNames,
                             amount: total,
                             status: 'certified',
@@ -1456,7 +1456,7 @@ Proceed?`
                       if (!confirmed) return;
                       const { data: newStage } = await sb.from('payment_stages').insert([{
                         project_id: project.id,
-                        title: `Interim payment — ${approved}% complete`,
+                        title: `Interim payment -- ${approved}% complete`,
                         amount,
                         status: 'certified',
                         certified_date: new Date().toISOString().slice(0,10),
@@ -2118,7 +2118,7 @@ Proceed?`
                       </div>
                       <div style={{ fontSize: 12, color: '#374151' }}>{cost > 0 ? fmt(cost) : '—'}</div>
                       <div style={{ fontSize: 12, color: '#6b7280' }}>
-                        {item.markup_type === 'percentage' ? `${markupVal}%` : item.markup_type === 'fixed' ? fmt(markupVal) : '—'}
+                        {item.markup_type === 'percentage' ? `${markupVal}%` : item.markup_type === 'fixed' ? fmt(markupVal) : '--'}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: charge > 0 ? '#16a34a' : '#9ca3af' }}>
                         {charge > 0 ? fmt(charge) : '—'}

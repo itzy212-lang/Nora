@@ -426,7 +426,7 @@ function buildPartyDrafts(emailsRequired = [], projectMeta = {}) {
 
     if (emails.length === 1) {
       const email = emails[0];
-      const subject = email.subject || `Schedule of Condition — ${projectMeta.bo_address || ''}`;
+      const subject = email.subject || `Schedule of Condition -- ${projectMeta.bo_address || ''}`;
       const body = email.body || [
         `Dear ${isBO ? (projectMeta.bo_1_name || 'Sir/Madam') : isAO ? (projectMeta.ao_1_name || 'Sir/Madam') : party},`,
         '',
@@ -441,7 +441,7 @@ function buildPartyDrafts(emailsRequired = [], projectMeta = {}) {
     }
 
     // Multiple items — merge into one email with numbered points
-    const subject = emails[0].subject || `Schedule of Condition — outstanding matters — ${projectMeta.bo_address || ''}`;
+    const subject = emails[0].subject || `Schedule of Condition -- outstanding matters -- ${projectMeta.bo_address || ''}`;
     const points = emails.map((e, i) => `${i + 1}. ${e.reason || e.subject || ''}`).filter(Boolean).join('\n');
     const body = [
       `Dear ${isBO ? (projectMeta.bo_1_name || 'Sir/Madam') : isAO ? (projectMeta.ao_1_name || 'Sir/Madam') : party},`,
@@ -941,7 +941,7 @@ function validateSocJson(parsed) {
 
         // Non-fatal: missing action — auto-correct to "Record only"
         if (!row.action || !String(row.action).trim()) {
-          console.warn(`[generate-soc] ${rLabel} has no action — defaulting to "Record only"`);
+          console.warn(`[generate-soc] ${rLabel} has no action -- defaulting to "Record only"`);
           row.action = 'Record only';
         }
       });
@@ -1073,7 +1073,7 @@ function runCodedFidelityChecks(draftedResult, claims) {
     for (const row of (section.rows || [])) {
       const sourceClaims = (row.source_claim_ids || []).map(id => claimMap[id]).filter(Boolean);
       if (sourceClaims.length === 0 && (row.source_note_ids || []).length > 0) {
-        warnings.push(`Row ${row.ref}: has source_note_ids but no source_claim_ids — claim traceability incomplete.`);
+        warnings.push(`Row ${row.ref}: has source_note_ids but no source_claim_ids -- claim traceability incomplete.`);
         continue;
       }
 
@@ -1082,7 +1082,7 @@ function runCodedFidelityChecks(draftedResult, claims) {
       // Check for superseded wording surviving
       const supersededClaims = sourceClaims.filter(c => c.status === 'superseded');
       for (const sc of supersededClaims) {
-        warnings.push(`Row ${row.ref}: includes superseded claim ${sc.claim_id} ("${sc.content?.slice(0, 60)}") — check it has been correctly replaced.`);
+        warnings.push(`Row ${row.ref}: includes superseded claim ${sc.claim_id} ("${sc.content?.slice(0, 60)}") -- check it has been correctly replaced.`);
       }
 
       // Check measurements not altered
@@ -1538,7 +1538,7 @@ export default async function handler(req, res) {
     try {
       const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       const aoLabel = ao_name || ao_names || '';
-      const chatTitle = `SOC Notes${aoLabel ? ' – ' + aoLabel : ''} – ${today}`;
+      const chatTitle = `SOC Notes${aoLabel ? ' - ' + aoLabel : ''} - ${today}`;
 
       // Upsert the SOC session into project chat — one session per project+AO, not per generate
       const aoKey = aoLabel || ao_id || 'default';

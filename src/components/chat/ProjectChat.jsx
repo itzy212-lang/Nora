@@ -360,7 +360,7 @@ function InvoicePreviewCard({ msg, projectId, boEmail, onSent }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: toEmail,
-          subject: `Invoice ${inv.invoice_number} — ${inv.property_address || ''}`,
+          subject: `Invoice ${inv.invoice_number} -- ${inv.property_address || ''}`,
           body: `Hi ${inv.bill_to_name?.split(' ')[0] || ''},\n\nPlease find attached invoice ${inv.invoice_number} for the works at ${inv.property_address || 'the above property'}.\n\nKind regards,`,
           attachments: [{
             name: msg.invoiceFileName || `Invoice-${inv.invoice_number}.pdf`,
@@ -1269,7 +1269,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     ).join('');
                     const projectAddress = project?.bo_premise_address || project?.address || project?.name || '';
                     const composerSubject = projectAddress
-                      ? `Party Wall etc. Act 1996 — ${projectAddress}`
+                      ? `Party Wall etc. Act 1996 -- ${projectAddress}`
                       : '';
                     onOpenComposer?.({ mode: 'compose', body: htmlBody, bodyIsHtml: true, projectId, aoAddresses, subject: composerSubject });
                   }}
@@ -1384,7 +1384,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 {/* Recipient */}
                 {(pendingInvoice.bill_to_name || pendingInvoice.bo_email) && (
                   <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 6 }}>
-                    To: {pendingInvoice.bill_to_name}{pendingInvoice.bo_email ? ` — ${pendingInvoice.bo_email}` : ''}
+                    To: {pendingInvoice.bill_to_name}{pendingInvoice.bo_email ? ` -- ${pendingInvoice.bo_email}` : ''}
                   </div>
                 )}
               </div>

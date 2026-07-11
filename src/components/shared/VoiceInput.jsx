@@ -246,7 +246,7 @@ export default function VoiceInput({
     } catch (error) {
       console.error('[VoiceInput] mobile transcription failed:', error);
       const msg = error?.message || 'Voice transcription failed. Please try again.';
-      alert(`[Transcription error — please screenshot this]\n\n${msg}`);
+      alert(`[Transcription error -- please screenshot this]\n\n${msg}`);
     } finally {
       setTranscribing(false);
       setRecording(false);

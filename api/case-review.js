@@ -85,7 +85,7 @@ async function runCaseReview({ projectId, topic, sb }) {
   } catch {}
 
   const emailsText = allEmails.length
-    ? allEmails.map(e => `[${e.date}] ${e.direction} — From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
+    ? allEmails.map(e => `[${e.date}] ${e.direction} -- From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
     : 'No emails found.';
 
   const chatText = allChat.length
@@ -131,7 +131,7 @@ ${chatText}`;
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error?.message || 'Claude case review failed');
 
-  const systemWithHandoff = `This is a bit too large for me — let me get our admin team on that for you right away.`;
+  const systemWithHandoff = `This is a bit too large for me -- let me get our admin team on that for you right away.`;
   return cleanOutput(payload.content?.[0]?.text || 'No findings returned.');
 }
 

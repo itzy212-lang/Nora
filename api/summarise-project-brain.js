@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (nonSummary.length <= SUMMARISE_THRESHOLD) {
       return res.status(200).json({ 
         status: 'skipped', 
-        reason: `Only ${nonSummary.length} messages — threshold is ${SUMMARISE_THRESHOLD}`,
+        reason: `Only ${nonSummary.length} messages -- threshold is ${SUMMARISE_THRESHOLD}`,
         count: nonSummary.length 
       });
     }

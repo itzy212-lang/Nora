@@ -235,7 +235,7 @@ export default function NotepadOverlay({ onClose }) {
             <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 8, borderBottom: `1px solid ${activeColor.border}` }}>
               <button onClick={backToList} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>←</button>
               <div style={{ flex: 1, fontSize: 11, color: '#9ca3af' }}>
-                {saving ? 'Saving…' : activeNote?.updated_at ? `Saved ${formatDate(activeNote.updated_at)}` : ''}
+                {saving ? 'Saving...' : activeNote?.updated_at ? `Saved ${formatDate(activeNote.updated_at)}` : ''}
               </div>
               <button onClick={deleteNote} style={{ background: 'none', border: 'none', fontSize: 15, cursor: 'pointer', color: '#9ca3af', padding: '4px 8px' }} title="Delete note">🗑</button>
             </div>

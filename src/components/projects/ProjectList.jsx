@@ -240,7 +240,7 @@ function ProjectCard({ project, onClick }) {
         }}>
           <span style={{ fontSize: 11.5, color: colour, fontWeight: 500 }}>
             {aoCount} {aoCount === 1 ? 'AO' : 'AOs'}
-            {project.fee ? ` · £${parseFloat(project.fee).toLocaleString('en-GB')}` : ''}
+            {project.fee ? ` . £${parseFloat(project.fee).toLocaleString('en-GB')}` : ''}
           </span>
           {showNoAOWarning && (
             <span style={{
@@ -473,7 +473,7 @@ export default function ProjectList({ onOpenProject }) {
               ? `Error: ${syncResult.error}`
               : (syncResult.projectsCreated === 0 && syncResult.aosCreated === 0)
               ? '✓ All folders already synced'
-              : `✓ ${syncResult.projectsCreated} project${syncResult.projectsCreated !== 1 ? 's' : ''}, ${syncResult.aosCreated} AO folder${syncResult.aosCreated !== 1 ? 's' : ''} created${syncResult.failed ? ` · ${syncResult.failed} failed` : ''}`
+              : `✓ ${syncResult.projectsCreated} project${syncResult.projectsCreated !== 1 ? 's' : ''}, ${syncResult.aosCreated} AO folder${syncResult.aosCreated !== 1 ? 's' : ''} created${syncResult.failed ? ` . ${syncResult.failed} failed` : ''}`
             }
           </span>
         )}

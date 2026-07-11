@@ -35,7 +35,7 @@ function buildSessionState(previousNotes, observations, keywordHint = null, inhe
   if (!previousNotes?.length) return 'No notes recorded yet. This is the first note.';
 
   const hintText = keywordHint
-    ? `\n\nKEYWORD HINT (supporting only — verify with full context): Subject matter may suggest "${keywordHint}". Use only if consistent with context and physical location. Generic terms (wall, floor, window, door) in many sections must not override context.`
+    ? `\n\nKEYWORD HINT (supporting only -- verify with full context): Subject matter may suggest "${keywordHint}". Use only if consistent with context and physical location. Generic terms (wall, floor, window, door) in many sections must not override context.`
     : '';
 
   const currentSectionText = inheritedSection

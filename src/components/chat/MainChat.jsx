@@ -727,7 +727,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         // hook's possibly-stale React state) fixes the intermittent silent
         // failure where message_type never reached the database.
         // BUG FIXED: this used to declare `const result = ...sessionId: result?.sessionId`
-        // — the new `result` shadowed the outer one within its own declaration,
+        // -- the new `result` shadowed the outer one within its own declaration,
         // referencing itself before assignment ("Cannot access before
         // initialization"), which broke main chat entirely.
         const saveResult = saveMessage?.({ role: 'assistant', content: m.content, messageType: m.messageType, sessionId: result?.sessionId });

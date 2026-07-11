@@ -268,7 +268,7 @@ export default function Leads() {
           <p style={s.subtitle}>
             {leads.length} lead{leads.length !== 1 ? 's' : ''} total
             {leads.filter(l => (l.lead_stage || l.status) === 'new').length > 0 &&
-              ` · ${leads.filter(l => (l.lead_stage || l.status) === 'new').length} new`}
+              ` . ${leads.filter(l => (l.lead_stage || l.status) === 'new').length} new`}
           </p>
         </div>
         <button style={s.addBtn} onClick={openAdd}>+ Add Lead</button>
@@ -338,7 +338,7 @@ export default function Leads() {
       {showModal && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div style={s.modal}>
-            <div style={s.modalTitle}>{editing ? `Edit Lead — ${editing.lead_ref}` : 'Add Lead'}</div>
+            <div style={s.modalTitle}>{editing ? `Edit Lead -- ${editing.lead_ref}` : 'Add Lead'}</div>
 
             <div style={s.section}>Contact</div>
             <div style={s.grid2}>

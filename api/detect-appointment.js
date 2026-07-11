@@ -91,7 +91,7 @@ Set is_confirmed:true if both parties have agreed. Set is_proposal:true if only 
             diaryClash = `You have "${clashingTask.title}"${clashingTask.start_time ? ' at ' + clashingTask.start_time : ''} already in your diary${clashingTask.project_address_snapshot ? ' at ' + clashingTask.project_address_snapshot : ''}.`;
           }
         } else {
-          diaryClash = `You have ${tasks.length} other appointment${tasks.length > 1 ? 's' : ''} on ${detection.date_text?.split(' at ')[0] || 'that day'} — worth checking for clashes.`;
+          diaryClash = `You have ${tasks.length} other appointment${tasks.length > 1 ? 's' : ''} on ${detection.date_text?.split(' at ')[0] || 'that day'} -- worth checking for clashes.`;
         }
       }
 
@@ -156,7 +156,7 @@ Set is_confirmed:true if both parties have agreed. Set is_proposal:true if only 
       confirm_reply: detection.confirm_reply || '',
       pending_booking: {
         taskType: detection.type === 'soc' ? 'soc' : detection.type || 'appointment',
-        title: `${detection.type === 'soc' ? 'Schedule of Condition' : 'Appointment'}${detection.address ? ' — ' + detection.address : ''}`,
+        title: `${detection.type === 'soc' ? 'Schedule of Condition' : 'Appointment'}${detection.address ? ' -- ' + detection.address : ''}`,
         dueDate: detection.iso_date,
         startTime: detection.time,
         projectAddress: detection.address || null,

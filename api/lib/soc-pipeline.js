@@ -224,7 +224,7 @@ function buildFactualChecklist(claims, rawNotesBySeq) {
       if (c.access_limitation)  facts.push(`Access limitation: ${c.access_limitation}`);
 
       lines.push(`[${c.claim_id}] ${c.claim_type}`);
-      for (const f of facts) lines.push(`  • ${f}`);
+      for (const f of facts) lines.push(`  - ${f}`);
       if (c.raw_fragment)       lines.push(`  Raw: "${c.raw_fragment}"`);
       if (c.amendment_mode)     lines.push(`  Amendment: ${c.amendment_mode}`);
       lines.push('');

@@ -41,7 +41,7 @@ function getMediaType(fileName) {
 // Drawing prompts — one per drawing type
 const PROMPTS = {
 
-  general: `You are reading a construction drawing or architectural plan. Extract EVERYTHING visible — this is a general plan and may include architectural, structural, electrical, plumbing and finishing information all at once.
+  general: `You are reading a construction drawing or architectural plan. Extract EVERYTHING visible -- this is a general plan and may include architectural, structural, electrical, plumbing and finishing information all at once.
 
 Extract every scope item you can identify including:
 - New rooms, extensions, loft conversions, basement excavations

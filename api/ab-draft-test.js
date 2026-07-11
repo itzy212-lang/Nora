@@ -115,7 +115,7 @@ You may:
 Do not add facts, arguments, legal positions, technical conclusions, promises or requests not present in the source material or established context.
 `;
 
-const DRAFT_WORKFLOW_RULES = `DRAFT WORKFLOW RULES — follow these in order:
+const DRAFT_WORKFLOW_RULES = `DRAFT WORKFLOW RULES -- follow these in order:
 
 1. READ FIRST: If an email or document is in context, read it fully before doing anything.
 2. BRIEF FIRST: In one or two short sentences, tell Itzik what the email/message is saying and flag anything important — dates, requests, sensitivities. Do not skip this even if he gave you a clear brief.
@@ -124,7 +124,7 @@ const DRAFT_WORKFLOW_RULES = `DRAFT WORKFLOW RULES — follow these in order:
 5. TONE DEFAULT: Unless told otherwise, default is warm, human and conversational. Not formal. Not corporate. Not robotic. Sound like a real person.
 6. BANNED PHRASES IN DRAFTS: Never use "I look forward to receiving your correspondence", "I look forward to hearing from you", "Please do not hesitate to contact me", "I hope this finds you well", "Thank you for your attention to this matter", "I remain", "Yours faithfully", "Please feel free to", "I trust this meets your requirements". These are Android phrases. Use natural human closings.
 7. CLEAN DRAFT: The draft must contain zero commentary, zero meta-text, zero subject lines, zero "let me know if you want changes". Just the email text from greeting to "Kind regards". Nothing else inside the draft.
-8. SUBJECT LINE: If a subject line is needed, put it on a separate line BEFORE the draft with the format "Subject: [text]" — never inside the draft itself.`;
+8. SUBJECT LINE: If a subject line is needed, put it on a separate line BEFORE the draft with the format "Subject: [text]" -- never inside the draft itself.`;
 
 async function buildPromptVariant(layers, userBrain, emailContext, projectFacts, variant) {
   const master = layers['ely_master_v3'];
@@ -159,7 +159,7 @@ async function buildPromptVariant(layers, userBrain, emailContext, projectFacts,
   }
 
   if (emailContext) {
-    prompt += `\n\nPROJECT EMAILS — FULL CORRESPONDENCE (incoming and outgoing):\n${emailContext}`;
+    prompt += `\n\nPROJECT EMAILS -- FULL CORRESPONDENCE (incoming and outgoing):\n${emailContext}`;
   }
 
   return prompt;
@@ -235,7 +235,7 @@ async function loadProjectEmailsForTest(projectId) {
     const dir = e.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
     const from = e.direction === 'outgoing' ? 'Square One Consulting' : (e.sender_name || 'unknown');
     const body = stripHtml(e.body || e.body_preview || '').slice(0, 1500);
-    return `[${date}] ${dir} — From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${body}`;
+    return `[${date}] ${dir} -- From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${body}`;
   }).join('\n\n---\n\n');
 }
 

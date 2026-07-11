@@ -200,7 +200,7 @@ function TemplatesTab() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{tpl?.label || defaultLabel}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
-                  {tpl ? `${tpl.filename} · ${fmtSize(tpl.file_size)} · Updated ${fmtDate(tpl.updated_at)}` : 'No file uploaded yet'}
+                  {tpl ? `${tpl.filename} . ${fmtSize(tpl.file_size)} . Updated ${fmtDate(tpl.updated_at)}` : 'No file uploaded yet'}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

@@ -205,7 +205,7 @@ KEY CLAUSES (all required unless works-specific):
 16. No warranty as to sufficiency/design
 17. Final inspection notification obligation
 18. No boundary determination
-19. Document Issue Register — signed by both surveyors`;
+19. Document Issue Register -- signed by both surveyors`;
 
 export const AWARD_REVIEW_SYSTEM_PROMPT = `You are reviewing a party wall award against a master benchmark template.
 
@@ -223,4 +223,4 @@ Analyse the uploaded award and produce a structured review covering:
 
 Be specific. Quote the exact clause or wording that is missing or weaker. Reference section numbers from the Act where relevant.
 
-Format your response clearly with these five sections. Be direct — this is a professional review for a practising party wall surveyor.`;
+Format your response clearly with these five sections. Be direct -- this is a professional review for a practising party wall surveyor.`;
