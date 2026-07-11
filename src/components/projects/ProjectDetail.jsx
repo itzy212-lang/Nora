@@ -1222,6 +1222,7 @@ function AOCard({
 
   // Stale inactivity — days since last status change
   const resolvedStatuses = ['consent', 'complete', 'award_served'];
+  const st = (ao?.status || '').toLowerCase();
   const isResolved = resolvedStatuses.includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
   const lastChange = ao?.last_status_change ? new Date(ao.last_status_change) : null;
   const daysSinceChange = lastChange ? Math.floor((Date.now() - lastChange.getTime()) / 86400000) : null;
