@@ -67,6 +67,61 @@ export default function NoticeServingModal({
   const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
   const [s2Subsections, setS2Subsections] = useState('');
+  const [worksItems, setWorksItems] = useState(['']);
+  const [polishingIndex, setPolishingIndex] = useState(null);
+  const [dictatingIndex, setDictatingIndex] = useState(null);
+
+  const showWorks = selected.some(s => ['s1', 's2', 's6'].includes(s));
+
+  const updateWork = (index, value) => {
+    setWorksItems(prev => prev.map((item, i) => i === index ? value : item));
+  };
+
+  const addWork = () => setWorksItems(prev => [...prev, '']);
+
+  const removeWork = (index) => {
+    setWorksItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : ['']);
+  };
+
+  const polishWork = async (index) => {
+    const raw = worksItems[index]?.trim();
+    if (!raw) return;
+    const section = selected.find(s => ['s1', 's2', 's6'].includes(s)) || 's2';
+    setPolishingIndex(index);
+    try {
+      const res = await fetch('/api/polish-works', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText: raw, section }),
+      });
+      const data = await res.json();
+      if (data.polished) updateWork(index, data.polished);
+    } catch (err) {
+      console.error('Polish failed:', err);
+    } finally {
+      setPolishingIndex(null);
+    }
+  };
+
+  const startDictation = (index) => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.lang = 'en-GB';
+    recognition.interimResults = false;
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      updateWork(index, transcript);
+      setDictatingIndex(null);
+    };
+    recognition.onerror = () => setDictatingIndex(null);
+    recognition.onend = () => setDictatingIndex(null);
+    setDictatingIndex(index);
+    recognition.start();
+  };
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
 
@@ -117,6 +172,7 @@ export default function NoticeServingModal({
           createDeadlineTask,
           noticeDate,
           section2Subsections: s2Subsections,
+          worksItems: worksItems.filter(w => w.trim()),
         });
       }
 
@@ -295,6 +351,109 @@ export default function NoticeServingModal({
               </div>
             )}
           </div>
+
+          {/* Notifiable Works — shown when s1, s2 or s6 selected */}
+          {showWorks && (
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
+                Notifiable works
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {worksItems.map((item, index) => (
+                  <div key={index} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <div style={{ width: 20, paddingTop: 10, color: '#9ca3af', fontSize: 13, flexShrink: 0 }}>•</div>
+                    <textarea
+                      value={item}
+                      onChange={e => updateWork(index, e.target.value)}
+                      placeholder="Describe the work item..."
+                      rows={2}
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => startDictation(index)}
+                        title="Dictate"
+                        style={{
+                          padding: '5px 8px',
+                          borderRadius: 7,
+                          border: '1px solid #d1d5db',
+                          background: dictatingIndex === index ? '#fee2e2' : '#f9fafb',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {dictatingIndex === index ? '⏹' : '🎤'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => polishWork(index)}
+                        title="Polish with AI"
+                        disabled={polishingIndex === index || !item.trim()}
+                        style={{
+                          padding: '5px 8px',
+                          borderRadius: 7,
+                          border: '1px solid #d1d5db',
+                          background: '#f0fdf4',
+                          cursor: polishingIndex === index ? 'wait' : 'pointer',
+                          fontSize: 13,
+                          lineHeight: 1,
+                          opacity: !item.trim() ? 0.4 : 1,
+                        }}
+                      >
+                        {polishingIndex === index ? '…' : '✨'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeWork(index)}
+                        title="Remove"
+                        style={{
+                          padding: '5px 8px',
+                          borderRadius: 7,
+                          border: '1px solid #fecaca',
+                          background: '#fff5f5',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          lineHeight: 1,
+                          color: '#ef4444',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={addWork}
+                style={{
+                  marginTop: 10,
+                  padding: '7px 14px',
+                  borderRadius: 10,
+                  border: '1px dashed #d1d5db',
+                  background: '#f9fafb',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  width: '100%',
+                }}
+              >
+                + Add work item
+              </button>
+            </div>
+          )}
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
