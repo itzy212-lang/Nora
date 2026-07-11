@@ -160,7 +160,7 @@ function joinOwnerNames(name1, name2) {
   return a || b || '';
 }
 
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '' }) {
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '', worksItems = [] }) {
   const noticeDate = suppliedNoticeDate || todayIso();
   const boPremise = project?.bo_premise_address || project?.address || '';
   const aoPremise = aoAddress(ao);
@@ -202,7 +202,10 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     noticeDate,
     originalNoticeDate,
     section10NoticeDate: noticeDate,
-    notifiableWorks: project?.works || '',
+    notifiableWorks: worksItems?.length
+      ? worksItems.filter(w => w.trim()).join('\n')
+      : (project?.works || ''),
+    works_items: (worksItems?.length ? worksItems.filter(w => w.trim()) : (project?.works ? [project.works] : [])).map(item => ({ item })),
     includeCover,
     allSections: allSections.length ? allSections : [sectionKey],
     section2Subsections,
@@ -3299,6 +3302,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     noticeDate: suppliedNoticeDate,
     createDeadlineTask = true,
     section2Subsections = '',
+    worksItems = [],
   }) => {
     const noticeDate = suppliedNoticeDate || todayIso();
     const generatedDocs = [];
@@ -3363,7 +3367,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     for (const key of keysToGenerate) {
       try {
-        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections });
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems });
         const result = await generateDocument({
           templateKey: key === 's2' ? 's3' : key, // s2 (Section 2(2)) uses the s3 template
           mergeData,
@@ -3568,7 +3572,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections }) =>
+          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems }) =>
             handleServeNoticePack({
               ao: servedAO || noticeModal.ao,
               sections,
@@ -3576,6 +3580,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               noticeDate,
               createDeadlineTask,
               section2Subsections,
+              worksItems,
             })
           }
           onClose={() => setNoticeModal(null)}
