@@ -1207,7 +1207,15 @@ function AOCard({
     if (!t.due_date) return false;
     try {
       const meta = typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {});
-      return aoEmail && meta.to_email && meta.to_email.toLowerCase() === aoEmail.toLowerCase();
+      // email_response: match by to_email (we sent to surveyor)
+      if (t.task_type === 'email_response') {
+        return aoEmail && meta.to_email && meta.to_email.toLowerCase() === aoEmail.toLowerCase();
+      }
+      // email_action: match by sender_email (surveyor emailed us)
+      if (t.task_type === 'email_action') {
+        return aoEmail && meta.sender_email && meta.sender_email.toLowerCase() === aoEmail.toLowerCase();
+      }
+      return false;
     } catch { return false; }
   }) || null;
   const emailTaskDays = emailTask ? daysUntil(emailTask.due_date) : null;
@@ -1369,7 +1377,9 @@ function AOCard({
                   background: emailTaskDays !== null && emailTaskDays <= 0 ? 'var(--red-bg)' : emailTaskDays !== null && emailTaskDays <= 3 ? 'var(--amber-bg)' : 'var(--blue-bg)',
                   color: emailTaskDays !== null && emailTaskDays <= 0 ? 'var(--red)' : emailTaskDays !== null && emailTaskDays <= 3 ? 'var(--amber)' : 'var(--blue)',
                 }}>
-                  📬 {emailTaskDays === null ? 'Awaiting response' : emailTaskDays <= 0 ? `Awaiting response — ${Math.abs(emailTaskDays)}d overdue` : emailTaskDays === 0 ? 'Response due today' : `Awaiting response — ${emailTaskDays}d`}
+                  {emailTask?.task_type === 'email_action' ? '📩' : '📬'} {emailTask?.task_type === 'email_action'
+                    ? (emailTaskDays !== null && emailTaskDays <= 0 ? `Email action overdue — ${Math.abs(emailTaskDays)}d` : `Action required — ${emailTaskDays}d`)
+                    : (emailTaskDays !== null && emailTaskDays <= 0 ? `Awaiting response — ${Math.abs(emailTaskDays)}d overdue` : `Awaiting response — ${emailTaskDays}d`)}
                 </div>
               );
             }
@@ -2854,7 +2864,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     sb.from('tasks')
       .select('id, title, due_date, status, metadata, task_type')
       .eq('project_id', project.id)
-      .eq('task_type', 'email_response')
+      .in('task_type', ['email_response', 'email_action'])
       .eq('status', 'open')
       .then(({ data }) => setEmailResponseTasks(data || []));
   }, [project?.id]);
