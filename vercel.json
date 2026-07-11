@@ -62,6 +62,12 @@
     },
     "api/generate-fee-quote.js": {
       "maxDuration": 60
+    },
+    "api/briefing.js": {
+      "maxDuration": 30
+    },
+    "api/polish-works.js": {
+      "maxDuration": 30
     }
   }
 }
