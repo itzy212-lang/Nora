@@ -245,6 +245,7 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
       : '',
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
+    works_items: (options.works_items || (notifiableWorks ? [{ item: notifiableWorks }] : [])),
     BO_NAME: boNames,
     BO_NAMES: boNames,
     BO_NAME_1: bo1,
