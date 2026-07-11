@@ -295,16 +295,27 @@ Read the following email thread in full. Identify:
    - Liability language: "your failure to", "we hold you responsible", "without prejudice"
    - Deadlines or ultimatums aimed at Itzik
    - Position hardening against Itzik across multiple emails
+   - Requests for urgent action or responses before a specific date
+   - Chasing emails where Itzik has not yet responded
 5. Any names, firms or contacts mentioned in the thread
 
 Do NOT flag escalation between other parties where Itzik is not the target.
 Do NOT summarise the thread.
 
-If there is a genuine red flag directed at Itzik, respond with ONE short sentence only, starting with "Flag:".
-If there is no flag, respond with the single word: "Ready."
+If there is a genuine red flag directed at Itzik, respond with this exact format:
+Flag: [one sentence describing the issue] | urgency: [same-day|urgent|2-day|3-day|7-day]
+
+Urgency guide:
+- same-day: imminent deadline today, award needed before someone goes away, without prejudice letter, legal threat
+- urgent: deadline tomorrow, strong chase, position hardening
+- 2-day: chasing email, request for update, no specific deadline stated
+- 3-day: draft received needing comments, general professional query requiring a considered response
+- 7-day: low-urgency review, copy of document for information, no action explicitly required but should not be ignored
+
+If there is no flag, respond with the single word: Ready.
 
 Thread:
-${threadText}`;
+\${threadText}\`;
 
     fetch('/api/ely-smart', {
       method: 'POST',
@@ -333,15 +344,53 @@ ${threadText}`;
       const reply = (data.reply || data.replyText || '').trim();
       // If it's just "Ready." — say nothing, thread is now in context
       if (!reply || reply === 'Ready.' || reply.toLowerCase() === 'ready') return;
-      // If it starts with "Flag:" — show it as a brief system note
+      // If it starts with "Flag:" — show it as a brief system note and create a task
       if (reply.toLowerCase().startsWith('flag:')) {
-        const flagText = reply.replace(/^flag:\s*/i, '').trim();
+        const rawFlag = reply.replace(/^flag:\s*/i, '').trim();
+        // Parse urgency from format: "description | urgency: X"
+        const urgencyMatch = rawFlag.match(/\|\s*urgency:\s*(same-day|urgent|2-day|3-day|7-day)/i);
+        const urgency = urgencyMatch ? urgencyMatch[1].toLowerCase() : '2-day';
+        const flagText = rawFlag.replace(/\|\s*urgency:\s*\S+/i, '').trim();
+
+        // Calculate due date from urgency
+        const urgencyDays = { 'same-day': 0, 'urgent': 1, '2-day': 2, '3-day': 3, '7-day': 7 };
+        const daysToAdd = urgencyDays[urgency] ?? 2;
+        const due = new Date();
+        due.setDate(due.getDate() + daysToAdd);
+        const dueIso = due.toISOString().slice(0, 10);
+
+        // Show flag banner
         setMessages([{
           id: Date.now(),
           role: 'ely',
           content: `⚠️ ${flagText}`,
           isFlag: true,
+          urgency,
         }]);
+
+        // Create task linked to this email and project
+        const linkedProjectId = email?.project_id || state?.selectedProjectId;
+        if (linkedProjectId && sb) {
+          sb.from('tasks').insert([{
+            project_id: linkedProjectId,
+            title: `Email action — ${email?.sender_name || email?.sender_email || 'sender'}`,
+            description: flagText,
+            status: 'open',
+            due_date: dueIso,
+            priority: daysToAdd <= 1 ? 'high' : 'normal',
+            task_type: 'email_action',
+            metadata: JSON.stringify({
+              email_id: email?.id || null,
+              sender_email: email?.sender_email || '',
+              sender_name: email?.sender_name || '',
+              subject: email?.subject || '',
+              urgency,
+              flag_text: flagText,
+            }),
+          }]).then(({ error }) => {
+            if (error) console.warn('[silent-read] task creation failed:', error.message);
+          });
+        }
       }
     })
     .catch(() => {}); // Fail silently — never block the user
