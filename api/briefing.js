@@ -65,7 +65,7 @@ export default async function handler(req, res) {
         alerts.push({
           level: 'red',
           project: addr,
-          message: `No adjoining owner added — project is ${age} days old`,
+          message: `No adjoining owner added -- project is ${age} days old`,
         });
         continue;
       }
@@ -84,28 +84,28 @@ export default async function handler(req, res) {
 
         // Consent deadline overdue
         if (cd && daysUntil(cd) !== null && daysUntil(cd) < 0 && st !== 'dissent') {
-          alerts.push({ level: 'red', project: addr, message: `${aoName} — consent deadline expired ${Math.abs(daysUntil(cd))}d ago, serve Section 10` });
+          alerts.push({ level: 'red', project: addr, message: `${aoName} -- consent deadline expired ${Math.abs(daysUntil(cd))}d ago, serve Section 10` });
         } else if (cd && daysUntil(cd) !== null && daysUntil(cd) <= 3 && daysUntil(cd) >= 0 && st !== 'dissent') {
-          alerts.push({ level: 'amber', project: addr, message: `${aoName} — consent deadline in ${daysUntil(cd)}d` });
+          alerts.push({ level: 'amber', project: addr, message: `${aoName} -- consent deadline in ${daysUntil(cd)}d` });
         }
 
         // S10 deadline overdue
         if (sd && daysUntil(sd) !== null && daysUntil(sd) < 0) {
-          alerts.push({ level: 'red', project: addr, message: `${aoName} — Section 10 expired ${Math.abs(daysUntil(sd))}d ago, serve 10(4)(b)` });
+          alerts.push({ level: 'red', project: addr, message: `${aoName} -- Section 10 expired ${Math.abs(daysUntil(sd))}d ago, serve 10(4)(b)` });
         } else if (sd && daysUntil(sd) !== null && daysUntil(sd) <= 3 && daysUntil(sd) >= 0) {
-          alerts.push({ level: 'amber', project: addr, message: `${aoName} — Section 10 expires in ${daysUntil(sd)}d` });
+          alerts.push({ level: 'amber', project: addr, message: `${aoName} -- Section 10 expires in ${daysUntil(sd)}d` });
         }
 
         // Dissent with no surveyor
         if (st === 'dissent' && !ao.agreed_surveyor && !ao.surv_name && !ao.surveyorName) {
-          alerts.push({ level: 'amber', project: addr, message: `${aoName} — dissent received, no surveyor appointed yet` });
+          alerts.push({ level: 'amber', project: addr, message: `${aoName} -- dissent received, no surveyor appointed yet` });
         }
 
         // Stale inactivity
         if (noticed && staleDays !== null && staleDays >= 14) {
-          alerts.push({ level: 'red', project: addr, message: `${aoName} — no progress for ${staleDays} days` });
+          alerts.push({ level: 'red', project: addr, message: `${aoName} -- no progress for ${staleDays} days` });
         } else if (noticed && staleDays !== null && staleDays >= 10 && staleDays < 14) {
-          alerts.push({ level: 'amber', project: addr, message: `${aoName} — no progress for ${staleDays} days` });
+          alerts.push({ level: 'amber', project: addr, message: `${aoName} -- no progress for ${staleDays} days` });
         }
 
         // Email response overdue
@@ -115,9 +115,9 @@ export default async function handler(req, res) {
           const isAction = task.task_type === 'email_action';
           const label = isAction ? 'email action required' : 'awaiting response';
           if (taskDays !== null && taskDays <= 0) {
-            alerts.push({ level: 'red', project: addr, message: `${aoName} — ${label} overdue by ${Math.abs(taskDays)}d (${task.title})` });
+            alerts.push({ level: 'red', project: addr, message: `${aoName} -- ${label} overdue by ${Math.abs(taskDays)}d (${task.title})` });
           } else if (taskDays !== null && taskDays <= 3) {
-            alerts.push({ level: 'amber', project: addr, message: `${aoName} — ${label} due in ${taskDays}d` });
+            alerts.push({ level: 'amber', project: addr, message: `${aoName} -- ${label} due in ${taskDays}d` });
           }
         }
       }
