@@ -3478,7 +3478,10 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'gpt-4o';
     const DRAFTING_MODEL = process.env.DRAFTING_MODEL || DEFAULT_MODEL;
-    const activeModel = modeHint === 'draft' ? DRAFTING_MODEL : DEFAULT_MODEL;
+    const PROJECT_CHAT_DISCUSS_MODEL = process.env.PROJECT_CHAT_DISCUSS_MODEL || 'gpt-5.6-terra';
+    const activeModel = modeHint === 'draft'
+      ? DRAFTING_MODEL
+      : (isProjectChat ? PROJECT_CHAT_DISCUSS_MODEL : DEFAULT_MODEL);
     const modelCfg = MODEL_CONFIG[activeModel] || MODEL_CONFIG['gpt-4o'];
 
     const modelPayload = modelCfg.reasoning
