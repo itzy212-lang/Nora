@@ -103,25 +103,10 @@ export default async function handler(req, res) {
       section_2_subsections: noticeType === 'section_2' ? section2Subsections : null,
     });
 
-    let task = null;
-    if (createReminder) {
-      task = await safeInsert(supabase, 'tasks', {
-        project_id: projectId,
-        title: isS10 ? 'Section 10 deadline' : 'Consent deadline',
-        description: isS10
-          ? '10-day Section 10 appointment deadline created from notice workflow.'
-          : '14-day notice consent deadline created from notice workflow.',
-        status: 'open',
-        due_date: deadlineDate,
-        priority: 'high',
-        task_type: isS10 ? 'section_10_deadline' : 'notice_consent_deadline',
-      });
-    }
-
     return res.status(200).json({
       success: true,
       notice,
-      task,
+      task: null,
       deadline_date: deadlineDate,
       status_patch: isS10
         ? {

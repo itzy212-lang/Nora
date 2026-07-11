@@ -600,8 +600,10 @@ export default function Calendar({ onOpenProject }) {
 
       if (error) throw error;
 
+      // Exclude notice deadline task types — these are already shown as red AO date events
+      const DEADLINE_TASK_TYPES = ['notice_consent_deadline', 'notice_section10_deadline', 'section_10_deadline'];
       setTaskEvents((data || [])
-        .filter(t => t.due_date)
+        .filter(t => t.due_date && !DEADLINE_TASK_TYPES.includes(t.task_type))
         .map(t => taskToEvent(t, projects))
       );
     } catch (err) {
