@@ -363,7 +363,7 @@ Thread:
         setMessages([{
           id: Date.now(),
           role: 'ely',
-          content: `⚠️ ${flagText}`,
+          content: '⚠️ ' + flagText,
           isFlag: true,
           urgency,
         }]);
