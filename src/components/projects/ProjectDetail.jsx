@@ -311,7 +311,7 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
       return { label: 'Serve 10(4)(b)', colour: '#ef4444', action: 'serve_104b' };
     }
     return {
-      label: s10Deadline === null ? 'S.10 served' : s10Deadline === 0 ? 'S.10 expires today' : `S.10 — ${s10Deadline}d left`,
+      label: s10Deadline === null ? 'S.10 served' : s10Deadline === 0 ? 'S.10 expires today' : `S.10 -- ${s10Deadline}d left`,
       colour: s10Deadline !== null && s10Deadline <= 3 ? '#f59e0b' : '#22c55e',
       action: null,
     };
@@ -1152,7 +1152,7 @@ function getAOWorkflowAction(ao, projectRole = 'BO') {
       return { label: 'Serve 10(4)(b) papers', action: 'serve104b', colour: 'var(--red)', active: true };
     }
     return {
-      label: s10DeadlineDays === null ? 'Section 10 served' : s10DeadlineDays === 0 ? 'S.10 deadline today' : `S.10 deadline — ${s10DeadlineDays}d`,
+      label: s10DeadlineDays === null ? 'Section 10 served' : s10DeadlineDays === 0 ? 'S.10 deadline today' : `S.10 deadline -- ${s10DeadlineDays}d`,
       action: null,
       colour: 'var(--green)',
       active: false,
@@ -1261,7 +1261,7 @@ function AOCard({
                   onClick={() => ao.loa_signed_pdf_url && window.open(ao.loa_signed_pdf_url, '_blank')}
                 >✅</span>
               ) : ao.loa_sent_at ? (
-                <span title={`LOA sent ${new Date(ao.loa_sent_at).toLocaleDateString('en-GB')} — awaiting signature`}
+                <span title={`LOA sent ${new Date(ao.loa_sent_at).toLocaleDateString('en-GB')} -- awaiting signature`}
                   style={{ fontSize: 16 }}
                 >📤</span>
               ) : null}
@@ -1345,7 +1345,7 @@ function AOCard({
                   background: days !== null && days <= 0 ? 'var(--red-bg)' : days !== null && days <= 7 ? 'var(--amber-bg)' : 'var(--green-bg)',
                   color: days !== null && days <= 0 ? 'var(--red)' : days !== null && days <= 7 ? 'var(--amber)' : 'var(--green)',
                 }}>
-                  ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline — ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline — ${days}d`}
+                  ⏱ {days === null ? fmtDate(cd) : days < 0 ? `Consent deadline -- ${Math.abs(days)}d overdue` : days === 0 ? 'Consent deadline TODAY' : `Consent deadline -- ${days}d`}
                 </div>
               );
             }
@@ -1362,7 +1362,7 @@ function AOCard({
                   background: s10Days !== null && s10Days <= 0 ? 'var(--red-bg)' : s10Days !== null && s10Days <= 3 ? 'var(--amber-bg)' : 'var(--green-bg)',
                   color: s10Days !== null && s10Days <= 0 ? 'var(--red)' : s10Days !== null && s10Days <= 3 ? 'var(--amber)' : 'var(--green)',
                 }}>
-                  ⏱ {s10Days === null ? fmtDate(s10Dd) : s10Days < 0 ? `S.10 expired — ${Math.abs(s10Days)}d overdue` : s10Days === 0 ? 'S.10 expires TODAY' : `S.10 expires — ${s10Days}d`}
+                  ⏱ {s10Days === null ? fmtDate(s10Dd) : s10Days < 0 ? `S.10 expired -- ${Math.abs(s10Days)}d overdue` : s10Days === 0 ? 'S.10 expires TODAY' : `S.10 expires -- ${s10Days}d`}
                 </div>
               );
             }
@@ -1378,8 +1378,8 @@ function AOCard({
                   color: emailTaskDays !== null && emailTaskDays <= 0 ? 'var(--red)' : emailTaskDays !== null && emailTaskDays <= 3 ? 'var(--amber)' : 'var(--blue)',
                 }}>
                   {emailTask?.task_type === 'email_action' ? '📩' : '📬'} {emailTask?.task_type === 'email_action'
-                    ? (emailTaskDays !== null && emailTaskDays <= 0 ? `Email action overdue — ${Math.abs(emailTaskDays)}d` : `Action required — ${emailTaskDays}d`)
-                    : (emailTaskDays !== null && emailTaskDays <= 0 ? `Awaiting response — ${Math.abs(emailTaskDays)}d overdue` : `Awaiting response — ${emailTaskDays}d`)}
+                    ? (emailTaskDays !== null && emailTaskDays <= 0 ? `Email action overdue -- ${Math.abs(emailTaskDays)}d` : `Action required -- ${emailTaskDays}d`)
+                    : (emailTaskDays !== null && emailTaskDays <= 0 ? `Awaiting response -- ${Math.abs(emailTaskDays)}d overdue` : `Awaiting response -- ${emailTaskDays}d`)}
                 </div>
               );
             }
@@ -1573,7 +1573,7 @@ function AOCard({
                   borderLeft: '1px solid var(--border2)',
                 }}
               >
-                {loaLoading === `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}` ? 'Generating…' : '⬇ PDF'}
+                {loaLoading === `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}` ? 'Generating...' : '⬇ PDF'}
               </button>
             </div>
 
@@ -2874,10 +2874,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   if (role !== 'AO') {
     aos.forEach(ao => {
       const cd = aoConsent(ao);
-      if (cd) upcoming.push({ label: `Consent deadline — ${aoAddress(ao) || ao.name}`, date: cd, days: daysUntil(cd) });
+      if (cd) upcoming.push({ label: `Consent deadline -- ${aoAddress(ao) || ao.name}`, date: cd, days: daysUntil(cd) });
 
       const sd = aoS10(ao);
-      if (sd) upcoming.push({ label: `S.10 deadline — ${ao.name}`, date: sd, days: daysUntil(sd) });
+      if (sd) upcoming.push({ label: `S.10 deadline -- ${ao.name}`, date: sd, days: daysUntil(sd) });
     });
   }
 
@@ -3091,7 +3091,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       });
 
       if (!award?.isValid) {
-        alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${(award?.missing || []).map(item => `• ${item}`).join('\n')}`);
+        alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${(award?.missing || []).map(item => `- ${item}`).join('\n')}`);
         return;
       }
 
@@ -3412,7 +3412,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       if (createDeadlineTask) {
         await createProjectTask({
-          title: `Consent deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+          title: `Consent deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
           description: '14-day notice consent period expired. Review whether Section 10 is required.',
           due_date: deadline,
           task_type: 'notice_consent_deadline',
@@ -3434,7 +3434,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       if (createDeadlineTask) {
         await createProjectTask({
-          title: `Section 10 deadline — AO${ao.num || ''} ${ao.name || ''}`.trim(),
+          title: `Section 10 deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
           description: '10-day Section 10 notice period expired.',
           due_date: deadline,
           task_type: 'notice_section10_deadline',
@@ -3984,7 +3984,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onClick={() => project.bo_loa_signed_pdf_url && window.open(project.bo_loa_signed_pdf_url, '_blank')}
                     >✅</span>
                   ) : project.bo_loa_sent_at ? (
-                    <span title={`BO LOA sent ${new Date(project.bo_loa_sent_at).toLocaleDateString('en-GB')} — awaiting signature`}
+                    <span title={`BO LOA sent ${new Date(project.bo_loa_sent_at).toLocaleDateString('en-GB')} -- awaiting signature`}
                       style={{ fontSize: 16, display: 'inline-block', marginTop: 6 }}
                     >📤</span>
                   ) : null}
@@ -4278,7 +4278,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   ? (e.to_email || 'Recipient')
                   : (e.sender_name || e.raw_recipients?.from?.name || e.sender_email || '');
                 const displayName = isOutgoing
-                  ? `→ ${e.to_email || 'Sent'}`
+                  ? `-> ${e.to_email || 'Sent'}`
                   : (e.sender_name || e.raw_recipients?.from?.name || e.sender_email);
                 const emailDate = e.sent_at || e.received_at;
                 const bodyContent = e.body || e.body_preview || '';
@@ -4473,7 +4473,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       {icon} {f.name}
                     </div>
                     <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                      {modified}{sizeKb ? ` · ${sizeKb}kb` : ''}
+                      {modified}{sizeKb ? ` . ${sizeKb}kb` : ''}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
