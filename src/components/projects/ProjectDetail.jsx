@@ -3497,7 +3497,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
 
     await updateAORecord(ao, patch);
-  }, [updateAORecord]);
+
+    // Close any open deadline tasks for this AO when consent or dissent is received
+    if (['consent', 'dissent'].includes(status) && sb && project?.id) {
+      const aoId = ao?.id || String(ao?.num || '');
+      if (aoId) {
+        await sb.from('tasks')
+          .update({ status: 'closed', closed_at: new Date().toISOString() })
+          .eq('project_id', project.id)
+          .eq('ao_id', aoId)
+          .in('task_type', ['notice_consent_deadline', 'notice_section10_deadline'])
+          .eq('status', 'open');
+      }
+    }
+  }, [updateAORecord, project?.id]);
 
   const handleToggleAgreedSurveyor = useCallback(async (ao) => {
     const next = !ao.agreed_surveyor;
