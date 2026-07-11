@@ -40,11 +40,11 @@ export default async function handler(req, res) {
 
     if (!projects?.length) return res.status(200).json({ alerts: [], summary: 'No active projects.' });
 
-    // Load open email_response tasks
+    // Load open email tasks (both response and action)
     const { data: emailTasks } = await sb
       .from('tasks')
-      .select('id, project_id, due_date, status, metadata, title')
-      .eq('task_type', 'email_response')
+      .select('id, project_id, due_date, status, metadata, title, task_type')
+      .in('task_type', ['email_response', 'email_action'])
       .eq('status', 'open');
 
     const tasksByProject = {};
@@ -112,10 +112,12 @@ export default async function handler(req, res) {
         const projectTasks = tasksByProject[project.id] || [];
         for (const task of projectTasks) {
           const taskDays = daysUntil(task.due_date);
+          const isAction = task.task_type === 'email_action';
+          const label = isAction ? 'email action required' : 'awaiting response';
           if (taskDays !== null && taskDays <= 0) {
-            alerts.push({ level: 'red', project: addr, message: `${aoName} — awaiting response overdue by ${Math.abs(taskDays)}d (${task.title})` });
+            alerts.push({ level: 'red', project: addr, message: `${aoName} — ${label} overdue by ${Math.abs(taskDays)}d (${task.title})` });
           } else if (taskDays !== null && taskDays <= 3) {
-            alerts.push({ level: 'amber', project: addr, message: `${aoName} — awaiting response due in ${taskDays}d` });
+            alerts.push({ level: 'amber', project: addr, message: `${aoName} — ${label} due in ${taskDays}d` });
           }
         }
       }
