@@ -70,7 +70,7 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
                 ...f, 
                 project_id: e.target.value, 
                 project_address: addr,
-                title: addr ? 'SOC — ' + addr : f.title
+                title: addr ? 'SOC - ' + addr : f.title
               }));
             }}>
               <option value="">No project linked</option>
@@ -125,7 +125,7 @@ function isHtmlEmail(body) {
   return body && (body.trim().startsWith('<') || body.includes('<html') || body.includes('<div') || body.includes('<p>'));
 }
 
-// Fix 1: Smart date — shows time if today, date+time if older
+// Fix 1: Smart date - shows time if today, date+time if older
 function fmtDate(d) {
   if (!d) return '';
   const date = new Date(d);
@@ -237,7 +237,7 @@ function extractDraft(text) {
   return null;
 }
 
-// ── Draft with Ely — full screen overlay ─────────────────────────────────────
+// ── Draft with Ely - full screen overlay ─────────────────────────────────────
 // Left: original email in full | Right: Ely collaboration with voice
 
 function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft, onClose }) {
@@ -246,7 +246,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [messages, setMessages]       = useState([]);
   const [input, setInput]             = useState('');
   const [workingDraft, setWorkingDraft] = useState('');
-  const workingDraftRef = useRef(''); // ref always has latest — survives re-renders
+  const workingDraftRef = useRef(''); // ref always has latest - survives re-renders
   const [loading, setLoading]         = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(false);
@@ -260,7 +260,7 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
       .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
   }, []);
 
-  // Auto-summary on open disabled — opens blank, user drafts on their own terms
+  // Auto-summary on open disabled - opens blank, user drafts on their own terms
 
   // ── Silent thread read on open ───────────────────────────────────────────────
   // Silently reads the full email thread the moment Draft With Ely opens.
@@ -284,12 +284,12 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
       })
       .join('\n\n---\n\n');
 
-    const silentPrompt = `SILENT THREAD READ — DO NOT SUMMARISE OR OUTPUT TO USER.
+    const silentPrompt = `SILENT THREAD READ - DO NOT SUMMARISE OR OUTPUT TO USER.
 
 Read the following email thread in full. Identify:
 1. All participants and their roles (who is Itzik/Square One, who are the other parties)
-2. The nature of the conversation — casual professional, formal, technical, contentious
-3. The tone trajectory — is it escalating, de-escalating, or stable
+2. The nature of the conversation - casual professional, formal, technical, contentious
+3. The tone trajectory - is it escalating, de-escalating, or stable
 4. Any red flags DIRECTED AT ITZIK/SQUARE ONE specifically:
    - Terse or accusatory language aimed at Itzik
    - Liability language: "your failure to", "we hold you responsible", "without prejudice"
@@ -330,7 +330,7 @@ Thread:
           subject: email.subject || '',
           threadText,
           body: threadText,
-          // selectedEmailBody: the raw body of the selected email ONLY — not the thread.
+          // selectedEmailBody: the raw body of the selected email ONLY - not the thread.
           // This lets ely-smart extract the sender's actual new message
           // without confusing it with the full concatenated thread.
           selectedEmailBody: email?.body_preview || email?.body || '',
@@ -342,9 +342,9 @@ Thread:
     .then(r => r.json())
     .then(data => {
       const reply = (data.reply || data.replyText || '').trim();
-      // If it's just "Ready." — say nothing, thread is now in context
+      // If it's just "Ready." - say nothing, thread is now in context
       if (!reply || reply === 'Ready.' || reply.toLowerCase() === 'ready') return;
-      // If it starts with "Flag:" — show it as a brief system note and create a task
+      // If it starts with "Flag:" - show it as a brief system note and create a task
       if (reply.toLowerCase().startsWith('flag:')) {
         const rawFlag = reply.replace(/^flag:\s*/i, '').trim();
         // Parse urgency from format: "description | urgency: X"
@@ -393,7 +393,7 @@ Thread:
         }
       }
     })
-    .catch(() => {}); // Fail silently — never block the user
+    .catch(() => {}); // Fail silently - never block the user
   }, [email, threadEmails]);
 
   const callEly = async (text, threadTextOverride, isAuto = false) => {
@@ -403,7 +403,7 @@ Thread:
     if (!isAuto) {
       setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }]);
     } else {
-      setMessages([{ id: 0, role: 'system', content: `✨ Reading ${(threadEmails || []).length > 1 ? `thread (${(threadEmails || []).length} emails)` : 'email'} and drafting…` }]);
+      setMessages([{ id: 0, role: 'system', content: `(*) Reading ${(threadEmails || []).length > 1 ? `thread (${(threadEmails || []).length} emails)` : 'email'} and drafting...` }]);
     }
 
     try {
@@ -455,7 +455,7 @@ Thread:
 
       const data = await res.json();
 
-      // Case review prompt — store pending state, show the question as plain message
+      // Case review prompt - store pending state, show the question as plain message
       if (data.case_review_prompt) {
         setPendingCaseReview(true);
         setMessages(prev => [...prev, { id: Date.now(), role: 'ely', explanation: data.reply || '', draft: null }]);
@@ -530,7 +530,7 @@ Thread:
         background: 'var(--bg2)', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✨</div>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>(*)</div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Draft with Ely</div>
             <div style={{ fontSize: 11, color: 'var(--text3)' }}>{email?.subject}</div>
@@ -573,10 +573,10 @@ Thread:
         </div>
       </div>
 
-      {/* Body — split screen on desktop, full screen chat on mobile */}
+      {/* Body - split screen on desktop, full screen chat on mobile */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LEFT — original email — hidden on mobile */}
+        {/* LEFT - original email - hidden on mobile */}
         <div style={{
           width: isMobile ? '0%' : '50%',
           display: isMobile ? 'none' : 'flex',
@@ -591,7 +591,7 @@ Thread:
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{email?.subject}</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
               {email?.sender_name || email?.sender_email}
-              {email?.received_at && ` · ${fmtDate(email.received_at)}`}
+              {email?.received_at && ` . ${fmtDate(email.received_at)}`}
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'hidden', background: isHtml ? '#fff' : 'transparent' }}>
@@ -604,7 +604,7 @@ Thread:
           </div>
         </div>
 
-        {/* RIGHT — Ely collaboration — full width on mobile */}
+        {/* RIGHT - Ely collaboration - full width on mobile */}
         <div style={{ width: isMobile ? '100%' : '50%', display: 'flex', flexDirection: 'column', background: 'var(--bg3)', overflow: 'hidden' }}>
 
           {/* Messages */}
@@ -660,7 +660,7 @@ Thread:
                       </div>
                     )}
 
-                    {/* Still to address — missing points from incoming email */}
+                    {/* Still to address - missing points from incoming email */}
                     {msg.missingPoints && msg.missingPoints.length > 0 && (
                       <div style={{ marginTop: 8, padding: '10px 13px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
@@ -680,13 +680,13 @@ Thread:
             ))}
             {loading && (
               <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 13, color: 'var(--text3)' }}>
-                ✨ Reading & drafting…
+                (*) Reading & drafting...
               </div>
             )}
             <div ref={endRef} />
           </div>
 
-          {/* Quick suggestions — only before first exchange */}
+          {/* Quick suggestions - only before first exchange */}
           {messages.length <= 1 && !loading && (
             <div style={{ padding: '8px 14px', display: 'flex', flexWrap: 'wrap', gap: 6, borderTop: '1px solid var(--border)' }}>
               {['Make it firmer', 'Make it shorter', 'Add more context', 'Produce a final amendment list', 'Ignore the last point'].map(s => (
@@ -698,13 +698,13 @@ Thread:
             </div>
           )}
 
-          {/* Input row — unified ChatInputBar */}
+          {/* Input row - unified ChatInputBar */}
           <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
             <ChatInputBar
               value={input}
               onChange={setInput}
               onSend={handleSend}
-              placeholder="Ask Ely to adjust, change tone, add a point…"
+              placeholder="Ask Ely to adjust, change tone, add a point..."
               disabled={loading}
               loading={loading}
             />
@@ -730,10 +730,10 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
   const [cc, setCc]           = useState(mode === 'replyAll'
     ? (() => {
-        // Build CC list from all recipients — exclude sender and own email only
+        // Build CC list from all recipients - exclude sender and own email only
         const ownEmails = ['help@sq1consulting.co.uk', 'itzik@sq1consulting.co.uk', 'itzy212@gmail.com'];
         const senderEmail = (email?.sender_email || email?.from_email || '').toLowerCase();
-        // Parse recipients — cc_emails can be string, array, or null
+        // Parse recipients - cc_emails can be string, array, or null
         const parseCCField = (field) => {
           if (!field) return [];
           if (Array.isArray(field)) return field.map(r => r.email || r).filter(Boolean);
@@ -870,7 +870,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
             </div>
           </div>
 
-          {/* Formatting toolbar — shown when A is tapped */}
+          {/* Formatting toolbar - shown when A is tapped */}
           {showFormatBar && (
             <div style={{
               display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 16px',
@@ -919,7 +919,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Replying to</div>
               <div style={{ fontSize: 12.5, color: 'var(--text2)' }}>
                 <span style={{ fontWeight: 600, color: 'var(--text)' }}>{email?.sender_name || email?.sender_email}</span>
-                {' · '}{fmtDate(email?.received_at)}
+                {' . '}{fmtDate(email?.received_at)}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{email?.subject}</div>
             </div>
@@ -936,7 +936,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 contentEditable
                 suppressContentEditableWarning
                 onInput={e => setBody(e.currentTarget.innerHTML)}
-                data-placeholder="Type your reply here, or use ✨ Draft with Ely…"
+                data-placeholder="Type your reply here, or use (*) Draft with Ely..."
                 style={{
                   flex: 1, minHeight: 320, padding: '8px 12px',
                   fontSize: 13, background: '#fff',
@@ -962,8 +962,8 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
                   {[...threadEmails].sort((a, b) => new Date(b.received_at) - new Date(a.received_at)).map((e, i) => (
                     <div key={e.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: i < threadEmails.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 2 }}>{e.sender_name || e.sender_email} · {fmtDate(e.received_at)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>{stripHtml(e.body || e.body_preview || '').slice(0, 200)}…</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 2 }}>{e.sender_name || e.sender_email} . {fmtDate(e.received_at)}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>{stripHtml(e.body || e.body_preview || '').slice(0, 200)}...</div>
                     </div>
                   ))}
                 </div>
@@ -1002,7 +1002,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </div>
             )}
 
-            {/* Footer buttons — two rows on mobile */}
+            {/* Footer buttons - two rows on mobile */}
             <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Row 1: Attach + Draft with Ely */}
@@ -1012,7 +1012,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 </button>
                 {!showEly && (
                   <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-                    ✨ Draft with Ely
+                    (*) Draft with Ely
                   </button>
                 )}
               </div>
@@ -1022,7 +1022,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                   Cancel
                 </button>
                 <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} style={{ flex: 2, padding: '10px', borderRadius: 10, background: sending || !body.trim() || !to.trim() ? 'var(--bg3)' : 'var(--blue)', color: sending || !body.trim() || !to.trim() ? 'var(--text3)' : '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                  {sending ? 'Sending…' : '↩ Send reply'}
+                  {sending ? 'Sending...' : '↩ Send reply'}
                 </button>
               </div>
             </div>
@@ -1082,7 +1082,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
             {email.sender_name || email.sender_email}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-            {/* Fix 1: Smart date — time if today, date if older */}
+            {/* Fix 1: Smart date - time if today, date if older */}
             <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{fmtShort(email.received_at)}</span>
             {unread && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)' }} />}
           </div>
@@ -1117,7 +1117,7 @@ function makeEmailMemoryPayload(email, projectId, source = 'manual_inbox_link') 
     source_type: 'email',
     source_id: String(email?.id || ''),
     title: email?.subject || 'Email',
-    summary: `${email?.sender_name || email?.sender_email || 'Unknown sender'} — ${email?.subject || 'No subject'}`,
+    summary: `${email?.sender_name || email?.sender_email || 'Unknown sender'} - ${email?.subject || 'No subject'}`,
     content: cleanBody.slice(0, 6000),
     metadata: {
       source,
@@ -1208,11 +1208,11 @@ function ProjectLinkBanner({ email, onLinked }) {
       display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
     }}>
       <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--blue)', flexShrink: 0 }}>
-        🔗 Link to project?
+        [link] Link to project?
       </span>
       <select value={selected} onChange={e => setSelected(e.target.value)}
         style={{ flex: 1, minWidth: 160, padding: '4px 8px', fontSize: 12.5, borderRadius: 8, border: '1px solid var(--blue)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}>
-        <option value="">Select project…</option>
+        <option value="">Select project...</option>
         {projects.map(p => (
           <option key={p.id} value={p.id}>
             {p.bo_premise_address || p.bo || 'Unknown'}
@@ -1221,7 +1221,7 @@ function ProjectLinkBanner({ email, onLinked }) {
       </select>
       <button onClick={handleLink} disabled={!selected || saving}
         style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: 'none', opacity: selected ? 1 : 0.5 }}>
-        {saving ? 'Linking…' : 'Link'}
+        {saving ? 'Linking...' : 'Link'}
       </button>
       <button onClick={() => setDismissed(true)}
         style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, cursor: 'pointer', background: 'transparent', color: 'var(--text3)', border: '1px solid var(--border)' }}>
@@ -1277,7 +1277,7 @@ function SaveAttachmentPopup({ email, onDismiss }) {
       <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text3)', marginBottom: 6 }}>Save to project:</div>
       <select value={selected} onChange={e => setSelected(e.target.value)}
         style={{ width: '100%', padding: '6px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', marginBottom: 12, cursor: 'pointer' }}>
-        <option value="">— Select project —</option>
+        <option value="">- Select project -</option>
         {projects.map(p => (
           <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
         ))}
@@ -1285,7 +1285,7 @@ function SaveAttachmentPopup({ email, onDismiss }) {
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={handleSave} disabled={!selected || saving}
           style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed', opacity: selected ? 1 : 0.5 }}>
-          {saving ? 'Saving…' : 'Link to project'}
+          {saving ? 'Saving...' : 'Link to project'}
         </button>
         <button onClick={() => { setDone(true); onDismiss?.(); }}
           style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
@@ -1301,7 +1301,7 @@ function AttachmentChip({ att }) {
   const ext = (att.filename || '').split('.').pop().toLowerCase();
   const icon = ['pdf'].includes(ext) ? '📄' : ['doc','docx'].includes(ext) ? '📝' : ['jpg','jpeg','png','gif','webp'].includes(ext) ? '🖼️' : ['xls','xlsx'].includes(ext) ? '📊' : '📎';
   const sizeLabel = att.size_bytes ? (att.size_bytes > 1048576 ? `${(att.size_bytes/1048576).toFixed(1)}MB` : `${Math.round(att.size_bytes/1024)}KB`) : '';
-  const shortName = (att.filename || 'File').length > 20 ? (att.filename || 'File').slice(0, 20) + '…' : (att.filename || 'File');
+  const shortName = (att.filename || 'File').length > 20 ? (att.filename || 'File').slice(0, 20) + '...' : (att.filename || 'File');
   const canOpen = !!(att.email_external_id && att.attachment_external_id);
 
   const handleOpen = (e) => {
@@ -1490,7 +1490,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
   const folderRef = useRef(null);
 
   // Re-navigating to Inbox while already here (e.g. tapping "Inbox" in the
-  // sidebar from inside an open email) bumps resetKey — clear the open-email
+  // sidebar from inside an open email) bumps resetKey - clear the open-email
   // view so the user lands back on the list, without reloading the inbox.
   const isFirstRender = useRef(true);
   useEffect(() => {
@@ -1579,7 +1579,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     if (!doIncremental) setLoading(false);
   }, [folder, state.emails, state.emailsLoadedAt]);
 
-  // Initial load — only force if no emails cached or switching folder
+  // Initial load - only force if no emails cached or switching folder
   useEffect(() => {
     const existing = state.emails || [];
     const lastLoaded = state.emailsLoadedAt || 0;
@@ -1589,7 +1589,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     }
   }, [folder]);
 
-  // Auto-sync every 3 minutes — only if not already syncing
+  // Auto-sync every 3 minutes - only if not already syncing
   useEffect(() => {
     const interval = setInterval(async () => {
       if (syncingRef.current) return; // prevent overlap
@@ -1631,7 +1631,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     }
 
     // ── Silent appointment detection ──────────────────────────────────────
-    // Run in background — check if email contains a proposed date/time
+    // Run in background - check if email contains a proposed date/time
     setTimeout(async () => {
       try {
         const res = await fetch('/api/detect-appointment', {
@@ -1650,7 +1650,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
         if (data.appointment_detected) {
           setAppointmentPrompt(data);
         }
-      } catch { /* silent — never interrupt the user */ }
+      } catch { /* silent - never interrupt the user */ }
     }, 800); // slight delay so email renders first
   };
 
@@ -1701,7 +1701,7 @@ if (syncErr) throw syncErr;
       throw new Error('Could not send email: ' + msg);
     }
 
-    // Save as sent in DB — select() returns the row ID so we can embed it
+    // Save as sent in DB - select() returns the row ID so we can embed it
     let sentEmailId = null;
     try {
       const { data: sentRows, error: insertError } = await sb.from('emails').insert([{
@@ -1734,7 +1734,7 @@ if (syncErr) throw syncErr;
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
     }
 
-    // Embed the sent email (fire and forget) — enables semantic search
+    // Embed the sent email (fire and forget) - enables semantic search
     // We don't have the DB row ID at this point, so embed after insert via the replyToId thread
     // Extract key facts into project memory in background (fire and forget)
     // Look up project_id from the email being replied to in state
@@ -1762,7 +1762,7 @@ if (syncErr) throw syncErr;
         const dueIso = due.toISOString().slice(0, 10);
         await sb.from('tasks').insert([{
           project_id: linkedProjectId,
-          title: `Awaiting response — ${to}`,
+          title: `Awaiting response - ${to}`,
           description: `Follow-up on email sent to ${to}: ${subject}`,
           status: 'open',
           due_date: dueIso,
@@ -1803,7 +1803,7 @@ if (syncErr) throw syncErr;
         }
       : prev);
 
-    // Embed the linked email (fire and forget) — enables semantic search
+    // Embed the linked email (fire and forget) - enables semantic search
     fetch('/api/embed', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1955,7 +1955,7 @@ if (syncErr) throw syncErr;
         />
       )}
 
-      {/* Left panel — hidden on mobile when email is open */}
+      {/* Left panel - hidden on mobile when email is open */}
       <div style={{
         width: isMobile ? '100%' : 360,
         minWidth: isMobile ? 'unset' : 300,
@@ -2002,14 +2002,14 @@ if (syncErr) throw syncErr;
           </div>
           {/* Fix 2: Refresh now calls sync_outlook edge function */}
           <button onClick={handleSync} disabled={syncing} style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'none', color: 'var(--text2)', fontSize: 14, cursor: syncing ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-            {syncing ? '…' : '↻'}
+            {syncing ? '...' : '↻'}
           </button>
         </div>
 
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--bg2)' }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text3)' }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail…"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail..."
               style={{ width: '100%', padding: '7px 10px 7px 30px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 99, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
@@ -2017,20 +2017,20 @@ if (syncErr) throw syncErr;
               <div onClick={() => setCheckedIds(allChecked ? new Set() : new Set(filtered.map(e => e.id)))} style={{ width: 16, height: 16, borderRadius: 4, cursor: 'pointer', border: `1.5px solid ${allChecked ? 'var(--blue)' : 'var(--border2)'}`, background: allChecked ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {allChecked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
               </div>
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread · {filtered.length} shown</span>
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread . {filtered.length} shown</span>
             </div>
             {checkedIds.size > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <select value={bulkProjectId} onChange={e => setBulkProjectId(e.target.value)}
                   style={{ maxWidth: 180, padding: '3px 8px', borderRadius: 99, fontSize: 11.5, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
-                  <option value="">Link to project…</option>
+                  <option value="">Link to project...</option>
                   {bulkProjects.map(p => (
                     <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
                   ))}
                 </select>
                 <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
-                  {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
+                  {bulkLinking ? 'Linking...' : `[link] Link ${checkedIds.size}`}
                 </button>
                 <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
                   🗑 Delete {checkedIds.size}
@@ -2042,7 +2042,7 @@ if (syncErr) throw syncErr;
 
         <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4, paddingBottom: 8 }}>
           {loading
-            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading...</div>
             : filtered.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No emails in {folder}</div>
             : filtered.map(email => (
@@ -2052,7 +2052,7 @@ if (syncErr) throw syncErr;
         </div>
       </div>
 
-      {/* Right panel — full screen on mobile when email selected */}
+      {/* Right panel - full screen on mobile when email selected */}
       {(!isMobile || mobileShowEmail) && (
         <div style={{
           flex: 1,
@@ -2089,7 +2089,7 @@ if (syncErr) throw syncErr;
           {/* Appointment detection prompt */}
           {appointmentPrompt && (
             <div style={{ position: 'absolute', bottom: 80, left: 16, right: 16, padding: '10px 14px', background: appointmentPrompt.has_clash ? '#fef2f2' : '#eff6ff', border: `1px solid ${appointmentPrompt.has_clash ? '#ef4444' : '#3b82f6'}`, borderRadius: 8, fontSize: 12.5, zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}</div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{appointmentPrompt.has_clash ? '(!!) Appointment detected - possible clash' : '📅 Appointment detected'}</div>
               <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
               {appointmentPrompt.clash_detail && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
@@ -2102,11 +2102,11 @@ if (syncErr) throw syncErr;
                 <button onClick={() => {
                   setAppointmentPrompt(null);
                   setBookingOverlay({
-                    title: (appointmentPrompt.type === 'soc' ? 'SOC' : appointmentPrompt.title || 'Appointment') + (appointmentPrompt.address ? ' — ' + appointmentPrompt.address : ''),
+                    title: (appointmentPrompt.type === 'soc' ? 'SOC' : appointmentPrompt.title || 'Appointment') + (appointmentPrompt.address ? ' - ' + appointmentPrompt.address : ''),
                     date: (() => {
                     const d = appointmentPrompt.iso_date || '';
                     if (!d) return '';
-                    // Correct wrong year — if year is in the past, use current year
+                    // Correct wrong year - if year is in the past, use current year
                     const currentYear = new Date().getFullYear();
                     const parts = d.split('-');
                     if (parts.length === 3 && parseInt(parts[0]) < currentYear) {
@@ -2158,7 +2158,7 @@ if (syncErr) throw syncErr;
             }
             setBookingOverlay(null);
             window.dispatchEvent(new Event('nora:task-added'));
-            alert('✅ Added to diary — check your calendar.');
+            alert('✅ Added to diary - check your calendar.');
           }}
           onClose={() => setBookingOverlay(null)}
         />
