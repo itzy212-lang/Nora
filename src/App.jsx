@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
 import { useEmails } from './hooks/useEmails';
@@ -41,6 +41,22 @@ function StubView({ icon, title, subtitle }) {
   );
 }
 
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, margin: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, fontFamily: 'monospace', fontSize: 12 }}>
+          <strong style={{ color: '#ef4444' }}>Error — screenshot this and report:</strong>
+          <pre style={{ color: '#7f1d1d', whiteSpace: 'pre-wrap', marginTop: 8 }}>{this.state.error.message}\n\n{this.state.error.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 export default function App() {
   const { state, dispatch } = useApp();
   const { currentUser, settings } = state;
@@ -410,14 +426,16 @@ export default function App() {
       }
 
       return (
-        <ProjectDetail
-          project={projectView}
-          onBack={onBack}
-          onOpenComposer={openComposer}
-          onRaiseInvoice={handleRaiseInvoice}
-          onOpenSOC={handleOpenSOC}
-          onOpenDisputeAgreement={handleOpenDisputeAgreement}
-        />
+        <ErrorBoundary key={projectView?.id}>
+          <ProjectDetail
+            project={projectView}
+            onBack={onBack}
+            onOpenComposer={openComposer}
+            onRaiseInvoice={handleRaiseInvoice}
+            onOpenSOC={handleOpenSOC}
+            onOpenDisputeAgreement={handleOpenDisputeAgreement}
+          />
+        </ErrorBoundary>
       );
     }
 
