@@ -3280,13 +3280,32 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     let draftingExamples = [];
 
     try {
-      const { data } = await getSupabase()
+      // ── GOLD STANDARD SELECTION ──────────────────────────────────────────
+      // Classify the drafting task using the combined instruction + email context.
+      // Never use word count. Default uncertain correspondence to complex_analytical.
+      const _gsEmail = scopedEmailContext?.[0] || null;
+      const _gsEmailSignal = _gsEmail
+        ? `${_gsEmail.subject || ''}\n${(_gsEmail.body || '').slice(0, 500)}\n${(_gsEmail.body || '').slice(-500)}`
+        : '';
+      const _gsCt = [prompt, _gsEmailSignal].filter(Boolean).join('\n');
+
+      const _hasComplex = /\bdisput|\bdo\s+not\s+agree\b|\bdo\s+not\s+accept\b|\breject\b|\bchalleng|\binterim\s+fee\b|\bdisputed\s+fee\b|\bunreasonable\s+fee\b|\bfee\s+not\s+recover|\brecoverable\s+costs\b|\bthird\s+surveyor\s+referral\b|\brefer\s+to\s+the\s+third\s+surveyor\b|\bthird\s+surveyor\s+determination\b|\bnotice\s+expir|\bnotices?\s+expired\b|\bnotice\s+laps|\bcase\s+law\b|\bstatutory\s+interpretation\b|\bsection\s+\d|\bbreach\b|\bliability\b|\bwithout\s+prejudice\b|\bclaim\b|\bdamages\b|\benforcement\b|\bcontrary\s+position\b|\bprofessional\s+disagreement\b|\bdetermination\b|\bnot\s+recover\b|\bcosts\s+order\b|\bpursu|\btakes?\s+issue\b|\bcontested\b/i.test(_gsCt);
+
+      const _hasSimple = /\bconfirm\b|\bconfirmation\b|\bthanks\b|\bthank\s+you\b|\breceived\b|\bnoted\b|\bavailability\b|\bsend\s+over\b|\bplease\s+send\b|\bhappy\s+to\b|\bpleased\s+to\b|\blet\s+me\s+know\b|\bquick\s+(?:question|reply|note)\b|\bjust\s+(?:to\s+)?(?:confirm|check|let\s+you\s+know)\b/i.test(_gsCt);
+
+      const _targetCategory = (_hasSimple && !_hasComplex)
+        ? 'short_factual_reply'
+        : 'complex_analytical';
+
+      const { data: _exData } = await getSupabase()
         .from('ai_drafting_examples')
         .select('*')
         .eq('active', true)
-        .limit(3);
+        .eq('category', _targetCategory)
+        .limit(1);
 
-      draftingExamples = data || [];
+      draftingExamples = _exData || [];
+      console.log(`[ely-smart] drafting example: category=${_targetCategory} found=${draftingExamples.length} complex=${_hasComplex} simple=${_hasSimple}`);
     } catch (err) {
       console.warn('[ely-smart] drafting examples load failed:', err.message);
     }
