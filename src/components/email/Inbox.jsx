@@ -1628,7 +1628,7 @@ if (syncErr) throw syncErr;
     }
   };
 
-  const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId, attachments = [] }) => {
+  const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId, attachments = [], createTask = false }) => {
     if (!sb) return;
 
     const funcPayload = {
@@ -1704,6 +1704,26 @@ if (syncErr) throw syncErr;
           received_at: new Date().toISOString(),
         }),
       }).catch(() => {});
+    }
+    // Create follow-up task if checkbox was ticked
+    if (createTask && linkedProjectId) {
+      try {
+        const due = new Date();
+        due.setDate(due.getDate() + 10);
+        const dueIso = due.toISOString().slice(0, 10);
+        await sb.from('tasks').insert([{
+          project_id: linkedProjectId,
+          title: `Awaiting response — ${to}`,
+          description: `Follow-up on email sent to ${to}: ${subject}`,
+          status: 'open',
+          due_date: dueIso,
+          priority: 'normal',
+          task_type: 'email_response',
+          metadata: JSON.stringify({ to_email: to, subject, sent_at: new Date().toISOString() }),
+        }]);
+      } catch (taskErr) {
+        console.warn('[Inbox] Follow-up task creation failed:', taskErr?.message);
+      }
     }
   };
 
