@@ -3392,6 +3392,30 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       }
     }
 
+    // ── Briefing injection — surfaces project alerts when user asks for briefing ──
+    const isBriefingRequest = !projectId && /\b(brief(ing)?|what('s| is) (on|happening|outstanding|urgent|due)|morning|catch up|catch me up|what do i (have|need)|project status|status update|anything (urgent|due|outstanding)|any (deadlines|reminders|alerts))\b/i.test(prompt);
+    if (isBriefingRequest && isMainChat) {
+      try {
+        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nora-d9wy.vercel.app';
+        const briefingRes = await fetch(`${baseUrl}/api/briefing`);
+        if (briefingRes.ok) {
+          const briefingData = await briefingRes.json();
+          if (briefingData?.alerts?.length > 0) {
+            const briefingText = briefingData.alerts.map(a =>
+              `[${a.level.toUpperCase()}] ${a.project} — ${a.message}`
+            ).join('\n');
+            messages.splice(1, 0, {
+              role: 'system',
+              content: `PROJECT BRIEFING — live status across all active projects:\n\n${briefingText}\n\nSummary: ${briefingData.summary}\n\nPresent this naturally as a professional colleague giving a morning briefing. Group by urgency. Be direct and specific. Do not list every project — focus on what needs attention.`,
+            });
+            console.log(`[ely-smart] briefing injected: ${briefingData.redCount} red, ${briefingData.amberCount} amber`);
+          }
+        }
+      } catch (briefErr) {
+        console.warn('[ely-smart] briefing injection failed:', briefErr.message);
+      }
+    }
+
     // ── Knowledge base lookup for statutory questions ─────────────────────
     if (isStatutoryQuestion(prompt)) {
       try {
