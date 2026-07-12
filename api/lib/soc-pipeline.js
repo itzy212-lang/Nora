@@ -258,7 +258,15 @@ Facts:
   • General condition: No visible defects
 
 Required row:
-"The party wall is finished in plaster and paint and appeared generally free from visible defects at the time of inspection."
+"The party wall is finished in a plaster skim coat with emulsion paint decoration. No visible defects were noted at the time of inspection."
+
+CRITICAL: Never write bare "plaster and paint finish" without identifying the construction material first and stating condition explicitly. Compare:
+BAD: "The party wall is finished in plaster and paint."
+GOOD: "The party wall is finished in a plaster skim coat with emulsion paint decoration. No visible defects were noted at the time of inspection."
+BAD: "The ceiling is plasterboard with no issues."
+GOOD: "The ceiling is of plasterboard construction with a smooth skim coat finish. No visible defects were noted at the time of inspection."
+BAD: "The walls have wallpaper with no defects."
+GOOD: "The walls have wallpaper-lined finishes. No visible defects were noted at the time of inspection."
 
 ---
 
@@ -508,7 +516,57 @@ Facts:
 
 Required rows (First Floor Rear Bedroom):
 "The upper opening section of the rear elevation UPVC window nearest the Building Owner was tested and operated satisfactorily without sticking, binding or jamming."
-"No visible defects were noted in the ceiling."`;
+"No visible defects were noted in the ceiling."
+
+---
+
+EXAMPLE 18 — External brickwork with construction identification
+
+Raw dictation: "front elevation lower section brick looks weathered no cracks no displacement"
+Facts:
+  • Element: Front elevation, lower section
+  • Construction: Brickwork (London stock yellow brickwork where typical)
+  • Condition: General age-related weathering only, no cracking or displacement
+
+Required row:
+"The lower section of the front elevation is constructed in London stock yellow brickwork exhibiting general age-related weathering only. No visible cracking, displacement or significant defects were noted."
+
+---
+
+EXAMPLE 19 — Complex crack with branching
+
+Raw dictation: "hairline crack from chimney breast goes toward rear about a metre then splits both ways"
+Facts:
+  • Origin: Chimney breast abutment
+  • Direction: Towards rear elevation
+  • Length: Approximately 1 metre
+  • Branching: Splits approximately 400mm from origin, extending to both sides
+
+Required row:
+"A hairline crack extends from the chimney breast abutment towards the rear elevation for approximately 1.1 metres. The crack branches approximately 400mm from its origin, extending towards both the Building Owner's and Adjoining Owner's sides."
+
+---
+
+EXAMPLE 20 — Render finish with crack description
+
+Raw dictation: "upper section rendered finish hairline crack above arch about 600mm goes up then branches toward window"
+Facts:
+  • Element: Upper rendered section
+  • Crack: Vertical, above arch, approximately 600mm, branches toward adjacent window
+
+Required row:
+"In the upper rendered section, a vertical hairline crack is present above the arch and broadly aligned with the centre of the arch below. This crack extends approximately 600mm vertically before branching towards the adjacent window opening."
+
+---
+
+EXAMPLE 21 — No-defects wording with fuller form
+
+Raw dictation: "patio looks fine no issues"
+Required row:
+"The paved patio is generally level with no significant cracking, displacement, rocking slabs or open joints observed. Typical weathering only was noted."
+
+NOT: "The patio appeared generally free from visible defects."
+The fuller enumeration (no cracking, displacement, rocking slabs, open joints) is always preferred for external elements.`;
 
 // ─── Main drafting instruction ─────────────────────────────────────────────────
 const DRAFTING_SYSTEM = `You are an experienced Chartered Building Surveyor specialising exclusively in Party Wall matters, with extensive experience preparing professional Schedules of Condition for use under the Party Wall etc. Act 1996.
