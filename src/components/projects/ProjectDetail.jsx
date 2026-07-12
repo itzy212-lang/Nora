@@ -3359,7 +3359,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project.id, project.bo_premise_address]);
 
 
-  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false }) => {
+  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '' }) => {
     // Calculate next run_number for this project/AO
     const aoId = ao?.id || String(ao?.num || '');
     const { data: existingRuns } = await sb
@@ -3387,6 +3387,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       section_2_subsections: selectedSections.includes('s2') ? section2Subsections : null,
       notifiable_works: worksItems.filter(w => w?.trim()).length ? worksItems.filter(w => w?.trim()) : null,
       safeguarding: !!safeguarding,
+      tenure: tenure || null,
     };
 
     try {
@@ -3468,6 +3469,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     section2Subsections = '',
     worksItems = [],
     safeguarding = false,
+    tenure = '',
   }) => {
     const noticeDate = suppliedNoticeDate || todayIso();
     const generatedDocs = [];
@@ -3477,7 +3479,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (!sections?.length && !includeCover) throw new Error('No notice selected.');
 
     // STEP 1: persist legal/workflow state first
-    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections, worksItems, safeguarding });
+    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections, worksItems, safeguarding, tenure });
 
     const nonS10 = sections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
@@ -3751,7 +3753,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding }) =>
+          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, tenure }) =>
             handleServeNoticePack({
               ao: servedAO || noticeModal.ao,
               sections,
@@ -3761,6 +3763,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               section2Subsections,
               worksItems,
               safeguarding,
+              tenure,
             })
           }
           onClose={() => setNoticeModal(null)}

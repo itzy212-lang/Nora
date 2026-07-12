@@ -271,6 +271,9 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
+    LEASEHOLDER_SURVEYOR_NOTE: (options.tenure || '').toLowerCase() === 'leaseholder'
+      ? 'In the interest of keeping costs down, would you consider using the same surveyor as the other Leaseholders in your building? I am happy to pass these details on to you.'
+      : '',
 
     // AO service address split into lines for cover letter
     ...(() => {

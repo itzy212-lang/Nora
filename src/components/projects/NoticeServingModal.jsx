@@ -68,6 +68,7 @@ export default function NoticeServingModal({
   const [loading, setLoading] = useState(false);
   const [s2Subsections, setS2Subsections] = useState('');
   const [safeguarding, setSafeguarding] = useState(false);
+  const [aoTenureTypes, setAoTenureTypes] = useState({}); // { [aoKey]: 'leaseholder' | 'freeholder' | '' }
   const [worksItems, setWorksItems] = useState(['']);
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
@@ -175,6 +176,7 @@ export default function NoticeServingModal({
           section2Subsections: s2Subsections,
           worksItems: worksItems.filter(w => w.trim()),
           safeguarding,
+          tenure: aoTenureTypes[aoKey(selectedAO)] || '',
         });
       }
 
@@ -268,6 +270,29 @@ export default function NoticeServingModal({
                     {aoAddress(item) && (
                       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
                         {aoAddress(item)}
+                      </div>
+                    )}
+                    {active && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{ marginTop: 8, display: 'flex', gap: 6 }}
+                      >
+                        {['', 'leaseholder', 'freeholder'].map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setAoTenureTypes(prev => ({ ...prev, [key]: t })); }}
+                            style={{
+                              fontSize: 10, padding: '2px 7px', borderRadius: 99, cursor: 'pointer',
+                              border: (aoTenureTypes[key] || '') === t ? '1.5px solid #2563eb' : '1px solid #d1d5db',
+                              background: (aoTenureTypes[key] || '') === t ? '#2563eb' : '#f9fafb',
+                              color: (aoTenureTypes[key] || '') === t ? '#fff' : '#6b7280',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {t === '' ? 'Default' : t.charAt(0).toUpperCase() + t.slice(1)}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </button>
