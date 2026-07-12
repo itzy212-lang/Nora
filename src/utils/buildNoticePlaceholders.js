@@ -134,6 +134,14 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       const hasNext = !!sorted[i + 1];
       out[`notice_run_${n}_and`] = hasNext ? 'and a further Notice under' : '';
 
+      // Section 2 subsections for this run (formatted as (a)(f)(j)(k))
+      const s2SubRaw = run.section_2_subsections || '';
+      const s2SubFormatted = s2SubRaw
+        ? s2SubRaw.split(',').map(s => `(${s.trim()})`).filter(s => s.length > 2).join('')
+        : '';
+      out[`section_2_subsections_run_${n}`] = s2SubFormatted;
+      out[`SECTION_2_SUBSECTIONS_RUN_${n}`] = s2SubFormatted;
+
       // Also uppercase aliases
       out[`NOTICE_RUN_${n}_SECTIONS`] = sectionsStr;
       out[`NOTICE_RUN_${n}_DATE`] = dateStr;
@@ -143,6 +151,8 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       out[`notice_run_${n}_sections`] = '';
       out[`notice_run_${n}_date`] = '';
       out[`notice_run_${n}_and`] = '';
+      out[`section_2_subsections_run_${n}`] = '';
+      out[`SECTION_2_SUBSECTIONS_RUN_${n}`] = '';
       out[`NOTICE_RUN_${n}_SECTIONS`] = '';
       out[`NOTICE_RUN_${n}_DATE`] = '';
       out[`NOTICE_RUN_${n}_AND`] = '';

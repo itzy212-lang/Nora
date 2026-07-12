@@ -1,4 +1,4 @@
-import { buildNoticePlaceholders } from './buildNoticePlaceholders';
+import { buildNoticePlaceholders, buildNoticeRunPlaceholders } from './buildNoticePlaceholders';
 
 function clean(value) {
   return value === undefined || value === null ? '' : String(value).trim();
@@ -294,6 +294,14 @@ export function buildAwardPlaceholders(project = {}, ao = {}, options = {}) {
     AWARD_DEALING_WITH: works,
     NOTIFIABLE_WORKS: works,
     WORKS: works,
+
+    // Loop placeholder for bulleted works list — {#works_items}{item}{/works_items}
+    works_items: options.worksItems && options.worksItems.length
+      ? options.worksItems
+      : (works ? [{ item: works }] : []),
+
+    // Multi-run notice placeholders (NOTICE_RUN_1_SECTIONS, SECTION_2_SUBSECTIONS_RUN_1 etc.)
+    ...buildNoticeRunPlaceholders(options.noticeRuns || []),
 
     ...getNotice2(project, ao, options),
   };

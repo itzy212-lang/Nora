@@ -3091,10 +3091,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       try {
         const { data: noticeRows } = await sb
           .from('notices')
-          .select('section_1, section_2, section_3, section_6, section_2_subsections, notice_date')
+          .select('section_1, section_2, section_3, section_6, section_2_subsections, notice_date, run_number, notifiable_works')
           .eq('project_id', String(project.id))
+          .eq('ao_id', String(ao?.id || ao?.num || ''))
           .eq('status', 'served')
-          .order('notice_date', { ascending: true });
+          .order('run_number', { ascending: true });
 
         if (noticeRows && noticeRows.length > 0) {
           const hasS1 = noticeRows.some(n => n.section_1);
@@ -3125,10 +3126,25 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         console.warn('[Award] Could not load notices:', e.message);
       }
 
+      // Build combined works_items from all runs (deduplicated)
+      let worksItems = [];
+      if (noticeRows && noticeRows.length > 0) {
+        const seen = new Set();
+        noticeRows.forEach(row => {
+          const items = Array.isArray(row.notifiable_works) ? row.notifiable_works : [];
+          items.forEach(w => {
+            const key = (w || '').trim().toLowerCase();
+            if (key && !seen.has(key)) { seen.add(key); worksItems.push({ item: w.trim() }); }
+          });
+        });
+      }
+
       const award = buildAwardPlaceholders(project, ao, {
         ...(noticeSection ? { noticeSection } : {}),
         ...(noticeServedDate ? { noticeDate: noticeServedDate } : {}),
         ...(boAgreedSurveyorMode ? { agreedSurveyor: true } : {}),
+        ...(worksItems.length ? { worksItems } : {}),
+        noticeRuns: noticeRows || [],
       });
 
       if (!award?.isValid) {
@@ -3335,7 +3351,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project.id, project.bo_premise_address]);
 
 
-  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '' }) => {
+  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [] }) => {
     // Calculate next run_number for this project/AO
     const aoId = ao?.id || String(ao?.num || '');
     const { data: existingRuns } = await sb
@@ -3361,6 +3377,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
       run_number: runNumber,
       section_2_subsections: selectedSections.includes('s2') ? section2Subsections : null,
+      notifiable_works: worksItems.filter(w => w?.trim()).length ? worksItems.filter(w => w?.trim()) : null,
     };
 
     try {
@@ -3437,7 +3454,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (!sections?.length && !includeCover) throw new Error('No notice selected.');
 
     // STEP 1: persist legal/workflow state first
-    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections });
+    await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections, worksItems });
 
     const nonS10 = sections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
     if (nonS10.length > 0) {
