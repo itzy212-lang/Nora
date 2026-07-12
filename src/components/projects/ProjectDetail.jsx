@@ -3165,6 +3165,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         throw new Error(result?.error || 'Could not generate award.');
       }
 
+      // Mark AO as award drafted
+      await updateAORecord(ao, {
+        award_generated_at: new Date().toISOString(),
+        awardGeneratedAt: new Date().toISOString(),
+      });
+
       alert(`${award.awardTypeLabel || 'Award'} generated successfully.`);
     } catch (err) {
       alert(err.message || 'Could not generate award.');
