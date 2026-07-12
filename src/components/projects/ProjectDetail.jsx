@@ -1301,6 +1301,25 @@ function AOCard({
             </div>
           </div>
 
+          {/* Always-visible serve notice button */}
+          <div style={{ marginTop: 6 }}>
+            <button
+              onClick={() => onServeNotice?.(ao)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 99,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: '1px solid var(--blue)',
+                background: 'var(--blue-bg)',
+                color: 'var(--blue)',
+              }}
+            >
+              + Serve notice
+            </button>
+          </div>
+
           {address && (
             <div style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4 }}>
               {address}
@@ -4285,37 +4304,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             </div>
 
-            <div
-              style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
-              onClick={() => setNoticeModal({ ao: null, defaultSections: [] })}
-            >              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
-                  background: 'var(--blue-bg)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 20,
-                  flexShrink: 0,
-                }}>
-                  📄
-                </div>
 
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                    Serve Notices
-                  </div>
-
-                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
-                    Select AOs · generate notice pack
-                  </div>
-                </div>
-
-                <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
-              </div>
-            </div>
 
 <div style={{ ...card({ padding: '14px 16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
