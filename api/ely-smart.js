@@ -2254,7 +2254,7 @@ async function fetchEmailAttachments(emailId) {
               'anthropic-beta': 'pdfs-2024-09-25',
             },
             body: JSON.stringify({
-              model: 'claude-opus-4-6',
+              model: 'claude-sonnet-4-6',
               max_tokens: 2000,
               messages: [{
                 role: 'user',
@@ -2690,7 +2690,7 @@ async function callClaude(messages = []) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3500,
       system: systemWithHandoff,
       messages: userMessages.length ? userMessages : [{ role: 'user', content: 'Please help.' }],
