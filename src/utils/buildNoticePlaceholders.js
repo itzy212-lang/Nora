@@ -130,6 +130,8 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
 
       out[`notice_run_${n}_sections`] = sectionsStr;
       out[`notice_run_${n}_date`] = dateStr;
+      out[`notice_run_${n}_space`] = ' ';
+      out[`NOTICE_RUN_${n}_SPACE`] = ' ';
       // Connector for the NEXT run — "and a further Notice under" or blank
       const hasNext = !!sorted[i + 1];
       out[`notice_run_${n}_and`] = hasNext ? 'and a further Notice under' : '';
@@ -150,6 +152,8 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       // Run doesn't exist — blank all placeholders so they disappear in template
       out[`notice_run_${n}_sections`] = '';
       out[`notice_run_${n}_date`] = '';
+      out[`notice_run_${n}_space`] = '';
+      out[`NOTICE_RUN_${n}_SPACE`] = '';
       out[`notice_run_${n}_and`] = '';
       out[`section_2_subsections_run_${n}`] = '';
       out[`SECTION_2_SUBSECTIONS_RUN_${n}`] = '';
