@@ -135,12 +135,32 @@ function ProjectCard({ project, onClick }) {
   const aos = project.aos || [];
   let cardStatus = null;
   if (aos.length > 0) {
-    // Priority order: amber/red statuses first, then green
-    const statuses = aos.map(ao => getAOStatusMeta(ao, project, role));
-    const amber = statuses.find(s => s.colour === '#f59e0b' || s.colour === '#ef4444');
-    cardStatus = amber || statuses[0];
-    // Only show if it's not the default "serve notice" blue — that's implied by colour
-    if (cardStatus && (cardStatus.label === 'Serve notice' || !cardStatus.label)) cardStatus = null;
+    const getSimpleStatus = (ao) => {
+      const st = (ao?.status || '').toLowerCase();
+      if (ao?.award_served_date || ao?.awardServedDate || st === 'complete') return null; // done, don't show
+      if (ao?.award_generated_at || ao?.awardGeneratedAt || st === 'award') return { label: 'Award drafted — serve', colour: '#f59e0b' };
+      if (st === 'dissent') return { label: 'Dissent received', colour: '#ef4444' };
+      if (st === 'consent') return { label: 'Consent received', colour: '#22c55e' };
+      if (st === 's10') {
+        const sd = ao?.s10_deadline || ao?.s10Deadline || '';
+        const days = sd ? Math.ceil((new Date(sd) - new Date()) / 86400000) : null;
+        if (days !== null && days <= 0) return { label: 'Serve 10(4)(b)', colour: '#ef4444' };
+        if (days !== null && days <= 3) return { label: `S.10 — ${days}d left`, colour: '#f59e0b' };
+        return null;
+      }
+      if (st === 'notice_served') {
+        const cd = ao?.consent_deadline || ao?.consentDeadline || '';
+        const days = cd ? Math.ceil((new Date(cd) - new Date()) / 86400000) : null;
+        if (days !== null && days <= 0) return { label: 'Serve Section 10', colour: '#ef4444' };
+        if (days !== null && days <= 3) return { label: `Deadline — ${days}d`, colour: '#f59e0b' };
+        return null;
+      }
+      return null;
+    };
+    const statuses = aos.map(getSimpleStatus).filter(Boolean);
+    const red = statuses.find(s => s.colour === '#ef4444');
+    const amber = statuses.find(s => s.colour === '#f59e0b');
+    cardStatus = red || amber || statuses[0] || null;
   }
 
   return (
