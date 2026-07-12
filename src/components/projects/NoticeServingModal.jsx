@@ -67,6 +67,7 @@ export default function NoticeServingModal({
   const [noticeDate, setNoticeDate] = useState(todayIso());
   const [loading, setLoading] = useState(false);
   const [s2Subsections, setS2Subsections] = useState('');
+  const [safeguarding, setSafeguarding] = useState(false);
   const [worksItems, setWorksItems] = useState(['']);
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
@@ -173,6 +174,7 @@ export default function NoticeServingModal({
           noticeDate,
           section2Subsections: s2Subsections,
           worksItems: worksItems.filter(w => w.trim()),
+          safeguarding,
         });
       }
 
@@ -323,6 +325,24 @@ export default function NoticeServingModal({
                 );
               })}
             </div>
+
+            {/* Section 6 safeguarding toggle — only shown when s6 is selected */}
+            {selected.includes('s6') && (
+              <div style={{ marginTop: 10, padding: '12px 14px', background: '#fef9f0', borderRadius: 12, border: '1px solid #fcd34d' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+                  <input
+                    type="checkbox"
+                    checked={safeguarding}
+                    onChange={e => setSafeguarding(e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                  Proposing to underpin / safeguard foundations?
+                </label>
+                <div style={{ fontSize: 11, color: '#92400e', marginTop: 6, paddingLeft: 26 }}>
+                  Tick if yes — leave unticked for "it is <strong>not</strong> proposed to underpin..."
+                </div>
+              </div>
+            )}
 
             {/* Section 2(2) subsections input — only shown when s2 is selected */}
             {selected.includes('s2') && (
