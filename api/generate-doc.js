@@ -62,9 +62,21 @@ function normaliseMergeData(mergeData = {}) {
 }
 
 function renderDocx(templateB64, mergeData = {}) {
-  const zip = new PizZip(
-    Buffer.from(templateB64, 'base64')
-  );
+  // Pre-process: convert single-brace loop tags to double-brace to match delimiter config
+  // e.g. {#works_items} -> {{#works_items}}, {item} -> {{item}}, {/works_items} -> {{/works_items}}
+  let templateBuffer = Buffer.from(templateB64, 'base64');
+  try {
+    let xml = templateBuffer.toString('utf8');
+    // Only convert single-brace tags that are NOT already double-braced
+    // Matches {#tag}, {/tag}, {^tag}, {tag} but not {{...}}
+    xml = xml.replace(/(?<!\{)\{([#/^]?[\w_]+)\}(?!\})/g, '{{$1}}');
+    templateBuffer = Buffer.from(xml, 'utf8');
+  } catch (e) {
+    // If XML conversion fails, use original buffer
+    templateBuffer = Buffer.from(templateB64, 'base64');
+  }
+
+  const zip = new PizZip(templateBuffer);
 
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
