@@ -3601,7 +3601,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         });
         const mergeData = await mergeRes.json();
         if (mergeData?.pdf_b64) {
-          downloadB64File(mergeData.pdf_b64, pdfName, 'application/pdf');
+          // Save to OneDrive project folder if available, otherwise download
+          const folderId = ao?.onedrive_folder_id || project?.onedrive_folder_id;
+          if (folderId) {
+            await fetch('/api/onedrive-upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                user_id: 'help@sq1consulting.co.uk',
+                folder_id: folderId,
+                filename: pdfName,
+                content_base64: mergeData.pdf_b64,
+                content_type: 'application/pdf',
+              }),
+            });
+          } else {
+            downloadB64File(mergeData.pdf_b64, pdfName, 'application/pdf');
+          }
         } else {
           throw new Error(mergeData?.error || 'PDF merge failed');
         }
