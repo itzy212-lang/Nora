@@ -69,6 +69,11 @@ function addAliasFields(base) {
     out[`{{${key}}}`] = value;
     out[`{{${key.toUpperCase()}}}`] = value;
   });
+  // "respectively" if more than one run exists
+  const multipleRuns = sorted.filter(Boolean).length > 1;
+  out['MULTIPLE_NOTICE_RUN_RESPECTFULLY'] = multipleRuns ? 'respectively' : '';
+  out['multiple_notice_run_respectfully'] = multipleRuns ? 'respectively' : '';
+
   return out;
 }
 
@@ -163,6 +168,12 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       const hasNext = !!sorted[i + 1];
       out[`notice_run_${n}_,`] = hasNext ? ', ' : '';
       out[`NOTICE_RUN_${n}_,`] = hasNext ? ', ' : '';
+    }
+
+    // & placeholder — "and" if THIS run exists (for runs 2 and 3 only)
+    if (n > 1) {
+      out[`notice_run_${n}_&`] = run ? 'and' : '';
+      out[`NOTICE_RUN_${n}_&`] = run ? 'and' : '';
     }
   }
 
