@@ -69,36 +69,35 @@ export default function NoticeServingModal({
   const [s2Subsections, setS2Subsections] = useState('');
   const [safeguarding, setSafeguarding] = useState(false);
   const [aoTenureTypes, setAoTenureTypes] = useState({}); // { [aoKey]: 'leaseholder' | 'freeholder' | '' }
-  const [worksItems, setWorksItems] = useState(['']);
-  const [worksItemSections, setWorksItemSections] = useState({});
+  const [sectionWorks, setSectionWorks] = useState({});
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
 
   const showWorks = selected.some(s => ['s1', 's2', 's6'].includes(s));
 
-  const updateWork = (index, value) => {
-    setWorksItems(prev => prev.map((item, i) => i === index ? value : item));
+  const updateWork = (sec, index, value) => {
+    setSectionWorks(prev => ({ ...prev, [sec]: (prev[sec] || ['']).map((item, i) => i === index ? value : item) }));
   };
 
-  const addWork = () => setWorksItems(prev => [...prev, '']);
+  const addWork = (sec) => setSectionWorks(prev => ({ ...prev, [sec]: [...(prev[sec] || ['']), ''] }));
 
-  const removeWork = (index) => {
-    setWorksItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : ['']);
+  const removeWork = (sec, index) => {
+    setSectionWorks(prev => { const items = prev[sec] || ['']; return { ...prev, [sec]: items.length > 1 ? items.filter((_, i) => i !== index) : [''] }; });
   };
 
-  const polishWork = async (index) => {
-    const raw = worksItems[index]?.trim();
+  const polishWork = async (sec, index) => {
+    const raw = (sectionWorks[sec] || [''])[index]?.trim();
     if (!raw) return;
-    const section = selected.find(s => ['s1', 's2', 's6'].includes(s)) || 's2';
-    setPolishingIndex(index);
+    const key = sec + '-' + index;
+    setPolishingIndex(key);
     try {
       const res = await fetch('/api/polish-works', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText: raw, section }),
+        body: JSON.stringify({ rawText: raw, section: sec }),
       });
       const data = await res.json();
-      if (data.polished) updateWork(index, data.polished);
+      if (data.polished) updateWork(sec, index, data.polished);
     } catch (err) {
       console.error('Polish failed:', err);
     } finally {
@@ -106,7 +105,7 @@ export default function NoticeServingModal({
     }
   };
 
-  const startDictation = (index) => {
+  const startDictation = (secIndex) => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Speech recognition is not supported in this browser.');
       return;
@@ -117,12 +116,12 @@ export default function NoticeServingModal({
     recognition.interimResults = false;
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
-      updateWork(index, transcript);
+      const [dSec, dIdx] = secIndex.split('-'); updateWork(dSec, parseInt(dIdx), transcript);
       setDictatingIndex(null);
     };
     recognition.onerror = () => setDictatingIndex(null);
     recognition.onend = () => setDictatingIndex(null);
-    setDictatingIndex(index);
+    setDictatingIndex(secIndex);
     recognition.start();
   };
 
@@ -175,7 +174,7 @@ export default function NoticeServingModal({
           createDeadlineTask,
           noticeDate,
           section2Subsections: s2Subsections,
-          worksItems: worksItems.filter(w => w.trim()),
+          worksItems: Object.entries(sectionWorks).flatMap(([sec, items]) => (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))),
           safeguarding,
           tenure: aoTenureTypes[aoKey(selectedAO)] || '',
         });
@@ -398,137 +397,46 @@ export default function NoticeServingModal({
             )}
           </div>
 
-          {/* Notifiable Works — shown when s1, s2 or s6 selected */}
-          {showWorks && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
-                Notifiable works
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {worksItems.map((item, index) => (
-                  <div key={index} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                    <div style={{ width: 20, paddingTop: 10, color: '#9ca3af', fontSize: 13, flexShrink: 0 }}>•</div>
-                    <textarea
-                      value={item}
-                      onChange={e => updateWork(index, e.target.value)}
-                      placeholder="Describe the work item..."
-                      rows={2}
-                      style={{
-                        flex: 1,
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        resize: 'vertical',
-                        fontFamily: 'inherit',
-                      }}
-                    />
-                    {/* Section selector — only shown when multiple sections selected */}
-                    {selected.length > 1 && (
-                      <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, color: '#9ca3af' }}>Notice:</span>
-                        {['all', ...selected].map(sec => {
-                          const label = sec === 'all' ? 'All' : sec === 's1' ? 'S.1' : sec === 's2' ? 'S.2' : sec === 's3' ? 'S.3' : sec === 's6' ? 'S.6' : sec.toUpperCase();
-                          const cur = worksItemSections[index] || [];
-                          const isActive = sec === 'all' ? cur.length === 0 : cur.includes(sec);
-                          return (
-                            <button key={sec} type="button"
-                              onClick={() => setWorksItemSections(prev => {
-                                const updated = { ...prev };
-                                if (sec === 'all') { updated[index] = []; }
-                                else {
-                                  const c = updated[index] || [];
-                                  updated[index] = c.includes(sec) ? c.filter(s => s !== sec) : [...c, sec];
-                                }
-                                return updated;
-                              })}
-                              style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', fontWeight: 600,
-                                border: isActive ? '1.5px solid #2563eb' : '1px solid #d1d5db',
-                                background: isActive ? '#2563eb' : '#f9fafb',
-                                color: isActive ? '#fff' : '#6b7280',
-                              }}
-                            >{label}</button>
-                          );
-                        })}
+          {['s6', 's2', 's1'].filter(sec => selected.includes(sec)).map(sec => {
+            const secLabel = sec === 's1' ? 'Section 1' : sec === 's2' ? 'Section 2' : 'Section 6';
+            const items = sectionWorks[sec] || [''];
+            return (
+              <div key={sec} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12 }}>
+                  {secLabel} — Notifiable works
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {items.map((item, index) => (
+                    <div key={index} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                      <div style={{ width: 20, paddingTop: 10, color: '#9ca3af', fontSize: 13, flexShrink: 0 }}>•</div>
+                      <textarea value={item} onChange={e => updateWork(sec, index, e.target.value)}
+                        placeholder="Describe the work item..." rows={2}
+                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
+                        <button type="button" onClick={() => startDictation(sec + '-' + index)} title="Dictate"
+                          style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', background: dictatingIndex === sec + '-' + index ? '#fee2e2' : '#f9fafb', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>
+                          {dictatingIndex === sec + '-' + index ? 'stop' : 'mic'}
+                        </button>
+                        <button type="button" onClick={() => polishWork(sec, index)} title="Polish with AI"
+                          disabled={polishingIndex === sec + '-' + index || !item.trim()}
+                          style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', background: '#f0fdf4', cursor: 'pointer', fontSize: 13, lineHeight: 1, opacity: !item.trim() ? 0.4 : 1 }}>
+                          {polishingIndex === sec + '-' + index ? '...' : 'AI'}
+                        </button>
+                        <button type="button" onClick={() => removeWork(sec, index)} title="Remove"
+                          style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff5f5', cursor: 'pointer', fontSize: 13, lineHeight: 1, color: '#ef4444' }}>
+                          X
+                        </button>
                       </div>
-                    )}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
-                      <button
-                        type="button"
-                        onClick={() => startDictation(index)}
-                        title="Dictate"
-                        style={{
-                          padding: '5px 8px',
-                          borderRadius: 7,
-                          border: '1px solid #d1d5db',
-                          background: dictatingIndex === index ? '#fee2e2' : '#f9fafb',
-                          cursor: 'pointer',
-                          fontSize: 14,
-                          lineHeight: 1,
-                        }}
-                      >
-                        {dictatingIndex === index ? '⏹' : '🎤'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => polishWork(index)}
-                        title="Polish with AI"
-                        disabled={polishingIndex === index || !item.trim()}
-                        style={{
-                          padding: '5px 8px',
-                          borderRadius: 7,
-                          border: '1px solid #d1d5db',
-                          background: '#f0fdf4',
-                          cursor: polishingIndex === index ? 'wait' : 'pointer',
-                          fontSize: 13,
-                          lineHeight: 1,
-                          opacity: !item.trim() ? 0.4 : 1,
-                        }}
-                      >
-                        {polishingIndex === index ? '…' : '✨'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeWork(index)}
-                        title="Remove"
-                        style={{
-                          padding: '5px 8px',
-                          borderRadius: 7,
-                          border: '1px solid #fecaca',
-                          background: '#fff5f5',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          lineHeight: 1,
-                          color: '#ef4444',
-                        }}
-                      >
-                        ✕
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button type="button" onClick={() => addWork(sec)}
+                  style={{ marginTop: 10, padding: '7px 14px', borderRadius: 10, border: '1px dashed #d1d5db', background: '#f9fafb', color: '#6b7280', cursor: 'pointer', fontSize: 13, width: '100%' }}>
+                  + Add work item
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={addWork}
-                style={{
-                  marginTop: 10,
-                  padding: '7px 14px',
-                  borderRadius: 10,
-                  border: '1px dashed #d1d5db',
-                  background: '#f9fafb',
-                  color: '#6b7280',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  width: '100%',
-                }}
-              >
-                + Add work item
-              </button>
-            </div>
-          )}
+            );
+          })}
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 16 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
