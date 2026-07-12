@@ -1149,7 +1149,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   let draftedResult;
   let draftMeta = {};
   try {
-    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt4o'; // default: gpt-4o — tested and confirmed better SOC quality than gpt-5.4
+    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt-5.6-terra';
     // Build rawNotesBySeq map so drafting model can read original context
     const rawNoteLines = (message || '').split(/\n+/).filter(l => l.trim());
     const rawNotesBySeq = {};
@@ -1185,7 +1185,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       const fbRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 8000,
+        body: JSON.stringify({ model: 'gpt-5.6-terra', max_completion_tokens: 8000,
           messages: [{ role: 'system', content: GENERATOR_SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] }),
       });
       if (fbRes.ok) {
