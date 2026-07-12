@@ -3404,7 +3404,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
       run_number: runNumber,
       section_2_subsections: selectedSections.includes('s2') ? section2Subsections : null,
-      notifiable_works: worksItems.filter(w => w?.trim()).length ? worksItems.filter(w => w?.trim()) : null,
+      notifiable_works: (() => { const items = worksItems.map(w => typeof w === 'object' ? w : { text: w, sections: [] }).filter(w => w.text?.trim()); return items.length ? items : null; })(),
       safeguarding: !!safeguarding,
       tenure: tenure || null,
     };
@@ -3553,7 +3553,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     for (const key of keysToGenerate) {
       try {
-        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems });
+        const sectionWorks = worksItems
+          .filter(w => { const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
+          .map(w => (w?.text || w || '').trim())
+          .filter(Boolean);
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems: sectionWorks });
         const result = await generateDocument({
           templateKey: key === 's2' ? 's3' : key, // s2 (Section 2(2)) uses the s3 template
           mergeData,

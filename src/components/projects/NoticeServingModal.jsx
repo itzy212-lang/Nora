@@ -423,6 +423,35 @@ export default function NoticeServingModal({
                         fontFamily: 'inherit',
                       }}
                     />
+                    {/* Section selector — only shown when multiple sections selected */}
+                    {selected.length > 1 && (
+                      <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: 10, color: '#9ca3af' }}>Notice:</span>
+                        {['all', ...selected].map(sec => {
+                          const label = sec === 'all' ? 'All' : sec === 's1' ? 'S.1' : sec === 's2' ? 'S.2' : sec === 's3' ? 'S.3' : sec === 's6' ? 'S.6' : sec.toUpperCase();
+                          const cur = worksItemSections[index] || [];
+                          const isActive = sec === 'all' ? cur.length === 0 : cur.includes(sec);
+                          return (
+                            <button key={sec} type="button"
+                              onClick={() => setWorksItemSections(prev => {
+                                const updated = { ...prev };
+                                if (sec === 'all') { updated[index] = []; }
+                                else {
+                                  const c = updated[index] || [];
+                                  updated[index] = c.includes(sec) ? c.filter(s => s !== sec) : [...c, sec];
+                                }
+                                return updated;
+                              })}
+                              style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', fontWeight: 600,
+                                border: isActive ? '1.5px solid #2563eb' : '1px solid #d1d5db',
+                                background: isActive ? '#2563eb' : '#f9fafb',
+                                color: isActive ? '#fff' : '#6b7280',
+                              }}
+                            >{label}</button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
                       <button
                         type="button"
