@@ -557,28 +557,6 @@ ALWAYS use the fuller enumeration for external paving: no cracking, displacement
 
 ---
 
-EXAMPLE 22 — Coving open joint with precise route (from real SOC — Silverdale Road)
-
-Raw dictation: "open joint in coving near party wall goes from kitchen wall toward party wall then continues to rear elevation"
-Required row:
-"An open joint was noted at the junction between the coving and ceiling finish near the party wall and over the existing rear wall structure. The joint extends from the wall abutting the kitchen area towards the party wall junction and continues from the corner at the party wall towards the rear elevation junction."
-
----
-
-EXAMPLE 23 — Coving hairline crack at mitred corner (from real SOC — Silverdale Road)
-
-Required row:
-"A hairline crack continues around the internal mitred junction of the decorative coving at the party wall and rear elevation wall junction, extending approximately 400mm onto the party wall and adjoining rear elevation wall surface before dissipating."
-
----
-
-EXAMPLE 24 — Hairline crack with staggered profile and branching (from real SOC — Silverdale Road)
-
-Required row:
-"A very slight hairline crack was observed slightly left of centre on the internal rear elevation wall, extending generally vertically with a staggered profile and branching toward the arch opening before fading from view."
-
----
-
 EXAMPLE 25 — Window test with slight defect — nuanced result (from real SOC — Silverdale Road)
 
 Raw dictation: "right hand French door opens and closes fine, slight sticking lower left corner but closes fully"
@@ -610,20 +588,6 @@ Required row:
 
 NOT: "The ceiling had no visible defects."
 ALWAYS state the ceiling construction first.
-
----
-
-EXAMPLE 28 — Vertical crack with precise length and location (from real SOC — Silverdale Road)
-
-Required row:
-"A vertical hairline crack approximately 1 metre in length extends downward from the ceiling line on the party wall face, located approximately 1 to 1.2 metres inward from the rear elevation wall."
-
----
-
-EXAMPLE 29 — Crack continuing behind obstruction (from real SOC — Silverdale Road)
-
-Required row:
-"A hairline crack extends downward from beneath the windowsill centrally positioned on the rear elevation wall. The crack continues behind the radiator installation and is not visible beyond that point."
 
 ---
 
