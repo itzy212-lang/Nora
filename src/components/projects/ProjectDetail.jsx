@@ -3088,8 +3088,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // Load notices served for this project and AO to build the correct section string
       let noticeSection = null;
       let noticeServedDate = null;
+      let noticeRows = [];
       try {
-        const { data: noticeRows } = await sb
+        const { data: fetchedRows } = await sb
           .from('notices')
           .select('section_1, section_2, section_3, section_6, section_2_subsections, notice_date, run_number, notifiable_works')
           .eq('project_id', String(project.id))
@@ -3097,7 +3098,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           .eq('status', 'served')
           .order('run_number', { ascending: true });
 
-        if (noticeRows && noticeRows.length > 0) {
+        noticeRows = fetchedRows || [];
+        if (noticeRows.length > 0) {
           const hasS1 = noticeRows.some(n => n.section_1);
           const hasS2 = noticeRows.some(n => n.section_2);
           const hasS3 = noticeRows.some(n => n.section_3);
