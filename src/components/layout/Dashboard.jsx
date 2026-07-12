@@ -104,16 +104,37 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
   useEffect(() => { loadInboxEmails(); }, [loadInboxEmails]);
 
-  // Stats
-  const activeProjects = projects.filter(p => p.status !== 'complete').length;
+  // Helper — is a project closed (award served on all AOs, or manually closed)
+  const isProjectClosed = (p) => {
+    if (p.status === 'complete' || p.status === 'closed' || p.status === 'award_served') return true;
+    const aos = p.aos || [];
+    if (aos.length === 0) return false;
+    // Closed if ALL AOs have award served
+    return aos.every(ao => !!(ao.award_served_date || ao.awardServedDate || (ao.status || '') === 'complete'));
+  };
 
-  const needsAttention = projects.reduce((sum, p) =>
-    sum + (p.aos || []).filter(ao =>
-      ['notice_expired', 's10_expired', '104b_triggered', 'consent_due'].includes(ao.status)
-    ).length, 0);
+  // Helper — does an AO show as RED on the project list (i.e. needs urgent attention)
+  const aoIsRed = (ao) => {
+    const st = (ao?.status || '').toLowerCase();
+    if (ao?.award_served_date || ao?.awardServedDate || st === 'complete') return false;
+    // S10 deadline overdue
+    if (st === 's10' || st === 'notice_served') {
+      const deadline = ao?.s10_deadline || ao?.s10Deadline || ao?.consent_deadline || ao?.consentDeadline || '';
+      if (deadline && new Date(deadline) < new Date()) return true;
+    }
+    // Dissent with no surveyor appointed
+    if (st === 'dissent' && !ao?.ao_surveyor_name && !ao?.aoSurveyorName) return true;
+    return false;
+  };
+
+  // Stats
+  const activeProjects = projects.filter(p => !isProjectClosed(p)).length;
+
+  const needsAttention = projects.filter(p => !isProjectClosed(p)).reduce((sum, p) =>
+    sum + (p.aos || []).filter(aoIsRed).length, 0);
 
   const feePipeline = projects
-    .filter(p => p.status !== 'complete')
+    .filter(p => !isProjectClosed(p))
     .reduce((s, p) => s + Math.max(0, parseFloat(p.fee || 0) - parseFloat(p.fee_invoiced || 0)), 0);
 
   const leadPipeline = freshLeads
