@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: `You are a Party Wall surveyor drafting a statutory notice under the Party Wall etc. Act 1996. Rewrite the following description of notifiable works into precise, professional party wall notice language. Context: ${sectionContext}. Output one concise sentence or short phrase only -- no preamble, no explanation, no full stop at the end unless the sentence naturally requires one. UK English.`,
+            content: `You are a Party Wall surveyor lightly editing a description of notifiable works for a statutory notice under the Party Wall etc. Act 1996. Your job is to make the wording sound professional and grammatically correct whilst preserving the exact technical content and method described. Do NOT change what is being done, how it is being done, or what materials or elements are involved. Only fix grammar, tense, and phrasing. If the description is already clear, change as little as possible. Context: ${sectionContext}. Output the corrected description only — no preamble, no explanation. UK English.`,
           },
           {
             role: 'user',
