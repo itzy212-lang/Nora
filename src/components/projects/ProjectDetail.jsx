@@ -3553,8 +3553,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     for (const key of keysToGenerate) {
       try {
+        // Cover letter gets all works; other sections get their specific works
         const sectionWorks = worksItems
-          .filter(w => { const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
+          .filter(w => {
+            if (key === 'cover') return true; // cover letter shows all works
+            const ws = w?.sections || [];
+            return ws.length === 0 || ws.includes(key);
+          })
           .map(w => (w?.text || w || '').trim())
           .filter(Boolean);
         const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems: sectionWorks });
@@ -3577,11 +3582,39 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       }
     }
 
-    // STEP 3: download ZIP pack where more than one document generated
-    if (generatedDocs.length > 1) {
-      const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-      const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
-      downloadB64File(zipB64, zipName, 'application/zip');
+    // STEP 3: merge all documents into one PDF and download
+    if (generatedDocs.length > 0) {
+      // Sort in correct notice order: cover → s2 → s6 → s1 → s10
+      const ORDER = ['cover', 's2', 's6', 's1', 's10'];
+      const sorted = [...generatedDocs].sort((a, b) => {
+        const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
+
+      const pdfName = `${safeFilePart(project.bo_premise_address || project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.pdf`;
+
+      try {
+        const mergeRes = await fetch('/api/merge-notice-pdfs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documents: sorted, outputFileName: pdfName }),
+        });
+        const mergeData = await mergeRes.json();
+        if (mergeData?.pdf_b64) {
+          downloadB64File(mergeData.pdf_b64, pdfName, 'application/pdf');
+        } else {
+          throw new Error(mergeData?.error || 'PDF merge failed');
+        }
+      } catch (pdfErr) {
+        // Fallback to zip if PDF merge fails
+        console.error('[notice] PDF merge failed, falling back to zip:', pdfErr.message);
+        if (generatedDocs.length > 1) {
+          const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+          const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
+          downloadB64File(zipB64, zipName, 'application/zip');
+        }
+        warnings.push('PDF merge failed — downloaded as zip instead');
+      }
     }
 
     const warningText = warnings.length ? `\n\nWarnings:\n${warnings.join('\n')}` : '';
