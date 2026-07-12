@@ -520,53 +520,117 @@ Required rows (First Floor Rear Bedroom):
 
 ---
 
-EXAMPLE 18 — External brickwork with construction identification
+EXAMPLE 18 — External brickwork — construction material first, fuller no-defects
 
 Raw dictation: "front elevation lower section brick looks weathered no cracks no displacement"
-Facts:
-  • Element: Front elevation, lower section
-  • Construction: Brickwork (London stock yellow brickwork where typical)
-  • Condition: General age-related weathering only, no cracking or displacement
-
-Required row:
+Required row (from real SOC):
 "The lower section of the front elevation is constructed in London stock yellow brickwork exhibiting general age-related weathering only. No visible cracking, displacement or significant defects were noted."
+
+NOT: "The front elevation brickwork had no defects."
+NOT: "The front elevation appeared generally free from visible defects."
+ALWAYS: State the construction material and type first, then condition with specific enumeration.
 
 ---
 
-EXAMPLE 19 — Complex crack with branching
+EXAMPLE 19 — Complex crack with branching and precise measurements (from real SOC)
 
 Raw dictation: "hairline crack from chimney breast goes toward rear about a metre then splits both ways"
-Facts:
-  • Origin: Chimney breast abutment
-  • Direction: Towards rear elevation
-  • Length: Approximately 1 metre
-  • Branching: Splits approximately 400mm from origin, extending to both sides
-
 Required row:
 "A hairline crack extends from the chimney breast abutment towards the rear elevation for approximately 1.1 metres. The crack branches approximately 400mm from its origin, extending towards both the Building Owner's and Adjoining Owner's sides."
 
 ---
 
-EXAMPLE 20 — Render finish with crack description
-
-Raw dictation: "upper section rendered finish hairline crack above arch about 600mm goes up then branches toward window"
-Facts:
-  • Element: Upper rendered section
-  • Crack: Vertical, above arch, approximately 600mm, branches toward adjacent window
+EXAMPLE 20 — Rendered upper section with vertical crack (from real SOC)
 
 Required row:
 "In the upper rendered section, a vertical hairline crack is present above the arch and broadly aligned with the centre of the arch below. This crack extends approximately 600mm vertically before branching towards the adjacent window opening."
 
 ---
 
-EXAMPLE 21 — No-defects wording with fuller form
+EXAMPLE 21 — Patio/external paving — fuller enumerated no-defects (from real SOC)
 
-Raw dictation: "patio looks fine no issues"
 Required row:
 "The paved patio is generally level with no significant cracking, displacement, rocking slabs or open joints observed. Typical weathering only was noted."
 
 NOT: "The patio appeared generally free from visible defects."
-The fuller enumeration (no cracking, displacement, rocking slabs, open joints) is always preferred for external elements.`;
+ALWAYS use the fuller enumeration for external paving: no cracking, displacement, rocking slabs, open joints.
+
+---
+
+EXAMPLE 22 — Coving open joint with precise route (from real SOC — Silverdale Road)
+
+Raw dictation: "open joint in coving near party wall goes from kitchen wall toward party wall then continues to rear elevation"
+Required row:
+"An open joint was noted at the junction between the coving and ceiling finish near the party wall and over the existing rear wall structure. The joint extends from the wall abutting the kitchen area towards the party wall junction and continues from the corner at the party wall towards the rear elevation junction."
+
+---
+
+EXAMPLE 23 — Coving hairline crack at mitred corner (from real SOC — Silverdale Road)
+
+Required row:
+"A hairline crack continues around the internal mitred junction of the decorative coving at the party wall and rear elevation wall junction, extending approximately 400mm onto the party wall and adjoining rear elevation wall surface before dissipating."
+
+---
+
+EXAMPLE 24 — Hairline crack with staggered profile and branching (from real SOC — Silverdale Road)
+
+Required row:
+"A very slight hairline crack was observed slightly left of centre on the internal rear elevation wall, extending generally vertically with a staggered profile and branching toward the arch opening before fading from view."
+
+---
+
+EXAMPLE 25 — Window test with slight defect — nuanced result (from real SOC — Silverdale Road)
+
+Raw dictation: "right hand French door opens and closes fine, slight sticking lower left corner but closes fully"
+Required row:
+"Operational testing of the right-hand opening leaf of the UPVC French doors indicated satisfactory opening and closing. A slight degree of sticking was noted at the lower left-hand corner against the frame; however, the door closed fully without significant resistance."
+
+NOT: "The right-hand French door operated satisfactorily without sticking, binding or jamming."
+Where there IS a slight defect, describe it precisely — do not suppress it with a blanket satisfactory statement.
+
+---
+
+EXAMPLE 26 — Party wall with finish — internal room (from real SOC)
+
+Raw dictation: "party wall plaster skim coat emulsion paint no visible defects"
+Required row:
+"The party wall is finished in a plaster skim coat with emulsion paint decoration. No visible defects were noted at the time of inspection."
+
+NOT: "The party wall is finished in plaster and paint."
+NOT: "The party wall had no defects."
+ALWAYS name the specific finish type (plaster skim coat, emulsion paint, wallpaper-lined, rendered etc.) and always end with a condition statement.
+
+---
+
+EXAMPLE 27 — Ceiling construction and condition (from real SOC)
+
+Raw dictation: "ceiling is plasterboard with coving no defects"
+Required row:
+"The ceiling is of plasterboard construction with decorative coving. No visible defects were noted at the time of inspection."
+
+NOT: "The ceiling had no visible defects."
+ALWAYS state the ceiling construction first.
+
+---
+
+EXAMPLE 28 — Vertical crack with precise length and location (from real SOC — Silverdale Road)
+
+Required row:
+"A vertical hairline crack approximately 1 metre in length extends downward from the ceiling line on the party wall face, located approximately 1 to 1.2 metres inward from the rear elevation wall."
+
+---
+
+EXAMPLE 29 — Crack continuing behind obstruction (from real SOC — Silverdale Road)
+
+Required row:
+"A hairline crack extends downward from beneath the windowsill centrally positioned on the rear elevation wall. The crack continues behind the radiator installation and is not visible beyond that point."
+
+---
+
+EXAMPLE 30 — Party fence wall with construction description (from real SOC — Silverdale Road)
+
+Required row:
+"An existing external party fence wall is located at the rear boundary between the Building Owner's and Adjoining Owner's properties. The wall is constructed in masonry with a face brick finish visible on the Adjoining Owner's side." `;
 
 // ─── Main drafting instruction ─────────────────────────────────────────────────
 const DRAFTING_SYSTEM = `You are an experienced Chartered Building Surveyor specialising exclusively in Party Wall matters, with extensive experience preparing professional Schedules of Condition for use under the Party Wall etc. Act 1996.
