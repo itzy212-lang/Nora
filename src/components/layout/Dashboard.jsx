@@ -203,6 +203,14 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     await sb.from('emails').update({ flagged: !currentFlagged }).eq('id', emailId);
   }, []);
 
+  // Time-based greeting
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  })();
+
   // Morning briefing
   const refreshBriefing = useCallback(async () => {
     setBriefingLoading(true);
@@ -223,7 +231,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
 
     const emailSummary = `${unreadCount} unread, ${flaggedCount} flagged, ${attentionEmails.length} needing attention`;
 
-    const prompt = `Morning briefing for Itzik - ${today}.
+    const prompt = `Briefing for Itzik - ${today}.
 
 Active projects (${activeProjects}): ${projSummary || 'none'}.
 Needs attention: ${needsAttention} project AOs with urgent status.
@@ -232,13 +240,13 @@ Email inbox: ${emailSummary}.
 Unpaid invoices: £${unpaidInvoices.toLocaleString('en-GB', { maximumFractionDigits: 0 })}.
 Active leads: ${activeLeads.length}.
 
-Give Itzik a concise morning briefing in 2-3 sentences. UK English. No bullet points. No AI phrases. Focus on what needs attention today. Be direct and practical like a trusted colleague.`;
+Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik." UK English. No bullet points. No AI phrases. Focus on what needs attention. Be direct and practical like a trusted colleague.`;
 
     try {
       const res = await fetch('/api/ely-smart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ surface: 'morning_briefing', prompt }),
+        body: JSON.stringify({ surface: 'morning_briefing', prompt: prompt.replace('${greeting}', greeting) }),
       });
       const data = await res.json();
       const text = data.reply || data.message || '';
@@ -296,7 +304,7 @@ Give Itzik a concise morning briefing in 2-3 sentences. UK English. No bullet po
         <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-              ✨ Morning Briefing
+              ✨ Briefing
             </div>
             <button onClick={refreshBriefing} disabled={briefingLoading} style={{ background: 'none', border: 'none', color: 'var(--blue)', fontSize: 12, cursor: 'pointer', fontWeight: 500, padding: 0 }}>
               {briefingLoading ? '…' : '↻ REFRESH'}
