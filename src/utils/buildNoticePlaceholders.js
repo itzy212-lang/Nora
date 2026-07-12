@@ -271,6 +271,26 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
+
+    // AO service address split into lines for cover letter
+    ...(() => {
+      const parts = aoServiceAddress.split(',').map(s => s.trim()).filter(Boolean);
+      // Group into max 3 lines — last two parts (postcode + city) stay together on line 3
+      let line1 = '', line2 = '', line3 = '';
+      if (parts.length === 1) { line1 = parts[0]; }
+      else if (parts.length === 2) { line1 = parts[0]; line2 = parts[1]; }
+      else if (parts.length === 3) { line1 = parts[0]; line2 = parts[1]; line3 = parts[2]; }
+      else if (parts.length >= 4) {
+        line1 = parts[0];
+        line2 = parts.slice(1, parts.length - 2).join(', ');
+        line3 = parts.slice(parts.length - 2).join(', ');
+      }
+      return {
+        AO_SERVICE_LINE_1: line1, ao_service_line_1: line1,
+        AO_SERVICE_LINE_2: line2, ao_service_line_2: line2,
+        AO_SERVICE_LINE_3: line3, ao_service_line_3: line3,
+      };
+    })(),
     works_items: (options.works_items || (notifiableWorks ? [{ item: notifiableWorks }] : [])),
     BO_NAME: boNames,
     BO_NAMES: boNames,
