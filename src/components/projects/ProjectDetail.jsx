@@ -3439,7 +3439,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     );
     await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
     setProject(p => ({ ...p, aos: updatedAOs }));
-  }, [project, sb]);
+
+    // Auto-raise final invoice after award served
+    const boBillToName = project.bo || project.bo_1_name || project.bo_name || '';
+    const boBillToAddress = project.bo_service_address || project.bo_1_service_address || project.bo_address || project.bo_premise_address || '';
+    const appointAddr = project.bo_premise_address || project.address || '';
+    onRaiseInvoice?.({
+      property_address: appointAddr,
+      bill_to_name: boBillToName,
+      bill_to_address: boBillToAddress,
+      role,
+      project_id: project.id,
+      invoice_note: 'Final invoice — award served',
+    });
+  }, [project, sb, onRaiseInvoice, role]);
 
   const handleServeS10 = useCallback((ao) => {
     handleOpenNoticeModal(ao, ['s10']);

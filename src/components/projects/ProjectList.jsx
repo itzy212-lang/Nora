@@ -131,6 +131,18 @@ function ProjectCard({ project, onClick }) {
   const displayAddress = getAppointmentAddress(project);
   const appointmentName = getAppointmentName(project);
 
+  // Get most actionable AO status to show on card
+  const aos = project.aos || [];
+  let cardStatus = null;
+  if (aos.length > 0) {
+    // Priority order: amber/red statuses first, then green
+    const statuses = aos.map(ao => getAOStatusMeta(ao, project, role));
+    const amber = statuses.find(s => s.colour === '#f59e0b' || s.colour === '#ef4444');
+    cardStatus = amber || statuses[0];
+    // Only show if it's not the default "serve notice" blue — that's implied by colour
+    if (cardStatus && (cardStatus.label === 'Serve notice' || !cardStatus.label)) cardStatus = null;
+  }
+
   return (
     <div
       onClick={() => onClick(project)}
@@ -248,6 +260,20 @@ function ProjectCard({ project, onClick }) {
               background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca',
             }}>
               ⚠️ No AO
+            </span>
+          )}
+          {!showNoAOWarning && cardStatus && (
+            <span style={{
+              fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+              background: cardStatus.colour + '22',
+              color: cardStatus.colour,
+              border: '1px solid ' + cardStatus.colour + '44',
+              maxWidth: 140,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {cardStatus.label}
             </span>
           )}
 
