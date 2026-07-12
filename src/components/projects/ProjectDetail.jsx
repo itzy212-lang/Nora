@@ -3582,17 +3582,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       }
     }
 
-    // STEP 3: merge all documents into one PDF and download
+    // STEP 3: sort docs, then download docx files + attempt merged PDF
     if (generatedDocs.length > 0) {
-      // Sort in correct notice order: cover → s2 → s6 → s1 → s10
       const ORDER = ['cover', 's2', 's6', 's1', 's10'];
       const sorted = [...generatedDocs].sort((a, b) => {
         const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
 
-      const pdfName = `${safeFilePart(project.bo_premise_address || project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.pdf`;
+      const baseName = safeFilePart(project.bo_premise_address || project.ref || 'Project');
+      const aoName = safeFilePart(ao?.name || `AO${ao?.num || ''}`);
 
+      // Always download individual docx files so you can edit them
+      if (sorted.length === 1) {
+        downloadB64File(sorted[0].docx_b64, sorted[0].fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      } else {
+        const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
+        downloadB64File(zipB64, `${baseName}_${aoName}_Notice_Pack.zip`, 'application/zip');
+      }
+
+      // Also attempt merged PDF — save to OneDrive or download individually
+      const pdfName = `${baseName}_${aoName}_Notice_Pack.pdf`;
       try {
         const mergeRes = await fetch('/api/merge-notice-pdfs', {
           method: 'POST',
@@ -3601,7 +3611,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         });
         const mergeData = await mergeRes.json();
         if (mergeData?.pdf_b64) {
-          // Save to OneDrive project folder if available, otherwise download
           const folderId = ao?.onedrive_folder_id || project?.onedrive_folder_id;
           if (folderId) {
             await fetch('/api/onedrive-upload', {
@@ -3622,14 +3631,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           throw new Error(mergeData?.error || 'PDF merge failed');
         }
       } catch (pdfErr) {
-        // Fallback to zip if PDF merge fails
-        console.error('[notice] PDF merge failed, falling back to zip:', pdfErr.message);
-        if (generatedDocs.length > 1) {
-          const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-          const zipName = `${safeFilePart(project.ref || 'Project')}_${safeFilePart(ao?.name || `AO${ao?.num || ''}`)}_Notice_Pack.zip`;
-          downloadB64File(zipB64, zipName, 'application/zip');
+        // PDF merge failed — download individual PDFs as fallback
+        console.error('[notice] PDF merge failed, downloading individual PDFs:', pdfErr.message);
+        warnings.push('Merged PDF failed — downloading individual PDFs');
+        for (const doc of sorted) {
+          if (doc.pdf_b64) {
+            downloadB64File(doc.pdf_b64, doc.fileName.replace(/\.docx$/i, '.pdf'), 'application/pdf');
+          }
         }
-        warnings.push('PDF merge failed — downloaded as zip instead');
       }
     }
 
