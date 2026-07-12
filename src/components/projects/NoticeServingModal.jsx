@@ -70,6 +70,7 @@ export default function NoticeServingModal({
   const [safeguarding, setSafeguarding] = useState(false);
   const [aoTenureTypes, setAoTenureTypes] = useState({}); // { [aoKey]: 'leaseholder' | 'freeholder' | '' }
   const [worksItems, setWorksItems] = useState(['']);
+  const [worksItemSections, setWorksItemSections] = useState({});
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
 
