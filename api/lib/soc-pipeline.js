@@ -622,6 +622,30 @@ Where an observation is on the building owner's side, include it with the attrib
 
 If it was dictated, it must be in the schedule.
 
+GOLD STANDARD WRITING STYLE:
+
+Every observation must follow this structure — construction material first, then finish, then condition, then specific defects with precise location, direction, extent and termination:
+
+GOOD: "The lower section of the front elevation is constructed in London stock yellow brickwork exhibiting general age-related weathering only. No visible cracking, displacement or significant defects were noted."
+BAD: "The front elevation wall is in plaster and paint finish."
+
+GOOD: "A hairline crack extends from the chimney breast abutment towards the rear elevation for approximately 1.1 metres. The crack branches approximately 400mm from its origin, extending towards both the Building Owner's and Adjoining Owner's sides."
+BAD: "There is a crack on the ceiling."
+
+GOOD: "The walls have wallpaper-lined finishes and the ceiling is plasterboard with decorative coving."
+BAD: "The walls are finished in wallpaper."
+
+GOOD: "No visible cracking, displacement or significant defects were noted."
+BAD: "No visible defects noted."
+
+RULES:
+- ALWAYS identify the construction material before describing condition
+- ALWAYS state finish type (plaster skim, emulsion paint, wallpaper-lined, rendered, textured render etc.)
+- For cracks: state origin point, direction, approximate length, any branching, termination point
+- For no-defects: use the fuller form "No visible cracking, displacement or significant defects were noted" not just "no visible defects"
+- Never write a bare materials description without a condition statement
+- "Party wall finished in plaster and paint" is NOT acceptable — must be "The party wall is finished in a plaster skim coat with emulsion paint decoration. No visible defects were noted at the time of inspection."
+
 GROUPING:
 - Combine: construction + finish + general condition of the same element; related observations at same location
 - Separate: different elements, different defects, different locations, different tests
@@ -658,13 +682,15 @@ ${FEW_SHOT_EXAMPLES}`;
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
   const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o'; // default: gpt-4o
   // Model selection — gpt55=gpt-5.5, gpt54=gpt-5.4, gpt5=gpt-5, anything else=gpt-4o
-  const model = resolvedMode === 'gpt55' ? 'gpt-5.5'
+  const model = resolvedMode === 'gpt-5.6-terra' ? 'gpt-5.6-terra'
+              : resolvedMode === 'gpt55' ? 'gpt-5.5'
               : resolvedMode === 'gpt54' ? 'gpt-5.4'
               : resolvedMode === 'gpt5'  ? 'gpt-5'
               : 'gpt-4o';
+  const isTerra = resolvedMode === 'gpt-5.6-terra';
   const isGpt5Family = ['gpt55','gpt54','gpt5'].includes(resolvedMode);
-  const params = isGpt5Family
-    ? { max_completion_tokens: 32000, reasoning_effort: 'medium' }
+  const params = (isTerra || isGpt5Family)
+    ? { max_completion_tokens: 32000 }
     : { temperature: 0.15, max_tokens: 16383 };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
