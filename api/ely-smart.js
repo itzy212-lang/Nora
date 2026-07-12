@@ -1849,8 +1849,9 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
         /proprietorship register/i.test(text) ||
         /(title plan|official copy)/i.test(text)
       );
-      if (isLandReg && ANTHROPIC_KEY) {
+      if (isLandReg) {
         try {
+          const OPENAI_KEY = process.env.OPENAI_API_KEY;
           const lrPrompt = 'Extract the registered proprietor details from this Land Registry title register. Return ONLY a JSON object with no markdown:\n' +
             '{\n' +
             '  "proprietor_name": "full name(s) of registered proprietor(s)",\n' +
@@ -1860,14 +1861,14 @@ async function buildMessages({ body, systemPrompt, scopedEmailContext = [], mode
             '}\n\n' +
             'If multiple proprietors, put all names in proprietor_name separated by " and ".\n\n' +
             'TITLE REGISTER TEXT:\n' + text.slice(0, 8000);
-          const lrRes = await fetch('https://api.anthropic.com/v1/messages', {
+          const lrRes = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: lrPrompt }] }),
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+            body: JSON.stringify({ model: 'gpt-4o', max_completion_tokens: 800, messages: [{ role: 'user', content: lrPrompt }] }),
           });
           if (lrRes.ok) {
             const lrData = await lrRes.json();
-            const rawText = lrData?.content?.[0]?.text || '';
+            const rawText = lrData?.choices?.[0]?.message?.content || '';
             try {
               const extracted = JSON.parse(rawText.replace(/```json|```/g, '').trim());
               if (extracted.proprietor_name && extracted.property_address) {
@@ -2646,61 +2647,51 @@ ${emailsText}
 --- PROJECT NOTES & CHAT HISTORY ---
 ${brainText}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${OPENAI_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-6',
-      max_tokens: 8000,
-      system: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.',
-      messages: [{ role: 'user', content: prompt }],
+      model: 'gpt-4o',
+      max_completion_tokens: 8000,
+      messages: [
+        { role: 'system', content: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.' },
+        { role: 'user', content: prompt },
+      ],
     }),
   });
 
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error?.message || 'Claude case review failed');
+  if (!response.ok) throw new Error(payload?.error?.message || 'Case review failed');
 
-  return payload.content?.[0]?.text || 'No findings returned.';
+  return payload.choices?.[0]?.message?.content || 'No findings returned.';
 }
 
-// ── Claude fallback for oversized requests ────────────────────────────────
+// ── Fallback for oversized requests — uses gpt-4o ────────────────────────
 async function callClaude(messages = []) {
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_KEY) throw new Error('Missing ANTHROPIC_API_KEY');
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) throw new Error('Missing OPENAI_API_KEY');
 
-  // Convert OpenAI message format to Anthropic format
-  const systemMsg = messages.find(m => m.role === 'system')?.content || 'You are Nora, an AI assistant for a Party Wall surveying practice. Use British English.';
-  const userMessages = messages.filter(m => m.role !== 'system').map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
-  }));
-
-  // Prepend the handoff message as a system note
-  const systemWithHandoff = `You are Nora, an AI assistant for a Party Wall surveying practice. Use British English.\n\n${systemMsg}`;
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${OPENAI_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3500,
-      system: systemWithHandoff,
-      messages: userMessages.length ? userMessages : [{ role: 'user', content: 'Please help.' }],
+      model: 'gpt-4o',
+      max_completion_tokens: 3500,
+      messages: messages.length ? messages : [{ role: 'user', content: 'Please help.' }],
     }),
   });
 
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error?.message || 'Claude fallback failed');
+  if (!response.ok) throw new Error(payload?.error?.message || 'Fallback failed');
 
-  const raw = payload.content?.[0]?.text || '';
+  const raw = payload.choices?.[0]?.message?.content || '';
   return cleanOutput(`*This is a bit too large for me -- let me get our admin team on that for you right away.* 📋\n\n${raw}`);
 }
 
