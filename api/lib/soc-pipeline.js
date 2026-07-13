@@ -20,6 +20,10 @@ const STT_CORRECTIONS = [
   [/tarps? floor/gi,        'tiled floor'],
   [/\bUPBC\b/g,             'UPVC'],
   [/\bscheduler\b/g,        'schedule'],
+  // False-start correction: "starting the extension, starting the schedule... rear outrigger"
+  // The word "extension" before a schedule declaration followed by "outrigger" is a false start
+  [/starting the extension[,.]?\s*starting the schedule of conditions in the/gi, 'starting the schedule of conditions in the'],
+  [/starting the extension[,.]?\s*(ground floor rear outrigger|rear outrigger)/gi, '$1'],
 ];
 
 export function applySttCorrections(text) {
