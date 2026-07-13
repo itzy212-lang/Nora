@@ -1033,8 +1033,14 @@ Where an active claim cannot be assigned to a section with reasonable confidence
 
 ROW GROUPING
 
-Combine into one row: construction + finish + general condition of the same element at the same location.
-Separate into distinct rows: different elements; different defects at different locations; operational tests; access limitations.
+Keep observations as separate rows unless they are directly about the same physical element and the same location and the combination makes the row materially clearer.
+
+Do NOT merge:
+- a general condition statement ("no visible defects noted") with a description of fittings or fixtures on that element
+- a party wall no-defects observation with any other observation
+- observations that the surveyor dictated as separate notes
+
+When in doubt, keep them as separate rows. The default is one observation per row.
 
 FACTUAL SOURCE HIERARCHY
 
