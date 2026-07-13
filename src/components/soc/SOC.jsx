@@ -304,7 +304,24 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       body: JSON.stringify({ action: 'save_note', session_id: newSessionId || socSessionId, content: userContent, project_id: projectId || null }),
     });
     if (saveRes.ok) {
-      setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: 'Noted.' }]);
+      // Detect note type for acknowledgement
+      const noteText = userContent.toLowerCase().trim();
+      const isCorrection = /\b(actually|scratch that|correction|just to amend|just to note on that last|just to note on the last|going back to|to clarify the last|to correct the last|sorry[,\s]+(i mean|that should|the))/i.test(userContent);
+      const isSectionChange = /\b(moving (to|into)|entering (the|into)|starting (the schedule|in|with)|continuing (in|with|the schedule)|now (in|at)|i('m| am) (now |)(in|at))/i.test(userContent);
+      
+      let ack = 'Noted ✓';
+      if (isCorrection) {
+        // Extract what's being corrected
+        const corrText = userContent.replace(/^(actually[,.]?|scratch that[,.]?|correction[,.]?|just to amend[,.]?|just to note on (that |the )?last one[,.]?|sorry[,.]?)/i, '').trim();
+        ack = `Correction noted ✓ — updating: "${corrText.slice(0, 80)}${corrText.length > 80 ? '...' : ''}"`;
+      } else if (isSectionChange) {
+        // Extract section name
+        const secMatch = userContent.match(/(?:moving (?:to|into)|entering (?:the|into)|starting (?:in|with)|continuing (?:in|with)|now (?:in|at))\s+(?:the\s+)?(.{3,50}?)(?:\s*[.,]|$)/i);
+        const secName = secMatch ? secMatch[1].trim() : '';
+        ack = secName ? `Moving to: ${secName} ✓` : 'Section change noted ✓';
+      }
+      
+      setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: ack }]);
     } else {
       const err = await saveRes.json().catch(() => ({}));
       console.error('[SOC] save_note failed:', err);
