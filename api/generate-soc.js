@@ -1121,10 +1121,11 @@ function runCodedFidelityChecks(draftedResult, claims) {
 // Calls shared soc-pipeline.js functions in sequence.
 // Uses live persisted claims from DB if available; otherwise runs Stage 1 extraction.
 async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId) {
-  // Load live claims from DB first
+  // Load live claims from DB first — unless forceReextract is set
   let claims = [];
   let claimsFromLive = false;
-  if (sessionId) {
+  const forceReextract = projectMeta?.forceReextract === true;
+  if (sessionId && !forceReextract) {
     try {
       const { data: liveClaims } = await supabase
         .from('soc_claims')
@@ -1134,6 +1135,13 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
         .order('claim_sequence', { ascending: true });  // numeric integer column
       if (liveClaims?.length) { claims = liveClaims; claimsFromLive = true; }
     } catch (e) { console.warn('[generate-soc] Could not load live claims:', e.message); }
+  }
+  if (forceReextract && sessionId) {
+    // Delete cached claims so Stage 1 runs fresh with updated STT corrections
+    try {
+      await supabase.from('soc_claims').delete().eq('session_id', sessionId);
+      console.log('[generate-soc] Cleared cached claims for fresh extraction');
+    } catch (e) { console.warn('[generate-soc] Could not clear claims:', e.message); }
   }
 
   // Stage 1: Extract if no live claims
@@ -1459,8 +1467,13 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Missing OpenAI API key' });
       }
 
+      // Pass forceReextract=true on regenerate so cached claims are cleared
+      // and Stage 1 runs fresh with latest STT corrections
+      const isRegenerate = body.action === 'regenerate' || body.force_reextract === true;
+      const projectMetaWithFlag = { ...projectMeta, forceReextract: isRegenerate };
+
       try {
-        dataForRender = await extractStructuredData(notesText, projectMeta, apiKey, session_id, project_id, ao_id);
+        dataForRender = await extractStructuredData(notesText, projectMetaWithFlag, apiKey, session_id, project_id, ao_id);
       } catch (genErr) {
         if (genErr.message?.startsWith('GENERATION_INCOMPLETE')) {
           // Return structured incomplete response — client shows warning + retry
