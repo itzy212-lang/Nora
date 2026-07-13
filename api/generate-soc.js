@@ -1469,7 +1469,7 @@ export default async function handler(req, res) {
 
       // Pass forceReextract=true on regenerate so cached claims are cleared
       // and Stage 1 runs fresh with latest STT corrections
-      const isRegenerate = body.action === 'regenerate' || body.force_reextract === true;
+      const isRegenerate = (req.body?.action === 'regenerate') || (req.body?.force_reextract === true);
       const projectMetaWithFlag = { ...projectMeta, forceReextract: isRegenerate };
 
       try {
