@@ -126,6 +126,13 @@ SECTION ASSIGNMENT RULES — CRITICAL:
 - Use "Ground Floor Hallway" when the surveyor describes a hallway, corridor or passageway without naming it as an extension or outrigger.
 - If the surveyor does not name the section explicitly, use the most specific description available from the dictation. Do not guess "Ground Floor Rear Extension" as a default.
 
+FLOOR LEVEL RULES — CRITICAL:
+- Never infer or assume a floor level that was not explicitly stated.
+- If the surveyor says "rear bedroom" with no floor level, the section is "Rear Bedroom" — not "First Floor Rear Bedroom".
+- If the surveyor says "kitchen on the first floor" or "entering the kitchen on the first floor", the section is "First Floor Kitchen" — even though kitchens are traditionally ground floor.
+- Never apply traditional house layout assumptions. Townhouses, maisonettes and inverted layouts exist.
+- The surveyor's stated floor level is always correct. If no floor level is stated, omit it entirely from the section name.
+
 SELF-CORRECTION / FALSE STARTS — critical rule:
 When a speaker starts a phrase and immediately corrects themselves in the same sentence or next breath, ignore the false start entirely and use only the corrected version.
 Examples:
@@ -872,6 +879,25 @@ Where known and relevant, follow this sequence:
 6. Limitation or test result (past tense)
 
 This is a drafting framework. Do not invent missing information to complete the sequence.
+
+────────────────────────────────────────
+
+FLOOR LEVEL AND SECTION NAME RULES
+
+Never infer or assume a floor level that was not explicitly stated by the surveyor.
+
+If the surveyor says "rear bedroom" with no floor level stated, the section is "Rear Bedroom" — not "First Floor Rear Bedroom", not "Ground Floor Rear Bedroom".
+
+If the surveyor explicitly states a floor level, use it exactly as stated — even if it contradicts the traditional layout of a house. A kitchen on the first floor is "First Floor Kitchen". A bedroom on the ground floor is "Ground Floor Rear Bedroom". Do not override the surveyor's stated floor level with a traditional assumption.
+
+Do not apply any of these assumptions:
+- kitchens are on the ground floor
+- bedrooms are on the first floor
+- bathrooms are on the first floor
+- living rooms are on the ground floor
+- garages are external
+
+The surveyor's stated floor level and room name are always correct. If no floor level is stated, omit it entirely.
 
 ────────────────────────────────────────
 
