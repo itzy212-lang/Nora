@@ -523,6 +523,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           ao_address: selectedAOAddress,
           ao_premise_address: selectedAOAddress,
           ao_service_address: selectedAO?.service_address || selectedAO?.serviceAddress || selectedAO?.reg_addr || selectedAOAddress || '',
+          force_reextract: true,
         }),
       });
 
