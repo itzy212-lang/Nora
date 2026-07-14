@@ -3532,6 +3532,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         s10ServedDate: noticeDate,
         s10_deadline: deadline,
         s10Deadline: deadline,
+        consent_deadline: '',
+        consentDeadline: '',
       });
 
       if (createDeadlineTask) {
