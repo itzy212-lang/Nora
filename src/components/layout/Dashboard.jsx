@@ -116,14 +116,16 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   // Helper — does an AO show as RED on the project list (i.e. needs urgent attention)
   const aoIsRed = (ao) => {
     const st = (ao?.status || '').toLowerCase();
+    const now = Date.now();
     if (ao?.award_served_date || ao?.awardServedDate || st === 'complete') return false;
-    // S10 deadline overdue
-    if (st === 's10' || st === 'notice_served') {
-      const deadline = ao?.s10_deadline || ao?.s10Deadline || ao?.consent_deadline || ao?.consentDeadline || '';
-      if (deadline && new Date(deadline) < new Date()) return true;
-    }
-    // Dissent with no surveyor appointed
-    if (st === 'dissent' && !ao?.ao_surveyor_name && !ao?.aoSurveyorName) return true;
+    if (ao?.s104b_served_date || ao?.s104bServedDate) return false;
+    const hasSurveyor = !!(ao?.surv_name || ao?.surveyorName || ao?.ao_surveyor_name || ao?.aoSurveyorName || ao?.agreed_surveyor || ao?.agreedSurveyor);
+    if (st === 'dissent' && hasSurveyor) return false;
+    if (st === 'dissent' && !hasSurveyor) return true;
+    const cd = ao?.consent_deadline || ao?.consentDeadline || '';
+    if (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) return true;
+    const sd = ao?.s10_deadline || ao?.s10Deadline || '';
+    if (sd && new Date(sd).getTime() < now && st !== 'dissent') return true;
     return false;
   };
 
