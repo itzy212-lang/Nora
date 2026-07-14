@@ -602,6 +602,14 @@ ACTIVE RETRIEVAL — before completing the brief, explicitly search the supplied
 For each relevant quote: include it verbatim in exact_quotes_relevant.
 If nothing relevant exists: write "none found" — do not invent.
 
+CONFLICT DETECTION — this is mandatory. After extracting prior commitments and the user's current dictation, explicitly compare them:
+- Does the user's current instruction contradict or differ from a prior commitment, agreed position, or previously stated amount?
+- Has a fee, sum, deadline or scope changed from what was previously stated or agreed?
+- Is the user about to send something that conflicts with what they previously told the other party?
+
+For each conflict found: state what was previously committed and what the current dictation says. Be specific — include dates and amounts where available.
+If no conflicts exist: write "none" in the conflicts field — do not invent conflicts.
+
 Return ONLY valid JSON matching the schema below. No preamble. No explanation. No markdown.
 
 {
@@ -644,7 +652,15 @@ Return ONLY valid JSON matching the schema below. No preamble. No explanation. N
   "recommended_drafting_strategy": "",
   "tone_register": "formal | professional-conversational | warm | firm",
   "do_not_include": [],
-  "must_include": []
+  "must_include": [],
+  "conflicts": [
+    {
+      "description": "what conflicts",
+      "prior_commitment": "what was previously said or agreed",
+      "current_instruction": "what the user is now saying",
+      "date_of_prior": "date if known"
+    }
+  ]
 }`;
 
   const stage1User = [
@@ -1448,6 +1464,16 @@ async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBun
       (repLock ? '\n\n' + repLock : '') +
       '\n\n# STRUCTURED BRIEF FROM RESEARCH ASSISTANT\n\n' + briefJson +
       terminologyBlock + concessionsBlock + mustBlock + dontBlock +
+      ((() => {
+        const conflicts = (stage1Brief.conflicts || []).filter(c => c.description && c.description !== 'none');
+        if (!conflicts.length) return '';
+        return '\n\nCONFLICTS DETECTED — READ BEFORE DRAFTING:\n' +
+          'The research assistant has identified the following conflicts between the user\'s current instruction and prior project commitments.\n' +
+          'You must flag these to the user BEFORE drafting. Do not silently proceed if a conflict exists.\n' +
+          conflicts.map(c =>
+            `- ${c.description}\n  Previously committed: "${c.prior_commitment}"\n  Current instruction: "${c.current_instruction}"${c.date_of_prior ? '\n  Date: ' + c.date_of_prior : ''}`
+          ).join('\n\n');
+      })()) +
       '\n\n# OUTPUT RULES' +
       '\n- Output only the completed correspondence' +
       '\n- Begin with the greeting. Use the recipient\'s actual first name from the brief — not Whisper transcription' +
