@@ -45,7 +45,7 @@ function getProjectColour(project) {
       if (daysLeft >= 0 && daysLeft <= 3) return true;
     }
     // Dissent with no surveyor and no agreed surveyor
-    if (st === 'dissent' && !ao.agreed_surveyor && !ao.surv_name && !ao.surveyorName) return true;
+    if (st === 'dissent' && !ao.agreed_surveyor && !ao.surv_name && !ao.surveyorName && !ao.ao_surveyor_name && !ao.aoSurveyorName) return true;
     // Stale 10-13 days
     const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
     const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
@@ -139,7 +139,8 @@ function ProjectCard({ project, onClick }) {
       const st = (ao?.status || '').toLowerCase();
       if (ao?.award_served_date || ao?.awardServedDate || st === 'complete') return null; // done, don't show
       if (ao?.award_generated_at || ao?.awardGeneratedAt || st === 'award') return { label: 'Award drafted — serve', colour: '#f59e0b' };
-      if (st === 'dissent') return { label: 'Dissent received', colour: '#ef4444' };
+      if (st === 'dissent' && !ao.surv_name && !ao.surveyorName && !ao.ao_surveyor_name && !ao.aoSurveyorName && !ao.agreed_surveyor) return { label: 'Dissent — no surveyor', colour: '#ef4444' };
+      if (st === 'dissent') return null; // surveyor appointed — no urgent action
       if (st === 'consent') return { label: 'Consent received', colour: '#22c55e' };
       if (st === 's10') {
         const sd = ao?.s10_deadline || ao?.s10Deadline || '';

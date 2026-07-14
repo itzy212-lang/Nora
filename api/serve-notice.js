@@ -103,6 +103,17 @@ export default async function handler(req, res) {
       section_2_subsections: noticeType === 'section_2' ? section2Subsections : null,
     });
 
+    // Supersede any previous Section 10 notices for this AO
+    if (isS10) {
+      await supabase.from('notices')
+        .update({ status: 'superseded' })
+        .eq('project_id', projectId)
+        .eq('ao_id', aoId)
+        .eq('section_10', true)
+        .eq('status', 'served')
+        .neq('id', notice.id);
+    }
+
     return res.status(200).json({
       success: true,
       notice,
