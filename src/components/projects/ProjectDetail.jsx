@@ -3661,6 +3661,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       patch.dissentReceivedDate = todayISODate();
     }
 
+    // When dissent received, clear all countdown deadlines — they're no longer relevant
+    if (status === 'dissent') {
+      patch.s10_deadline = '';
+      patch.s10Deadline = '';
+      patch.consent_deadline = '';
+      patch.consentDeadline = '';
+    }
+
     await updateAORecord(ao, patch);
 
     // Close any open deadline tasks for this AO when consent or dissent is received
