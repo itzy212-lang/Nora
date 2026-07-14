@@ -19,10 +19,15 @@ function getProjectColour(project) {
     const resolved = ['consent', 'complete', 'award_served'].includes(st);
     const awardServed = !!(ao.award_served_date || ao.awardServedDate);
     if (resolved || awardServed) return false;
-    // Overdue consent deadline
+    // Dissent with surveyor appointed — not red regardless of deadlines
+    const hasSurveyor = !!(ao.surv_name || ao.surveyorName || ao.ao_surveyor_name || ao.aoSurveyorName || ao.agreed_surveyor || ao.agreedSurveyor);
+    if (st === 'dissent' && hasSurveyor) return false;
+    // 10(4)(b) served — not red
+    if (ao.s104b_served_date || ao.s104bServedDate) return false;
+    // Overdue consent deadline (only if not dissent)
     if (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) return true;
-    // Overdue S10 deadline
-    if (sd && new Date(sd).getTime() < now) return true;
+    // Overdue S10 deadline (only if not dissent with surveyor)
+    if (sd && new Date(sd).getTime() < now && st !== 'dissent') return true;
     // Stale — no progress for 14+ days
     const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
     const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
