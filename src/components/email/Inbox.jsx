@@ -1931,7 +1931,9 @@ if (syncErr) throw syncErr;
       (e.sender_email || '').toLowerCase().includes(q) ||
       (e.subject || '').toLowerCase().includes(q) ||
       toNames.toLowerCase().includes(q) ||
-      toEmailsStr.toLowerCase().includes(q)
+      toEmailsStr.toLowerCase().includes(q) ||
+      (e.body_preview || '').toLowerCase().includes(q) ||
+      (e.body || '').toLowerCase().includes(q)
     );
   });
 
