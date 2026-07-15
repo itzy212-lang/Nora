@@ -27,11 +27,36 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
   const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
 
-  // Try to suggest a starting split from the description — split on common separators (and, comma, semicolon)
+  // Try to suggest a starting split. Two patterns handled:
+  // 1) Room-count breakdown e.g. "Counted across all rooms: Kitchen 3, Living 4, Bedroom 1 2" — split into one row per room, title = original item title, room = detected room
+  // 2) Generic multi-task description e.g. "Excavation, foundations and construction of flank wall" — split into one row per phrase
   const suggestSplit = () => {
-    const text = item.description || item.title || '';
-    const parts = text.split(/,|;|\band\b/i).map(s => s.trim()).filter(s => s.length > 2);
-    if (parts.length >= 2) return parts.slice(0, 6).map(p => ({ title: p, description: '', room_id: '', cost: '' }));
+    const text = item.description || '';
+    const roomNames = rooms.map(r => (r.name || '').trim()).filter(Boolean).sort((a, b) => b.length - a.length);
+
+    // Pattern 1: room-count breakdown — look for "<RoomName> <number>" pairs anywhere in the text
+    if (roomNames.length) {
+      const roomMatches = [];
+      const lowerText = text.toLowerCase();
+      for (const roomName of roomNames) {
+        const re = new RegExp(`${roomName.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\s*(\\d+)`, 'i');
+        const m = lowerText.match(re);
+        if (m) {
+          const room = rooms.find(r => (r.name || '').trim().toLowerCase() === roomName.toLowerCase());
+          roomMatches.push({ title: `${item.title} — ${room.name}`, description: `Qty: ${m[1]}`, room_id: room.id, cost: '' });
+        }
+      }
+      if (roomMatches.length >= 2) return roomMatches;
+    }
+
+    // Pattern 2: generic multi-phrase split — only trigger if description looks like a genuine list of separate tasks
+    // (avoid mangling free text — require at least 2 comma/semicolon-separated segments each with 2+ words)
+    const parts = text.split(/,|;/).map(s => s.trim()).filter(s => s.split(/\s+/).length >= 2);
+    if (parts.length >= 2 && parts.length <= 8) {
+      return parts.map(p => ({ title: p.charAt(0).toUpperCase() + p.slice(1), description: '', room_id: '', cost: '' }));
+    }
+
+    // Fallback: original item + one blank row for manual entry
     return [
       { title: item.title || '', description: item.description || '', room_id: item.room_id || '', cost: item.cost || '' },
       { title: '', description: '', room_id: '', cost: '' },
@@ -48,7 +73,15 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
 
   const handleSave = async () => {
     const validRows = rowsState.filter(r => r.title.trim());
+    const blankRowCount = rowsState.length - validRows.length;
     if (validRows.length < 1) return;
+    if (!keepOriginal && blankRowCount > 0) {
+      const proceed = window.confirm(
+        `${blankRowCount} row${blankRowCount > 1 ? 's are' : ' is'} blank and will be skipped. ` +
+        `The original item "${item.title}" will be permanently deleted and replaced with only the ${validRows.length} filled-in item(s) below. Continue?`
+      );
+      if (!proceed) return;
+    }
     setSaving(true);
 
     const created = [];
