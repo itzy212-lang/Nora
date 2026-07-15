@@ -23,6 +23,116 @@ function fmt(n) {
 }
 
 // ── Scope item modal ─────────────────────────────────────────────────────
+function DetachModal({ item, projectId, rooms, onSave, onClose }) {
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
+
+  // Try to suggest a starting split from the description — split on common separators (and, comma, semicolon)
+  const suggestSplit = () => {
+    const text = item.description || item.title || '';
+    const parts = text.split(/,|;|\band\b/i).map(s => s.trim()).filter(s => s.length > 2);
+    if (parts.length >= 2) return parts.slice(0, 6).map(p => ({ title: p, description: '', room_id: '', cost: '' }));
+    return [
+      { title: item.title || '', description: item.description || '', room_id: item.room_id || '', cost: item.cost || '' },
+      { title: '', description: '', room_id: '', cost: '' },
+    ];
+  };
+
+  const [rowsState, setRowsState] = useState(suggestSplit());
+  const [saving, setSaving] = useState(false);
+  const [keepOriginal, setKeepOriginal] = useState(false);
+
+  const updateRow = (i, field, val) => setRowsState(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
+  const addRow = () => setRowsState(prev => [...prev, { title: '', description: '', room_id: '', cost: '' }]);
+  const removeRow = (i) => setRowsState(prev => prev.filter((_, idx) => idx !== i));
+
+  const handleSave = async () => {
+    const validRows = rowsState.filter(r => r.title.trim());
+    if (validRows.length < 1) return;
+    setSaving(true);
+
+    const created = [];
+    for (let i = 0; i < validRows.length; i++) {
+      const r = validRows[i];
+      const { data } = await sb.from('scope_items').insert([{
+        project_id: projectId,
+        title: r.title.trim(),
+        description: r.description.trim() || null,
+        trade: item.trade || null,
+        subcontractor_name: item.subcontractor_name || null,
+        in_house: item.in_house || false,
+        cost: r.cost ? parseFloat(r.cost) : null,
+        markup_type: 'none',
+        client_charge: r.cost ? parseFloat(r.cost) : 0,
+        room_id: r.room_id || null,
+        position: (item.position || 0) + i,
+        extracted_by_ai: item.extracted_by_ai || false,
+      }]).select('*').single();
+      if (data) created.push(data);
+    }
+
+    if (!keepOriginal) {
+      await sb.from('scope_items').delete().eq('id', item.id);
+    }
+
+    onSave(created, keepOriginal ? null : item.id);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Detach item</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
+          Split "{item.title}" into separate scope items. Edit the titles below, allocate each to a room, and set a price if known.
+        </div>
+
+        {rowsState.map((row, i) => (
+          <div key={i} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 10, position: 'relative' }}>
+            {rowsState.length > 1 && (
+              <button onClick={() => removeRow(i)} style={{ position: 'absolute', top: 8, right: 8, background: 'transparent', border: 'none', color: '#ef4444', fontSize: 14, cursor: 'pointer' }}>✕</button>
+            )}
+            <div style={{ marginBottom: 8 }}>
+              <div style={labelStyle}>Item {i + 1} title</div>
+              <input value={row.title} onChange={e => updateRow(i, 'title', e.target.value)} placeholder="e.g. Excavation" style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <div style={labelStyle}>Room</div>
+                <select value={row.room_id} onChange={e => updateRow(i, 'room_id', e.target.value)} style={inputStyle}>
+                  <option value="">Select room / External</option>
+                  <option value="__external__">External</option>
+                  {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={labelStyle}>Price (optional)</div>
+                <input type="number" value={row.cost} onChange={e => updateRow(i, 'cost', e.target.value)} placeholder="£" style={inputStyle} />
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <button onClick={addRow} style={{ padding: '7px 14px', borderRadius: 99, background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 16 }}>
+          + Add another item
+        </button>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6b7280', marginBottom: 16, cursor: 'pointer' }}>
+          <input type="checkbox" checked={keepOriginal} onChange={e => setKeepOriginal(e.target.checked)} />
+          Keep original item as well (don't delete it)
+        </label>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 10, background: '#f3f4f6', color: '#374151', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding: '9px 18px', borderRadius: 10, background: '#f59e0b', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Detaching...' : `Detach into ${rowsState.filter(r => r.title.trim()).length} items`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
@@ -822,6 +932,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [stageModal, setStageModal] = useState(null);
   const [scopeItems, setScopeItems] = useState([]);
   const [scopeModal, setScopeModal] = useState(null);
+  const [detachModal, setDetachModal] = useState(null);
   const [scopeLoading, setScopeLoading] = useState(false);
   const [selectedScopeIds, setSelectedScopeIds] = useState(new Set());
   const [drawingExtracting, setDrawingExtracting] = useState(false);
@@ -1871,6 +1982,12 @@ Proceed?`
                 <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Price each item — costs flow into financials and payment schedule</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {selectedScopeIds.size === 1 && (
+                  <button onClick={() => setDetachModal(scopeItems.find(s => selectedScopeIds.has(s.id)))}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#f59e0b', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    ⊗ Detach item
+                  </button>
+                )}
                 {selectedScopeIds.size >= 2 && (
                   <button onClick={async () => {
                     const selected = scopeItems.filter(s => selectedScopeIds.has(s.id));
@@ -2751,6 +2868,24 @@ Proceed?`
         )}
 
       </div>
+
+      {/* Detach item modal */}
+      {detachModal && (
+        <DetachModal
+          item={detachModal}
+          projectId={project.id}
+          rooms={rooms}
+          onSave={(createdItems, deletedId) => {
+            setScopeItems(prev => {
+              const withoutDeleted = deletedId ? prev.filter(s => s.id !== deletedId) : prev;
+              return [...withoutDeleted, ...createdItems].sort((a, b) => (a.position || 0) - (b.position || 0));
+            });
+            setSelectedScopeIds(new Set());
+            setDetachModal(null);
+          }}
+          onClose={() => setDetachModal(null)}
+        />
+      )}
 
       {/* Scope item modal */}
       {scopeModal && (
