@@ -908,7 +908,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'scope', 'programme', 'payments', 'rooms', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TABS = ['overview', 'scope', 'rooms', 'programme', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
   const handleDeletePMProject = async () => {
     if (!window.confirm('Delete this project and all its records? This cannot be undone.')) return;
@@ -1948,6 +1948,7 @@ Proceed?`
                       // Process all files and merge results
                       const allItems = [];
                       const allExtractedFiles = [];
+                      const allExtractedRoomNames = new Set();
                       for (const file of files) {
                         const formData = new FormData();
                         formData.append('file', file);
@@ -1961,11 +1962,40 @@ Proceed?`
                             allExtractedFiles.push({ file, items: json.extracted.scope_items, extracted: json.extracted });
                           }
                         }
+                        if (json.extracted?.rooms?.length) {
+                          json.extracted.rooms.forEach(r => { if (r && String(r).trim()) allExtractedRoomNames.add(String(r).trim()); });
+                        }
                       }
                       if (allItems.length === 0) {
                         setDrawingError('No scope items found in the uploaded files.');
                         return;
                       }
+
+                      // Auto-create rooms from drawing extraction — skip any that already exist (case-insensitive match)
+                      const existingRoomNames = new Set(rooms.map(r => (r.name || '').trim().toLowerCase()));
+                      const roomsToCreate = [...allExtractedRoomNames].filter(name => !existingRoomNames.has(name.toLowerCase()));
+                      const createdRooms = [];
+                      for (let i = 0; i < roomsToCreate.length; i++) {
+                        const { data: newRoom } = await sb.from('project_rooms').insert([{
+                          project_id: project.id,
+                          name: roomsToCreate[i].toUpperCase(),
+                          position: rooms.length + i,
+                        }]).select('*').single();
+                        if (newRoom) createdRooms.push(newRoom);
+                      }
+                      if (createdRooms.length) setRooms(prev => [...prev, ...createdRooms]);
+                      // Combined room lookup — existing + newly created, name (lowercase) -> id
+                      const roomLookup = {};
+                      [...rooms, ...createdRooms].forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
+
+                      // Try to match each scope item to a single room if its description clearly indicates one room only
+                      // (multi-room items with per-room breakdowns are left unlinked at item level — room_id stays null,
+                      //  per-room quantities belong in scope_item_rooms once that table exists)
+                      const matchRoomIdForItem = (item) => {
+                        const text = `${item.title || ''} ${item.description || ''}`.toLowerCase();
+                        const matches = Object.keys(roomLookup).filter(name => name && text.includes(name));
+                        return matches.length === 1 ? roomLookup[matches[0]] : null;
+                      };
 
                       // Dual AI verification — send to Claude to check GPT's work
                       if (dualAIEnabled && allExtractedFiles.length > 0) {
@@ -2007,6 +2037,7 @@ Proceed?`
                           markup_type: 'none',
                           client_charge: 0,
                           cost: null,
+                          room_id: matchRoomIdForItem(item),
                         }]).select('*').single();
                         if (newItem) saved.push(newItem);
                       }
