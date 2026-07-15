@@ -27,39 +27,48 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
   const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
 
-  // Try to suggest a starting split. Two patterns handled:
-  // 1) Room-count breakdown e.g. "Counted across all rooms: Kitchen 3, Living 4, Bedroom 1 2" — split into one row per room, title = original item title, room = detected room
-  // 2) Generic multi-task description e.g. "Excavation, foundations and construction of flank wall" — split into one row per phrase
+  // Suggest a starting split. Two patterns handled:
+  // 1) Room-count breakdown e.g. "Counted across all rooms: Kitchen 3, Living 4, Bedroom 1 2" —
+  //    one row PER ROOM, title always stays the original item title, quantity is its own field.
+  // 2) Generic multi-task description e.g. "Excavation, foundations and construction of flank wall" —
+  //    one row per phrase, quantity defaults to 1.
   const suggestSplit = () => {
     const text = item.description || '';
-    const roomNames = rooms.map(r => (r.name || '').trim()).filter(Boolean).sort((a, b) => b.length - a.length);
 
-    // Pattern 1: room-count breakdown — look for "<RoomName> <number>" pairs anywhere in the text
-    if (roomNames.length) {
+    // Pattern 1: room-count breakdown. Sort room names longest-first so "Bedroom 1" doesn't get
+    // shadowed by a shorter overlapping name, and remove each match from the text as we go so the
+    // same fragment can't be matched twice.
+    const roomsSorted = [...rooms].filter(r => r.name).sort((a, b) => (b.name.length - a.name.length));
+    if (roomsSorted.length) {
+      let remaining = text;
       const roomMatches = [];
-      const lowerText = text.toLowerCase();
-      for (const roomName of roomNames) {
-        const re = new RegExp(`${roomName.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\s*(\\d+)`, 'i');
-        const m = lowerText.match(re);
+      for (const room of roomsSorted) {
+        const escaped = room.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp('(^|[,;:]\\s*)' + escaped + '\\s+(\\d+)', 'i');
+        const m = remaining.match(re);
         if (m) {
-          const room = rooms.find(r => (r.name || '').trim().toLowerCase() === roomName.toLowerCase());
-          roomMatches.push({ title: `${item.title} — ${room.name}`, description: `Qty: ${m[1]}`, room_id: room.id, cost: '' });
+          roomMatches.push({ title: item.title || '', description: '', room_id: room.id, quantity: m[2], cost: '' });
+          remaining = remaining.replace(m[0], m[1] || '');
         }
       }
-      if (roomMatches.length >= 2) return roomMatches;
+      if (roomMatches.length >= 2) {
+        // Preserve room display order (top to bottom as in the rooms list) rather than match order
+        roomMatches.sort((a, b) => rooms.findIndex(r => r.id === a.room_id) - rooms.findIndex(r => r.id === b.room_id));
+        return roomMatches;
+      }
     }
 
-    // Pattern 2: generic multi-phrase split — only trigger if description looks like a genuine list of separate tasks
-    // (avoid mangling free text — require at least 2 comma/semicolon-separated segments each with 2+ words)
+    // Pattern 2: generic multi-phrase split — genuine list of separate tasks only
+    // (require at least 2 comma/semicolon-separated segments, each with 2+ words)
     const parts = text.split(/,|;/).map(s => s.trim()).filter(s => s.split(/\s+/).length >= 2);
     if (parts.length >= 2 && parts.length <= 8) {
-      return parts.map(p => ({ title: p.charAt(0).toUpperCase() + p.slice(1), description: '', room_id: '', cost: '' }));
+      return parts.map(p => ({ title: p.charAt(0).toUpperCase() + p.slice(1), description: '', room_id: '', quantity: '1', cost: '' }));
     }
 
     // Fallback: original item + one blank row for manual entry
     return [
-      { title: item.title || '', description: item.description || '', room_id: item.room_id || '', cost: item.cost || '' },
-      { title: '', description: '', room_id: '', cost: '' },
+      { title: item.title || '', description: item.description || '', room_id: item.room_id || '', quantity: '1', cost: item.cost || '' },
+      { title: '', description: '', room_id: '', quantity: '1', cost: '' },
     ];
   };
 
@@ -68,7 +77,7 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
   const [keepOriginal, setKeepOriginal] = useState(false);
 
   const updateRow = (i, field, val) => setRowsState(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  const addRow = () => setRowsState(prev => [...prev, { title: '', description: '', room_id: '', cost: '' }]);
+  const addRow = () => setRowsState(prev => [...prev, { title: item.title || '', description: '', room_id: '', quantity: '1', cost: '' }]);
   const removeRow = (i) => setRowsState(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
@@ -87,17 +96,19 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
     const created = [];
     for (let i = 0; i < validRows.length; i++) {
       const r = validRows[i];
+      const qty = r.quantity ? parseFloat(r.quantity) : 1;
+      const unitCost = r.cost ? parseFloat(r.cost) : null;
       const { data } = await sb.from('scope_items').insert([{
         project_id: projectId,
         title: r.title.trim(),
-        description: r.description.trim() || null,
+        description: r.description.trim() || (qty && qty !== 1 ? `Qty: ${qty}` : null),
         trade: item.trade || null,
         subcontractor_name: item.subcontractor_name || null,
         in_house: item.in_house || false,
-        cost: r.cost ? parseFloat(r.cost) : null,
+        cost: unitCost !== null ? unitCost * qty : null,
         markup_type: 'none',
-        client_charge: r.cost ? parseFloat(r.cost) : 0,
-        room_id: r.room_id || null,
+        client_charge: unitCost !== null ? unitCost * qty : 0,
+        room_id: (r.room_id && r.room_id !== '__external__') ? r.room_id : null,
         position: (item.position || 0) + i,
         extracted_by_ai: item.extracted_by_ai || false,
       }]).select('*').single();
@@ -114,10 +125,10 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Detach item</div>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
-          Split "{item.title}" into separate scope items. Edit the titles below, allocate each to a room, and set a price if known.
+          Split "{item.title}" into separate scope items — one per room. Title stays the same on each; adjust quantity, room and price as needed.
         </div>
 
         {rowsState.map((row, i) => (
@@ -127,19 +138,23 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
             )}
             <div style={{ marginBottom: 8 }}>
               <div style={labelStyle}>Item {i + 1} title</div>
-              <input value={row.title} onChange={e => updateRow(i, 'title', e.target.value)} placeholder="e.g. Excavation" style={inputStyle} />
+              <input value={row.title} onChange={e => updateRow(i, 'title', e.target.value)} placeholder="e.g. Double switched socket outlet" style={inputStyle} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr', gap: 10 }}>
               <div>
                 <div style={labelStyle}>Room</div>
                 <select value={row.room_id} onChange={e => updateRow(i, 'room_id', e.target.value)} style={inputStyle}>
-                  <option value="">Select room / External</option>
+                  <option value="">Select room</option>
                   <option value="__external__">External</option>
                   {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
               <div>
-                <div style={labelStyle}>Price (optional)</div>
+                <div style={labelStyle}>Qty</div>
+                <input type="number" value={row.quantity} onChange={e => updateRow(i, 'quantity', e.target.value)} placeholder="1" style={inputStyle} />
+              </div>
+              <div>
+                <div style={labelStyle}>Unit price (optional)</div>
                 <input type="number" value={row.cost} onChange={e => updateRow(i, 'cost', e.target.value)} placeholder="£" style={inputStyle} />
               </div>
             </div>
@@ -165,7 +180,6 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
     </div>
   );
 }
-
 function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
