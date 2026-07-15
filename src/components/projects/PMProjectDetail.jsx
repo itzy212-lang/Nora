@@ -27,17 +27,15 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box', background: '#fff', color: '#111827' };
   const labelStyle = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 };
 
-  // Suggest a starting split. Two patterns handled:
+  // Parse the item into per-room rows wherever possible. Two patterns handled:
   // 1) Room-count breakdown e.g. "Counted across all rooms: Kitchen 3, Living 4, Bedroom 1 2" —
   //    one row PER ROOM, title always stays the original item title, quantity is its own field.
   // 2) Generic multi-task description e.g. "Excavation, foundations and construction of flank wall" —
   //    one row per phrase, quantity defaults to 1.
-  const suggestSplit = () => {
+  // 3) Fallback — single row representing the whole item as-is.
+  const parseRows = () => {
     const text = item.description || '';
 
-    // Pattern 1: room-count breakdown. Sort room names longest-first so "Bedroom 1" doesn't get
-    // shadowed by a shorter overlapping name, and remove each match from the text as we go so the
-    // same fragment can't be matched twice.
     const roomsSorted = [...rooms].filter(r => r.name).sort((a, b) => (b.name.length - a.name.length));
     if (roomsSorted.length) {
       let remaining = text;
@@ -47,61 +45,48 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
         const re = new RegExp('(^|[,;:]\\s*)' + escaped + '\\s+(\\d+)', 'i');
         const m = remaining.match(re);
         if (m) {
-          roomMatches.push({ title: item.title || '', description: '', room_id: room.id, quantity: m[2], cost: '' });
+          roomMatches.push({ title: item.title || '', room_id: room.id, quantity: m[2], cost: '', checked: false });
           remaining = remaining.replace(m[0], m[1] || '');
         }
       }
       if (roomMatches.length >= 2) {
-        // Preserve room display order (top to bottom as in the rooms list) rather than match order
         roomMatches.sort((a, b) => rooms.findIndex(r => r.id === a.room_id) - rooms.findIndex(r => r.id === b.room_id));
         return roomMatches;
       }
     }
 
-    // Pattern 2: generic multi-phrase split — genuine list of separate tasks only
-    // (require at least 2 comma/semicolon-separated segments, each with 2+ words)
     const parts = text.split(/,|;/).map(s => s.trim()).filter(s => s.split(/\s+/).length >= 2);
     if (parts.length >= 2 && parts.length <= 8) {
-      return parts.map(p => ({ title: p.charAt(0).toUpperCase() + p.slice(1), description: '', room_id: '', quantity: '1', cost: '' }));
+      return parts.map(p => ({ title: p.charAt(0).toUpperCase() + p.slice(1), room_id: '', quantity: '1', cost: '', checked: false }));
     }
 
-    // Fallback: original item + one blank row for manual entry
-    return [
-      { title: item.title || '', description: item.description || '', room_id: item.room_id || '', quantity: '1', cost: item.cost || '' },
-      { title: '', description: '', room_id: '', quantity: '1', cost: '' },
-    ];
+    return [{ title: item.title || '', room_id: item.room_id || '', quantity: '1', cost: item.cost || '', checked: false }];
   };
 
-  const [rowsState, setRowsState] = useState(suggestSplit());
+  const [rowsState, setRowsState] = useState(parseRows());
   const [saving, setSaving] = useState(false);
-  const [keepOriginal, setKeepOriginal] = useState(false);
 
   const updateRow = (i, field, val) => setRowsState(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  const addRow = () => setRowsState(prev => [...prev, { title: item.title || '', description: '', room_id: '', quantity: '1', cost: '' }]);
+  const addRow = () => setRowsState(prev => [...prev, { title: item.title || '', room_id: '', quantity: '1', cost: '', checked: true }]);
   const removeRow = (i) => setRowsState(prev => prev.filter((_, idx) => idx !== i));
 
+  const checkedRows = rowsState.filter(r => r.checked && r.title.trim());
+  const remainingRows = rowsState.filter(r => !r.checked);
+
   const handleSave = async () => {
-    const validRows = rowsState.filter(r => r.title.trim());
-    const blankRowCount = rowsState.length - validRows.length;
-    if (validRows.length < 1) return;
-    if (!keepOriginal && blankRowCount > 0) {
-      const proceed = window.confirm(
-        `${blankRowCount} row${blankRowCount > 1 ? 's are' : ' is'} blank and will be skipped. ` +
-        `The original item "${item.title}" will be permanently deleted and replaced with only the ${validRows.length} filled-in item(s) below. Continue?`
-      );
-      if (!proceed) return;
-    }
+    if (checkedRows.length < 1) return;
     setSaving(true);
 
+    // Create new scope items for each checked (extracted) row
     const created = [];
-    for (let i = 0; i < validRows.length; i++) {
-      const r = validRows[i];
+    for (let i = 0; i < checkedRows.length; i++) {
+      const r = checkedRows[i];
       const qty = r.quantity ? parseFloat(r.quantity) : 1;
       const unitCost = r.cost ? parseFloat(r.cost) : null;
       const { data } = await sb.from('scope_items').insert([{
         project_id: projectId,
         title: r.title.trim(),
-        description: r.description.trim() || (qty && qty !== 1 ? `Qty: ${qty}` : null),
+        description: qty && qty !== 1 ? `Qty: ${qty}` : null,
         trade: item.trade || null,
         subcontractor_name: item.subcontractor_name || null,
         in_house: item.in_house || false,
@@ -109,36 +94,58 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
         markup_type: 'none',
         client_charge: unitCost !== null ? unitCost * qty : 0,
         room_id: (r.room_id && r.room_id !== '__external__') ? r.room_id : null,
-        position: (item.position || 0) + i,
+        position: (item.position || 0) + i + 1,
         extracted_by_ai: item.extracted_by_ai || false,
       }]).select('*').single();
       if (data) created.push(data);
     }
 
-    if (!keepOriginal) {
+    // Update or delete the original item to reflect what's left after extraction
+    let updatedOriginal = null;
+    if (remainingRows.length === 0) {
+      // Nothing left — original fully extracted, delete it
       await sb.from('scope_items').delete().eq('id', item.id);
+    } else if (remainingRows.length === 1 && !rooms.find(r => r.id === remainingRows[0].room_id)) {
+      // Single remaining row with no specific room — just keep original mostly as-is
+      updatedOriginal = item;
+    } else {
+      // Rebuild the description from what's left (room breakdown format), keep item as the "remainder"
+      const roomLookup = {};
+      rooms.forEach(r => { roomLookup[r.id] = r.name; });
+      const remainingDesc = remainingRows
+        .map(r => `${roomLookup[r.room_id] || 'Unallocated'} ${r.quantity || 1}`)
+        .join(', ');
+      const { data } = await sb.from('scope_items')
+        .update({ description: `Counted across remaining rooms: ${remainingDesc}` })
+        .eq('id', item.id)
+        .select('*')
+        .single();
+      updatedOriginal = data;
     }
 
-    onSave(created, keepOriginal ? null : item.id);
+    onSave(created, updatedOriginal);
     setSaving(false);
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Detach item</div>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
-          Split "{item.title}" into separate scope items — one per room. Title stays the same on each; adjust quantity, room and price as needed.
+          Tick the rooms you want to pull out as their own separate scope items. Anything left unticked stays on the original "{item.title}" item — nothing is lost.
         </div>
 
         {rowsState.map((row, i) => (
-          <div key={i} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 10, position: 'relative' }}>
-            {rowsState.length > 1 && (
-              <button onClick={() => removeRow(i)} style={{ position: 'absolute', top: 8, right: 8, background: 'transparent', border: 'none', color: '#ef4444', fontSize: 14, cursor: 'pointer' }}>✕</button>
-            )}
-            <div style={{ marginBottom: 8 }}>
-              <div style={labelStyle}>Item {i + 1} title</div>
-              <input value={row.title} onChange={e => updateRow(i, 'title', e.target.value)} placeholder="e.g. Double switched socket outlet" style={inputStyle} />
+          <div key={i} style={{ border: '1px solid ' + (row.checked ? '#f59e0b' : '#e5e7eb'), background: row.checked ? '#fffbeb' : '#fff', borderRadius: 10, padding: 12, marginBottom: 10, position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <input type="checkbox" checked={row.checked} onChange={e => updateRow(i, 'checked', e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+              <div style={{ flex: 1 }}>
+                <div style={labelStyle}>Item {i + 1} title</div>
+                <input value={row.title} onChange={e => updateRow(i, 'title', e.target.value)} placeholder="e.g. Double switched socket outlet" style={inputStyle} />
+              </div>
+              {rowsState.length > 1 && (
+                <button onClick={() => removeRow(i)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 14, cursor: 'pointer', alignSelf: 'flex-start', marginTop: 18 }}>✕</button>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr', gap: 10 }}>
               <div>
@@ -165,21 +172,23 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
           + Add another item
         </button>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6b7280', marginBottom: 16, cursor: 'pointer' }}>
-          <input type="checkbox" checked={keepOriginal} onChange={e => setKeepOriginal(e.target.checked)} />
-          Keep original item as well (don't delete it)
-        </label>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16, padding: '10px 12px', background: '#f9fafb', borderRadius: 8 }}>
+          {checkedRows.length === 0
+            ? 'Tick at least one row to extract it as a new item.'
+            : `${checkedRows.length} item${checkedRows.length > 1 ? 's' : ''} will be created. ${remainingRows.length} room${remainingRows.length !== 1 ? 's' : ''} will remain on the original "${item.title}" item.`}
+        </div>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 10, background: '#f3f4f6', color: '#374151', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding: '9px 18px', borderRadius: 10, background: '#f59e0b', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Detaching...' : `Detach into ${rowsState.filter(r => r.title.trim()).length} items`}
+          <button onClick={handleSave} disabled={saving || checkedRows.length === 0} style={{ padding: '9px 18px', borderRadius: 10, background: '#f59e0b', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (saving || checkedRows.length === 0) ? 0.6 : 1 }}>
+            {saving ? 'Extracting...' : `Extract ${checkedRows.length} item${checkedRows.length !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
@@ -2922,10 +2931,11 @@ Proceed?`
           item={detachModal}
           projectId={project.id}
           rooms={rooms}
-          onSave={(createdItems, deletedId) => {
+          onSave={(createdItems, updatedOriginal) => {
             setScopeItems(prev => {
-              const withoutDeleted = deletedId ? prev.filter(s => s.id !== deletedId) : prev;
-              return [...withoutDeleted, ...createdItems].sort((a, b) => (a.position || 0) - (b.position || 0));
+              const withoutOriginal = prev.filter(s => s.id !== detachModal.id);
+              const rebuilt = updatedOriginal ? [...withoutOriginal, updatedOriginal] : withoutOriginal;
+              return [...rebuilt, ...createdItems].sort((a, b) => (a.position || 0) - (b.position || 0));
             });
             setSelectedScopeIds(new Set());
             setDetachModal(null);
