@@ -1989,12 +1989,34 @@ Proceed?`
                       [...rooms, ...createdRooms].forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
 
                       // Try to match each scope item to a single room if its description clearly indicates one room only
-                      // (multi-room items with per-room breakdowns are left unlinked at item level — room_id stays null,
-                      //  per-room quantities belong in scope_item_rooms once that table exists)
                       const matchRoomIdForItem = (item) => {
                         const text = `${item.title || ''} ${item.description || ''}`.toLowerCase();
                         const matches = Object.keys(roomLookup).filter(name => name && text.includes(name));
                         return matches.length === 1 ? roomLookup[matches[0]] : null;
+                      };
+
+                      // Parse per-room quantity breakdown from description text, e.g.
+                      // "Kitchen 3, Living 4, Bedroom 1 2" -> [{room:'kitchen',qty:3},{room:'living',qty:4},{room:'bedroom 1',qty:2}]
+                      // Matches "RoomName <number>" pairs, comma or semicolon separated, room names matched against known rooms (longest name first).
+                      const parseRoomBreakdown = (item) => {
+                        const text = item.description || '';
+                        if (!text) return [];
+                        const roomNames = Object.keys(roomLookup).filter(Boolean).sort((a, b) => b.length - a.length);
+                        if (!roomNames.length) return [];
+                        const results = [];
+                        // Split on commas/semicolons, then match "<room name> <qty>" within each segment
+                        const segments = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+                        for (const seg of segments) {
+                          const lower = seg.toLowerCase();
+                          const matchedRoom = roomNames.find(name => lower.includes(name));
+                          if (!matchedRoom) continue;
+                          const numMatch = seg.match(/(\d+)\s*$/) || seg.match(/(\d+)/);
+                          if (!numMatch) continue;
+                          const qty = parseInt(numMatch[1], 10);
+                          if (!qty || qty <= 0) continue;
+                          results.push({ room_id: roomLookup[matchedRoom], quantity: qty });
+                        }
+                        return results;
                       };
 
                       // Dual AI verification — send to Claude to check GPT's work
@@ -2025,8 +2047,10 @@ Proceed?`
 
                       // Save all items to scope_items table
                       const saved = [];
+                      const roomLinksToInsert = [];
                       for (let i = 0; i < allItems.length; i++) {
                         const item = allItems[i];
+                        const breakdown = parseRoomBreakdown(item);
                         const { data: newItem } = await sb.from('scope_items').insert([{
                           project_id: project.id,
                           title: item.title,
@@ -2037,9 +2061,15 @@ Proceed?`
                           markup_type: 'none',
                           client_charge: 0,
                           cost: null,
-                          room_id: matchRoomIdForItem(item),
+                          room_id: breakdown.length ? null : matchRoomIdForItem(item),
                         }]).select('*').single();
-                        if (newItem) saved.push(newItem);
+                        if (newItem) {
+                          saved.push(newItem);
+                          breakdown.forEach(b => roomLinksToInsert.push({ scope_item_id: newItem.id, room_id: b.room_id, quantity: b.quantity }));
+                        }
+                      }
+                      if (roomLinksToInsert.length) {
+                        await sb.from('scope_item_rooms').insert(roomLinksToInsert);
                       }
                       setScopeItems(prev => [...prev, ...saved]);
                       setDrawingError('');
