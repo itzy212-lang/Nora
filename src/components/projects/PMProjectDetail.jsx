@@ -2038,6 +2038,78 @@ Proceed?`
                 <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Price each item — costs flow into financials and payment schedule</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {project.quote_status !== 'accepted' && scopeItems.length > 0 && (
+                  <button onClick={async () => {
+                    const proceed = window.confirm(
+                      `Accept quote and generate the programme?\n\n` +
+                      `This will create ${scopeItems.length} programme task(s) from your scope items, carrying over room allocation and pricing. ` +
+                      `You'll then just need to add dates. This can be done again later if you add more scope items.`
+                    );
+                    if (!proceed) return;
+
+                    // Fetch per-room breakdowns for all scope items in one go
+                    const { data: allBreakdowns } = await sb.from('scope_item_rooms').select('*').in('scope_item_id', scopeItems.map(s => s.id));
+                    const breakdownsByItem = {};
+                    (allBreakdowns || []).forEach(b => {
+                      if (!breakdownsByItem[b.scope_item_id]) breakdownsByItem[b.scope_item_id] = [];
+                      breakdownsByItem[b.scope_item_id].push(b);
+                    });
+
+                    const newTasks = [];
+                    let position = tasks.length;
+                    for (const item of scopeItems) {
+                      const breakdown = breakdownsByItem[item.id] || [];
+                      if (breakdown.length > 0) {
+                        // Item spans multiple rooms — one programme task per room, value split proportionally by quantity
+                        const totalQty = breakdown.reduce((s, b) => s + parseFloat(b.quantity || 0), 0) || 1;
+                        for (const b of breakdown) {
+                          const share = parseFloat(b.quantity || 0) / totalQty;
+                          newTasks.push({
+                            project_id: project.id,
+                            title: item.title,
+                            trade: item.trade || null,
+                            room_id: b.room_id,
+                            contractor: item.subcontractor_name || null,
+                            in_house: item.in_house || false,
+                            task_value: item.client_charge ? Math.round(item.client_charge * share * 100) / 100 : null,
+                            status: 'not_started',
+                            position: position++,
+                          });
+                        }
+                      } else {
+                        // Single item — one task, room already linked or null (External)
+                        newTasks.push({
+                          project_id: project.id,
+                          title: item.title,
+                          trade: item.trade || null,
+                          room_id: item.room_id || null,
+                          contractor: item.subcontractor_name || null,
+                          in_house: item.in_house || false,
+                          task_value: item.client_charge || null,
+                          status: 'not_started',
+                          position: position++,
+                        });
+                      }
+                    }
+
+                    const { data: createdTasks } = await sb.from('programme_tasks').insert(newTasks).select('*');
+                    if (createdTasks) setTasks(prev => [...prev, ...createdTasks]);
+
+                    const contractValue = scopeItems.reduce((s, i) => s + parseFloat(i.client_charge || 0), 0);
+                    await sb.from('projects').update({ quote_status: 'accepted', contract_value: contractValue }).eq('id', project.id);
+                    setProject(prev => ({ ...prev, quote_status: 'accepted', contract_value: contractValue }));
+
+                    alert(`Programme generated with ${createdTasks?.length || 0} task(s). Head to the Programme tab to add dates.`);
+                  }}
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#10b981', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    ✓ Accept Quote
+                  </button>
+                )}
+                {project.quote_status === 'accepted' && (
+                  <div style={{ padding: '7px 14px', borderRadius: 99, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: 12, fontWeight: 600 }}>
+                    ✓ Quote accepted — programme generated
+                  </div>
+                )}
                 {selectedScopeIds.size === 1 && (
                   <button onClick={() => setDetachModal(scopeItems.find(s => selectedScopeIds.has(s.id)))}
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#f59e0b', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
