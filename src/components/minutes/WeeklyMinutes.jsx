@@ -13,8 +13,10 @@ const SEVERITY_COLOURS = {
 export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer }) {
   const { state } = useApp();
   const projects = state.projects || [];
+  const isMobile = window.innerWidth < 768;
 
-  const [phase, setPhase] = useState('setup'); // setup | recording | preview
+  const [phase, setPhase] = useState('landing'); // landing | recording | preview
+  const [mobileView, setMobileView] = useState('tasks'); // tasks | visits (mobile only)
   const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [sessionId, setSessionId] = useState(null);
   const [weekLabel, setWeekLabel] = useState('Week 1');
@@ -27,6 +29,9 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+
+  const [openTasks, setOpenTasks] = useState([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
   const [draft, setDraft] = useState(null);
   const [missedTasks, setMissedTasks] = useState([]);
@@ -60,8 +65,38 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     setLoadingSessions(false);
   };
 
+  const loadOpenTasks = async (pid) => {
+    if (!pid) return;
+    setLoadingTasks(true);
+    try {
+      const res = await fetch('/api/generate-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_open_tasks', project_id: pid }),
+      });
+      const json = await res.json();
+      setOpenTasks(json.tasks || []);
+    } catch (err) {
+      console.error('[WeeklyMinutes] load open tasks failed', err);
+    }
+    setLoadingTasks(false);
+  };
+
+  const closeTask = async (taskId) => {
+    setOpenTasks(prev => prev.filter(t => t.id !== taskId));
+    try {
+      await fetch('/api/generate-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close_task', task_id: taskId, closed_by: 'manual' }),
+      });
+    } catch (err) {
+      console.error('[WeeklyMinutes] close task failed', err);
+    }
+  };
+
   useEffect(() => {
-    if (projectId) loadSessionHistory(projectId);
+    if (projectId) { loadSessionHistory(projectId); loadOpenTasks(projectId); }
   }, [projectId]);
 
   const startNewSession = async () => {
@@ -73,30 +108,19 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     setPhase('recording');
     setSidebarOpen(false);
 
-    // Pre-visit summary — pull open tasks so nothing gets forgotten
-    try {
-      const res = await fetch('/api/generate-minutes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list_open_tasks', project_id: projectId }),
-      });
-      const json = await res.json();
-      const openTasks = json.tasks || [];
-      if (openTasks.length) {
-        const list = openTasks.map(t => {
-          const roomName = t.project_rooms?.name;
-          return `• ${t.title}${roomName ? ` (${roomName})` : ''}`;
-        }).join('\n');
-        setMessages([{
-          id: uid(),
-          role: 'ely',
-          content: `Before we start — ${openTasks.length} task${openTasks.length > 1 ? 's' : ''} still open from previous visits:\n\n${list}\n\nMention any that are resolved and I'll close them off. Ready when you are.`,
-        }]);
-      } else {
-        setMessages([{ id: uid(), role: 'ely', content: 'No outstanding tasks from previous visits. Ready when you are.' }]);
-      }
-    } catch (err) {
-      console.error('[WeeklyMinutes] pre-visit summary failed', err);
+    // Pre-visit summary — use already-loaded open tasks so nothing gets forgotten
+    if (openTasks.length) {
+      const list = openTasks.map(t => {
+        const roomName = t.project_rooms?.name;
+        return `• ${t.title}${roomName ? ` (${roomName})` : ''}`;
+      }).join('\n');
+      setMessages([{
+        id: uid(),
+        role: 'ely',
+        content: `Before we start — ${openTasks.length} task${openTasks.length > 1 ? 's' : ''} still open from previous visits:\n\n${list}\n\nMention any that are resolved and I'll close them off. Ready when you are.`,
+      }]);
+    } else {
+      setMessages([{ id: uid(), role: 'ely', content: 'No outstanding tasks from previous visits. Ready when you are.' }]);
     }
   };
 
@@ -180,6 +204,7 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
         setMissedTasks(json.missed_tasks || []);
         setEmailDrafts((json.email_drafts || []).map(d => ({ ...d, id: uid(), sent: false })));
         setPhase('preview');
+        loadOpenTasks(projectId);
       } else {
         alert(json.error || 'Could not generate minutes.');
       }
@@ -292,34 +317,106 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
   };
 
   // ── Setup phase ────────────────────────────────────────────────────────
-  if (phase === 'setup') {
-    return (
-      <div style={{ padding: 24, maxWidth: 480, margin: '0 auto' }}>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Weekly Site Minutes</div>
-        <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>Select a project to begin or resume site visit dictation.</div>
-        <select value={projectId} onChange={e => setProjectId(e.target.value)}
-          style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 14, marginBottom: 16 }}>
-          <option value="">Select project...</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.bo_premise_address || p.bo_address}</option>)}
-        </select>
-        {projectId && (
-          <button onClick={startNewSession}
-            style={{ width: '100%', padding: 12, borderRadius: 10, background: '#1F2937', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            Start dictation — {weekLabel}
-          </button>
-        )}
-        {sessionHistory.length > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8 }}>PREVIOUS SESSIONS</div>
-            {sessionHistory.map(s => (
-              <div key={s.id} onClick={() => resumeSession(s)}
-                style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{s.week_label}</span>
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>{s.note_count} note{s.note_count !== 1 ? 's' : ''} · {s.status}</span>
+  if (phase === 'landing') {
+    if (!projectId) {
+      return (
+        <div style={{ padding: 24, maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Site Log</div>
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>Select a project to view its site log.</div>
+          <select value={projectId} onChange={e => setProjectId(e.target.value)}
+            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 14 }}>
+            <option value="">Select project...</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.bo_premise_address || p.bo_address}</option>)}
+          </select>
+        </div>
+      );
+    }
+
+    const TasksPanel = () => (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Open Tasks</div>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>{openTasks.length} open</span>
+        </div>
+        {loadingTasks ? (
+          <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading...</div>
+        ) : openTasks.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>No open tasks. Everything's up to date.</div>
+        ) : (
+          openTasks.map(t => {
+            const c = SEVERITY_COLOURS[t.severity] || SEVERITY_COLOURS['follow-up'];
+            const programmeTitle = t.programme_tasks?.title;
+            return (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 8 }}>
+                <button onClick={() => closeTask(t.id)}
+                  style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #d1d5db', background: '#fff', cursor: 'pointer', flexShrink: 0, marginTop: 1 }}
+                  title="Mark complete" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{t.title}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    {t.project_rooms?.name && (
+                      <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{t.project_rooms.name}</span>
+                    )}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: c.text, background: c.bg, padding: '2px 8px', borderRadius: 6 }}>{t.severity}</span>
+                    {programmeTitle && (
+                      <span style={{ fontSize: 11, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>→ {programmeTitle}</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })
         )}
+      </div>
+    );
+
+    const VisitsPanel = () => (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Visits</div>
+          <button onClick={startNewSession}
+            style={{ padding: '6px 14px', borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            + New visit — {weekLabel}
+          </button>
+        </div>
+        {sessionHistory.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>No visits recorded yet.</div>
+        ) : (
+          sessionHistory.map(s => (
+            <div key={s.id} onClick={() => resumeSession(s)}
+              style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{s.week_label}</span>
+              <span style={{ fontSize: 12, color: '#9ca3af' }}>{s.note_count} note{s.note_count !== 1 ? 's' : ''} · {s.status}</span>
+            </div>
+          ))
+        )}
+      </div>
+    );
+
+    // Desktop — split view, both visible
+    if (!isMobile) {
+      return (
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, height: '100%', overflowY: 'auto' }}>
+          <TasksPanel />
+          <div style={{ borderTop: '1px solid #e5e7eb' }} />
+          <VisitsPanel />
+        </div>
+      );
+    }
+
+    // Mobile — tasks by default, hamburger toggles to visits
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Site Log</div>
+          <button onClick={() => setMobileView(v => v === 'tasks' ? 'visits' : 'tasks')}
+            style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', padding: 4 }}>
+            ☰
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {mobileView === 'tasks' ? <TasksPanel /> : <VisitsPanel />}
+        </div>
       </div>
     );
   }
@@ -425,6 +522,8 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
         <div>
+          <button onClick={() => { setPhase('landing'); loadOpenTasks(projectId); loadSessionHistory(projectId); }}
+            style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 11, padding: 0, marginBottom: 2 }}>← Site Log</button>
           <div style={{ fontWeight: 700, fontSize: 14 }}>{weekLabel}</div>
           <div style={{ fontSize: 12, color: '#6b7280' }}>{projectAddress}</div>
         </div>

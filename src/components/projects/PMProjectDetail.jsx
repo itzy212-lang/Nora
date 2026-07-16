@@ -1077,6 +1077,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   };
 
   const TABS = ['overview', 'scope', 'rooms', 'programme', 'minutes', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TAB_LABELS = { minutes: 'Site Log' };
 
   const handleDeletePMProject = async () => {
     if (!window.confirm('Delete this project and all its records? This cannot be undone.')) return;
@@ -1138,7 +1139,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 fontWeight: tab === t ? 600 : 400,
               }}
             >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {TAB_LABELS[t] || (t.charAt(0).toUpperCase() + t.slice(1))}
             </button>
           ))}
         </div>
