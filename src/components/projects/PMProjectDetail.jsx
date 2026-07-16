@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
+import WeeklyMinutes from '../minutes/WeeklyMinutes';
 
 const card = () => ({
   background: 'var(--bg)',
@@ -1075,7 +1076,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'scope', 'rooms', 'programme', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
+  const TABS = ['overview', 'scope', 'rooms', 'programme', 'minutes', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents'];
 
   const handleDeletePMProject = async () => {
     if (!window.confirm('Delete this project and all its records? This cannot be undone.')) return;
@@ -2978,6 +2979,13 @@ Proceed?`
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Weekly Minutes tab ── */}
+        {tab === 'minutes' && (
+          <div style={{ height: 640, border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+            <WeeklyMinutes defaultProjectId={project.id} />
           </div>
         )}
 
