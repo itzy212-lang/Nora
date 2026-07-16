@@ -193,13 +193,6 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
 function PortalTab({ project, subs, card }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteType, setInviteType] = useState('client');
-  const [inviteSubId, setInviteSubId] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [lastInviteUrl, setLastInviteUrl] = useState(null);
 
   const loadUsers = () => {
     setLoading(true);
@@ -210,36 +203,6 @@ function PortalTab({ project, subs, card }) {
   };
 
   useEffect(() => { loadUsers(); }, [project.id]);
-
-  const sendInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    setInviting(true);
-    setLastInviteUrl(null);
-    try {
-      const res = await fetch('/api/portal', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'invite',
-          project_id: project.id,
-          email: inviteEmail.trim(),
-          name: inviteName.trim(),
-          user_type: inviteType,
-          subcontractor_id: inviteType === 'subcontractor' ? inviteSubId : null,
-        }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setLastInviteUrl(json.invite_url);
-        setInviteEmail(''); setInviteName(''); setInviteSubId('');
-        loadUsers();
-      } else {
-        alert(json.error || 'Could not send invite.');
-      }
-    } catch (err) {
-      alert('Could not send invite.');
-    }
-    setInviting(false);
-  };
 
   const revoke = async (portalUserId) => {
     if (!window.confirm('Revoke this user\'s portal access?')) return;
@@ -254,59 +217,8 @@ function PortalTab({ project, subs, card }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Portal Access</div>
-        <button onClick={() => setInviteOpen(v => !v)}
-          style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-          {inviteOpen ? 'Cancel' : '+ Invite'}
-        </button>
-      </div>
-
-      {inviteOpen && (
-        <div style={card()}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Type</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button onClick={() => setInviteType('client')}
-              style={{ flex: 1, padding: 8, borderRadius: 8, border: inviteType === 'client' ? 'none' : '1px solid #e5e7eb', background: inviteType === 'client' ? '#1F2937' : '#fff', color: inviteType === 'client' ? '#fff' : '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              Client
-            </button>
-            <button onClick={() => setInviteType('subcontractor')}
-              style={{ flex: 1, padding: 8, borderRadius: 8, border: inviteType === 'subcontractor' ? 'none' : '1px solid #e5e7eb', background: inviteType === 'subcontractor' ? '#1F2937' : '#fff', color: inviteType === 'subcontractor' ? '#fff' : '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              Subcontractor
-            </button>
-          </div>
-
-          {inviteType === 'subcontractor' && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Which subcontractor</div>
-              <select value={inviteSubId} onChange={e => setInviteSubId(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12 }}>
-                <option value="">Select subcontractor...</option>
-                {subs.map(s => <option key={s.id} value={s.id}>{s.name} — {s.trade}</option>)}
-              </select>
-            </>
-          )}
-
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Name</div>
-          <input value={inviteName} onChange={e => setInviteName(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
-
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Email</div>
-          <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
-
-          <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim() || (inviteType === 'subcontractor' && !inviteSubId)}
-            style={{ width: '100%', padding: 10, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (inviting || !inviteEmail.trim() || (inviteType === 'subcontractor' && !inviteSubId)) ? 0.5 : 1 }}>
-            {inviting ? 'Sending...' : 'Send invite'}
-          </button>
-
-          {lastInviteUrl && (
-            <div style={{ marginTop: 12, padding: 10, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, fontSize: 12, color: '#166534', wordBreak: 'break-all' }}>
-              Invite created. Link: {lastInviteUrl}
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Portal Access</div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Invite the client from Overview, or a subcontractor from their profile. This is a status overview of everyone with access.</div>
 
       {loading ? (
         <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading...</div>
