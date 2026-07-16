@@ -79,7 +79,7 @@ function addAliasFields(base) {
  */
 function formatS2Subsections(raw) {
   if (!raw) return '';
-  return raw
+  return String(raw)
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
@@ -137,7 +137,7 @@ export function buildNoticeRunPlaceholders(noticeRuns = []) {
       out[`notice_run_${n}_and`] = hasNext ? 'and a further Notice under' : '';
 
       // Section 2 subsections for this run (formatted as (a)(f)(j)(k))
-      const s2SubRaw = run.section_2_subsections || '';
+      const s2SubRaw = String(run.section_2_subsections || '');
       const s2SubFormatted = s2SubRaw
         ? s2SubRaw.split(',').map(s => `(${s.trim()})`).filter(s => s.length > 2).join('')
         : '';
