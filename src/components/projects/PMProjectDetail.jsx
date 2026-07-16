@@ -977,6 +977,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [subModal, setSubModal] = useState(null); // null | 'new' | {sub object}
   const [saving, setSaving] = useState(false);
   const [tasks, setTasks] = useState([]);
+  const [projectTasks, setProjectTasks] = useState([]); // unified task system from Site Log, linked to programme via linked_programme_task_id
+  const [taskPopup, setTaskPopup] = useState(null); // { x, y, tasks: [...] } — Gantt dependency arrow click
   const [tasksLoading, setTasksLoading] = useState(false);
   const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task}
   const [rooms, setRooms] = useState([]);
@@ -1038,6 +1040,12 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
         setTasks(data || []);
         setTasksLoading(false);
       });
+    sb.from('project_tasks')
+      .select('*')
+      .eq('project_id', project.id)
+      .eq('status', 'open')
+      .not('linked_programme_task_id', 'is', null)
+      .then(({ data }) => setProjectTasks(data || []));
   }, [tab, project?.id]);
 
   // Re-fetch from DB on open
@@ -2649,7 +2657,9 @@ Proceed?`
                   const depEndWithLag = new Date(dep.end_date);
                   depEndWithLag.setDate(depEndWithLag.getDate() + (lag_days || 0));
                   const clash = new Date(task.start_date) < depEndWithLag;
-                  depLines.push({ x_bar_end, x_lag_end, y1, x2, y2, clash, lag_days: lag_days || 0 });
+                  // Any open Site Log tasks linked to either side of this dependency
+                  const linkedTasks = projectTasks.filter(pt => pt.linked_programme_task_id === task.id || pt.linked_programme_task_id === dep.id);
+                  depLines.push({ x_bar_end, x_lag_end, y1, x2, y2, clash, lag_days: lag_days || 0, linkedTasks });
                 });
               });
 
@@ -2766,6 +2776,33 @@ Proceed?`
                                     </text>
                                   </g>
                                 )}
+                                {/* Linked Site Log task icon — click to view/close */}
+                                {line.linkedTasks.length > 0 && (() => {
+                                  // Escalate to red if the downstream task starts within 3 days or has already started
+                                  const downstreamTask = datedTasks[Math.round(line.y2 / ROW_H - 0.5)];
+                                  const daysToStart = downstreamTask?.start_date
+                                    ? Math.ceil((new Date(downstreamTask.start_date) - new Date()) / 86400000)
+                                    : null;
+                                  const isOverdueRisk = daysToStart !== null && daysToStart <= 3;
+                                  const iconFill = isOverdueRisk ? '#ef4444' : '#f59e0b';
+                                  const iconY = line.lag_days > 0 ? midY - 22 : midY;
+                                  return (
+                                    <g
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTaskPopup({
+                                          x: elbowX,
+                                          y: iconY,
+                                          tasks: line.linkedTasks,
+                                        });
+                                      }}
+                                    >
+                                      <circle cx={midX} cy={iconY} r={8} fill={iconFill} stroke="#fff" strokeWidth={1.5} />
+                                      <text x={midX} y={iconY + 3.5} textAnchor="middle" fontSize={10} fill="#fff" fontWeight="700">!</text>
+                                    </g>
+                                  );
+                                })()}
                               </g>
                             );
                           })}
@@ -2828,7 +2865,42 @@ Proceed?`
                       <svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,2" /></svg>
                       <span style={{ fontSize: 11, color: '#6b7280' }}>Clash</span>
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#f59e0b', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>!</div>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>Open task blocking this</span>
+                    </div>
                   </div>
+
+                  {/* Task popup — click on a dependency task icon */}
+                  {taskPopup && (
+                    <div onClick={() => setTaskPopup(null)} style={{ position: 'fixed', inset: 0, zIndex: 999 }}>
+                      <div onClick={e => e.stopPropagation()} style={{
+                        position: 'absolute', left: Math.min(taskPopup.x + LABEL_W + 40, window.innerWidth - 300), top: taskPopup.y + 100,
+                        background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, width: 280,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', marginBottom: 8 }}>Blocking task{taskPopup.tasks.length > 1 ? 's' : ''}</div>
+                        {taskPopup.tasks.map(t => (
+                          <div key={t.id} style={{ padding: '8px 10px', border: '1px solid #f3f4f6', borderRadius: 8, marginBottom: 6 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 6 }}>{t.title}</div>
+                            <button
+                              onClick={async () => {
+                                await sb.from('project_tasks').update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: 'gantt' }).eq('id', t.id);
+                                setProjectTasks(prev => prev.filter(pt => pt.id !== t.id));
+                                setTaskPopup(prev => {
+                                  const remaining = prev.tasks.filter(x => x.id !== t.id);
+                                  return remaining.length ? { ...prev, tasks: remaining } : null;
+                                });
+                              }}
+                              style={{ padding: '5px 12px', borderRadius: 6, background: '#1F2937', color: '#fff', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              Mark complete
+                            </button>
+                          </div>
+                        ))}
+                        <button onClick={() => setTaskPopup(null)} style={{ width: '100%', padding: '6px', borderRadius: 6, background: '#f3f4f6', border: 'none', fontSize: 11, color: '#6b7280', cursor: 'pointer', marginTop: 4 }}>Close</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
