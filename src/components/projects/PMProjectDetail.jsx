@@ -246,6 +246,84 @@ function PortalTab({ project, subs, card }) {
   );
 }
 
+function SubCard({ sub, projectId, card, label, fmt, setSubModal, handleDeleteSub }) {
+  const balance = parseFloat(sub.contract_value || 0) - parseFloat(sub.amount_paid || 0);
+  const [portalStatus, setPortalStatus] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [inviting, setInviting] = useState(false);
+
+  useEffect(() => {
+    if (!sub.email || checked) return;
+    fetch('/api/portal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_users', project_id: projectId }),
+    }).then(r => r.json()).then(j => {
+      const match = (j.users || []).find(u => u.email === sub.email.toLowerCase().trim() && u.invite_status !== 'revoked');
+      if (match) setPortalStatus(match.invite_status);
+      setChecked(true);
+    }).catch(() => setChecked(true));
+  }, [sub.email, checked, projectId]);
+
+  const sendInvite = async () => {
+    if (!sub.email) return;
+    setInviting(true);
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'invite', project_id: projectId, email: sub.email, name: sub.name, user_type: 'subcontractor', subcontractor_id: sub.id }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setPortalStatus('pending');
+        window.prompt('Invite created — copy this link to send to the subcontractor:', json.invite_url);
+      } else {
+        alert(json.error || 'Could not send invite.');
+      }
+    } catch (err) {
+      alert('Could not send invite.');
+    }
+    setInviting(false);
+  };
+
+  return (
+    <div style={card()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{sub.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{sub.trade}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {sub.email && (
+            portalStatus ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>
+            ) : (
+              <button onClick={sendInvite} disabled={inviting} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', opacity: inviting ? 0.5 : 1 }}>
+                {inviting ? 'Sending...' : '📧 Invite'}
+              </button>
+            )
+          )}
+          <button onClick={() => setSubModal(sub)} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+          <button onClick={() => handleDeleteSub(sub.id)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <div>
+          <div style={label}>Contract</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{fmt(sub.contract_value)}</div>
+        </div>
+        <div>
+          <div style={label}>Paid</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{fmt(sub.amount_paid)}</div>
+        </div>
+        <div>
+          <div style={label}>Owed</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: balance > 0 ? 'var(--amber, #d97706)' : 'var(--green)' }}>{fmt(balance)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
@@ -2120,37 +2198,7 @@ Proceed?`
                 No subcontractors yet. Add them to track costs and payments.
               </div>
             ) : (
-              subs.map(sub => {
-                const balance = parseFloat(sub.contract_value || 0) - parseFloat(sub.amount_paid || 0);
-                return (
-                  <div key={sub.id} style={card()}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{sub.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{sub.trade}</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setSubModal(sub)} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
-                        <button onClick={() => handleDeleteSub(sub.id)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                      <div>
-                        <div style={label}>Contract</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{fmt(sub.contract_value)}</div>
-                      </div>
-                      <div>
-                        <div style={label}>Paid</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{fmt(sub.amount_paid)}</div>
-                      </div>
-                      <div>
-                        <div style={label}>Owed</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: balance > 0 ? 'var(--amber, #d97706)' : 'var(--green)' }}>{fmt(balance)}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              subs.map(sub => <SubCard key={sub.id} sub={sub} projectId={project.id} card={card} label={label} fmt={fmt} setSubModal={setSubModal} handleDeleteSub={handleDeleteSub} />)
             )}
 
             {/* Totals */}
