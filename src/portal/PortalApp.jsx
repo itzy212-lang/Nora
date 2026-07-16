@@ -214,23 +214,52 @@ function ResetPasswordScreen({ token, onReset }) {
   );
 }
 
-function ExpandableTaskCard({ t, sessionToken, onMarkedComplete }) {
+function ExpandableTaskCard({ t, sessionToken, onUpdated }) {
   const [open, setOpen] = useState(false);
-  const [marking, setMarking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [delayOpen, setDelayOpen] = useState(false);
+  const [delayStart, setDelayStart] = useState('');
+  const [delayEnd, setDelayEnd] = useState('');
+  const [delayReason, setDelayReason] = useState('');
+  const [delaySent, setDelaySent] = useState(false);
+
   const isPending = !!t.marked_complete_at;
   const isDone = t.status === 'complete';
+  const isInProgress = t.status === 'in_progress';
 
-  const handleMarkComplete = async (e) => {
-    e.stopPropagation();
-    setMarking(true);
+  const callAction = async (action, extra = {}) => {
+    setBusy(true);
     try {
       const res = await fetch('/api/portal-data', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_token: sessionToken, action: 'mark_task_complete', task_id: t.id }),
+        body: JSON.stringify({ session_token: sessionToken, action, task_id: t.id, ...extra }),
       });
-      if (res.ok) onMarkedComplete(t.id);
+      if (res.ok) return true;
     } catch (err) { /* noop */ }
-    setMarking(false);
+    finally { setBusy(false); }
+    return false;
+  };
+
+  const handleStart = async (e) => {
+    e.stopPropagation();
+    if (await callAction('mark_task_started')) onUpdated(t.id, { status: 'in_progress' });
+  };
+
+  const handleComplete = async (e) => {
+    e.stopPropagation();
+    if (await callAction('mark_task_complete')) onUpdated(t.id, { marked_complete_at: new Date().toISOString() });
+  };
+
+  const handleSendDelay = async (e) => {
+    e.stopPropagation();
+    setBusy(true);
+    const ok = await callAction('request_delay', {
+      requested_new_start_date: delayStart || null,
+      requested_new_end_date: delayEnd || null,
+      reason: delayReason || null,
+    });
+    if (ok) setDelaySent(true);
+    setBusy(false);
   };
 
   return (
@@ -242,8 +271,8 @@ function ExpandableTaskCard({ t, sessionToken, onMarkedComplete }) {
       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
         {t.start_date && t.end_date ? `${t.start_date} → ${t.end_date}` : 'Dates TBC'}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: isDone ? '#059669' : isPending ? '#d97706' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
-        {isDone ? 'Complete' : isPending ? 'Marked complete — awaiting confirmation' : (t.status || 'not started').replace('_', ' ')}
+      <div style={{ fontSize: 11, fontWeight: 700, color: isDone ? '#059669' : isPending ? '#d97706' : isInProgress ? '#2563eb' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
+        {isDone ? 'Complete' : isPending ? 'Marked complete — awaiting confirmation' : isInProgress ? 'In progress' : 'Not started'}
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f3f4f6' }}>
@@ -251,21 +280,58 @@ function ExpandableTaskCard({ t, sessionToken, onMarkedComplete }) {
             <div style={{ fontSize: 12, color: '#374151', marginBottom: 4 }}><strong>Trade:</strong> {t.trade}</div>
           )}
           {t.notes && (
-            <div style={{ fontSize: 12, color: '#374151', marginBottom: 4 }}><strong>Notes:</strong> {t.notes}</div>
+            <div style={{ fontSize: 12, color: '#374151', marginBottom: 8 }}><strong>Notes:</strong> {t.notes}</div>
           )}
-          {!t.trade && !t.notes && (
-            <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginBottom: 8 }}>No further detail added yet.</div>
-          )}
-          {!isDone && !isPending && (
-            <button onClick={handleMarkComplete} disabled={marking}
-              style={{ marginTop: 6, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: marking ? 0.6 : 1 }}>
-              {marking ? 'Marking...' : 'Mark as complete'}
-            </button>
-          )}
-          {isPending && (
+
+          {isPending ? (
             <div style={{ fontSize: 11, color: '#92400e', background: '#fef3c7', padding: 8, borderRadius: 6 }}>
               Waiting for the project manager or main contractor to confirm.
             </div>
+          ) : isDone ? null : (
+            <>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {!isInProgress && (
+                  <button onClick={handleStart} disabled={busy}
+                    style={{ flex: 1, padding: 9, borderRadius: 8, background: '#2563eb', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                    Start
+                  </button>
+                )}
+                {isInProgress && (
+                  <button onClick={handleComplete} disabled={busy}
+                    style={{ flex: 1, padding: 9, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                    Complete
+                  </button>
+                )}
+                <button onClick={e => { e.stopPropagation(); setDelayOpen(v => !v); }}
+                  style={{ padding: '9px 12px', borderRadius: 8, background: '#fff', color: '#b45309', border: '1px solid #fbbf24', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  Delay
+                </button>
+              </div>
+
+              {delayOpen && !delaySent && (
+                <div style={{ marginTop: 10, padding: 10, background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Request a delay</div>
+                  <div style={{ fontSize: 11, color: '#78716c', marginBottom: 8 }}>This won't change the programme automatically — the team will review and confirm.</div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                    <input type="date" value={delayStart} onChange={e => setDelayStart(e.target.value)}
+                      placeholder="Earliest I can start" style={{ flex: 1, padding: 7, borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                    <input type="date" value={delayEnd} onChange={e => setDelayEnd(e.target.value)}
+                      placeholder="Can finish by" style={{ flex: 1, padding: 7, borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                  </div>
+                  <textarea value={delayReason} onChange={e => setDelayReason(e.target.value)} placeholder="Reason (optional)" rows={2}
+                    style={{ width: '100%', padding: 7, borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, marginBottom: 8, boxSizing: 'border-box', resize: 'vertical' }} />
+                  <button onClick={handleSendDelay} disabled={busy}
+                    style={{ width: '100%', padding: 8, borderRadius: 6, background: '#b45309', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                    {busy ? 'Sending...' : 'Send delay request'}
+                  </button>
+                </div>
+              )}
+              {delaySent && (
+                <div style={{ marginTop: 10, fontSize: 11, color: '#166534', background: '#f0fdf4', padding: 8, borderRadius: 6 }}>
+                  Delay request sent — the team will be in touch.
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -280,8 +346,8 @@ function ProgrammeTab({ sessionToken }) {
       .then(r => r.json()).then(j => setTasks(j.tasks || []));
   }, [sessionToken]);
 
-  const handleMarkedComplete = (taskId) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, marked_complete_at: new Date().toISOString() } : t));
+  const handleTaskUpdated = (taskId, patch) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t));
   };
 
   if (tasks === null) return <div style={S.empty}>Loading...</div>;
@@ -301,7 +367,7 @@ function ProgrammeTab({ sessionToken }) {
       <div style={{ background: '#1F2937', color: '#fff', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 6, marginBottom: 8 }}>
         {roomName}
       </div>
-      {groups[roomName].map(t => <ExpandableTaskCard key={t.id} t={t} sessionToken={sessionToken} onMarkedComplete={handleMarkedComplete} />)}
+      {groups[roomName].map(t => <ExpandableTaskCard key={t.id} t={t} sessionToken={sessionToken} onUpdated={handleTaskUpdated} />)}
     </div>
   ));
 }

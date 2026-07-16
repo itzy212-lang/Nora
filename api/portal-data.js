@@ -148,6 +148,58 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Subcontractor marks a task as started — sets in_progress, no confirmation needed ──
+    if (action === 'mark_task_started') {
+      const { task_id } = req.body;
+      if (!task_id) return res.status(400).json({ error: 'Missing task_id' });
+
+      let visQuery = supabase.from('portal_visibility').select('id').eq('project_id', projectId).eq('item_type', 'programme_task').eq('item_id', task_id).eq('visible_to_type', visFilter.visible_to_type);
+      if (visFilter.visible_to_subcontractor_id) visQuery = visQuery.eq('visible_to_subcontractor_id', visFilter.visible_to_subcontractor_id);
+      const { data: visRows } = await visQuery;
+      if (!visRows || !visRows.length) return res.status(403).json({ error: 'You do not have access to this task' });
+
+      await supabase.from('programme_tasks').update({ status: 'in_progress' }).eq('id', task_id);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Subcontractor requests a delay — does NOT change the Gantt, just flags it for the team ──
+    if (action === 'request_delay') {
+      const { task_id, requested_new_start_date, requested_new_end_date, reason } = req.body;
+      if (!task_id) return res.status(400).json({ error: 'Missing task_id' });
+
+      let visQuery = supabase.from('portal_visibility').select('id').eq('project_id', projectId).eq('item_type', 'programme_task').eq('item_id', task_id).eq('visible_to_type', visFilter.visible_to_type);
+      if (visFilter.visible_to_subcontractor_id) visQuery = visQuery.eq('visible_to_subcontractor_id', visFilter.visible_to_subcontractor_id);
+      const { data: visRows } = await visQuery;
+      if (!visRows || !visRows.length) return res.status(403).json({ error: 'You do not have access to this task' });
+
+      const { data: task } = await supabase.from('programme_tasks').select('*').eq('id', task_id).single();
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      const { data: delayRequest } = await supabase.from('portal_delay_requests').insert([{
+        project_id: projectId, programme_task_id: task_id, portal_user_id: portalUser.id,
+        requested_new_start_date: requested_new_start_date || null,
+        requested_new_end_date: requested_new_end_date || null,
+        reason: reason || null,
+      }]).select('*').single();
+
+      // Create a project_task so the team sees it needs a decision
+      const dateNote = requested_new_start_date
+        ? ` They can do ${requested_new_start_date}${requested_new_end_date ? ` to ${requested_new_end_date}` : ''}.`
+        : '';
+      await supabase.from('project_tasks').insert([{
+        project_id: projectId,
+        title: `Delay requested: ${task.title}`,
+        description: `${portalUser.name || portalUser.email} has requested a delay.${reason ? ` Reason: ${reason}.` : ''}${dateNote} Authorise or contact them to discuss.`,
+        status: 'open',
+        severity: 'urgent',
+        room_id: task.room_id,
+        linked_programme_task_id: task_id,
+        source: 'portal_delay_request',
+      }]);
+
+      return res.status(200).json({ ok: true, delay_request: delayRequest });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error('[portal-data] fatal error:', err);

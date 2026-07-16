@@ -404,14 +404,19 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
             const c = SEVERITY_COLOURS[t.severity] || SEVERITY_COLOURS['follow-up'];
             const programmeTitle = t.programme_tasks?.title;
             const isPortalConfirmation = t.source === 'portal_completion';
+            const isDelayRequest = t.source === 'portal_delay_request';
+            const isHighlighted = isPortalConfirmation || isDelayRequest;
             return (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: isPortalConfirmation ? '1px solid #fbbf24' : '1px solid #e5e7eb', background: isPortalConfirmation ? '#fffbeb' : '#fff', borderRadius: 10, marginBottom: 8 }}>
+              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: isHighlighted ? '1px solid #fbbf24' : '1px solid #e5e7eb', background: isHighlighted ? '#fffbeb' : '#fff', borderRadius: 10, marginBottom: 8 }}>
                 <button onClick={() => closeTask(t.id, isPortalConfirmation ? t.linked_programme_task_id : null)}
                   style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #d1d5db', background: '#fff', cursor: 'pointer', flexShrink: 0, marginTop: 1 }}
-                  title={isPortalConfirmation ? 'Confirm complete' : 'Mark complete'} />
+                  title={isPortalConfirmation ? 'Confirm complete' : isDelayRequest ? 'Mark as handled' : 'Mark complete'} />
                 <div style={{ flex: 1 }}>
                   {isPortalConfirmation && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 2 }}>Confirm completion</div>
+                  )}
+                  {isDelayRequest && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', marginBottom: 2 }}>Delay requested</div>
                   )}
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{t.title}</div>
                   <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{t.description}</div>
