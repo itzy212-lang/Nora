@@ -13,6 +13,14 @@
       "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/get_config"
     },
     {
+      "source": "/portal",
+      "destination": "/portal.html"
+    },
+    {
+      "source": "/portal/(.*)",
+      "destination": "/portal.html"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
