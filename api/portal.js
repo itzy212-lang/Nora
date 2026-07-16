@@ -8,6 +8,30 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
 }
 
+// Sends via the same Microsoft account the main app uses to send all other emails.
+// Only one sending address exists today — if a second (e.g. admin@ / portal@) is set
+// up later, this becomes a Settings-selectable "from" address rather than hardcoded.
+async function sendPortalEmail({ toEmail, subject, bodyHtml }) {
+  try {
+    const { data, error } = await supabase.functions.invoke('send_email_via_microsoft', {
+      body: {
+        to_email: toEmail,
+        subject,
+        body: bodyHtml,
+        user_id: process.env.PORTAL_SENDER_USER_ID || null,
+      },
+    });
+    if (error || data?.error) {
+      console.error('[portal] email send failed:', error?.message || data?.error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[portal] email send exception:', err.message);
+    return false;
+  }
+}
+
 function generateToken() {
   return crypto.randomBytes(24).toString('hex');
 }
@@ -41,7 +65,21 @@ export default async function handler(req, res) {
       if (error) throw error;
 
       const inviteUrl = `${process.env.PORTAL_BASE_URL || 'https://nora-d9wy.vercel.app'}/portal/activate?token=${inviteToken}`;
-      return res.status(200).json({ portal_user: data, invite_url: inviteUrl });
+
+      const { data: project } = await supabase.from('projects').select('bo_premise_address, bo_address').eq('id', project_id).single();
+      const projectAddress = project?.bo_premise_address || project?.bo_address || 'your project';
+
+      const emailSent = await sendPortalEmail({
+        toEmail: data.email,
+        subject: `You've been invited to the project portal — ${projectAddress}`,
+        bodyHtml: `<p>Hi ${name || ''},</p>` +
+          `<p>You've been invited to access the project portal for <strong>${projectAddress}</strong>.</p>` +
+          `<p>Click the link below to set up your account:</p>` +
+          `<p><a href="${inviteUrl}">${inviteUrl}</a></p>` +
+          `<p>This link is unique to you — please don't share it.</p>`,
+      });
+
+      return res.status(200).json({ portal_user: data, invite_url: inviteUrl, email_sent: emailSent });
     }
 
     // ── List portal users for a project (account owner side) ─────────────────
@@ -130,7 +168,17 @@ export default async function handler(req, res) {
       }).eq('id', user.id);
 
       const resetUrl = `${process.env.PORTAL_BASE_URL || 'https://nora-d9wy.vercel.app'}/portal/reset?token=${resetToken}`;
-      return res.status(200).json({ ok: true, reset_url: resetUrl });
+
+      const emailSent = await sendPortalEmail({
+        toEmail: user.email,
+        subject: 'Reset your project portal password',
+        bodyHtml: `<p>Hi ${user.name || ''},</p>` +
+          `<p>We received a request to reset your project portal password. Click the link below to set a new one:</p>` +
+          `<p><a href="${resetUrl}">${resetUrl}</a></p>` +
+          `<p>If you didn't request this, you can ignore this email.</p>`,
+      });
+
+      return res.status(200).json({ ok: true, email_sent: emailSent });
     }
 
     // ── Portal user: set a new password from a reset token ────────────────────

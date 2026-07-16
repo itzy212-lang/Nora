@@ -275,7 +275,11 @@ function SubCard({ sub, projectId, card, label, fmt, setSubModal, handleDeleteSu
       const json = await res.json();
       if (res.ok) {
         setPortalStatus('pending');
-        window.prompt('Invite created — copy this link to send to the subcontractor:', json.invite_url);
+        if (json.email_sent) {
+          alert(`Invite email sent to ${sub.email}.`);
+        } else {
+          window.prompt('Could not send the email automatically — copy this link to send manually:', json.invite_url);
+        }
       } else {
         alert(json.error || 'Could not send invite.');
       }
@@ -1609,7 +1613,12 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             const json = await res.json();
                             if (res.ok) {
                               setClientPortalStatus('pending');
-                              window.prompt('Invite created — copy this link to send to the client:', json.invite_url);
+                              const clientEmail = project.client_email || project.bo_1_email;
+                              if (json.email_sent) {
+                                alert(`Invite email sent to ${clientEmail}.`);
+                              } else {
+                                window.prompt('Could not send the email automatically — copy this link to send manually:', json.invite_url);
+                              }
                             } else {
                               alert(json.error || 'Could not send invite.');
                             }
