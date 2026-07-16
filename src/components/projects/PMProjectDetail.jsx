@@ -1038,23 +1038,24 @@ function SubModal({ sub, projectId, onSave, onClose }) {
           </div>
         ))}
 
-        {sub && (
-          <div style={{ marginBottom: 12, padding: 12, background: 'rgba(59,130,246,0.06)', borderRadius: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Portal access</div>
-              {portalStatus && <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>}
-            </div>
-            {!portalStatus && (
-              <button onClick={sendInvite} disabled={inviting || !form.email.trim()}
-                style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (inviting || !form.email.trim()) ? 0.5 : 1 }}>
-                {inviting ? 'Sending...' : '📧 Invite to portal'}
-              </button>
-            )}
-            {inviteResult && (
-              <div style={{ marginTop: 8, fontSize: 11, color: '#166534', wordBreak: 'break-all' }}>Invite link: {inviteResult}</div>
-            )}
+        <div style={{ marginBottom: 12, padding: 12, background: 'rgba(59,130,246,0.06)', borderRadius: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Portal access</div>
+            {portalStatus && <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>}
           </div>
-        )}
+          {!portalStatus && !sub && (
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text3)' }}>Save this subcontractor first, then you can invite them to the portal.</div>
+          )}
+          {!portalStatus && sub && (
+            <button onClick={sendInvite} disabled={inviting || !form.email.trim()}
+              style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (inviting || !form.email.trim()) ? 0.5 : 1 }}>
+              {inviting ? 'Sending...' : '📧 Invite to portal'}
+            </button>
+          )}
+          {inviteResult && (
+            <div style={{ marginTop: 8, fontSize: 11, color: '#166534', wordBreak: 'break-all' }}>Invite link: {inviteResult}</div>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
@@ -1065,7 +1066,7 @@ function SubModal({ sub, projectId, onSave, onClose }) {
               amount_paid: parseFloat(form.amount_paid) || 0,
               id: sub?.id || `sub_${Date.now()}`,
             })}
-            style={{ flex: 1, padding: '10px', borderRadius: 99, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
           >
             Save
           </button>
@@ -1261,7 +1262,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               onClick={() => setTab(t)}
               style={{
                 padding: '6px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
-                background: tab === t ? 'var(--accent)' : 'transparent',
+                background: tab === t ? 'var(--blue)' : 'transparent',
                 color: tab === t ? '#fff' : 'var(--text2)',
                 border: tab === t ? 'none' : '1px solid var(--border)',
                 fontWeight: tab === t ? 600 : 400,
@@ -1540,7 +1541,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           setClientInviting(false);
                         }}
                         disabled={clientInviting}
-                        style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
+                        style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
                         {clientInviting ? 'Sending...' : '📧 Invite to portal'}
                       </button>
                     )
@@ -2108,7 +2109,7 @@ Proceed?`
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Subcontractors</div>
               <button
                 onClick={() => setSubModal('new')}
-                style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 + Add
               </button>
@@ -2129,7 +2130,7 @@ Proceed?`
                         <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{sub.trade}</div>
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setSubModal(sub)} style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => setSubModal(sub)} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                         <button onClick={() => handleDeleteSub(sub.id)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
                       </div>
                     </div>
