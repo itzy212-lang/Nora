@@ -870,6 +870,31 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Portal visibility — does the current contractor text match a subcontractor with portal access?
+  const matchedSub = (subs || []).find(s => s.name && form.contractor && s.name.toLowerCase().trim() === form.contractor.toLowerCase().trim());
+  const [portalVisible, setPortalVisible] = useState(false);
+  const [checkingVis, setCheckingVis] = useState(false);
+
+  useEffect(() => {
+    if (isNew || !task?.id) return;
+    setCheckingVis(true);
+    sb.from('portal_visibility').select('id').eq('project_id', projectId).eq('item_type', 'programme_task').eq('item_id', task.id).eq('visible_to_type', 'subcontractor')
+      .then(({ data }) => { setPortalVisible(!!(data && data.length)); setCheckingVis(false); });
+  }, [task?.id, projectId, isNew]);
+
+  const togglePortalVisibility = async (checked) => {
+    if (!task?.id || !matchedSub) return;
+    setPortalVisible(checked);
+    if (checked) {
+      await sb.from('portal_visibility').insert([{
+        project_id: projectId, item_type: 'programme_task', item_id: task.id,
+        visible_to_type: 'subcontractor', visible_to_subcontractor_id: matchedSub.id,
+      }]);
+    } else {
+      await sb.from('portal_visibility').delete().eq('project_id', projectId).eq('item_type', 'programme_task').eq('item_id', task.id).eq('visible_to_type', 'subcontractor');
+    }
+  };
+
   const handleSave = async () => {
     if (!form.title.trim()) return;
     setSaving(true);
@@ -968,6 +993,19 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
           </div>
         )}
 
+        {!isNew && !form.in_house && matchedSub && (
+          <div style={{ marginBottom: 12, padding: 10, background: '#eff6ff', borderRadius: 8, border: '1px solid #bfdbfe' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={portalVisible} disabled={checkingVis} onChange={e => togglePortalVisibility(e.target.checked)} style={{ width: 15, height: 15 }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#1e40af' }}>Show on {matchedSub.name}'s portal</span>
+            </label>
+          </div>
+        )}
+        {!isNew && !form.in_house && form.contractor.trim() && !matchedSub && (
+          <div style={{ marginBottom: 12, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>
+            "{form.contractor}" isn't a saved subcontractor with portal access, so this can't be shared to a portal yet.
+          </div>
+        )}
         <div style={{ marginBottom: 12 }}>
           <div style={labelStyle}>Task value (£)</div>
           <input type="number" value={form.task_value}
