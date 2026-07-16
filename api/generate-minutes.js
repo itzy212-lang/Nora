@@ -136,6 +136,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ sessions: withCounts });
     }
 
+    // ── List open tasks for a project (pre-visit summary + Tasks tab) ────────
+    if (action === 'list_open_tasks') {
+      const { project_id } = req.body;
+      const { data: openTasks } = await supabase
+        .from('project_tasks')
+        .select('*, project_rooms(name), programme_tasks(title, start_date, end_date)')
+        .eq('project_id', project_id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: true });
+      return res.status(200).json({ tasks: openTasks || [] });
+    }
+
+    // ── Close a task manually (from Tasks tab or Gantt popup) ─────────────────
+    if (action === 'close_task') {
+      const { task_id, closed_by } = req.body;
+      const { data } = await supabase.from('project_tasks').update({
+        status: 'closed', closed_at: new Date().toISOString(), closed_by: closed_by || 'manual',
+      }).eq('id', task_id).select('*').single();
+      return res.status(200).json({ task: data });
+    }
+
     // ── Load a session's full note + claim history ───────────────────────────
     if (action === 'load_session') {
       const { session_id } = req.body;
@@ -176,6 +197,76 @@ export default async function handler(req, res) {
         week_label: session.week_label,
         visit_date: session.visit_date,
       }, process.env.OPENAI_API_KEY);
+
+      // ── Create/close project_tasks from this session's claims ────────────────
+      // Any claim with severity urgent/follow-up becomes a tracked task, linked to
+      // a matching programme_task in the same room where the title clearly matches.
+      const actionableClaims = claims.filter(c => c.severity === 'urgent' || c.severity === 'follow-up');
+      const createdTaskIds = [];
+
+      for (const claim of actionableClaims) {
+        // Skip if a task already exists for this exact claim (re-generation safety)
+        const { data: existing } = await supabase
+          .from('project_tasks')
+          .select('id')
+          .eq('source_claim_id', claim.id)
+          .limit(1);
+        if (existing && existing.length) { createdTaskIds.push(existing[0].id); continue; }
+
+        // Try to match a programme task in the same room by keyword overlap
+        let linkedProgrammeTaskId = null;
+        if (claim.room_id) {
+          const roomTasks = (tasks || []).filter(t => t.room_id === claim.room_id && t.status !== 'complete');
+          const claimWords = new Set(
+            `${claim.description || ''} ${claim.action || ''}`.toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3)
+          );
+          let bestMatch = null;
+          let bestScore = 0;
+          roomTasks.forEach(rt => {
+            const titleWords = (rt.title || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3);
+            const score = titleWords.filter(w => claimWords.has(w)).length;
+            if (score > bestScore) { bestScore = score; bestMatch = rt; }
+          });
+          if (bestMatch && bestScore > 0) linkedProgrammeTaskId = bestMatch.id;
+        }
+
+        const { data: newTask } = await supabase.from('project_tasks').insert([{
+          project_id,
+          title: claim.description?.slice(0, 120) || claim.action,
+          description: claim.description || '',
+          status: 'open',
+          severity: claim.severity,
+          room_id: claim.room_id,
+          linked_programme_task_id: linkedProgrammeTaskId,
+          source: 'weekly_minutes',
+          source_session_id: session_id,
+          source_claim_id: claim.id,
+        }]).select('id').single();
+        if (newTask) createdTaskIds.push(newTask.id);
+      }
+
+      // Auto-close open tasks whose description strongly matches a "none"-severity
+      // claim mentioning the same room — e.g. "tiles have now arrived" resolves "order tiles"
+      const resolvedClaims = claims.filter(c => c.severity === 'none' && c.room_id);
+      for (const claim of resolvedClaims) {
+        const { data: openTasksInRoom } = await supabase
+          .from('project_tasks')
+          .select('id, title')
+          .eq('project_id', project_id)
+          .eq('room_id', claim.room_id)
+          .eq('status', 'open');
+        if (!openTasksInRoom?.length) continue;
+        const claimWords = new Set((claim.description || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3));
+        for (const ot of openTasksInRoom) {
+          const titleWords = (ot.title || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3);
+          const overlap = titleWords.filter(w => claimWords.has(w)).length;
+          if (overlap >= 2) {
+            await supabase.from('project_tasks').update({
+              status: 'closed', closed_at: new Date().toISOString(), closed_by: 'auto (weekly minutes)',
+            }).eq('id', ot.id);
+          }
+        }
+      }
 
       // Generate email drafts for anything flagged urgent or follow-up — one per action item
       const actionableRows = [];

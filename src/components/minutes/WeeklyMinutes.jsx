@@ -64,13 +64,40 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     if (projectId) loadSessionHistory(projectId);
   }, [projectId]);
 
-  const startNewSession = () => {
+  const startNewSession = async () => {
     setSessionId(null);
     setMessages([]);
     setDraft(null);
     setMissedTasks([]);
+    setEmailDrafts([]);
     setPhase('recording');
     setSidebarOpen(false);
+
+    // Pre-visit summary — pull open tasks so nothing gets forgotten
+    try {
+      const res = await fetch('/api/generate-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_open_tasks', project_id: projectId }),
+      });
+      const json = await res.json();
+      const openTasks = json.tasks || [];
+      if (openTasks.length) {
+        const list = openTasks.map(t => {
+          const roomName = t.project_rooms?.name;
+          return `• ${t.title}${roomName ? ` (${roomName})` : ''}`;
+        }).join('\n');
+        setMessages([{
+          id: uid(),
+          role: 'ely',
+          content: `Before we start — ${openTasks.length} task${openTasks.length > 1 ? 's' : ''} still open from previous visits:\n\n${list}\n\nMention any that are resolved and I'll close them off. Ready when you are.`,
+        }]);
+      } else {
+        setMessages([{ id: uid(), role: 'ely', content: 'No outstanding tasks from previous visits. Ready when you are.' }]);
+      }
+    } catch (err) {
+      console.error('[WeeklyMinutes] pre-visit summary failed', err);
+    }
   };
 
   const resumeSession = async (session) => {
