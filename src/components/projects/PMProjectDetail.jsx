@@ -1064,14 +1064,43 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
 }
 
 // ── Subcontractor modal ───────────────────────────────────────────────────
-function SubModal({ sub, onSave, onClose }) {
+function SubModal({ sub, projectId, onSave, onClose }) {
   const [form, setForm] = useState({
     name: sub?.name || '',
     trade: sub?.trade || '',
+    email: sub?.email || '',
     contract_value: sub?.contract_value || '',
     amount_paid: sub?.amount_paid || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState(null);
+  const [portalStatus, setPortalStatus] = useState(sub?.portal_status || null);
+
+  const sendInvite = async () => {
+    if (!form.email.trim()) { alert('Add an email address first.'); return; }
+    setInviting(true);
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'invite', project_id: projectId, email: form.email.trim(), name: form.name.trim(),
+          user_type: 'subcontractor', subcontractor_id: sub?.id || null,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setInviteResult(json.invite_url);
+        setPortalStatus('pending');
+      } else {
+        alert(json.error || 'Could not send invite.');
+      }
+    } catch (err) {
+      alert('Could not send invite.');
+    }
+    setInviting(false);
+  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -1082,6 +1111,7 @@ function SubModal({ sub, onSave, onClose }) {
         {[
           { key: 'name', label: 'Name / Company' },
           { key: 'trade', label: 'Trade' },
+          { key: 'email', label: 'Email (for portal invite)', type: 'email' },
           { key: 'contract_value', label: 'Contract value (£)', type: 'number' },
           { key: 'amount_paid', label: 'Amount paid (£)', type: 'number' },
         ].map(({ key, label: lbl, type }) => (
@@ -1095,6 +1125,25 @@ function SubModal({ sub, onSave, onClose }) {
             />
           </div>
         ))}
+
+        {sub && (
+          <div style={{ marginBottom: 12, padding: 12, background: 'rgba(59,130,246,0.06)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Portal access</div>
+              {portalStatus && <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>}
+            </div>
+            {!portalStatus && (
+              <button onClick={sendInvite} disabled={inviting || !form.email.trim()}
+                style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (inviting || !form.email.trim()) ? 0.5 : 1 }}>
+                {inviting ? 'Sending...' : '📧 Invite to portal'}
+              </button>
+            )}
+            {inviteResult && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#166534', wordBreak: 'break-all' }}>Invite link: {inviteResult}</div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button
@@ -1119,6 +1168,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [project, setProject] = useState(initialProject);
   const [tab, setTab] = useState('overview');
   const [subModal, setSubModal] = useState(null); // null | 'new' | {sub object}
+  const [clientPortalStatus, setClientPortalStatus] = useState(null);
+  const [clientInviting, setClientInviting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]); // unified task system from Site Log, linked to programme via linked_programme_task_id
@@ -1163,6 +1214,19 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   useEffect(() => {
     if (!project?.id) return;
     sb.from('project_rooms').select('*').eq('project_id', project.id).order('position').then(({ data }) => setRooms(data || []));
+  }, [project?.id]);
+
+  // Load client portal invite status (if any exists for the client email)
+  useEffect(() => {
+    const clientEmail = project?.client_email || project?.bo_1_email;
+    if (!clientEmail || !project?.id) return;
+    fetch('/api/portal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_users', project_id: project.id }),
+    }).then(r => r.json()).then(j => {
+      const match = (j.users || []).find(u => u.email === clientEmail.toLowerCase().trim() && u.user_type === 'client' && u.invite_status !== 'revoked');
+      if (match) setClientPortalStatus(match.invite_status);
+    }).catch(() => {});
   }, [project?.id]);
 
   // Load materials when tab opens
@@ -1532,6 +1596,43 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                 <div>
                   <div style={label}>Client</div>
                   <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
+                  {(project.client_email || project.bo_1_email) && (
+                    clientPortalStatus === 'active' || clientPortalStatus === 'pending' ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: clientPortalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>
+                        Portal: {clientPortalStatus}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          setClientInviting(true);
+                          try {
+                            const res = await fetch('/api/portal', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                action: 'invite', project_id: project.id,
+                                email: project.client_email || project.bo_1_email,
+                                name: project.client_name || project.bo_1_name,
+                                user_type: 'client',
+                              }),
+                            });
+                            const json = await res.json();
+                            if (res.ok) {
+                              setClientPortalStatus('pending');
+                              window.prompt('Invite created — copy this link to send to the client:', json.invite_url);
+                            } else {
+                              alert(json.error || 'Could not send invite.');
+                            }
+                          } catch (err) {
+                            alert('Could not send invite.');
+                          }
+                          setClientInviting(false);
+                        }}
+                        disabled={clientInviting}
+                        style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
+                        {clientInviting ? 'Sending...' : '📧 Invite to portal'}
+                      </button>
+                    )
+                  )}
                 </div>
                 <div>
                   <div style={label}>Contract value</div>
@@ -3316,6 +3417,7 @@ Proceed?`
       {subModal && (
         <SubModal
           sub={subModal === 'new' ? null : subModal}
+          projectId={project.id}
           onSave={handleSaveSub}
           onClose={() => setSubModal(null)}
         />
