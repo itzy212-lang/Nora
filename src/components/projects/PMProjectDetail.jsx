@@ -298,7 +298,7 @@ function SubCard({ sub, projectId, card, label, fmt, setSubModal, handleDeleteSu
               <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>
             ) : (
               <button onClick={sendInvite} disabled={inviting} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', opacity: inviting ? 0.5 : 1 }}>
-                {inviting ? 'Sending...' : '📧 Invite'}
+                {inviting ? 'Sending...' : '📧 Portal Invite'}
               </button>
             )
           )}
@@ -1127,7 +1127,7 @@ function SubModal({ sub, projectId, onSave, onClose }) {
           {!portalStatus && sub && (
             <button onClick={sendInvite} disabled={inviting || !form.email.trim()}
               style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (inviting || !form.email.trim()) ? 0.5 : 1 }}>
-              {inviting ? 'Sending...' : '📧 Invite to portal'}
+              {inviting ? 'Sending...' : '📧 Portal Invite'}
             </button>
           )}
           {inviteResult && (
@@ -1620,7 +1620,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         }}
                         disabled={clientInviting}
                         style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
-                        {clientInviting ? 'Sending...' : '📧 Invite to portal'}
+                        {clientInviting ? 'Sending...' : '📧 Portal Invite'}
                       </button>
                     )
                   )}

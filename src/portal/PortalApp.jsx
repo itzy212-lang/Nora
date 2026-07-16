@@ -69,7 +69,7 @@ function ActivateScreen({ token, onActivated }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onForgotPassword }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -111,6 +111,103 @@ function LoginScreen({ onLogin }) {
           onKeyDown={e => e.key === 'Enter' && handleLogin()} style={S.input} />
         <button onClick={handleLogin} disabled={loading} style={{ ...S.button, opacity: loading ? 0.6 : 1 }}>
           {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <button onClick={onForgotPassword} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+            Forgot password?
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordScreen({ onBack }) {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleRequest = async () => {
+    if (!email.trim()) return;
+    setLoading(true);
+    try {
+      await fetch('/api/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request_reset', email }),
+      });
+      setSent(true);
+    } catch (err) {
+      setSent(true); // don't reveal errors either way
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={S.authWrap}>
+      <div style={S.authCard}>
+        <div style={S.logo}>Reset your password</div>
+        {sent ? (
+          <>
+            <div style={S.sub}>If an account exists for that email, a reset link has been sent.</div>
+            <button onClick={onBack} style={S.button}>Back to sign in</button>
+          </>
+        ) : (
+          <>
+            <div style={S.sub}>Enter your email and we'll send you a reset link.</div>
+            <div style={S.label}>Email</div>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={S.input} />
+            <button onClick={handleRequest} disabled={loading || !email.trim()} style={{ ...S.button, opacity: (loading || !email.trim()) ? 0.6 : 1 }}>
+              {loading ? 'Sending...' : 'Send reset link'}
+            </button>
+            <div style={{ textAlign: 'center', marginTop: 14 }}>
+              <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Back to sign in</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordScreen({ token, onReset }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleReset = async () => {
+    setError('');
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (password !== confirm) { setError('Passwords do not match.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_password', token, password }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        onReset();
+      } else {
+        setError(json.error || 'Could not reset password.');
+      }
+    } catch (err) {
+      setError('Could not reset password.');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={S.authWrap}>
+      <div style={S.authCard}>
+        <div style={S.logo}>Set a new password</div>
+        {error && <div style={S.error}>{error}</div>}
+        <div style={S.label}>New password</div>
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={S.input} />
+        <div style={S.label}>Confirm password</div>
+        <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={S.input} />
+        <button onClick={handleReset} disabled={loading} style={{ ...S.button, opacity: loading ? 0.6 : 1 }}>
+          {loading ? 'Resetting...' : 'Reset password'}
         </button>
       </div>
     </div>
@@ -274,6 +371,10 @@ export default function PortalApp() {
       setScreen('activate');
       return;
     }
+    if (window.location.pathname.includes('/reset') && token) {
+      setScreen('reset');
+      return;
+    }
     const storedSession = localStorage.getItem('portal_session');
     const storedUser = localStorage.getItem('portal_user');
     if (storedSession && storedUser) {
@@ -301,8 +402,21 @@ export default function PortalApp() {
     }} />;
   }
 
+  if (screen === 'reset') {
+    return <ResetPasswordScreen token={getUrlParam('token')} onReset={() => {
+      window.location.href = '/portal';
+    }} />;
+  }
+
+  if (screen === 'forgot') {
+    return <ForgotPasswordScreen onBack={() => setScreen('login')} />;
+  }
+
   if (screen === 'login') {
-    return <LoginScreen onLogin={(token, u) => { setSessionToken(token); setUser(u); setScreen('app'); }} />;
+    return <LoginScreen
+      onLogin={(token, u) => { setSessionToken(token); setUser(u); setScreen('app'); }}
+      onForgotPassword={() => setScreen('forgot')}
+    />;
   }
 
   const visibleTabs = user?.user_type === 'subcontractor'

@@ -110,6 +110,50 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── Portal user: request a password reset link ────────────────────────────
+    if (action === 'request_reset') {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: 'Missing email' });
+
+      const { data: user } = await supabase.from('portal_users')
+        .select('*')
+        .eq('email', String(email).toLowerCase().trim())
+        .eq('invite_status', 'active')
+        .single();
+
+      // Always return success even if not found — don't leak whether an email is registered
+      if (!user) return res.status(200).json({ ok: true });
+
+      const resetToken = generateToken();
+      await supabase.from('portal_users').update({
+        invite_token: resetToken, // reuse the same token column — activation flow is now dormant once active
+      }).eq('id', user.id);
+
+      const resetUrl = `${process.env.PORTAL_BASE_URL || 'https://nora-d9wy.vercel.app'}/portal/reset?token=${resetToken}`;
+      return res.status(200).json({ ok: true, reset_url: resetUrl });
+    }
+
+    // ── Portal user: set a new password from a reset token ────────────────────
+    if (action === 'reset_password') {
+      const { token, password } = req.body;
+      if (!token || !password || password.length < 8) {
+        return res.status(400).json({ error: 'Invalid token or password too short (min 8 characters)' });
+      }
+      const { data: user } = await supabase.from('portal_users').select('*').eq('invite_token', token).eq('invite_status', 'active').single();
+      if (!user) return res.status(404).json({ error: 'Reset link not found or already used' });
+
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = hashPassword(password, salt);
+
+      const { data: updated, error } = await supabase.from('portal_users').update({
+        password_hash: `${salt}:${hash}`,
+        invite_token: null, // token is single-use
+      }).eq('id', user.id).select('*').single();
+      if (error) throw error;
+
+      return res.status(200).json({ user: { id: updated.id, email: updated.email, name: updated.name, project_id: updated.project_id, user_type: updated.user_type } });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error('[portal] fatal error:', err);
