@@ -328,6 +328,42 @@ function SubCard({ sub, projectId, card, label, fmt, setSubModal, handleDeleteSu
   );
 }
 
+function ContractorInput({ value, onChange, subs, inputStyle, placeholder }) {
+  const [focused, setFocused] = useState(false);
+  const matches = (subs || []).filter(s =>
+    value && s.name && s.name.toLowerCase().includes(value.toLowerCase()) && s.name.toLowerCase() !== value.toLowerCase()
+  ).slice(0, 6);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder={placeholder || 'Contractor name or company'}
+        style={inputStyle}
+      />
+      {focused && matches.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, zIndex: 20, maxHeight: 180, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+          {matches.map(s => (
+            <div
+              key={s.id}
+              onMouseDown={() => onChange(s.name)}
+              style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{ fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
+              {s.trade && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.trade}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
@@ -623,7 +659,7 @@ function RoomModal({ room, projectId, onSave, onClose }) {
 }
 
 // ── Material modal ────────────────────────────────────────────────────────
-function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
+function MaterialModal({ material, projectId, rooms, subs, onSave, onClose }) {
   const isNew = !material || material === 'new';
   const [form, setForm] = useState({
     name: isNew ? '' : material.name || '',
@@ -739,11 +775,11 @@ function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
               </label>
             </div>
             {!form.in_house && (
-              <input
+              <ContractorInput
                 value={form.contractor}
-                onChange={e => set('contractor', e.target.value)}
-                placeholder="Contractor name or company"
-                style={inputStyle}
+                onChange={v => set('contractor', v)}
+                subs={subs}
+                inputStyle={inputStyle}
               />
             )}
             {form.in_house && (
@@ -815,7 +851,7 @@ function MaterialModal({ material, projectId, rooms, onSave, onClose }) {
 }
 
 // ── Task modal ───────────────────────────────────────────────────────────
-function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
+function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) {
   const isNew = !task || task === 'new';
   const [form, setForm] = useState({
     title: isNew ? '' : task.title || '',
@@ -917,11 +953,11 @@ function TaskModal({ task, projectId, allTasks, rooms, onSave, onClose }) {
               </label>
             </div>
             {!form.in_house && (
-              <input
+              <ContractorInput
                 value={form.contractor}
-                onChange={e => set('contractor', e.target.value)}
-                placeholder="Contractor name or company"
-                style={inputStyle}
+                onChange={v => set('contractor', v)}
+                subs={subs}
+                inputStyle={inputStyle}
               />
             )}
             {form.in_house && (
@@ -3360,6 +3396,7 @@ Proceed?`
           material={materialModal}
           projectId={project.id}
           rooms={rooms}
+          subs={subs}
           onSave={(result, isNew) => {
             setMaterials(prev => isNew ? [...prev, result] : prev.map(m => m.id === result.id ? result : m));
             setMaterialModal(null);
@@ -3375,6 +3412,7 @@ Proceed?`
           projectId={project.id}
           allTasks={tasks}
           rooms={rooms}
+          subs={subs}
           onSave={(result, isNew) => {
             setTasks(prev => isNew ? [...prev, result] : prev.map(t => t.id === result.id ? result : t));
             setTaskModal(null);
