@@ -86,13 +86,13 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     setLoadingTasks(false);
   };
 
-  const closeTask = async (taskId) => {
+  const closeTask = async (taskId, linkedProgrammeTaskId) => {
     setOpenTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await fetch('/api/generate-minutes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'close_task', task_id: taskId, closed_by: 'manual' }),
+        body: JSON.stringify({ action: 'close_task', task_id: taskId, closed_by: 'manual', linked_programme_task_id: linkedProgrammeTaskId || null }),
       });
     } catch (err) {
       console.error('[WeeklyMinutes] close task failed', err);
@@ -403,18 +403,23 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
           openTasks.map(t => {
             const c = SEVERITY_COLOURS[t.severity] || SEVERITY_COLOURS['follow-up'];
             const programmeTitle = t.programme_tasks?.title;
+            const isPortalConfirmation = t.source === 'portal_completion';
             return (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 8 }}>
-                <button onClick={() => closeTask(t.id)}
+              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: isPortalConfirmation ? '1px solid #fbbf24' : '1px solid #e5e7eb', background: isPortalConfirmation ? '#fffbeb' : '#fff', borderRadius: 10, marginBottom: 8 }}>
+                <button onClick={() => closeTask(t.id, isPortalConfirmation ? t.linked_programme_task_id : null)}
                   style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #d1d5db', background: '#fff', cursor: 'pointer', flexShrink: 0, marginTop: 1 }}
-                  title="Mark complete" />
+                  title={isPortalConfirmation ? 'Confirm complete' : 'Mark complete'} />
                 <div style={{ flex: 1 }}>
+                  {isPortalConfirmation && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 2 }}>Confirm completion</div>
+                  )}
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{t.title}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{t.description}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                     {t.project_rooms?.name && (
                       <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{t.project_rooms.name}</span>
                     )}
-                    <span style={{ fontSize: 11, fontWeight: 700, color: c.text, background: c.bg, padding: '2px 8px', borderRadius: 6 }}>{t.severity}</span>
+                    {!isPortalConfirmation && <span style={{ fontSize: 11, fontWeight: 700, color: c.text, background: c.bg, padding: '2px 8px', borderRadius: 6 }}>{t.severity}</span>}
                     {programmeTitle && (
                       <span style={{ fontSize: 11, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>→ {programmeTitle}</span>
                     )}

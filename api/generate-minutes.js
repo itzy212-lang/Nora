@@ -150,10 +150,20 @@ export default async function handler(req, res) {
 
     // ── Close a task manually (from Tasks tab or Gantt popup) ─────────────────
     if (action === 'close_task') {
-      const { task_id, closed_by } = req.body;
+      const { task_id, closed_by, linked_programme_task_id } = req.body;
       const { data } = await supabase.from('project_tasks').update({
         status: 'closed', closed_at: new Date().toISOString(), closed_by: closed_by || 'manual',
       }).eq('id', task_id).select('*').single();
+
+      // If this was confirming a portal-reported completion, close the actual programme task too
+      if (linked_programme_task_id) {
+        await supabase.from('programme_tasks').update({
+          status: 'complete',
+          confirmed_complete_at: new Date().toISOString(),
+          confirmed_complete_by: closed_by || 'manual',
+        }).eq('id', linked_programme_task_id);
+      }
+
       return res.status(200).json({ task: data });
     }
 

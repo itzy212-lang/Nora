@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       const visibleIds = (visRows || []).map(v => v.item_id);
       if (!visibleIds.length) return res.status(200).json({ tasks: [] });
 
-      const { data: tasks } = await supabase.from('programme_tasks').select('id, title, trade, notes, start_date, end_date, status, room_id, project_rooms(name)').in('id', visibleIds);
+      const { data: tasks } = await supabase.from('programme_tasks').select('id, title, trade, notes, start_date, end_date, status, room_id, marked_complete_at, project_rooms(name)').in('id', visibleIds);
       return res.status(200).json({ tasks: tasks || [] });
     }
 
@@ -107,6 +107,45 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({ approval: updated });
+    }
+
+    // ── Subcontractor marks a task complete — does NOT close it, flags for PM/contractor confirmation ──
+    if (action === 'mark_task_complete') {
+      const { task_id } = req.body;
+      if (!task_id) return res.status(400).json({ error: 'Missing task_id' });
+
+      // Security: only allow marking a task this portal user actually has visibility on
+      let visQuery = supabase.from('portal_visibility').select('id').eq('project_id', projectId).eq('item_type', 'programme_task').eq('item_id', task_id).eq('visible_to_type', visFilter.visible_to_type);
+      if (visFilter.visible_to_subcontractor_id) visQuery = visQuery.eq('visible_to_subcontractor_id', visFilter.visible_to_subcontractor_id);
+      const { data: visRows } = await visQuery;
+      if (!visRows || !visRows.length) return res.status(403).json({ error: 'You do not have access to this task' });
+
+      const { data: task } = await supabase.from('programme_tasks').select('*').eq('id', task_id).single();
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      await supabase.from('programme_tasks').update({
+        marked_complete_by_portal_user_id: portalUser.id,
+        marked_complete_at: new Date().toISOString(),
+      }).eq('id', task_id);
+
+      // Create a project_task so it surfaces in the main app's Site Log task list and
+      // pre-visit summary until a PM/contractor confirms and closes it
+      const { data: existingTask } = await supabase.from('project_tasks').select('id')
+        .eq('linked_programme_task_id', task_id).eq('source', 'portal_completion').eq('status', 'open').limit(1);
+      if (!existingTask || !existingTask.length) {
+        await supabase.from('project_tasks').insert([{
+          project_id: projectId,
+          title: `Confirm complete: ${task.title}${task.room_id ? '' : ''}`,
+          description: `${portalUser.name || portalUser.email} marked this as complete on the portal. Confirm before closing.`,
+          status: 'open',
+          severity: 'follow-up',
+          room_id: task.room_id,
+          linked_programme_task_id: task_id,
+          source: 'portal_completion',
+        }]);
+      }
+
+      return res.status(200).json({ ok: true });
     }
 
     return res.status(400).json({ error: 'Unknown action' });

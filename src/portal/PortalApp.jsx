@@ -214,8 +214,25 @@ function ResetPasswordScreen({ token, onReset }) {
   );
 }
 
-function ExpandableTaskCard({ t }) {
+function ExpandableTaskCard({ t, sessionToken, onMarkedComplete }) {
   const [open, setOpen] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const isPending = !!t.marked_complete_at;
+  const isDone = t.status === 'complete';
+
+  const handleMarkComplete = async (e) => {
+    e.stopPropagation();
+    setMarking(true);
+    try {
+      const res = await fetch('/api/portal-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_token: sessionToken, action: 'mark_task_complete', task_id: t.id }),
+      });
+      if (res.ok) onMarkedComplete(t.id);
+    } catch (err) { /* noop */ }
+    setMarking(false);
+  };
+
   return (
     <div style={{ ...S.card, cursor: 'pointer' }} onClick={() => setOpen(v => !v)}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -225,8 +242,8 @@ function ExpandableTaskCard({ t }) {
       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
         {t.start_date && t.end_date ? `${t.start_date} → ${t.end_date}` : 'Dates TBC'}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: t.status === 'complete' ? '#059669' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
-        {(t.status || 'not started').replace('_', ' ')}
+      <div style={{ fontSize: 11, fontWeight: 700, color: isDone ? '#059669' : isPending ? '#d97706' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
+        {isDone ? 'Complete' : isPending ? 'Marked complete — awaiting confirmation' : (t.status || 'not started').replace('_', ' ')}
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f3f4f6' }}>
@@ -237,7 +254,18 @@ function ExpandableTaskCard({ t }) {
             <div style={{ fontSize: 12, color: '#374151', marginBottom: 4 }}><strong>Notes:</strong> {t.notes}</div>
           )}
           {!t.trade && !t.notes && (
-            <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>No further detail added yet.</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginBottom: 8 }}>No further detail added yet.</div>
+          )}
+          {!isDone && !isPending && (
+            <button onClick={handleMarkComplete} disabled={marking}
+              style={{ marginTop: 6, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: marking ? 0.6 : 1 }}>
+              {marking ? 'Marking...' : 'Mark as complete'}
+            </button>
+          )}
+          {isPending && (
+            <div style={{ fontSize: 11, color: '#92400e', background: '#fef3c7', padding: 8, borderRadius: 6 }}>
+              Waiting for the project manager or main contractor to confirm.
+            </div>
           )}
         </div>
       )}
@@ -251,6 +279,10 @@ function ProgrammeTab({ sessionToken }) {
     fetch('/api/portal-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_token: sessionToken, action: 'programme' }) })
       .then(r => r.json()).then(j => setTasks(j.tasks || []));
   }, [sessionToken]);
+
+  const handleMarkedComplete = (taskId) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, marked_complete_at: new Date().toISOString() } : t));
+  };
 
   if (tasks === null) return <div style={S.empty}>Loading...</div>;
   if (!tasks.length) return <div style={S.empty}>No programme items have been shared yet.</div>;
@@ -269,7 +301,7 @@ function ProgrammeTab({ sessionToken }) {
       <div style={{ background: '#1F2937', color: '#fff', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 6, marginBottom: 8 }}>
         {roomName}
       </div>
-      {groups[roomName].map(t => <ExpandableTaskCard key={t.id} t={t} />)}
+      {groups[roomName].map(t => <ExpandableTaskCard key={t.id} t={t} sessionToken={sessionToken} onMarkedComplete={handleMarkedComplete} />)}
     </div>
   ));
 }
