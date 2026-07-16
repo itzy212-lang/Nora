@@ -157,6 +157,53 @@ export default async function handler(req, res) {
       return res.status(200).json({ task: data });
     }
 
+    // ── Create a task manually (Site Log Tasks panel "+ Add Task") ────────────
+    if (action === 'create_task') {
+      const { project_id, title, description, severity, room_id, linked_programme_task_id, due_date } = req.body;
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({ error: 'Missing task title' });
+      }
+      const { data, error } = await supabase.from('project_tasks').insert([{
+        project_id,
+        title: String(title).trim(),
+        description: description || '',
+        status: 'open',
+        severity: severity || 'follow-up',
+        room_id: room_id || null,
+        linked_programme_task_id: linked_programme_task_id || null,
+        due_date: due_date || null,
+        source: 'manual',
+      }]).select('*, project_rooms(name), programme_tasks(title, start_date, end_date)').single();
+      if (error) throw error;
+      return res.status(200).json({ task: data });
+    }
+
+    // ── Update a task's link/room/due date (edit from Tasks panel) ────────────
+    if (action === 'update_task') {
+      const { task_id, room_id, linked_programme_task_id, due_date, title, description, severity } = req.body;
+      const patch = {};
+      if (room_id !== undefined) patch.room_id = room_id || null;
+      if (linked_programme_task_id !== undefined) patch.linked_programme_task_id = linked_programme_task_id || null;
+      if (due_date !== undefined) patch.due_date = due_date || null;
+      if (title !== undefined) patch.title = title;
+      if (description !== undefined) patch.description = description;
+      if (severity !== undefined) patch.severity = severity;
+      const { data, error } = await supabase.from('project_tasks').update(patch).eq('id', task_id)
+        .select('*, project_rooms(name), programme_tasks(title, start_date, end_date)').single();
+      if (error) throw error;
+      return res.status(200).json({ task: data });
+    }
+
+    // ── Fetch rooms + programme tasks for the manual task picker ──────────────
+    if (action === 'list_pickers') {
+      const { project_id } = req.body;
+      const [{ data: rooms }, { data: programmeTasks }] = await Promise.all([
+        supabase.from('project_rooms').select('id, name').eq('project_id', project_id).order('position'),
+        supabase.from('programme_tasks').select('id, title, room_id').eq('project_id', project_id).neq('status', 'complete'),
+      ]);
+      return res.status(200).json({ rooms: rooms || [], programme_tasks: programmeTasks || [] });
+    }
+
     // ── Load a session's full note + claim history ───────────────────────────
     if (action === 'load_session') {
       const { session_id } = req.body;

@@ -31,6 +31,10 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
   const [loadingSessions, setLoadingSessions] = useState(false);
 
   const [openTasks, setOpenTasks] = useState([]);
+  const [addTaskModal, setAddTaskModal] = useState(null); // { title, description, severity, room_id, linked_programme_task_id, due_date }
+  const [pickerRooms, setPickerRooms] = useState([]);
+  const [pickerProgrammeTasks, setPickerProgrammeTasks] = useState([]);
+  const [savingTask, setSavingTask] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
 
   const [draft, setDraft] = useState(null);
@@ -93,6 +97,53 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
     } catch (err) {
       console.error('[WeeklyMinutes] close task failed', err);
     }
+  };
+
+  const openAddTaskModal = async () => {
+    setAddTaskModal({ title: '', description: '', severity: 'follow-up', room_id: '', linked_programme_task_id: '', due_date: '' });
+    try {
+      const res = await fetch('/api/generate-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_pickers', project_id: projectId }),
+      });
+      const json = await res.json();
+      setPickerRooms(json.rooms || []);
+      setPickerProgrammeTasks(json.programme_tasks || []);
+    } catch (err) {
+      console.error('[WeeklyMinutes] load pickers failed', err);
+    }
+  };
+
+  const saveManualTask = async () => {
+    if (!addTaskModal?.title?.trim()) return;
+    setSavingTask(true);
+    try {
+      const res = await fetch('/api/generate-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_task',
+          project_id: projectId,
+          title: addTaskModal.title,
+          description: addTaskModal.description,
+          severity: addTaskModal.severity,
+          room_id: addTaskModal.room_id || null,
+          linked_programme_task_id: addTaskModal.linked_programme_task_id || null,
+          due_date: addTaskModal.due_date || null,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.task) {
+        setOpenTasks(prev => [...prev, json.task]);
+        setAddTaskModal(null);
+      } else {
+        alert(json.error || 'Could not create task.');
+      }
+    } catch (err) {
+      alert('Could not create task.');
+    }
+    setSavingTask(false);
   };
 
   useEffect(() => {
@@ -336,7 +387,13 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Open Tasks</div>
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>{openTasks.length} open</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>{openTasks.length} open</span>
+            <button onClick={openAddTaskModal}
+              style={{ padding: '5px 12px', borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              + Add Task
+            </button>
+          </div>
         </div>
         {loadingTasks ? (
           <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading...</div>
@@ -393,6 +450,63 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
       </div>
     );
 
+    const addTaskModalUI = addTaskModal && (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Add task</div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Title</div>
+          <input value={addTaskModal.title} onChange={e => setAddTaskModal(prev => ({ ...prev, title: e.target.value }))}
+            placeholder="e.g. Order bathroom tiles"
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Details (optional)</div>
+          <textarea value={addTaskModal.description} onChange={e => setAddTaskModal(prev => ({ ...prev, description: e.target.value }))}
+            rows={2} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12, boxSizing: 'border-box', resize: 'vertical' }} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Severity</div>
+              <select value={addTaskModal.severity} onChange={e => setAddTaskModal(prev => ({ ...prev, severity: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
+                <option value="follow-up">Follow-up</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Due date</div>
+              <input type="date" value={addTaskModal.due_date} onChange={e => setAddTaskModal(prev => ({ ...prev, due_date: e.target.value }))}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Room (optional)</div>
+          <select value={addTaskModal.room_id} onChange={e => setAddTaskModal(prev => ({ ...prev, room_id: e.target.value, linked_programme_task_id: '' }))}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12 }}>
+            <option value="">No specific room</option>
+            {pickerRooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Link to programme task (optional)</div>
+          <select value={addTaskModal.linked_programme_task_id} onChange={e => setAddTaskModal(prev => ({ ...prev, linked_programme_task_id: e.target.value }))}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 20 }}>
+            <option value="">Not linked</option>
+            {pickerProgrammeTasks
+              .filter(pt => !addTaskModal.room_id || pt.room_id === addTaskModal.room_id)
+              .map(pt => <option key={pt.id} value={pt.id}>{pt.title}</option>)}
+          </select>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={() => setAddTaskModal(null)} style={{ padding: '9px 18px', borderRadius: 10, background: '#f3f4f6', color: '#374151', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+            <button onClick={saveManualTask} disabled={savingTask || !addTaskModal.title.trim()}
+              style={{ padding: '9px 18px', borderRadius: 10, background: '#1F2937', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (savingTask || !addTaskModal.title.trim()) ? 0.5 : 1 }}>
+              {savingTask ? 'Adding...' : 'Add task'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
     // Desktop — split view, both visible
     if (!isMobile) {
       return (
@@ -400,6 +514,7 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
           <TasksPanel />
           <div style={{ borderTop: '1px solid #e5e7eb' }} />
           <VisitsPanel />
+          {addTaskModalUI}
         </div>
       );
     }
@@ -417,6 +532,7 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {mobileView === 'tasks' ? <TasksPanel /> : <VisitsPanel />}
         </div>
+        {addTaskModalUI}
       </div>
     );
   }
