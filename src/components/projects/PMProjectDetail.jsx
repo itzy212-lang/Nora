@@ -2985,7 +2985,7 @@ Proceed?`
         {/* ── Weekly Minutes tab ── */}
         {tab === 'minutes' && (
           <div style={{ height: 640, border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-            <WeeklyMinutes defaultProjectId={project.id} />
+            <WeeklyMinutes defaultProjectId={project.id} onOpenComposer={onOpenComposer} />
           </div>
         )}
 

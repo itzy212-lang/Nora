@@ -177,6 +177,49 @@ export default async function handler(req, res) {
         visit_date: session.visit_date,
       }, process.env.OPENAI_API_KEY);
 
+      // Generate email drafts for anything flagged urgent or follow-up — one per action item
+      const actionableRows = [];
+      (draft.rooms || []).forEach(room => {
+        (room.rows || []).forEach(row => {
+          if (row.severity === 'urgent' || row.severity === 'follow-up') {
+            actionableRows.push({ room_name: room.room_name, ...row });
+          }
+        });
+      });
+
+      let emailDrafts = [];
+      if (actionableRows.length) {
+        try {
+          const emailPrompt =
+            `You are drafting short, professional emails on behalf of a Project Manager following a weekly site visit.\n\n` +
+            `PROJECT: ${project?.bo_premise_address || ''}\n` +
+            `VISIT: ${session.week_label}\n\n` +
+            `For each action item below, draft a short, clear email to the most likely recipient (a specific trade/contractor if the item names one, otherwise the client). ` +
+            `Keep it brief — 2-4 sentences. State the issue and what's needed, in a professional but friendly tone. Do not sign off with a name — end with "Kind regards,".\n\n` +
+            `ACTION ITEMS:\n` +
+            actionableRows.map((r, i) => `${i + 1}. [${r.room_name}] ${r.description} -- Action: ${r.action}`).join('\n') +
+            `\n\nReturn ONLY valid JSON: { "drafts": [ { "recipient_guess": "e.g. Electrician / Client / Supplier", "subject": "...", "body": "..." } ] } — one draft per action item, same order.`;
+
+          const emailRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gpt-4o',
+              temperature: 0.3,
+              max_completion_tokens: 1500,
+              messages: [{ role: 'user', content: emailPrompt }],
+              response_format: { type: 'json_object' },
+            }),
+          });
+          const emailPayload = await emailRes.json();
+          const emailRaw = emailPayload.choices?.[0]?.message?.content || '{"drafts":[]}';
+          const emailJson = JSON.parse(emailRaw);
+          emailDrafts = Array.isArray(emailJson.drafts) ? emailJson.drafts : [];
+        } catch (emailErr) {
+          console.error('[generate-minutes] email draft generation failed:', emailErr.message);
+        }
+      }
+
       await supabase.from('minutes_sessions').update({
         status: 'generated',
         generated_at: new Date().toISOString(),
@@ -184,6 +227,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         draft,
+        email_drafts: emailDrafts,
         missed_tasks: missedTasks.map(t => ({ title: t.title, end_date: t.end_date })),
         session,
       });

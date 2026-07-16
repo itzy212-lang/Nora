@@ -10,7 +10,7 @@ const SEVERITY_COLOURS = {
   urgent: { bg: '#FEE2E2', text: '#991B1B' },
 };
 
-export default function WeeklyMinutes({ defaultProjectId, onBack }) {
+export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer }) {
   const { state } = useApp();
   const projects = state.projects || [];
 
@@ -30,6 +30,8 @@ export default function WeeklyMinutes({ defaultProjectId, onBack }) {
 
   const [draft, setDraft] = useState(null);
   const [missedTasks, setMissedTasks] = useState([]);
+  const [emailDrafts, setEmailDrafts] = useState([]);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const chatEndRef = useRef(null);
 
@@ -149,6 +151,7 @@ export default function WeeklyMinutes({ defaultProjectId, onBack }) {
       if (res.ok) {
         setDraft(json.draft);
         setMissedTasks(json.missed_tasks || []);
+        setEmailDrafts((json.email_drafts || []).map(d => ({ ...d, id: uid(), sent: false })));
         setPhase('preview');
       } else {
         alert(json.error || 'Could not generate minutes.');
@@ -166,6 +169,99 @@ export default function WeeklyMinutes({ defaultProjectId, onBack }) {
     }
     const list = missedTasks.map(t => `• ${t.title} (due ${t.end_date})`).join('\n');
     alert(`These programme items are due this week but weren't mentioned in your notes:\n\n${list}`);
+  };
+
+  const SEVERITY_HTML_COLOURS = {
+    none: { bg: '#D1FAE5', text: '#065F46' },
+    'follow-up': { bg: '#FEF3C7', text: '#92400E' },
+    urgent: { bg: '#FEE2E2', text: '#991B1B' },
+  };
+
+  const buildHtmlForPdf = () => {
+    if (!draft) return '';
+    const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let sectionNum = 1;
+    let body = `<div style="font-family:Arial,sans-serif;max-width:100%;">` +
+      `<div style="text-align:center;margin-bottom:20px;">` +
+      `<div style="font-size:24pt;font-weight:700;color:#1F2937;">WEEKLY SITE MINUTES</div>` +
+      `<div style="font-size:13pt;color:#6B7280;margin-top:4px;">Site Inspection Record — ${esc(weekLabel)}</div>` +
+      `</div>` +
+      `<table style="width:100%;border-collapse:collapse;margin-bottom:24px;">` +
+      `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;width:30%;">Project</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(projectAddress)}</td></tr>` +
+      `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Date of Visit</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))}</td></tr>` +
+      `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Visit Number</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(weekLabel)}</td></tr>` +
+      `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Attended By</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(attendedBy)}</td></tr>` +
+      `</table>`;
+
+    (draft.rooms || []).filter(r => r.rows?.length).forEach(room => {
+      body += `<div style="background:#1F2937;color:#fff;font-weight:700;font-size:12pt;padding:8px 12px;margin:20px 0 8px 0;">${sectionNum}. ${esc(room.room_name)}</div>` +
+        `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">` +
+        `<tr><th style="background:#F3F4F6;border:1px solid #C8C8C8;padding:6px 10px;text-align:left;font-size:10pt;width:10%;">Ref</th><th style="background:#F3F4F6;border:1px solid #C8C8C8;padding:6px 10px;text-align:left;font-size:10pt;width:55%;">Description</th><th style="background:#F3F4F6;border:1px solid #C8C8C8;padding:6px 10px;text-align:left;font-size:10pt;width:35%;">Action</th></tr>`;
+      room.rows.forEach(r => {
+        const c = SEVERITY_HTML_COLOURS[r.severity] || SEVERITY_HTML_COLOURS.none;
+        body += `<tr><td style="border:1px solid #C8C8C8;padding:7px 10px;font-size:10pt;font-weight:700;">${esc(r.ref)}</td>` +
+          `<td style="border:1px solid #C8C8C8;padding:7px 10px;font-size:10pt;">${esc(r.description)}</td>` +
+          `<td style="border:1px solid #C8C8C8;padding:7px 10px;font-size:10pt;background:${c.bg};color:${c.text};font-weight:${r.severity !== 'none' ? 700 : 400};">${esc(r.action)}</td></tr>`;
+      });
+      body += `</table>`;
+      sectionNum++;
+    });
+
+    if ((draft.general_notes || []).length) {
+      body += `<div style="background:#1F2937;color:#fff;font-weight:700;font-size:12pt;padding:8px 12px;margin:20px 0 8px 0;">${sectionNum}. General Notes</div>` +
+        `<div style="border:1px solid #C8C8C8;background:#FFFBEB;padding:12px 16px;">` +
+        `<ol style="margin:0;padding-left:18px;font-size:10.5pt;">` +
+        draft.general_notes.map(n => `<li style="margin-bottom:6px;">${esc(n)}</li>`).join('') +
+        `</ol></div>`;
+    }
+
+    body += `</div>`;
+    return body;
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const html = buildHtmlForPdf();
+      const res = await fetch('/api/export-minutes-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, filename: `Weekly Site Minutes - ${weekLabel} - ${projectAddress}.pdf` }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Could not generate PDF.');
+        setDownloadingPdf(false);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Weekly Site Minutes - ${weekLabel}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Could not generate PDF.');
+    }
+    setDownloadingPdf(false);
+  };
+
+  const handleEmailToClient = () => {
+    const html = buildHtmlForPdf();
+    if (typeof onOpenComposer === 'function') {
+      onOpenComposer({
+        mode: 'compose',
+        projectId,
+        subject: `Weekly Site Minutes — ${weekLabel} — ${projectAddress}`,
+        body: html,
+        prefillGreeting: false,
+      });
+    } else {
+      alert('Email composer is not available here.');
+    }
   };
 
   // ── Setup phase ────────────────────────────────────────────────────────
@@ -251,11 +347,45 @@ export default function WeeklyMinutes({ defaultProjectId, onBack }) {
           </div>
         )}
 
+        {emailDrafts.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 10 }}>Draft emails for follow-up items</div>
+            {emailDrafts.map((d, i) => (
+              <div key={d.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 10, background: d.sent ? '#f0fdf4' : '#fff' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 4 }}>
+                  To: {d.recipient_guess || 'Recipient'} {d.sent && <span style={{ color: '#10b981' }}>· Sent</span>}
+                </div>
+                <input
+                  value={d.subject || ''}
+                  onChange={e => setEmailDrafts(prev => prev.map(x => x.id === d.id ? { ...x, subject: e.target.value } : x))}
+                  style={{ width: '100%', fontWeight: 700, fontSize: 13, border: 'none', outline: 'none', marginBottom: 8, background: 'transparent' }}
+                />
+                <textarea
+                  value={d.body || ''}
+                  onChange={e => setEmailDrafts(prev => prev.map(x => x.id === d.id ? { ...x, body: e.target.value } : x))}
+                  rows={4}
+                  style={{ width: '100%', fontSize: 13, border: '1px solid #f3f4f6', borderRadius: 8, padding: 8, resize: 'vertical', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                  <button
+                    onClick={() => setEmailDrafts(prev => prev.map(x => x.id === d.id ? { ...x, sent: true } : x))}
+                    disabled={d.sent}
+                    style={{ padding: '6px 14px', borderRadius: 8, background: d.sent ? '#d1fae5' : '#1F2937', color: d.sent ? '#065f46' : '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: d.sent ? 'default' : 'pointer' }}>
+                    {d.sent ? 'Sent ✓' : 'Send'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, background: '#1F2937', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            Download PDF
+          <button onClick={handleDownloadPdf} disabled={downloadingPdf}
+            style={{ flex: 1, padding: 12, borderRadius: 10, background: '#1F2937', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: downloadingPdf ? 0.6 : 1 }}>
+            {downloadingPdf ? 'Preparing PDF...' : 'Download PDF'}
           </button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, background: '#10b981', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleEmailToClient}
+            style={{ flex: 1, padding: 12, borderRadius: 10, background: '#10b981', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             Email to client
           </button>
         </div>
