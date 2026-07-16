@@ -214,6 +214,37 @@ function ResetPasswordScreen({ token, onReset }) {
   );
 }
 
+function ExpandableTaskCard({ t }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ ...S.card, cursor: 'pointer' }} onClick={() => setOpen(v => !v)}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{t.title}</div>
+        <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+        {t.start_date && t.end_date ? `${t.start_date} → ${t.end_date}` : 'Dates TBC'}
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: t.status === 'complete' ? '#059669' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
+        {(t.status || 'not started').replace('_', ' ')}
+      </div>
+      {open && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f3f4f6' }}>
+          {t.trade && (
+            <div style={{ fontSize: 12, color: '#374151', marginBottom: 4 }}><strong>Trade:</strong> {t.trade}</div>
+          )}
+          {t.notes && (
+            <div style={{ fontSize: 12, color: '#374151', marginBottom: 4 }}><strong>Notes:</strong> {t.notes}</div>
+          )}
+          {!t.trade && !t.notes && (
+            <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>No further detail added yet.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProgrammeTab({ sessionToken }) {
   const [tasks, setTasks] = useState(null);
   useEffect(() => {
@@ -224,16 +255,21 @@ function ProgrammeTab({ sessionToken }) {
   if (tasks === null) return <div style={S.empty}>Loading...</div>;
   if (!tasks.length) return <div style={S.empty}>No programme items have been shared yet.</div>;
 
-  return tasks.map(t => (
-    <div key={t.id} style={S.card}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{t.title}</div>
-      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
-        {t.project_rooms?.name && `${t.project_rooms.name} · `}
-        {t.start_date && t.end_date ? `${t.start_date} → ${t.end_date}` : 'Dates TBC'}
+  // Group tasks by room — unallocated tasks (no room_id) go under "General"
+  const groups = {};
+  tasks.forEach(t => {
+    const roomName = t.project_rooms?.name || 'General';
+    if (!groups[roomName]) groups[roomName] = [];
+    groups[roomName].push(t);
+  });
+  const roomNames = Object.keys(groups).sort((a, b) => a === 'General' ? 1 : b === 'General' ? -1 : a.localeCompare(b));
+
+  return roomNames.map(roomName => (
+    <div key={roomName} style={{ marginBottom: 20 }}>
+      <div style={{ background: '#1F2937', color: '#fff', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 6, marginBottom: 8 }}>
+        {roomName}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: t.status === 'complete' ? '#059669' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
-        {(t.status || 'not started').replace('_', ' ')}
-      </div>
+      {groups[roomName].map(t => <ExpandableTaskCard key={t.id} t={t} />)}
     </div>
   ));
 }

@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       const visibleIds = (visRows || []).map(v => v.item_id);
       if (!visibleIds.length) return res.status(200).json({ tasks: [] });
 
-      const { data: tasks } = await supabase.from('programme_tasks').select('id, title, trade, start_date, end_date, status, room_id, project_rooms(name)').in('id', visibleIds);
+      const { data: tasks } = await supabase.from('programme_tasks').select('id, title, trade, notes, start_date, end_date, status, room_id, project_rooms(name)').in('id', visibleIds);
       return res.status(200).json({ tasks: tasks || [] });
     }
 
