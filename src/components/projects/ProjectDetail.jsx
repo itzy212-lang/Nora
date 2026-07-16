@@ -3125,10 +3125,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           const hasS6 = noticeRows.some(n => n.section_6);
           const s2Subs = noticeRows
             .filter(n => n.section_2 && n.section_2_subsections)
-            .map(n => n.section_2_subsections)
+            .map(n => String(n.section_2_subsections || ''))
             .join(',');
           const s2SubFormatted = s2Subs
-            ? s2Subs.split(',').map(s => '(' + s.trim() + ')').filter(Boolean).join('')
+            ? s2Subs.split(',').map(s => '(' + String(s).trim() + ')').filter(Boolean).join('')
             : '';
 
           const parts = [];
@@ -3154,8 +3154,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         noticeRows.forEach(row => {
           const items = Array.isArray(row.notifiable_works) ? row.notifiable_works : [];
           items.forEach(w => {
-            const key = (w || '').trim().toLowerCase();
-            if (key && !seen.has(key)) { seen.add(key); worksItems.push({ item: w.trim() }); }
+            const wStr = String(w || '');
+            const key = wStr.trim().toLowerCase();
+            if (key && !seen.has(key)) { seen.add(key); worksItems.push({ item: wStr.trim() }); }
           });
         });
       }
