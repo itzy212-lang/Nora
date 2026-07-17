@@ -2,7 +2,7 @@
 // Phase 1 — Construction / PM project detail page
 // Cards: Overview, Subcontractors, Financials
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import sb from '../../supabaseClient';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import WeeklyMinutes from '../minutes/WeeklyMinutes';
@@ -186,6 +186,164 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DocumentsTab({ project, subs, card }) {
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const loadDocs = () => {
+    setLoading(true);
+    sb.from('documents').select('*').eq('project_id', project.id).order('created_at', { ascending: false })
+      .then(({ data }) => { setDocs(data || []); setLoading(false); });
+  };
+
+  useEffect(() => { loadDocs(); }, [project.id]);
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    for (const file of files) {
+      const path = `${project.id}/${Date.now()}_${file.name}`;
+      const { error: uploadError } = await sb.storage.from('documents').upload(path, file);
+      if (uploadError) { alert(`Could not upload ${file.name}: ${uploadError.message}`); continue; }
+
+      const { data: signedData } = await sb.storage.from('documents').createSignedUrl(path, 60 * 60 * 24 * 365);
+
+      const { data: newDoc } = await sb.from('documents').insert([{
+        project_id: project.id,
+        file_name: file.name,
+        file_type: file.type,
+        storage_path: path,
+        signed_url: signedData?.signedUrl || null,
+        category: 'general',
+      }]).select('*').single();
+
+      if (newDoc) setDocs(prev => [newDoc, ...prev]);
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDelete = async (doc) => {
+    if (!window.confirm(`Delete "${doc.file_name}"?`)) return;
+    if (doc.storage_path) await sb.storage.from('documents').remove([doc.storage_path]);
+    await sb.from('documents').delete().eq('id', doc.id);
+    await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id);
+    setDocs(prev => prev.filter(d => d.id !== doc.id));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Documents</div>
+        <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+          style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}>
+          {uploading ? 'Uploading...' : '+ Upload'}
+        </button>
+        <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleUpload} />
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading...</div>
+      ) : docs.length === 0 ? (
+        <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No documents uploaded yet.</div>
+      ) : (
+        docs.map(doc => <DocumentCard key={doc.id} doc={doc} project={project} subs={subs} card={card} onDelete={handleDelete} />)
+      )}
+    </div>
+  );
+}
+
+function DocumentCard({ doc, project, subs, card, onDelete }) {
+  const [visOpen, setVisOpen] = useState(false);
+  const [visClient, setVisClient] = useState(false);
+  const [visSubIds, setVisSubIds] = useState([]);
+  const [checkingVis, setCheckingVis] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadVisibility = async () => {
+    setCheckingVis(true);
+    const { data } = await sb.from('portal_visibility').select('*').eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id);
+    setVisClient(!!(data || []).find(v => v.visible_to_type === 'client'));
+    setVisSubIds((data || []).filter(v => v.visible_to_type === 'subcontractor').map(v => v.visible_to_subcontractor_id));
+    setCheckingVis(false);
+  };
+
+  const openPanel = () => {
+    setVisOpen(v => !v);
+    if (!visOpen) loadVisibility();
+  };
+
+  const toggleClient = async (checked) => {
+    setVisClient(checked);
+    setSaving(true);
+    if (checked) {
+      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'client' }]);
+    } else {
+      await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id).eq('visible_to_type', 'client');
+    }
+    setSaving(false);
+  };
+
+  const toggleSub = async (subId, checked) => {
+    setVisSubIds(prev => checked ? [...prev, subId] : prev.filter(id => id !== subId));
+    setSaving(true);
+    if (checked) {
+      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'subcontractor', visible_to_subcontractor_id: subId }]);
+    } else {
+      await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id).eq('visible_to_type', 'subcontractor').eq('visible_to_subcontractor_id', subId);
+    }
+    setSaving(false);
+  };
+
+  const isVisible = visClient || visSubIds.length > 0;
+
+  return (
+    <div style={card()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <a href={doc.signed_url || doc.public_url} target="_blank" rel="noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>
+          {doc.file_name}
+        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isVisible && <span style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>On portal</span>}
+          <button onClick={openPanel} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Share</button>
+          <button onClick={() => onDelete(doc)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{doc.category || 'General'}</div>
+
+      {visOpen && (
+        <div style={{ marginTop: 10, padding: 10, background: 'rgba(59,130,246,0.06)', borderRadius: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Show on portal to:</div>
+          {checkingVis ? (
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading...</div>
+          ) : (
+            <>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={visClient} disabled={saving} onChange={e => toggleClient(e.target.checked)} />
+                <span style={{ fontSize: 12, color: 'var(--text)' }}>Client</span>
+              </label>
+              {subs.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 4 }}>Subcontractors</div>
+                  {subs.map(s => (
+                    <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={visSubIds.includes(s.id)} disabled={saving} onChange={e => toggleSub(s.id, e.target.checked)} />
+                      <span style={{ fontSize: 12, color: 'var(--text)' }}>{s.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -3359,11 +3517,7 @@ Proceed?`
         )}
 
         {/* ── Documents tab ── */}
-        {tab === 'documents' && (
-          <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
-            Project documents coming soon.
-          </div>
-        )}
+        {tab === 'documents' && <DocumentsTab project={project} subs={subs} card={card} />}
 
         {tab === 'portal' && <PortalTab project={project} subs={subs} card={card} />}
 
