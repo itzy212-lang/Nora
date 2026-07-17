@@ -87,7 +87,18 @@ export function buildAOLOAPdfPlaceholders(project = {}, ao = {}) {
   return rest;
 }
 
+export function buildASLOAPdfPlaceholders(project = {}, ao = {}) {
+  // Same underlying data as a standard AO LoA — the agreed surveyor scenario uses the
+  // adjoining owner's own details, just against different template wording
+  return buildAOLOAPdfPlaceholders(project, ao);
+}
+
 export function buildLOAPdfFileName(type, project = {}, ao = {}) {
+  if (type === 'as') {
+    const ref = clean(project.ref || 'Project');
+    const aoName = clean(ao.name || 'AO').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+    return `${ref}_${aoName}_Agreed_Surveyor_LOA.pdf`;
+  }
   const base = buildLOAFileName(type, project, ao);
   return base.replace(/\.docx$/i, '.pdf');
 }

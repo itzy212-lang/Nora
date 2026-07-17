@@ -3,7 +3,7 @@ import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
-import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, buildBOLOAPdfPlaceholders, buildAOLOAPdfPlaceholders, buildLOAPdfFileName } from '../../utils/buildLOAPlaceholders';
+import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, buildBOLOAPdfPlaceholders, buildAOLOAPdfPlaceholders, buildASLOAPdfPlaceholders, buildLOAPdfFileName } from '../../utils/buildLOAPlaceholders';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
@@ -3084,11 +3084,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const handleDownloadAOLOAPdf = useCallback(async (ao) => {
     const aoKey = `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}`;
     setLoaLoading(aoKey);
+    const isAgreedSurveyor = !!ao.agreed_surveyor;
     try {
       const r = await generateDocument({
-        templateKey: 'loa_ao_pdf',
-        mergeData: buildAOLOAPdfPlaceholders(project, ao),
-        fileName: buildLOAPdfFileName('ao', project, ao),
+        templateKey: isAgreedSurveyor ? 'loa_as_pdf' : 'loa_ao_pdf',
+        mergeData: isAgreedSurveyor ? buildASLOAPdfPlaceholders(project, ao) : buildAOLOAPdfPlaceholders(project, ao),
+        fileName: buildLOAPdfFileName(isAgreedSurveyor ? 'as' : 'ao', project, ao),
         projectId: project.id,
       });
       if (!r.success) alert(r.error || 'Could not generate LoA PDF.');
