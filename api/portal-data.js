@@ -67,14 +67,11 @@ export default async function handler(req, res) {
 
     // ── Documents — only files with an approved visibility row ────────────────
     if (action === 'documents') {
-      let visQuery = supabase.from('portal_visibility').select('item_id').eq('project_id', projectId).eq('item_type', 'document').eq('visible_to_type', visFilter.visible_to_type);
+      let visQuery = supabase.from('portal_visibility').select('item_id, item_name, item_url, created_at').eq('project_id', projectId).eq('item_type', 'document').eq('visible_to_type', visFilter.visible_to_type);
       if (visFilter.visible_to_subcontractor_id) visQuery = visQuery.eq('visible_to_subcontractor_id', visFilter.visible_to_subcontractor_id);
       const { data: visRows } = await visQuery;
-      const visibleIds = (visRows || []).map(v => v.item_id);
-      if (!visibleIds.length) return res.status(200).json({ documents: [] });
-
-      const { data: docs } = await supabase.from('documents').select('id, file_name, file_url, public_url, signed_url, category, created_at').in('id', visibleIds);
-      return res.status(200).json({ documents: docs || [] });
+      const documents = (visRows || []).map(v => ({ id: v.item_id, file_name: v.item_name, webUrl: v.item_url, shared_at: v.created_at }));
+      return res.status(200).json({ documents });
     }
 
     // ── Approvals — variations/requests sent to this portal user ──────────────

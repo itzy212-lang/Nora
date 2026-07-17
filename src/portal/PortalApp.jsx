@@ -423,10 +423,9 @@ function DocumentsTab({ sessionToken }) {
   if (!docs.length) return <div style={S.empty}>No documents have been shared yet.</div>;
 
   return docs.map(d => (
-    <a key={d.id} href={d.signed_url || d.public_url || d.file_url} target="_blank" rel="noreferrer"
+    <a key={d.id} href={d.webUrl} target="_blank" rel="noreferrer"
       style={{ ...S.card, display: 'block', textDecoration: 'none' }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{d.file_name}</div>
-      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{d.category || 'Document'}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>📄 {d.file_name}</div>
     </a>
   ));
 }

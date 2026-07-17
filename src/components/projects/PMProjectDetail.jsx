@@ -191,76 +191,67 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
 }
 
 function DocumentsTab({ project, subs, card }) {
-  const [docs, setDocs] = useState([]);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
+  const [error, setError] = useState(null);
 
-  const loadDocs = () => {
+  const loadFiles = () => {
+    if (!project.onedrive_folder_id) { setLoading(false); return; }
     setLoading(true);
-    sb.from('documents').select('*').eq('project_id', project.id).order('created_at', { ascending: false })
-      .then(({ data }) => { setDocs(data || []); setLoading(false); });
+    setError(null);
+    fetch('/api/onedrive-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: 'help@sq1consulting.co.uk',
+        action: 'get_folder_contents',
+        project_folder_id: project.onedrive_folder_id,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          setFiles((data.items || []).filter(i => !!i.file)); // files only, not subfolders
+        } else {
+          setError(data.error || 'Could not load OneDrive files');
+        }
+        setLoading(false);
+      })
+      .catch(() => { setError('Could not load OneDrive files'); setLoading(false); });
   };
 
-  useEffect(() => { loadDocs(); }, [project.id]);
+  useEffect(() => { loadFiles(); }, [project.id, project.onedrive_folder_id]);
 
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setUploading(true);
-    for (const file of files) {
-      const path = `${project.id}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await sb.storage.from('documents').upload(path, file);
-      if (uploadError) { alert(`Could not upload ${file.name}: ${uploadError.message}`); continue; }
-
-      const { data: signedData } = await sb.storage.from('documents').createSignedUrl(path, 60 * 60 * 24 * 365);
-
-      const { data: newDoc } = await sb.from('documents').insert([{
-        project_id: project.id,
-        file_name: file.name,
-        file_type: file.type,
-        storage_path: path,
-        signed_url: signedData?.signedUrl || null,
-        category: 'general',
-      }]).select('*').single();
-
-      if (newDoc) setDocs(prev => [newDoc, ...prev]);
-    }
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleDelete = async (doc) => {
-    if (!window.confirm(`Delete "${doc.file_name}"?`)) return;
-    if (doc.storage_path) await sb.storage.from('documents').remove([doc.storage_path]);
-    await sb.from('documents').delete().eq('id', doc.id);
-    await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id);
-    setDocs(prev => prev.filter(d => d.id !== doc.id));
-  };
+  if (!project.onedrive_folder_id) {
+    return (
+      <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+        No OneDrive folder linked to this project yet.
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Documents</div>
-        <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-          style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}>
-          {uploading ? 'Uploading...' : '+ Upload'}
-        </button>
-        <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleUpload} />
+        <button onClick={loadFiles} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Refresh</button>
       </div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Files uploaded to this project's OneDrive folder. Tick who should see each one on the portal.</div>
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading...</div>
-      ) : docs.length === 0 ? (
-        <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No documents uploaded yet.</div>
+      ) : error ? (
+        <div style={{ ...card(), color: '#ef4444', fontSize: 13 }}>{error}</div>
+      ) : files.length === 0 ? (
+        <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No files in the OneDrive folder yet. Add files there and hit Refresh.</div>
       ) : (
-        docs.map(doc => <DocumentCard key={doc.id} doc={doc} project={project} subs={subs} card={card} onDelete={handleDelete} />)
+        files.map(file => <DocumentCard key={file.id} doc={file} project={project} subs={subs} card={card} />)
       )}
     </div>
   );
 }
 
-function DocumentCard({ doc, project, subs, card, onDelete }) {
+function DocumentCard({ doc, project, subs, card }) {
   const [visOpen, setVisOpen] = useState(false);
   const [visClient, setVisClient] = useState(false);
   const [visSubIds, setVisSubIds] = useState([]);
@@ -284,7 +275,7 @@ function DocumentCard({ doc, project, subs, card, onDelete }) {
     setVisClient(checked);
     setSaving(true);
     if (checked) {
-      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'client' }]);
+      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'client', item_name: doc.name, item_url: doc.webUrl }]);
     } else {
       await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id).eq('visible_to_type', 'client');
     }
@@ -295,7 +286,7 @@ function DocumentCard({ doc, project, subs, card, onDelete }) {
     setVisSubIds(prev => checked ? [...prev, subId] : prev.filter(id => id !== subId));
     setSaving(true);
     if (checked) {
-      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'subcontractor', visible_to_subcontractor_id: subId }]);
+      await sb.from('portal_visibility').insert([{ project_id: project.id, item_type: 'document', item_id: doc.id, visible_to_type: 'subcontractor', visible_to_subcontractor_id: subId, item_name: doc.name, item_url: doc.webUrl }]);
     } else {
       await sb.from('portal_visibility').delete().eq('project_id', project.id).eq('item_type', 'document').eq('item_id', doc.id).eq('visible_to_type', 'subcontractor').eq('visible_to_subcontractor_id', subId);
     }
@@ -307,16 +298,18 @@ function DocumentCard({ doc, project, subs, card, onDelete }) {
   return (
     <div style={card()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <a href={doc.signed_url || doc.public_url} target="_blank" rel="noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>
-          {doc.file_name}
+        <a href={doc.webUrl} target="_blank" rel="noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>
+          📄 {doc.name}
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {isVisible && <span style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>On portal</span>}
           <button onClick={openPanel} style={{ fontSize: 11, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer' }}>Share</button>
-          <button onClick={() => onDelete(doc)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
         </div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{doc.category || 'General'}</div>
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+        {doc.lastModifiedDateTime ? new Date(doc.lastModifiedDateTime).toLocaleDateString('en-GB') : ''}
+        {doc.size ? ` · ${(doc.size / 1024).toFixed(0)} KB` : ''}
+      </div>
 
       {visOpen && (
         <div style={{ marginTop: 10, padding: 10, background: 'rgba(59,130,246,0.06)', borderRadius: 8 }}>
