@@ -96,6 +96,56 @@ export default async function handler(req, res) {
       return res.status(200).json({ user: data });
     }
 
+    // ── Account owner: create an approval and push it to a client's portal ────
+    if (action === 'create_approval') {
+      const { project_id, approval_type, title, description, client_facing_amount, time_impact_days, linked_item_type, linked_item_id } = req.body;
+      if (!project_id || !title) return res.status(400).json({ error: 'Missing project_id or title' });
+
+      const { data, error } = await supabase.from('portal_approvals').insert([{
+        project_id,
+        approval_type: approval_type || 'variation',
+        title,
+        description: description || null,
+        client_facing_amount: client_facing_amount != null ? parseFloat(client_facing_amount) : null,
+        time_impact_days: time_impact_days ? parseInt(time_impact_days, 10) : null,
+        linked_item_type: linked_item_type || null,
+        linked_item_id: linked_item_id || null,
+        status: 'pending',
+      }]).select('*').single();
+      if (error) throw error;
+
+      // Notify the client if they have active portal access
+      const { data: clientUser } = await supabase.from('portal_users').select('*').eq('project_id', project_id).eq('user_type', 'client').eq('invite_status', 'active').limit(1).single();
+      if (clientUser) {
+        await sendPortalEmail({
+          toEmail: clientUser.email,
+          subject: `Action needed: ${title}`,
+          bodyHtml: `<p>Hi ${clientUser.name || ''},</p>` +
+            `<p>A new item is awaiting your review on the project portal:</p>` +
+            `<p><strong>${title}</strong></p>` +
+            (description ? `<p>${description}</p>` : '') +
+            (client_facing_amount != null ? `<p>Amount: £${parseFloat(client_facing_amount).toFixed(2)}</p>` : '') +
+            `<p><a href="${process.env.PORTAL_BASE_URL || 'https://nora-d9wy.vercel.app'}/portal">View and respond</a></p>`,
+        });
+      }
+
+      return res.status(200).json({ approval: data });
+    }
+
+    // ── Account owner: list all approvals for a project ────────────────────────
+    if (action === 'list_approvals') {
+      const { project_id } = req.body;
+      const { data } = await supabase.from('portal_approvals').select('*, portal_approval_comments(*)').eq('project_id', project_id).order('sent_at', { ascending: false });
+      return res.status(200).json({ approvals: data || [] });
+    }
+
+    // ── Account owner: withdraw/delete a pending approval ───────────────────────
+    if (action === 'delete_approval') {
+      const { approval_id } = req.body;
+      await supabase.from('portal_approvals').delete().eq('id', approval_id);
+      return res.status(200).json({ ok: true });
+    }
+
     // ── Portal user: activate account (set password via invite token) ────────
     if (action === 'activate') {
       const { token, password } = req.body;

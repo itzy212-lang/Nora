@@ -352,6 +352,16 @@ function PortalTab({ project, subs, card }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [approvals, setApprovals] = useState([]);
+  const [loadingApprovals, setLoadingApprovals] = useState(true);
+  const [approvalFormOpen, setApprovalFormOpen] = useState(false);
+  const [approvalType, setApprovalType] = useState('variation');
+  const [approvalTitle, setApprovalTitle] = useState('');
+  const [approvalDesc, setApprovalDesc] = useState('');
+  const [approvalAmount, setApprovalAmount] = useState('');
+  const [approvalTimeImpact, setApprovalTimeImpact] = useState('');
+  const [sendingApproval, setSendingApproval] = useState(false);
+
   const loadUsers = () => {
     setLoading(true);
     fetch('/api/portal', {
@@ -360,7 +370,52 @@ function PortalTab({ project, subs, card }) {
     }).then(r => r.json()).then(j => { setUsers(j.users || []); setLoading(false); });
   };
 
-  useEffect(() => { loadUsers(); }, [project.id]);
+  const loadApprovals = () => {
+    setLoadingApprovals(true);
+    fetch('/api/portal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_approvals', project_id: project.id }),
+    }).then(r => r.json()).then(j => { setApprovals(j.approvals || []); setLoadingApprovals(false); });
+  };
+
+  useEffect(() => { loadUsers(); loadApprovals(); }, [project.id]);
+
+  const hasActiveClient = users.some(u => u.user_type === 'client' && u.invite_status === 'active');
+
+  const sendApproval = async () => {
+    if (!approvalTitle.trim()) return;
+    setSendingApproval(true);
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_approval', project_id: project.id,
+          approval_type: approvalType, title: approvalTitle.trim(), description: approvalDesc.trim() || null,
+          client_facing_amount: approvalAmount || null, time_impact_days: approvalTimeImpact || null,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setApprovals(prev => [json.approval, ...prev]);
+        setApprovalFormOpen(false);
+        setApprovalTitle(''); setApprovalDesc(''); setApprovalAmount(''); setApprovalTimeImpact('');
+      } else {
+        alert(json.error || 'Could not send approval.');
+      }
+    } catch (err) {
+      alert('Could not send approval.');
+    }
+    setSendingApproval(false);
+  };
+
+  const withdrawApproval = async (id) => {
+    if (!window.confirm('Withdraw this approval request?')) return;
+    await fetch('/api/portal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_approval', approval_id: id }),
+    });
+    setApprovals(prev => prev.filter(a => a.id !== id));
+  };
 
   const revoke = async (portalUserId) => {
     if (!window.confirm('Revoke this user\'s portal access?')) return;
@@ -372,6 +427,7 @@ function PortalTab({ project, subs, card }) {
   };
 
   const statusColour = { pending: '#d97706', active: '#059669', revoked: '#9ca3af' };
+  const approvalStatusColour = { pending: '#d97706', accepted: '#059669', rejected: '#ef4444' };
 
   return (
     <div>
@@ -397,6 +453,92 @@ function PortalTab({ project, subs, card }) {
                 )}
               </div>
             </div>
+          </div>
+        ))
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Approvals</div>
+        {hasActiveClient && (
+          <button onClick={() => setApprovalFormOpen(v => !v)}
+            style={{ padding: '6px 14px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {approvalFormOpen ? 'Cancel' : '+ Send for approval'}
+          </button>
+        )}
+      </div>
+      {!hasActiveClient && (
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, fontStyle: 'italic' }}>Invite an active client to the portal before sending approvals.</div>
+      )}
+
+      {approvalFormOpen && (
+        <div style={card()}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Type</div>
+          <select value={approvalType} onChange={e => setApprovalType(e.target.value)}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12 }}>
+            <option value="variation">Variation</option>
+            <option value="request">Request</option>
+            <option value="other">Other</option>
+          </select>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Title</div>
+          <input value={approvalTitle} onChange={e => setApprovalTitle(e.target.value)}
+            placeholder="e.g. Additional works — rear extension foundations"
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Description</div>
+          <textarea value={approvalDesc} onChange={e => setApprovalDesc(e.target.value)} rows={3}
+            placeholder="Explain what this covers — the client will only see this description and the total price below, never a cost breakdown."
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, marginBottom: 12, boxSizing: 'border-box', resize: 'vertical' }} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Total price (£)</div>
+              <input type="number" value={approvalAmount} onChange={e => setApprovalAmount(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Time impact (days)</div>
+              <input type="number" value={approvalTimeImpact} onChange={e => setApprovalTimeImpact(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          <button onClick={sendApproval} disabled={sendingApproval || !approvalTitle.trim()}
+            style={{ width: '100%', padding: 10, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (sendingApproval || !approvalTitle.trim()) ? 0.5 : 1 }}>
+            {sendingApproval ? 'Sending...' : 'Send to client portal'}
+          </button>
+        </div>
+      )}
+
+      {loadingApprovals ? (
+        <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading...</div>
+      ) : approvals.length === 0 ? (
+        <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No approvals sent yet.</div>
+      ) : (
+        approvals.map(a => (
+          <div key={a.id} style={card()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{a.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', marginTop: 2 }}>{a.approval_type}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {a.client_facing_amount != null && <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>£{parseFloat(a.client_facing_amount).toFixed(2)}</span>}
+                <span style={{ fontSize: 11, fontWeight: 700, color: approvalStatusColour[a.status], textTransform: 'capitalize' }}>{a.status}</span>
+                {a.status === 'pending' && (
+                  <button onClick={() => withdrawApproval(a.id)} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Withdraw</button>
+                )}
+              </div>
+            </div>
+            {a.portal_approval_comments?.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                {a.portal_approval_comments.map(c => (
+                  <div key={c.id} style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
+                    <strong>{c.is_account_owner ? 'You' : 'Client'}:</strong> {c.content}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))
       )}
