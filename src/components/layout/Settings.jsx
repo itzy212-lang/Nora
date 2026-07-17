@@ -7,7 +7,10 @@ const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account', 'AI'];
 
 const TEMPLATE_LABELS = {
   loa_bo: 'LoA - Building Owner',
+  loa_bo_pdf: 'LoA - Building Owner (PDF)',
   loa_ao: 'LoA - Adjoining Owner',
+  loa_ao_pdf: 'LoA - Adjoining Owner (PDF)',
+  loa_as_pdf: 'LoA - Agreed Surveyor (PDF)',
   s1: 'Section 1 Notice',
   s3: 'Section 3 Notice',
   s6: 'Section 6 Notice',
@@ -216,6 +219,27 @@ function TemplatesTab() {
             </div>
           );
         })}
+        {templates.filter(t => !TEMPLATE_LABELS[t.template_key]).map(tpl => (
+          <div key={tpl.template_key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--blue-bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+              📄
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{tpl.label || tpl.template_key}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
+                {tpl.filename} · {fmtSize(tpl.file_size)} · Updated {fmtDate(tpl.updated_at)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => handleDownload(tpl)} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', fontWeight: 500 }}>
+                ⬇ Download
+              </button>
+              <button onClick={() => handleReplaceClick(tpl.template_key)} disabled={uploading === tpl.template_key} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
+                {uploading === tpl.template_key ? 'Uploading...' : '↑ Replace'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
