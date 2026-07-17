@@ -1175,6 +1175,7 @@ function AOCard({
   project,
   onOpenComposer,
   onGenerateAOLOA,
+  onDownloadAOLOAPdf,
   onGenerateAward,
   onEditAO,
   onServeNotice,
