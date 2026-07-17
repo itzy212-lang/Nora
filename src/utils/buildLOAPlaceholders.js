@@ -82,9 +82,13 @@ export function buildBOLOAPdfPlaceholders(project = {}) {
 
 export function buildAOLOAPdfPlaceholders(project = {}, ao = {}) {
   const base = buildAOLOAPlaceholders(project, ao);
+  const hasAO2 = !!base.AO_NAME_2;
   // Remove Firma anchor strings — not needed for plain PDF download
   const { 'DATE HERE': _d, AO_2_DATE_HERE: _d2, 'SIGN HERE': _s, AO_2_SIGN_HERE: _s2, ...rest } = base;
-  return rest;
+  return {
+    ...rest,
+    DATE_AO_2: hasAO2 ? 'Date' : '',
+  };
 }
 
 export function buildASLOAPdfPlaceholders(project = {}, ao = {}) {
