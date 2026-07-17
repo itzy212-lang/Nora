@@ -3041,6 +3041,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         mergeData: buildBOLOAPdfPlaceholders(project),
         fileName: buildLOAPdfFileName('bo', project),
         projectId: project.id,
+        outputAs: 'pdf',
       });
       if (!r.success) alert(r.error || 'Could not generate LoA PDF.');
     } catch (err) {
@@ -3092,6 +3093,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         mergeData: isAgreedSurveyor ? buildASLOAPdfPlaceholders(project, ao) : buildAOLOAPdfPlaceholders(project, ao),
         fileName: buildLOAPdfFileName(isAgreedSurveyor ? 'as' : 'ao', project, ao),
         projectId: project.id,
+        outputAs: 'pdf',
       });
       if (!r.success) alert(r.error || 'Could not generate LoA PDF.');
     } catch (err) {

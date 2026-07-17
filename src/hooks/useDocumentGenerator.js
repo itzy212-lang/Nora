@@ -47,9 +47,10 @@ export default function useDocumentGenerator() {
     fileName = 'document.docx',
     projectId = null,
     skipDownload = false,
+    outputAs = 'docx', // 'docx' | 'pdf' — which format to actually download
   }) => {
     try {
-      console.log('[generateDocument] start', { templateKey, fileName, projectId });
+      console.log('[generateDocument] start', { templateKey, fileName, projectId, outputAs });
 
       const template = await loadTemplate(templateKey);
 
@@ -79,12 +80,19 @@ export default function useDocumentGenerator() {
         throw new Error(result?.error || `Document generation failed (${response.status})`);
       }
 
-      if (result.docx_b64 && !skipDownload) {
-        downloadB64(
-          result.docx_b64,
-          fileName,
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        );
+      if (!skipDownload) {
+        if (outputAs === 'pdf') {
+          if (!result.pdf_b64) {
+            throw new Error('PDF conversion failed — no PDF was returned. Check API2PDF_API_KEY is set in Vercel.');
+          }
+          downloadB64(result.pdf_b64, fileName, 'application/pdf');
+        } else if (result.docx_b64) {
+          downloadB64(
+            result.docx_b64,
+            fileName,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          );
+        }
       }
 
       return {
