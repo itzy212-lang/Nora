@@ -172,43 +172,12 @@ Return ONLY valid JSON with no markdown:
 
 };
 
-
-
-
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-// Extract text from docx using mammoth
-async function extractDocxText(filePath) {
-  const mammoth = await import('mammoth');
-  const result = await mammoth.extractRawText({ path: filePath });
-  return result.value;
-}
-
-// Convert file to base64 for Claude Vision
-function fileToBase64(filePath) {
-  const buf = fs.readFileSync(filePath);
-  return buf.toString('base64');
-}
-
-// Get media type for Claude Vision
-function getMediaType(fileName) {
-  const ext = path.extname(fileName).toLowerCase();
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.gif') return 'image/gif';
-  if (ext === '.webp') return 'image/webp';
-  if (ext === '.pdf') return 'application/pdf';
-  return 'image/jpeg';
-}
-
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const form = formidable({ maxFileSize: 20 * 1024 * 1024 }); // 20MB
-    const [, files] = await form.parse(req);
+    const [fields, files] = await form.parse(req);
     const file = Array.isArray(files.file) ? files.file[0] : files.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -224,9 +193,10 @@ export default async function handler(req, res) {
     let rawJson = '';
 
     if (isDrawing || isPdf) {
-      // Vision mode — drawings/PDFs go to GPT-4o (better structured/diagrammatic
-      // extraction for drawings with a legend + symbol count). This is the ONLY
-      // branch routed to GPT-4o — text/docx extraction below stays on Claude.
+      // Vision mode — drawings/PDFs go to GPT-5.6 Luna (cheap, capable multimodal
+      // extraction — pattern/structure extraction from a drawing doesn't need
+      // frontier reasoning depth). This is the ONLY branch routed to OpenAI —
+      // text/docx extraction below stays on Claude.
       const base64Data = fileToBase64(file.filepath);
       const mediaType = getMediaType(fileName);
       const dataUrl = `data:${mediaType};base64,${base64Data}`;
@@ -252,7 +222,7 @@ export default async function handler(req, res) {
           'Authorization': `Bearer ${OPENAI_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-5.6-luna',
           max_tokens: 4000,
           messages: [{
             role: 'user',
@@ -263,7 +233,7 @@ export default async function handler(req, res) {
 
       if (!gptRes.ok) {
         const err = await gptRes.text();
-        return res.status(500).json({ error: 'GPT-4o drawing extraction failed', detail: err });
+        return res.status(500).json({ error: 'Luna drawing extraction failed', detail: err });
       }
 
       const gptData = await gptRes.json();
