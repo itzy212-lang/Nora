@@ -12,6 +12,7 @@ For each note, extract one or more atomic claims. Each claim has:
 - action: what needs to happen next, or "None" if nothing further is required
 - severity: "none" (routine/complete, no action needed), "follow-up" (something to check next visit, not blocking), or "urgent" (a decision, approval or blocking issue with or without a deadline)
 - is_general_note: true if this does not belong to any specific room (admin, deliveries, permits, cross-room issues)
+- is_snagging: true if this describes a minor defect, snag, or unfinished detail on work that is otherwise substantially complete (e.g. a scuff, a missing latch, paint touch-up, a gap in sealant) — NOT general progress notes or blocking issues
 
 SEVERITY RULES — apply strictly:
 - "none": the note describes something complete, satisfactory, tested, or otherwise requiring no further action. Action = "None".
@@ -30,7 +31,11 @@ ROOM CHANGE DETECTION:
 DELAY / CASCADE DETECTION:
 - If a note describes something being delayed and mentions or implies a knock-on effect on another trade or room, capture the cascade in the description (e.g. "Skirting delivery delayed — this will delay decoration in the same room next week").
 
-Return ONLY valid JSON: { "claims": [ { "room_name": "...", "description": "...", "action": "...", "severity": "none|follow-up|urgent", "is_general_note": false } ] }
+SNAGGING DETECTION:
+- Snags are small, cosmetic, or finishing-detail defects on work that is otherwise done — not incomplete work itself. "Door architrave needs finishing" or "latch hasn't arrived" on an otherwise complete room = snagging. "Rip-out not yet complete" or "electrics not started" = NOT snagging, that's ordinary progress.
+- Mark is_snagging true only when reasonably confident; default to false.
+
+Return ONLY valid JSON: { "claims": [ { "room_name": "...", "description": "...", "action": "...", "severity": "none|follow-up|urgent", "is_general_note": false, "is_snagging": false } ] }
 No markdown. No commentary.`;
 
 const DRAFTING_SYSTEM = `You are a Project Manager preparing professional Weekly Site Minutes from structured site-visit notes.

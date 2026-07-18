@@ -341,6 +341,235 @@ function DocumentCard({ doc, project, subs, card }) {
   );
 }
 
+function SnaggingTab({ project, rooms, subs, card }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newRoomId, setNewRoomId] = useState('');
+  const [newAssignSubId, setNewAssignSubId] = useState('');
+  const [newAssignFree, setNewAssignFree] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [workCardSubId, setWorkCardSubId] = useState('');
+  const [selectedForCard, setSelectedForCard] = useState(new Set());
+
+  const loadItems = () => {
+    setLoading(true);
+    fetch('/api/generate-minutes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_snagging', project_id: project.id }),
+    }).then(r => r.json()).then(j => { setItems(j.items || []); setLoading(false); });
+  };
+
+  useEffect(() => { loadItems(); }, [project.id]);
+
+  const addItem = async () => {
+    if (!newTitle.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/generate-minutes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_snagging', project_id: project.id,
+          title: newTitle.trim(), description: newDesc.trim(),
+          room_id: newRoomId || null,
+          assigned_subcontractor_id: newAssignSubId || null,
+          assigned_to: newAssignSubId ? (subs.find(s => s.id === newAssignSubId)?.name || null) : (newAssignFree.trim() || null),
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setItems(prev => [...prev, json.item]);
+        setAddOpen(false);
+        setNewTitle(''); setNewDesc(''); setNewRoomId(''); setNewAssignSubId(''); setNewAssignFree('');
+      } else {
+        alert(json.error || 'Could not add item.');
+      }
+    } catch (err) {
+      alert('Could not add item.');
+    }
+    setSaving(false);
+  };
+
+  const markDone = async (item) => {
+    const res = await fetch('/api/generate-minutes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mark_snagging_done', item_id: item.id, marked_done_by: 'manual' }),
+    });
+    const json = await res.json();
+    if (res.ok) setItems(prev => prev.map(i => i.id === item.id ? json.item : i));
+  };
+
+  const unmarkDone = async (item) => {
+    const res = await fetch('/api/generate-minutes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'unmark_snagging_done', item_id: item.id }),
+    });
+    const json = await res.json();
+    if (res.ok) setItems(prev => prev.map(i => i.id === item.id ? json.item : i));
+  };
+
+  const confirmDone = async (item) => {
+    const res = await fetch('/api/generate-minutes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm_snagging', item_id: item.id, confirmed_by: 'manual' }),
+    });
+    const json = await res.json();
+    if (res.ok) setItems(prev => prev.map(i => i.id === item.id ? json.item : i));
+  };
+
+  const openItems = items.filter(i => i.status === 'open');
+  const groups = {};
+  openItems.forEach(i => {
+    const roomName = i.project_rooms?.name || 'General';
+    if (!groups[roomName]) groups[roomName] = [];
+    groups[roomName].push(i);
+  });
+  const roomNames = Object.keys(groups).sort((a, b) => a === 'General' ? 1 : b === 'General' ? -1 : a.localeCompare(b));
+
+  const subItemsForCard = workCardSubId ? openItems.filter(i => i.assigned_subcontractor_id === workCardSubId) : [];
+
+  const generateWorkCard = () => {
+    const sub = subs.find(s => s.id === workCardSubId);
+    const chosen = openItems.filter(i => selectedForCard.has(i.id));
+    if (!chosen.length) { alert('Select at least one item.'); return; }
+    const lines = chosen.map(i => `${i.project_rooms?.name ? `[${i.project_rooms.name}] ` : ''}${i.title}${i.description ? ` — ${i.description}` : ''}`);
+    const text = `SNAGGING WORK CARD\n${project.bo_premise_address || project.bo_address || ''}\nFor: ${sub?.name || 'Unassigned'}\n\n${lines.map((l, i) => `${i + 1}. ${l}`).join('\n')}`;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Snagging Work Card - ${sub?.name || 'Unassigned'}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Snagging</div>
+        <button onClick={() => setAddOpen(v => !v)}
+          style={{ padding: '7px 16px', borderRadius: 99, background: 'var(--blue)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          {addOpen ? 'Cancel' : '+ Add Snag'}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div style={card()}>
+          <div style={label}>Title</div>
+          <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="e.g. Door architrave needs finishing"
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 10, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
+          <div style={label}>Details (optional)</div>
+          <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 10, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)', resize: 'vertical' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={label}>Room</div>
+              <select value={newRoomId} onChange={e => setNewRoomId(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--bg)', color: 'var(--text)' }}>
+                <option value="">No specific room</option>
+                {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={label}>Assign to subcontractor</div>
+              <select value={newAssignSubId} onChange={e => setNewAssignSubId(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--bg)', color: 'var(--text)' }}>
+                <option value="">Not linked to a saved sub</option>
+                {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          {!newAssignSubId && (
+            <>
+              <div style={label}>Or free text (e.g. tradesperson name)</div>
+              <input value={newAssignFree} onChange={e => setNewAssignFree(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 10, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
+            </>
+          )}
+          <button onClick={addItem} disabled={saving || !newTitle.trim()}
+            style={{ width: '100%', padding: 10, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (saving || !newTitle.trim()) ? 0.5 : 1 }}>
+            {saving ? 'Adding...' : 'Add to snagging list'}
+          </button>
+        </div>
+      )}
+
+      {subs.length > 0 && openItems.length > 0 && (
+        <div style={{ ...card(), background: 'rgba(59,130,246,0.06)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Generate work card</div>
+          <select value={workCardSubId} onChange={e => { setWorkCardSubId(e.target.value); setSelectedForCard(new Set()); }}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 8, background: 'var(--bg)', color: 'var(--text)' }}>
+            <option value="">Select subcontractor...</option>
+            {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {workCardSubId && (
+            <>
+              {subItemsForCard.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No open snags assigned to this subcontractor.</div>
+              ) : (
+                <>
+                  {subItemsForCard.map(i => (
+                    <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedForCard.has(i.id)}
+                        onChange={e => setSelectedForCard(prev => { const next = new Set(prev); e.target.checked ? next.add(i.id) : next.delete(i.id); return next; })} />
+                      <span style={{ fontSize: 12, color: 'var(--text)' }}>{i.project_rooms?.name ? `[${i.project_rooms.name}] ` : ''}{i.title}</span>
+                    </label>
+                  ))}
+                  <button onClick={generateWorkCard}
+                    style={{ marginTop: 8, width: '100%', padding: 8, borderRadius: 8, background: '#1F2937', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    Generate work card
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading...</div>
+      ) : roomNames.length === 0 ? (
+        <div style={{ ...card(), color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No open snags. Everything's clean.</div>
+      ) : (
+        roomNames.map(roomName => (
+          <div key={roomName} style={{ marginBottom: 20 }}>
+            <div style={{ background: '#1F2937', color: '#fff', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 6, marginBottom: 8 }}>
+              {roomName}
+            </div>
+            {groups[roomName].map(item => {
+              const isMarkedDone = !!item.marked_done_at;
+              return (
+                <div key={item.id} style={{ ...card(), opacity: isMarkedDone ? 0.7 : 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <button onClick={() => isMarkedDone ? unmarkDone(item) : markDone(item)}
+                      style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #d1d5db', background: isMarkedDone ? '#1F2937' : '#fff', cursor: 'pointer', flexShrink: 0, marginTop: 1, color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isMarkedDone ? '✓' : ''}
+                    </button>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', textDecoration: isMarkedDone ? 'line-through' : 'none' }}>{item.title}</div>
+                      {item.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2, textDecoration: isMarkedDone ? 'line-through' : 'none' }}>{item.description}</div>}
+                      {item.assigned_to && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Assigned: {item.assigned_to}</div>}
+                    </div>
+                    {isMarkedDone && (
+                      <button onClick={() => confirmDone(item)}
+                        style={{ padding: '5px 12px', borderRadius: 8, background: '#10b981', color: '#fff', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                        Confirm
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function PortalTab({ project, subs, card }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1654,8 +1883,8 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     await saveSubs(subs.filter(s => s.id !== id));
   };
 
-  const TABS = ['overview', 'scope', 'rooms', 'programme', 'minutes', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents', 'portal'];
-  const TAB_LABELS = { minutes: 'Site Log', portal: 'Portal' };
+  const TABS = ['overview', 'scope', 'rooms', 'programme', 'minutes', 'snagging', 'payments', 'materials', 'subcontractors', 'financials', 'emails', 'documents', 'portal'];
+  const TAB_LABELS = { minutes: 'Site Log', snagging: 'Snagging', portal: 'Portal' };
 
   const handleDeletePMProject = async () => {
     if (!window.confirm('Delete this project and all its records? This cannot be undone.')) return;
@@ -3653,6 +3882,8 @@ Proceed?`
 
         {/* ── Documents tab ── */}
         {tab === 'documents' && <DocumentsTab project={project} subs={subs} card={card} />}
+
+        {tab === 'snagging' && <SnaggingTab project={project} rooms={rooms} subs={subs} card={card} />}
 
         {tab === 'portal' && <PortalTab project={project} subs={subs} card={card} />}
 

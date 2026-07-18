@@ -103,11 +103,29 @@ export default async function handler(req, res) {
         await supabase.from('minutes_claims').insert(claimRows);
       }
 
+      // Create snagging items from any claims flagged is_snagging
+      const snaggingClaims = claims.filter(c => c.is_snagging);
+      if (snaggingClaims.length) {
+        const snaggingRows = snaggingClaims.map(c => ({
+          project_id,
+          title: c.description?.slice(0, 120) || c.action,
+          description: c.description || '',
+          status: 'open',
+          severity: 'follow-up',
+          source: 'snagging',
+          source_session_id: sessionId,
+          room_id: c.room_name ? (roomLookup[c.room_name.toLowerCase().trim()] || null) : null,
+        }));
+        await supabase.from('project_tasks').insert(snaggingRows);
+      }
+
       // Build a short acknowledgement summarising what was detected
       let ack = 'Noted';
       if (claims.length === 1) {
         const c = claims[0];
-        ack = c.is_general_note
+        ack = c.is_snagging
+          ? `Noted — added to snagging${c.room_name ? ` (${c.room_name})` : ''}`
+          : c.is_general_note
           ? 'Noted — general note'
           : `Noted — ${c.room_name || 'unassigned'}${c.severity === 'urgent' ? ' (flagged urgent)' : ''}`;
       } else if (claims.length > 1) {
@@ -146,6 +164,73 @@ export default async function handler(req, res) {
         .eq('status', 'open')
         .order('created_at', { ascending: true });
       return res.status(200).json({ tasks: openTasks || [] });
+    }
+
+    // ── Snagging: list ALL snagging items (open AND recently closed, for strike-through) ──
+    if (action === 'list_snagging') {
+      const { project_id } = req.body;
+      const { data: items } = await supabase
+        .from('project_tasks')
+        .select('*, project_rooms(name)')
+        .eq('project_id', project_id)
+        .eq('source', 'snagging')
+        .order('created_at', { ascending: true });
+      return res.status(200).json({ items: items || [] });
+    }
+
+    // ── Snagging: create an item manually ─────────────────────────────────────
+    if (action === 'create_snagging') {
+      const { project_id, title, description, room_id, assigned_to, assigned_subcontractor_id, due_date } = req.body;
+      if (!title || !String(title).trim()) return res.status(400).json({ error: 'Missing title' });
+      const { data, error } = await supabase.from('project_tasks').insert([{
+        project_id,
+        title: String(title).trim(),
+        description: description || '',
+        status: 'open',
+        severity: 'follow-up',
+        source: 'snagging',
+        room_id: room_id || null,
+        assigned_to: assigned_to || null,
+        assigned_subcontractor_id: assigned_subcontractor_id || null,
+        due_date: due_date || null,
+      }]).select('*, project_rooms(name)').single();
+      if (error) throw error;
+      return res.status(200).json({ item: data });
+    }
+
+    // ── Snagging: contractor/sub marks an item done — strikes through, awaits confirm ──
+    if (action === 'mark_snagging_done') {
+      const { item_id, marked_done_by } = req.body;
+      const { data, error } = await supabase.from('project_tasks').update({
+        marked_done_at: new Date().toISOString(),
+        marked_done_by: marked_done_by || 'manual',
+      }).eq('id', item_id).select('*, project_rooms(name)').single();
+      if (error) throw error;
+      return res.status(200).json({ item: data });
+    }
+
+    // ── Snagging: undo a mark-done (contractor reopens it) ────────────────────
+    if (action === 'unmark_snagging_done') {
+      const { item_id } = req.body;
+      const { data, error } = await supabase.from('project_tasks').update({
+        marked_done_at: null, marked_done_by: null,
+      }).eq('id', item_id).select('*, project_rooms(name)').single();
+      if (error) throw error;
+      return res.status(200).json({ item: data });
+    }
+
+    // ── Snagging: PM/client confirms — fully closes the item ──────────────────
+    if (action === 'confirm_snagging') {
+      const { item_id, confirmed_by } = req.body;
+      const { data, error } = await supabase.from('project_tasks').update({
+        status: 'closed',
+        closed_at: new Date().toISOString(),
+        closed_by: confirmed_by || 'manual',
+        confirmed_at: new Date().toISOString(),
+        confirmed_by: confirmed_by || 'manual',
+      }).eq('id', item_id).select('*, project_rooms(name)').single();
+      if (error) throw error;
+      return res.status(200).json({ item: data });
     }
 
     // ── Close a task manually (from Tasks tab or Gantt popup) ─────────────────
