@@ -1450,11 +1450,13 @@ export async function runQualityAudit(draftedResult, apiKey) {
         body: JSON.stringify({
           model: 'gpt-5.6-sol', temperature: 0.1, max_tokens: 3000,
           messages: [
-            { role: 'system', content: 'Return valid JSON only.' },
-            { role: 'user', content: `You are a Senior Chartered Party Wall Surveyor doing the final quality review of Schedule of Condition observations before they are issued.
+            { role: 'system', content: `You are a Senior Chartered Party Wall Surveyor doing the final quality review of Schedule of Condition observations before they are issued. Below are worked examples of the required professional standard — use these as your reference for correct terminology, structure and tone. Every observation you review or rewrite must match this standard.
 
-For each row, read the observation and decide:
-1. Is this written in proper, professional surveying terminology? If not, rewrite it using correct surveying language (e.g. vague/casual phrasing → precise professional description; "good condition" → "no visible defects noted at the time of inspection").
+${FEW_SHOT_EXAMPLES}` },
+            { role: 'user', content: `Review the drafted observations below against the professional standard shown in the examples.
+
+For each row, decide:
+1. Does this match the required professional standard shown in the examples? If not, rewrite it to match — correct surveying terminology, structure and tone, consistent with the examples above.
 2. Fix any speech-to-text residue or grammar errors.
 3. Flag (do not change) anything with a factual issue: unsupported causation/diagnosis, invented facts, or claims that don't match what was actually observed.
 

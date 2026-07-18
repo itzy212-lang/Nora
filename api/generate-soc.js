@@ -959,112 +959,11 @@ function validateSocJson(parsed) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STAGE 3: DRAFTING QUALITY AUDIT
-// Reviews every drafted row for wording quality issues.
-// Auto-fixes stylistic issues. Flags factual/ambiguous issues for review.
-// Uses gpt-4o.
+// STAGE 3: DRAFTING QUALITY AUDIT — handled entirely in soc-pipeline.js
+// runQualityAudit reviews wording quality and factual/measurement fidelity
+// against FEW_SHOT_EXAMPLES, using gpt-5.6-sol.
 // ═══════════════════════════════════════════════════════════════════════════
-// Apply quality corrections back to drafted result
-function applyQualityCorrections(draftedResult, correctedByRef) {
-  const improved = JSON.parse(JSON.stringify(draftedResult));
-  for (const section of (improved.sections || [])) {
-    for (const row of (section.rows || [])) {
-      const correction = correctedByRef[row.ref];
-      if (correction) {
-        if (correction.observation) row.observation = correction.observation;
-        if (correction.flagged) { row.flagged = true; row.flag_reason = correction.flag_reason; }
-      }
-    }
-  }
-  return improved;
-}
-
-async function runQualityAuditBatch(rowsForReview, apiKey) {
-  const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing Schedule of Conditions observations.
-
-For each row below:
-AUTO-FIX these (change observation, flagged:false): speech-to-text residue, poor grammar, sentence fragments, missing articles, "good condition"/"very good condition" (→ "no visible defects noted at the time of inspection"), informal language, vague expressions, casual phrasing not in proper surveying terminology.
-FLAG these (flagged:true, do not change observation): over-compression, over-fragmentation, unsupported causation/diagnosis, invented facts.
-NEVER remove or omit claims.
-
-For every row you changed, briefly note what you changed and why in "change_note". Leave "change_note" null if unchanged.
-
-Return JSON only: { "rows": [ { "ref": "...", "observation": "...", "flagged": false, "flag_reason": null, "change_note": null } ] }
-
-ROWS: ${JSON.stringify(rowsForReview, null, 2)}`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.6-sol', temperature: 0.1, max_tokens: 3000,
-        messages: [{ role: 'system', content: 'Return valid JSON only.' },
-                   { role: 'user', content: QUALITY_PROMPT }] }),
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
-    const raw = (data.choices?.[0]?.message?.content || '').trim();
-    const parsed = parseJsonFromModel(raw);
-    const byRef = {};
-    for (const r of (parsed?.rows || [])) byRef[r.ref] = r;
-    return byRef;
-  } catch { return {}; }
-}
-
-// ── Semantic fidelity audit (GPT-based) ────────────────────────────────────────
-async function runSemanticFidelityCheck(draftedResult, claims, apiKey) {
-  if (!claims?.length) return { issues: [], warnings: [] };
-  const claimMap = {};
-  for (const c of claims) claimMap[c.claim_id] = c;
-
-  // Check rows with source_claim_ids that have measurements/directions
-  const rowsToCheck = [];
-  for (const section of (draftedResult.sections || [])) {
-    for (const row of (section.rows || [])) {
-      const sourceClaims = (row.source_claim_ids || []).map(id => claimMap[id]).filter(Boolean);
-      const activeClaims = sourceClaims.filter(c => c?.status === 'active');
-      const hasMeasurements = activeClaims.some(c => /\d+(mm|cm|m\b)/i.test(c.content || ''));
-      const hasAmendments = activeClaims.some(c => c.claim_type === 'amendment');
-      if (hasMeasurements || hasAmendments) {
-        rowsToCheck.push({
-          ref: row.ref,
-          observation: row.observation,
-          source_claims: activeClaims.map(c => ({ id: c.claim_id, type: c.claim_type, content: c.content, status: c.status })),
-        });
-      }
-    }
-  }
-
-  if (rowsToCheck.length === 0) return { issues: [], warnings: [] };
-
-  const FIDELITY_PROMPT = `You are auditing Schedule of Conditions observations for factual fidelity.
-
-For each row, check its observation against the source claims:
-1. Are all measurements preserved exactly?
-2. Are all directions preserved (left/right/upper/lower/diagonal/vertical)?
-3. Are all locations preserved?
-4. Have amendments been correctly applied (superseded wording must not survive)?
-5. Are there unsupported facts, diagnoses or causes not in the source claims?
-
-Return JSON: { "issues": ["Row XX: measurement changed from Xmm to Ymm", ...], "warnings": [...] }
-
-ROWS TO CHECK: ${JSON.stringify(rowsToCheck, null, 2)}`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.6-sol', temperature: 0.05, max_tokens: 2000,
-        messages: [{ role: 'system', content: 'Return valid JSON only.' },
-                   { role: 'user', content: FIDELITY_PROMPT }] }),
-    });
-    if (!res.ok) return { issues: [], warnings: [] };
-    const data = await res.json();
-    const raw = (data.choices?.[0]?.message?.content || '').trim();
-    const parsed = parseJsonFromModel(raw);
-    return { issues: parsed?.issues || [], warnings: parsed?.warnings || [] };
-  } catch { return { issues: [], warnings: [] }; }
-}
+// FEW_SHOT_EXAMPLES gold-standard reference. See that file.
 
 
 function runCodedFidelityChecks(draftedResult, claims) {
