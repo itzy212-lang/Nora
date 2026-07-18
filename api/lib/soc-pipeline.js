@@ -260,6 +260,23 @@ function buildFactualChecklist(claims, rawNotesBySeq) {
 const FEW_SHOT_EXAMPLES = `EXAMPLES OF REQUIRED PROFESSIONAL STANDARD
 ==========================================
 
+PREFERRED TERMINOLOGY — always use these terms where applicable:
+
+- "Plaster and emulsion finish" — standard phrasing for painted plaster (walls/ceilings). NOT "plaster paint finish" or generic "paint finish".
+- "Segmental brick arch" — a curved brick arch spanning an opening, bricks laid on edge following the curve, as opposed to a flat/horizontal lintel.
+- "Perished pointing" — for loose, crumbling, or missing mortar pointing. NOT "loose and friable mortar" or "missing pointing".
+- "Perished brickwork" / "localised perished brickwork" — for deteriorated, crumbling, or flaking brick faces. NOT "spalling" or "localised spalling".
+- "Stepped crack" — a crack that follows the mortar joints in a zig-zag pattern rather than running straight through brick or render.
+- "Slight inward lean" / "slight outward lean" — for masonry (parapets, walls, piers) showing a lean out of true.
+- "Render appeared blown at [location]" — for render that has detached/hollowed from the substrate.
+- "Not visible from ground level" — standard limitation phrase when an element could not be inspected due to height/access.
+- "Detailed inspection limited by vantage point" — standard limitation phrase for hard-to-reach elements (chimneys, high-level roofwork) that were visible but not closely inspectable.
+- "Appeared serviceable from ground level" — qualifier for elements seen but not closely inspected, where no obvious defects were visible.
+- "Inspection was partially restricted by stored contents" — for cupboards/storage areas where full inspection was not possible.
+- Do NOT use "heavily weathered and over-rendered" or similar vague weathering descriptions — be specific (perished, blown, spalled-equivalent perished brickwork, etc.) rather than generic.
+
+---
+
 EXAMPLE 1 — Room context and construction/finish/condition
 
 Raw dictation: "party wall plaster paint finish no visible defects"
