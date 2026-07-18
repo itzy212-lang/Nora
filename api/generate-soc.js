@@ -983,11 +983,13 @@ async function runQualityAuditBatch(rowsForReview, apiKey) {
   const QUALITY_PROMPT = `You are a Senior Chartered Party Wall Surveyor reviewing Schedule of Conditions observations.
 
 For each row below:
-AUTO-FIX these (change observation, flagged:false): speech-to-text residue, poor grammar, sentence fragments, missing articles, "good condition"/"very good condition" (→ "no visible defects noted at the time of inspection"), informal language, vague expressions.
+AUTO-FIX these (change observation, flagged:false): speech-to-text residue, poor grammar, sentence fragments, missing articles, "good condition"/"very good condition" (→ "no visible defects noted at the time of inspection"), informal language, vague expressions, casual phrasing not in proper surveying terminology.
 FLAG these (flagged:true, do not change observation): over-compression, over-fragmentation, unsupported causation/diagnosis, invented facts.
 NEVER remove or omit claims.
 
-Return JSON only: { "rows": [ { "ref": "...", "observation": "...", "flagged": false, "flag_reason": null } ] }
+For every row you changed, briefly note what you changed and why in "change_note". Leave "change_note" null if unchanged.
+
+Return JSON only: { "rows": [ { "ref": "...", "observation": "...", "flagged": false, "flag_reason": null, "change_note": null } ] }
 
 ROWS: ${JSON.stringify(rowsForReview, null, 2)}`;
 
@@ -995,7 +997,7 @@ ROWS: ${JSON.stringify(rowsForReview, null, 2)}`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.6-terra', temperature: 0.1, max_tokens: 3000,
+      body: JSON.stringify({ model: 'gpt-5.6-sol', temperature: 0.1, max_tokens: 3000,
         messages: [{ role: 'system', content: 'Return valid JSON only.' },
                    { role: 'user', content: QUALITY_PROMPT }] }),
     });
@@ -1052,7 +1054,7 @@ ROWS TO CHECK: ${JSON.stringify(rowsToCheck, null, 2)}`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.6-terra', temperature: 0.05, max_tokens: 2000,
+      body: JSON.stringify({ model: 'gpt-5.6-sol', temperature: 0.05, max_tokens: 2000,
         messages: [{ role: 'system', content: 'Return valid JSON only.' },
                    { role: 'user', content: FIDELITY_PROMPT }] }),
     });
