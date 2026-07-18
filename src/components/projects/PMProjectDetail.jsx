@@ -3020,7 +3020,16 @@ Proceed?`
                         formData.append('file', file);
                         formData.append('drawing_type', drawingType);
                         const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
-                        const json = await res.json();
+                        let json;
+                        try {
+                          json = await res.json();
+                        } catch {
+                          throw new Error(
+                            res.status === 413
+                              ? `"${file.name}" is too large to upload. Try a smaller file or a lower-resolution scan (under ~4MB).`
+                              : `Server error (${res.status}) reading "${file.name}". Please try again.`
+                          );
+                        }
                         if (json.extracted?.scope_items?.length) {
                           allItems.push(...json.extracted.scope_items);
                           // If dual AI enabled, store file for verification

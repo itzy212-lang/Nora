@@ -272,7 +272,16 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const docFile = files.find(f => /\.(docx|doc|txt)$/i.test(f.name)) || files[0];
       formData.append('file', docFile);
       const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
-      const json = await res.json();
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'File is too large to upload. Try a smaller file or a lower-resolution scan (under ~4MB).'
+            : `Server error (${res.status}). Please try again with a smaller file.`
+        );
+      }
       if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
       const { extracted } = json;
       if (!extracted) throw new Error('Nothing extracted');
