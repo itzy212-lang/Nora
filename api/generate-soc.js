@@ -995,7 +995,7 @@ ROWS: ${JSON.stringify(rowsForReview, null, 2)}`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o', temperature: 0.1, max_tokens: 3000,
+      body: JSON.stringify({ model: 'gpt-5.6-luna', temperature: 0.1, max_tokens: 3000,
         messages: [{ role: 'system', content: 'Return valid JSON only.' },
                    { role: 'user', content: QUALITY_PROMPT }] }),
     });
@@ -1052,7 +1052,7 @@ ROWS TO CHECK: ${JSON.stringify(rowsToCheck, null, 2)}`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o', temperature: 0.05, max_tokens: 2000,
+      body: JSON.stringify({ model: 'gpt-5.6-luna', temperature: 0.05, max_tokens: 2000,
         messages: [{ role: 'system', content: 'Return valid JSON only.' },
                    { role: 'user', content: FIDELITY_PROMPT }] }),
     });
@@ -1274,7 +1274,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     claims_extracted: claims.length,
     claims_from_live: claimsFromLive,
     generation_status: status,
-    drafting_model: draftMeta.drafting_model || 'gpt-4o',
+    drafting_model: draftMeta.drafting_model || 'gpt-5.6-terra',
     drafting_model_key: draftMeta.model_key || 'gpt4o',
     drafting_latency_ms: draftMeta.total_latency_ms || 0,
     drafting_tokens: { input: draftMeta.total_input_tokens || 0, output: draftMeta.total_output_tokens || 0, reasoning: draftMeta.total_reasoning_tokens || 0 },
