@@ -1448,7 +1448,7 @@ export async function runQualityAudit(draftedResult, apiKey) {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-5.6-luna', temperature: 0.1, max_tokens: 3000,
+          model: 'gpt-5.6-terra', temperature: 0.1, max_tokens: 3000,
           messages: [
             { role: 'system', content: 'Return valid JSON only.' },
             { role: 'user', content: `Review observations. Fix only speech-to-text residue and obvious grammar errors. Flag factual issues without changing them.\nReturn: { "rows": [{ "ref": "...", "observation": "...", "flagged": false, "flag_reason": null }] }\nROWS: ${JSON.stringify(batch)}` },
