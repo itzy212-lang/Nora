@@ -1138,6 +1138,23 @@ Each window or door opener tested must appear as a separate row, regardless of w
 const FEW_SHOT_EXAMPLES_V1 = `EXAMPLES — SQUARE ONE SCHEDULE OF CONDITION STANDARD
 =====================================================
 
+PREFERRED TERMINOLOGY — always use these terms where applicable:
+
+- "Plaster and emulsion finish" — standard phrasing for painted plaster (walls/ceilings). NOT "plaster paint finish" or generic "paint finish".
+- "Segmental brick arch" — a curved brick arch spanning an opening, bricks laid on edge following the curve, as opposed to a flat/horizontal lintel.
+- "Perished pointing" — for loose, crumbling, or missing mortar pointing. NOT "loose and friable mortar" or "missing pointing".
+- "Perished brickwork" / "localised perished brickwork" — for deteriorated, crumbling, or flaking brick faces. NOT "spalling" or "localised spalling".
+- "Stepped crack" — a crack that follows the mortar joints in a zig-zag pattern rather than running straight through brick or render.
+- "Slight inward lean" / "slight outward lean" — for masonry (parapets, walls, piers) showing a lean out of true.
+- "Render appeared blown at [location]" — for render that has detached/hollowed from the substrate.
+- "Not visible from ground level" — standard limitation phrase when an element could not be inspected due to height/access.
+- "Detailed inspection limited by vantage point" — standard limitation phrase for hard-to-reach elements (chimneys, high-level roofwork) that were visible but not closely inspectable.
+- "Appeared serviceable from ground level" — qualifier for elements seen but not closely inspected, where no obvious defects were visible.
+- "Inspection was partially restricted by stored contents" — for cupboards/storage areas where full inspection was not possible.
+- Do NOT use "heavily weathered and over-rendered" or similar vague weathering descriptions — be specific (perished, blown, spalled-equivalent perished brickwork, etc.) rather than generic.
+
+---
+
 EXAMPLE 1 — Painted plaster wall, no defects
 
 Raw: "party wall plaster finish painted no visible defects"
@@ -1450,7 +1467,8 @@ export function runCompletenessAudit(draftedResult, claims) {
 }
 
 // ─── Quality audit (async, not in sync pipeline) ──────────────────────────────
-export async function runQualityAudit(draftedResult, apiKey) {
+export async function runQualityAudit(draftedResult, apiKey, useV1 = false) {
+  const activeExamples = useV1 ? FEW_SHOT_EXAMPLES_V1 : FEW_SHOT_EXAMPLES;
   const rows = [];
   for (const s of (draftedResult.sections || []))
     for (const r of (s.rows || []))
@@ -1469,7 +1487,7 @@ export async function runQualityAudit(draftedResult, apiKey) {
           messages: [
             { role: 'system', content: `You are a Senior Chartered Party Wall Surveyor doing the final quality review of Schedule of Condition observations before they are issued. Below are worked examples of the required professional standard — use these as your reference for correct terminology, structure and tone. Every observation you review or rewrite must match this standard.
 
-${FEW_SHOT_EXAMPLES}` },
+${activeExamples}` },
             { role: 'user', content: `Review the drafted observations below against the professional standard shown in the examples.
 
 For each row, decide:
@@ -1496,6 +1514,7 @@ ROWS: ${JSON.stringify(batch)}` },
       const c = corrected[r.ref];
       if (c?.observation) r.observation = c.observation;
       if (c?.flagged) { r.flagged = true; r.flag_reason = c.flag_reason; }
+      if (c?.change_note) r.quality_change_note = c.change_note;
     }
   return improved;
 }

@@ -1110,10 +1110,17 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     if (!draftedResult) throw new Error('GENERATION_INCOMPLETE: All stages failed.');
   }
 
-  // Stage 3 (quality audit) and Stage 4 (fidelity) removed from synchronous path —
-  // they add 30-40s latency and belong in a background/async process.
-  // The editable preview allows manual review and correction.
-  const qualityResult = draftedResult;
+  // Stage 3: Quality audit (Sol) — checks Terra's draft against the same gold-standard
+  // examples Terra drafted from, upgrades wording, flags factual issues.
+  const useV1Standard = (typeof process !== 'undefined' && process.env.USE_SOC_MASTER_V1 === 'true');
+  let qualityResult = draftedResult;
+  try {
+    console.log('[generate-soc] Stage 3: quality audit (Sol)...');
+    qualityResult = await runQualityAudit(draftedResult, apiKey, useV1Standard);
+  } catch (e) {
+    console.warn('[generate-soc] Stage 3 (quality audit) failed, using unaudited draft:', e.message);
+    qualityResult = draftedResult;
+  }
 
   try {
     validateSocJson(qualityResult);
