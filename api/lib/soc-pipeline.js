@@ -183,7 +183,7 @@ ${notesText}`;
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gpt-5.6-luna', temperature: 0.05, max_completion_tokens: 16000,
+      model: 'gpt-5.6-luna', max_completion_tokens: 16000,
       messages: [
         { role: 'system', content: EXTRACTION_SYSTEM },
         { role: 'user', content: prompt },
@@ -1483,7 +1483,7 @@ export async function runQualityAudit(draftedResult, apiKey, useV1 = false) {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-5.6-sol', temperature: 0.1, max_completion_tokens: 3000,
+          model: 'gpt-5.6-sol', max_completion_tokens: 3000,
           messages: [
             { role: 'system', content: `You are a Senior Chartered Party Wall Surveyor doing the final quality review of Schedule of Condition observations before they are issued. Below are worked examples of the required professional standard — use these as your reference for correct terminology, structure and tone. Every observation you review or rewrite must match this standard.
 
