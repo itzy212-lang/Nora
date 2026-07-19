@@ -64,6 +64,8 @@ Everything else uses the specific room/space name from the PROPOSED layout that 
 - All fit-out, sanitaryware, joinery, electrical/plumbing points, flooring, tiling, decorating clearly tied to one named space.
 If you cannot confidently determine which specific room an item belongs to, use "Structure" or "External" if it clearly fits one of those, otherwise use "Unallocated" rather than guessing a room name.
 
+MULTIPLE ROOMS OF THE SAME TYPE — if the proposed layout shows more than one room of the same kind (e.g. three bedrooms, two loft rooms), you MUST distinguish them individually using the drawing's own labels if present (e.g. "Bedroom 1", "Bedroom 2", "Bedroom 3") or by position/description if the drawing doesn't number them explicitly (e.g. "Bedroom (Front)", "Bedroom (Rear)"). NEVER use a single generic zone like "Bedroom" for scope items that belong to different physical bedrooms — this incorrectly merges separate rooms into one. Check the full drawing set for how many distinct instances of a room type actually exist before assigning zones, and number/distinguish every one of them consistently across all scope items.
+
 Also extract every other scope item visible across the full drawing set, using all notes, specification text and legends provided, including:
 - New rooms, extensions, loft conversions, basement excavations
 - Wall removals, new walls, structural openings, lintels
