@@ -3232,6 +3232,17 @@ Proceed?`
                 onClose={() => setDualAIReview(null)}
                 onFinalise={async (finalItems) => {
                   const saved = [];
+                  const roomLinksToInsert = [];
+                  // Rebuild the same zone-aware room lookup used in the main upload path
+                  const roomLookup = {};
+                  rooms.forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
+                  const matchZone = (item) => {
+                    if (item.zone && String(item.zone).trim()) {
+                      const zoneKey = String(item.zone).trim().toLowerCase();
+                      if (roomLookup[zoneKey]) return roomLookup[zoneKey];
+                    }
+                    return null;
+                  };
                   for (let i = 0; i < finalItems.length; i++) {
                     const item = finalItems[i];
                     const { data: newItem } = await sb.from('scope_items').insert([{
@@ -3244,6 +3255,7 @@ Proceed?`
                       markup_type: 'none',
                       client_charge: 0,
                       cost: null,
+                      room_id: matchZone(item),
                     }]).select('*').single();
                     if (newItem) saved.push(newItem);
                   }
