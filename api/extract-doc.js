@@ -37,9 +37,28 @@ function getMediaType(fileName) {
 // Drawing prompts — one per drawing type
 const PROMPTS = {
 
-  general: `You are reading a construction drawing or architectural plan. Extract EVERYTHING visible -- this is a general plan and may include architectural, structural, electrical, plumbing and finishing information all at once.
+  general: `You are an experienced UK construction scope surveyor reading a set of architectural drawings to produce an accurate scope of works for pricing and programme purposes. This drawing set may include architectural plans, structural details, notes, elevations and sections all together — read everything provided before answering.
 
-Extract every scope item you can identify including:
+Follow this method, in order:
+
+STEP 1 — SITE ADDRESS
+Read the site address ONLY from the drawing's title block — the bordered information panel (almost always bottom-right or bottom corner of the sheet) containing the client name, project address, drawing number, scale and revision. Do NOT use house numbers or labels shown on a floor plan itself (e.g. "No 20", "No 22", "No 24" used only to identify neighbouring/adjoining properties for context on the plan) — those are never the site address, even if they appear larger or more prominent than the title block.
+
+STEP 2 — READ EXISTING vs PROPOSED, FLOOR BY FLOOR
+Where a floor plan is shown as both "existing" and "proposed" for the same floor (ground floor, first floor, loft, etc.), read them as a pair for that floor before moving to the next. For each floor:
+- Note what each room was called and where it sat in the EXISTING plan
+- Note what each room is called and where it sits in the PROPOSED plan
+- Compare them by physical position on the page, not just by label — a room may keep its position but change function (e.g. an existing en-suite becomes the new family bathroom, and a new en-suite is formed elsewhere), or a wall/opening may move, or a room may be removed, extended or newly created
+- Where the drawing includes explicit notes or annotations describing what is changing (e.g. "existing bathroom to become...", "form new opening", "remove wall"), use that wording directly — it is more reliable than inferring from position alone
+- If a genuine change cannot be confidently determined from position or annotation alone, do not guess — describe only what is clearly shown
+
+STEP 3 — ROOM LIST IS PROPOSED-ONLY
+The "rooms" list in your output must reflect the PROPOSED layout only — every room as it will exist after the works, using its proposed label. Do not include existing-only rooms that cease to exist (e.g. a room being merged into another). Do not include both an existing and proposed version of the same physical space as two separate rooms.
+
+STEP 4 — SCOPE ITEMS FOCUS ON WHAT IS CHANGING
+Every scope item must describe genuine work arising from a difference between existing and proposed (or new-build work with no existing equivalent, e.g. an extension). Where a room's function is changing, say so plainly in the description (e.g. "Convert existing en-suite to family bathroom, including new sanitaryware and altered pipework" rather than two disconnected items). Do not list a room or feature as a scope item just because it appears on the proposed plan unchanged from existing — only list what is actually being built, altered, removed or reconfigured.
+
+Also extract every other scope item visible across the full drawing set, using all notes, specification text and legends provided, including:
 - New rooms, extensions, loft conversions, basement excavations
 - Wall removals, new walls, structural openings, lintels
 - New or altered bathrooms, en suites, cloakrooms, kitchens
@@ -51,17 +70,17 @@ Extract every scope item you can identify including:
 - Any structural elements: steels, beams, columns, foundations, retaining walls
 - External works: drainage, paving, fencing, landscaping
 
-Go area by area across the entire drawing. Do not skip anything. Group items by trade or category.
+Go floor by floor, area by area, across the entire drawing set. Do not skip anything. Do not split one body of work into multiple overlapping or duplicate scope items — consolidate related changes to the same area into a single clear item with a full description, rather than several fragments describing the same thing from different angles.
 
 Return ONLY valid JSON with no markdown:
 {
-  "site_address": "if visible",
+  "site_address": "from the title block only",
   "drawing_type": "general architectural",
-  "rooms": ["list of rooms/spaces shown"],
+  "rooms": ["every room from the PROPOSED layout only, by its proposed label"],
   "scope_items": [
     {
       "title": "item title",
-      "description": "detail including quantities, locations, spec where visible",
+      "description": "what is changing and why, including quantities, locations, spec where visible",
       "trade": "Architectural / Structural / Electrical / Plumbing / Finishes / External"
     }
   ]
