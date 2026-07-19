@@ -6,8 +6,6 @@ import { useState, useEffect, useRef } from 'react';
 import sb from '../../supabaseClient';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import WeeklyMinutes from '../minutes/WeeklyMinutes';
-import useDocumentGenerator from '../../hooks/useDocumentGenerator';
-import { buildQuotePlaceholders, buildQuoteFileName } from '../../utils/buildQuotePlaceholders';
 
 const card = () => ({
   background: 'var(--bg)',
@@ -1759,7 +1757,6 @@ function SubModal({ sub, projectId, onSave, onClose }) {
 // ── Main component ────────────────────────────────────────────────────────
 export default function PMProjectDetail({ project: initialProject, onBack, onOpenComposer }) {
   const [project, setProject] = useState(initialProject);
-  const { generateDocument } = useDocumentGenerator();
   const [quoteGenerating, setQuoteGenerating] = useState(false);
   const [tab, setTab] = useState('overview');
   const [subModal, setSubModal] = useState(null); // null | 'new' | {sub object}
@@ -3392,14 +3389,66 @@ Proceed?`
                         if (type === 'quote') {
                           setQuoteGenerating(true);
                           try {
-                            const r = await generateDocument({
-                              templateKey: 'pm_quote',
-                              mergeData: buildQuotePlaceholders(project, scopeItems),
-                              fileName: buildQuoteFileName(project),
-                              projectId: project.id,
-                              outputAs: 'pdf',
+                            const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            const itemCharge = (item) => {
+                              const cost = parseFloat(item.cost || 0);
+                              const markup = parseFloat(item.markup_value || 0);
+                              if (item.markup_type === 'percentage') return cost + (cost * markup / 100);
+                              if (item.markup_type === 'fixed') return cost + markup;
+                              return parseFloat(item.client_charge || 0);
+                            };
+                            const fmtMoney = (v) => `£${parseFloat(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            const total = scopeItems.reduce((s, item) => s + itemCharge(item), 0);
+                            const projectAddress = project.bo_premise_address || project.bo_address || '';
+                            const clientName = project.client_name || project.bo_1_name || '';
+                            const quoteDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                            const rows = scopeItems.map(item => (
+                              `<tr>` +
+                              `<td style="border:1px solid #C8C8C8;padding:8px 10px;font-size:10pt;vertical-align:top;">` +
+                              `<div style="font-weight:700;">${esc(item.title)}</div>` +
+                              (item.description ? `<div style="color:#4b5563;margin-top:2px;">${esc(item.description)}</div>` : '') +
+                              `</td>` +
+                              `<td style="border:1px solid #C8C8C8;padding:8px 10px;font-size:10pt;text-align:right;white-space:nowrap;vertical-align:top;">${fmtMoney(itemCharge(item))}</td>` +
+                              `</tr>`
+                            )).join('');
+
+                            const html = `<div style="font-family:Arial,sans-serif;">` +
+                              `<div style="text-align:center;margin-bottom:24px;">` +
+                              `<div style="font-size:24pt;font-weight:700;color:#1F2937;">QUOTATION</div>` +
+                              `</div>` +
+                              `<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
+                              `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;width:30%;">Project</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(projectAddress)}</td></tr>` +
+                              (clientName ? `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Client</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(clientName)}</td></tr>` : '') +
+                              `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Date</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(quoteDate)}</td></tr>` +
+                              `</table>` +
+                              `<table style="width:100%;border-collapse:collapse;">` +
+                              `<tr><th style="border:1px solid #C8C8C8;padding:8px 10px;background:#1F2937;color:#fff;text-align:left;font-size:10pt;">Description</th><th style="border:1px solid #C8C8C8;padding:8px 10px;background:#1F2937;color:#fff;text-align:right;font-size:10pt;width:110px;">Price</th></tr>` +
+                              rows +
+                              `<tr><td style="border:1px solid #C8C8C8;padding:10px;font-weight:700;text-align:right;font-size:11pt;">Total</td><td style="border:1px solid #C8C8C8;padding:10px;font-weight:700;text-align:right;font-size:11pt;background:#F3F4F6;">${fmtMoney(total)}</td></tr>` +
+                              `</table>` +
+                              `</div>`;
+
+                            const address = (projectAddress || 'Project').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+                            const res = await fetch('/api/export-minutes-pdf', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ html, filename: `${address}_Quote.pdf` }),
                             });
-                            if (!r.success) alert(r.error || 'Could not generate quote PDF.');
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              alert(err.error || 'Could not generate quote PDF.');
+                            } else {
+                              const blob = await res.blob();
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `${address}_Quote.pdf`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              URL.revokeObjectURL(url);
+                            }
                           } catch (err) {
                             alert(err.message);
                           } finally {

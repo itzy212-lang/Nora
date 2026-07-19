@@ -11,7 +11,6 @@ const TEMPLATE_LABELS = {
   loa_ao: 'LoA - Adjoining Owner',
   loa_ao_pdf: 'LoA - Adjoining Owner (PDF)',
   loa_as_pdf: 'LoA - Agreed Surveyor (PDF)',
-  pm_quote: 'PM - Itemised Quote (PDF)',
   s1: 'Section 1 Notice',
   s3: 'Section 3 Notice',
   s6: 'Section 6 Notice',
