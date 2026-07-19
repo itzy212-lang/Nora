@@ -158,6 +158,8 @@ A scope refinement must NEVER remove elements that were not part of the correcti
 Example: "both chimney breasts on the front and rear removed" followed by "just to note on that last one, talking about the ground floor" — the correction narrows to ground floor only. It does NOT remove "front and rear". Active claim must retain both: ground floor front AND rear chimney breasts removed.
 Only mark a claim as fully superseded when the amendment explicitly replaces the entire substance.
 
+SECTION NAMING: Use the room name exactly as the surveyor described it. Do not apply architectural terminology (e.g. 'outrigger', 'annexe', 'extension') unless the surveyor used those exact words. If the surveyor said 'rear kitchen' use 'Rear Kitchen'. If they said 'kitchen family room' use 'Ground Floor Rear Kitchen Family Room'.
+
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
 Return JSON only: { "claims": [ ... ] }`;
@@ -1426,6 +1428,9 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     _drafting_metadata: {
       drafting_model: model,
       model_key: resolvedMode,
+      stage1_model: 'gpt-5.6-luna',
+      stage2_model: model,
+      stage3_model: 'gpt-5.6-sol',
     },
   };
 }
