@@ -266,7 +266,11 @@ export default async function handler(req, res) {
       const gptData = await gptRes.json();
       rawJson = gptData?.choices?.[0]?.message?.content || '';
     } else {
-      // Text mode — extract text first then send to Claude (unchanged)
+      // Text mode — extract text first, then send to a model for structuring.
+      // Toggle: EXTRACT_TEXT_USE_CLAUDE=true routes this to Claude Opus (higher
+      // cost, was the original default). Unset/false = Luna (default as of
+      // 19 July 2026 — cheaper, single-provider, testing quality before re-enabling
+      // Claude as an option).
       let rawText = '';
       if (isDocx) {
         rawText = await extractDocxText(fileBuffer);
@@ -277,33 +281,58 @@ export default async function handler(req, res) {
       }
 
       const truncated = rawText.slice(0, 40000);
-      const claudeMessages = [{
-        role: 'user',
-        content: `${TEXT_PROMPT}\n\nDOCUMENT:\n${truncated}`
-      }];
+      const useClaude = process.env.EXTRACT_TEXT_USE_CLAUDE === 'true';
 
-      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'pdfs-2024-09-25', // enable PDF support
-        },
-        body: JSON.stringify({
-          model: 'claude-opus-4-6',
-          max_tokens: 4000,
-          messages: claudeMessages,
-        }),
-      });
+      if (useClaude) {
+        const claudeMessages = [{
+          role: 'user',
+          content: `${TEXT_PROMPT}\n\nDOCUMENT:\n${truncated}`
+        }];
 
-      if (!claudeRes.ok) {
-        const err = await claudeRes.text();
-        return res.status(500).json({ error: 'Claude extraction failed', detail: err });
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'pdfs-2024-09-25', // enable PDF support
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-6',
+            max_tokens: 4000,
+            messages: claudeMessages,
+          }),
+        });
+
+        if (!claudeRes.ok) {
+          const err = await claudeRes.text();
+          return res.status(500).json({ error: 'Claude extraction failed', detail: err });
+        }
+
+        const claudeData = await claudeRes.json();
+        rawJson = claudeData?.content?.[0]?.text || '';
+      } else {
+        const lunaRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-5.6-luna',
+            max_completion_tokens: 4000,
+            messages: [{ role: 'user', content: `${TEXT_PROMPT}\n\nDOCUMENT:\n${truncated}` }],
+          }),
+        });
+
+        if (!lunaRes.ok) {
+          const err = await lunaRes.text();
+          return res.status(500).json({ error: 'Luna text extraction failed', detail: err });
+        }
+
+        const lunaData = await lunaRes.json();
+        rawJson = lunaData?.choices?.[0]?.message?.content || '';
       }
-
-      const claudeData = await claudeRes.json();
-      rawJson = claudeData?.content?.[0]?.text || '';
     }
 
     const clean = rawJson.replace(/```json|```/g, '').trim();
