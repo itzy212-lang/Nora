@@ -1400,11 +1400,19 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
     task_type: isNew ? 'trade' : task.task_type || 'trade',
     contractor: isNew ? '' : task.contractor || '',
     in_house: isNew ? false : task.in_house || false,
-    task_value: isNew ? '' : task.task_value || '',
     task_cost: isNew ? '' : task.task_cost || '',
+    markup_type: isNew ? 'none' : task.markup_type || 'none',
+    markup_value: isNew ? '' : task.markup_value || '',
+    task_value: isNew ? '' : task.task_value || '',
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const taskCostNum = parseFloat(form.task_cost || 0);
+  const taskMarkupNum = parseFloat(form.markup_value || 0);
+  const calculatedTaskValue = form.markup_type === 'percentage' ? taskCostNum + (taskCostNum * taskMarkupNum / 100)
+    : form.markup_type === 'fixed' ? taskCostNum + taskMarkupNum
+    : parseFloat(form.task_value || 0);
 
   // Portal visibility — does the current contractor text match a subcontractor with portal access?
   const matchedSub = (subs || []).find(s => s.name && form.contractor && s.name.toLowerCase().trim() === form.contractor.toLowerCase().trim());
@@ -1448,8 +1456,10 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
         task_type: form.task_type,
         contractor: form.in_house ? null : (form.contractor.trim() || null),
         in_house: form.in_house,
-        task_value: form.task_value ? parseFloat(form.task_value) : null,
+        task_value: calculatedTaskValue || null,
         task_cost: form.task_cost ? parseFloat(form.task_cost) : null,
+        markup_type: form.markup_type,
+        markup_value: form.markup_value ? parseFloat(form.markup_value) : null,
       };
       let result;
       if (isNew) {
@@ -1543,27 +1553,48 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
             "{form.contractor}" isn't a saved subcontractor with portal access, so this can't be shared to a portal yet.
           </div>
         )}
-        <div style={{ marginBottom: 12 }}>
-          <div style={labelStyle}>Task value (£) — charged to client</div>
-          <input type="number" value={form.task_value}
-            onChange={e => set('task_value', e.target.value)}
-            placeholder="Value of this task e.g. 2500"
-            style={inputStyle} />
-          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Used for payment certification and payment schedule</div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={labelStyle}>Subcontractor / supplier cost (£)</div>
+          <input type="number" value={form.task_cost} onChange={e => set('task_cost', e.target.value)} placeholder="What you're paying" style={inputStyle} />
         </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <div style={labelStyle}>Task cost (£) — what it costs you</div>
-          <input type="number" value={form.task_cost}
-            onChange={e => set('task_cost', e.target.value)}
-            placeholder="Subcontractor/material cost e.g. 1800"
-            style={inputStyle} />
-          {form.task_value && form.task_cost && (
-            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
-              Margin: £{(parseFloat(form.task_value) - parseFloat(form.task_cost)).toLocaleString()}
-            </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={labelStyle}>Markup</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {[
+              { val: 'none', label: 'None' },
+              { val: 'percentage', label: '% markup' },
+              { val: 'fixed', label: '£ fixed' },
+            ].map(opt => (
+              <button key={opt.val} type="button" onClick={() => set('markup_type', opt.val)}
+                style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  border: form.markup_type === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  background: form.markup_type === opt.val ? '#eff6ff' : 'transparent',
+                  color: form.markup_type === opt.val ? '#1e40af' : '#374151' }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {form.markup_type !== 'none' && (
+            <input type="number" value={form.markup_value} onChange={e => set('markup_value', e.target.value)}
+              placeholder={form.markup_type === 'percentage' ? 'e.g. 20 for 20%' : 'Fixed amount to add'}
+              style={inputStyle} />
           )}
         </div>
+        {form.markup_type === 'none' && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={labelStyle}>Task value (£) — charged to client</div>
+            <input type="number" value={form.task_value} onChange={e => set('task_value', e.target.value)}
+              placeholder="What you're charging the client" style={inputStyle} />
+          </div>
+        )}
+        {(taskCostNum > 0 || calculatedTaskValue > 0) && (
+          <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
+            <div><div style={{ fontSize: 10, color: '#9ca3af' }}>YOUR COST</div><div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>£{taskCostNum.toLocaleString()}</div></div>
+            <div><div style={{ fontSize: 10, color: '#9ca3af' }}>MARKUP</div><div style={{ fontSize: 13, fontWeight: 700, color: '#d97706' }}>£{(calculatedTaskValue - taskCostNum).toLocaleString()}</div></div>
+            <div><div style={{ fontSize: 10, color: '#9ca3af' }}>CLIENT PAYS</div><div style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>£{calculatedTaskValue.toLocaleString()}</div></div>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: -6, marginBottom: 12 }}>Client-facing value is used for payment certification and payment schedule</div>
 
         {rooms?.length > 0 && (
           <div style={{ marginBottom: 12 }}>
