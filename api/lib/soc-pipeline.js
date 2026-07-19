@@ -1367,7 +1367,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: m, ...p, messages: [
-        { role: 'system', content: activeSystem },
+        { role: m.startsWith('gpt-5.6') ? 'developer' : 'system', content: activeSystem },
         { role: 'user', content: userPrompt },
       ]}),
     });
