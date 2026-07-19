@@ -58,6 +58,15 @@ The "rooms" list in your output must reflect the PROPOSED layout only — every 
 STEP 4 — SCOPE ITEMS FOCUS ON WHAT IS CHANGING
 Every scope item must describe genuine work arising from a difference between existing and proposed (or new-build work with no existing equivalent, e.g. an extension). Where a room's function is changing, say so plainly in the description (e.g. "Convert existing en-suite to family bathroom, including new sanitaryware and altered pipework" rather than two disconnected items). Do not list a room or feature as a scope item just because it appears on the proposed plan unchanged from existing — only list what is actually being built, altered, removed or reconfigured.
 
+STEP 5 — ZONE FOR EACH SCOPE ITEM
+Every scope item needs a "zone" field. Two zones are always fixed and used consistently regardless of which room the work is physically near:
+- "Structure" — foundations, pad foundations, padstones, steel beams, columns, structural openings/lintels, roof structure (joists, rafters, ridge/eaves, roof timber framing), roof tiling/coverings. This applies EVEN IF the structural element sits under or serves one specific room (e.g. loft steel beams still go in "Structure", not "Loft Room").
+- "External" — patios, paving, external brickwork not tied to one specific room, fencing, drainage, landscaping, fascias/soffits.
+Everything else uses the specific room/space name from the proposed layout that the work is genuinely tied to (e.g. "Kitchen", "Bathroom", "Loft Room 1"). This includes:
+- Roof OPENINGS specifically — rooflights, Velux windows, skylights — these are finishes tied to the specific room they serve, NOT "Structure", even though roof structure itself is "Structure". A loft room with two Veluxes and another loft room with one Velux should each have their Velux item zoned to their own room.
+- All fit-out, sanitaryware, joinery, electrical/plumbing points, flooring, tiling, decorating clearly tied to one named space.
+If you cannot confidently determine which specific room an item belongs to, use "Structure" or "External" if it clearly fits one of those, otherwise leave zone as null rather than guessing a room.
+
 Also extract every other scope item visible across the full drawing set, using all notes, specification text and legends provided, including:
 - New rooms, extensions, loft conversions, basement excavations
 - Wall removals, new walls, structural openings, lintels
@@ -81,7 +90,8 @@ Return ONLY valid JSON with no markdown:
     {
       "title": "item title",
       "description": "what is changing and why, including quantities, locations, spec where visible",
-      "trade": "Architectural / Structural / Electrical / Plumbing / Finishes / External"
+      "trade": "Architectural / Structural / Electrical / Plumbing / Finishes / External",
+      "zone": "Structure / External / a specific room name from the rooms list / null if uncertain"
     }
   ]
 }`,

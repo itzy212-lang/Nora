@@ -1801,10 +1801,23 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
     sb.from('payment_stages').select('*').eq('project_id', project.id).order('position').then(({ data }) => setStages(data || []));
   }, [tab, project?.id]);
 
-  // Load rooms
+  // Load rooms — always guarantee the two hardcoded zones (Structure, External) exist
   useEffect(() => {
     if (!project?.id) return;
-    sb.from('project_rooms').select('*').eq('project_id', project.id).order('position').then(({ data }) => setRooms(data || []));
+    (async () => {
+      const { data } = await sb.from('project_rooms').select('*').eq('project_id', project.id).order('position');
+      let rows = data || [];
+      const hasStructure = rows.some(r => r.zone_type === 'structure');
+      const hasExternal = rows.some(r => r.zone_type === 'external');
+      const toCreate = [];
+      if (!hasStructure) toCreate.push({ project_id: project.id, name: 'STRUCTURE', zone_type: 'structure', position: -2 });
+      if (!hasExternal) toCreate.push({ project_id: project.id, name: 'EXTERNAL', zone_type: 'external', position: -1 });
+      if (toCreate.length) {
+        const { data: created } = await sb.from('project_rooms').insert(toCreate).select('*');
+        if (created) rows = [...created, ...rows];
+      }
+      setRooms(rows);
+    })();
   }, [project?.id]);
 
   // Load client portal invite status (if any exists for the client email)
@@ -2688,7 +2701,15 @@ Proceed?`
                     <div key={room.id} style={{ padding: '14px 16px', borderBottom: i < rooms.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{room.name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{room.name}</div>
+                            {room.zone_type === 'structure' && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#9a3412', background: '#ffedd5', padding: '2px 8px', borderRadius: 6 }}>STRUCTURAL</span>
+                            )}
+                            {room.zone_type === 'external' && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#065f46', background: '#d1fae5', padding: '2px 8px', borderRadius: 6 }}>EXTERNAL</span>
+                            )}
+                          </div>
                           {room.description && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{room.description}</div>}
                           <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
                             <span style={{ fontSize: 11, color: '#6b7280' }}>📋 {roomTasks.length} task{roomTasks.length !== 1 ? 's' : ''}</span>
@@ -2697,11 +2718,13 @@ Proceed?`
                         </div>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => setRoomModal(room)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
-                          <button onClick={async () => {
-                            if (!window.confirm('Delete this room?')) return;
-                            await sb.from('project_rooms').delete().eq('id', room.id);
-                            setRooms(prev => prev.filter(r => r.id !== room.id));
-                          }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                          {!room.zone_type || room.zone_type === 'room' ? (
+                            <button onClick={async () => {
+                              if (!window.confirm('Delete this room?')) return;
+                              await sb.from('project_rooms').delete().eq('id', room.id);
+                              setRooms(prev => prev.filter(r => r.id !== room.id));
+                            }} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -3077,11 +3100,17 @@ Proceed?`
                       }
                       if (createdRooms.length) setRooms(prev => [...prev, ...createdRooms]);
                       // Combined room lookup — existing + newly created, name (lowercase) -> id
+                      // Always includes the hardcoded Structure/External zones (guaranteed to exist from project load)
                       const roomLookup = {};
                       [...rooms, ...createdRooms].forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
 
-                      // Try to match each scope item to a single room if its description clearly indicates one room only
+                      // Zone-first matching: use the AI's explicit "zone" field when given (Structure / External / a
+                      // named room) — falls back to text-matching only when zone is missing/null.
                       const matchRoomIdForItem = (item) => {
+                        if (item.zone && String(item.zone).trim()) {
+                          const zoneKey = String(item.zone).trim().toLowerCase();
+                          if (roomLookup[zoneKey]) return roomLookup[zoneKey];
+                        }
                         const text = `${item.title || ''} ${item.description || ''}`.toLowerCase();
                         const matches = Object.keys(roomLookup).filter(name => name && text.includes(name));
                         return matches.length === 1 ? roomLookup[matches[0]] : null;
