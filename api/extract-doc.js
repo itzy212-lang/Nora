@@ -250,7 +250,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: 'gpt-5.6-luna',
-          max_tokens: 4000,
+          max_completion_tokens: 4000,
           messages: [{
             role: 'user',
             content: contentParts,
