@@ -3037,7 +3037,6 @@ Proceed?`
                       // Process all files and merge results
                       const allItems = [];
                       const allExtractedFiles = [];
-                      const allExtractedRoomNames = new Set();
                       const SMALL_FILE_THRESHOLD = 4 * 1024 * 1024;
                       for (const file of files) {
                         let json;
@@ -3077,14 +3076,22 @@ Proceed?`
                             allExtractedFiles.push({ file, items: json.extracted.scope_items, extracted: json.extracted });
                           }
                         }
-                        if (json.extracted?.rooms?.length) {
-                          json.extracted.rooms.forEach(r => { if (r && String(r).trim()) allExtractedRoomNames.add(String(r).trim()); });
-                        }
                       }
                       if (allItems.length === 0) {
                         setDrawingError('No scope items found in the uploaded files.');
                         return;
                       }
+
+                      // Derive room names directly from each scope item's "zone" field — this is the single
+                      // source of truth (not a separate AI-generated rooms list, which proved unreliable).
+                      // "Structure", "External" and "Unallocated" are excluded here since Structure/External
+                      // always already exist, and "Unallocated" isn't a real room.
+                      const RESERVED_ZONES = new Set(['structure', 'external', 'unallocated', '']);
+                      const allExtractedRoomNames = new Set();
+                      allItems.forEach(item => {
+                        const zone = String(item.zone || '').trim();
+                        if (zone && !RESERVED_ZONES.has(zone.toLowerCase())) allExtractedRoomNames.add(zone);
+                      });
 
                       // Auto-create rooms from drawing extraction — skip any that already exist (case-insensitive match)
                       const existingRoomNames = new Set(rooms.map(r => (r.name || '').trim().toLowerCase()));
@@ -3104,8 +3111,8 @@ Proceed?`
                       const roomLookup = {};
                       [...rooms, ...createdRooms].forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
 
-                      // Zone-first matching: use the AI's explicit "zone" field when given (Structure / External / a
-                      // named room) — falls back to text-matching only when zone is missing/null.
+                      // Zone is now the single required source for room matching — falls back to text-matching
+                      // only in the unlikely case zone is genuinely missing from the item.
                       const matchRoomIdForItem = (item) => {
                         if (item.zone && String(item.zone).trim()) {
                           const zoneKey = String(item.zone).trim().toLowerCase();
