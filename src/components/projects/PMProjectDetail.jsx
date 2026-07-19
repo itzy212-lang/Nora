@@ -3015,20 +3015,37 @@ Proceed?`
                       const allItems = [];
                       const allExtractedFiles = [];
                       const allExtractedRoomNames = new Set();
+                      const SMALL_FILE_THRESHOLD = 4 * 1024 * 1024;
                       for (const file of files) {
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        formData.append('drawing_type', drawingType);
-                        const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
                         let json;
-                        try {
-                          json = await res.json();
-                        } catch {
-                          throw new Error(
-                            res.status === 413
-                              ? `"${file.name}" is too large to upload. Try a smaller file or a lower-resolution scan (under ~4MB).`
-                              : `Server error (${res.status}) reading "${file.name}". Please try again.`
-                          );
+                        if (file.size < SMALL_FILE_THRESHOLD) {
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          formData.append('drawing_type', drawingType);
+                          const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
+                          try {
+                            json = await res.json();
+                          } catch {
+                            throw new Error(`Server error (${res.status}) reading "${file.name}". Please try again.`);
+                          }
+                          if (!res.ok) throw new Error(json.error || `API error ${res.status} reading "${file.name}"`);
+                        } else {
+                          const storagePath = `extract-tmp/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+                          const { error: uploadError } = await sb.storage.from('chat-temp-uploads').upload(storagePath, file, {
+                            contentType: file.type || 'application/octet-stream',
+                          });
+                          if (uploadError) throw new Error(`Could not upload "${file.name}": ${uploadError.message}`);
+                          const res = await fetch('/api/extract-doc', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ storage_path: storagePath, file_name: file.name, drawing_type: drawingType }),
+                          });
+                          try {
+                            json = await res.json();
+                          } catch {
+                            throw new Error(`Server error (${res.status}) reading "${file.name}". Please try again.`);
+                          }
+                          if (!res.ok) throw new Error(json.error || `API error ${res.status} reading "${file.name}"`);
                         }
                         if (json.extracted?.scope_items?.length) {
                           allItems.push(...json.extracted.scope_items);

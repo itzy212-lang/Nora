@@ -15,16 +15,12 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
 // Extract text from docx using mammoth
-async function extractDocxText(filePath) {
+async function extractDocxText(bufferOrPath) {
   const mammoth = await import('mammoth');
-  const result = await mammoth.extractRawText({ path: filePath });
+  const result = Buffer.isBuffer(bufferOrPath)
+    ? await mammoth.extractRawText({ buffer: bufferOrPath })
+    : await mammoth.extractRawText({ path: bufferOrPath });
   return result.value;
-}
-
-// Convert file to base64 for Claude Vision
-function fileToBase64(filePath) {
-  const buf = fs.readFileSync(filePath);
-  return buf.toString('base64');
 }
 
 // Get media type for Claude Vision
@@ -176,13 +172,44 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const form = formidable({ maxFileSize: 20 * 1024 * 1024 }); // 20MB
-    const [fields, files] = await form.parse(req);
-    const file = Array.isArray(files.file) ? files.file[0] : files.file;
-    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    let fileBuffer, fileName, drawingType;
 
-    const fileName = file.originalFilename || file.newFilename || '';
-    const drawingType = (Array.isArray(fields.drawing_type) ? fields.drawing_type[0] : fields.drawing_type) || 'general';
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('application/json')) {
+      // New path: browser uploaded the file directly to Supabase Storage
+      // (bypasses Vercel's 4.5MB request body limit entirely). We just
+      // download it here, server-side, with no such limit.
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const { storage_path, file_name, drawing_type } = body;
+      if (!storage_path) return res.status(400).json({ error: 'No storage_path provided' });
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { data, error } = await supabase.storage.from('chat-temp-uploads').download(storage_path);
+      if (error || !data) return res.status(400).json({ error: 'Could not download uploaded file: ' + (error?.message || 'not found') });
+
+      fileBuffer = Buffer.from(await data.arrayBuffer());
+      fileName = file_name || storage_path.split('/').pop();
+      drawingType = drawing_type || 'general';
+
+      // Clean up the temp file now that we've read it
+      supabase.storage.from('chat-temp-uploads').remove([storage_path]).catch(() => {});
+    } else {
+      // Legacy path: small files sent directly as multipart/form-data.
+      // Still subject to Vercel's ~4.5MB request body ceiling.
+      const form = formidable({ maxFileSize: 20 * 1024 * 1024 }); // 20MB (app-level; platform ceiling is lower)
+      const [fields, files] = await form.parse(req);
+      const file = Array.isArray(files.file) ? files.file[0] : files.file;
+      if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+      fileBuffer = fs.readFileSync(file.filepath);
+      fileName = file.originalFilename || file.newFilename || '';
+      drawingType = (Array.isArray(fields.drawing_type) ? fields.drawing_type[0] : fields.drawing_type) || 'general';
+    }
+
     const selectedPrompt = PROMPTS[drawingType] || PROMPTS.general;
     const ext = path.extname(fileName).toLowerCase();
     const isDrawing = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
@@ -197,7 +224,7 @@ export default async function handler(req, res) {
       // extraction — pattern/structure extraction from a drawing doesn't need
       // frontier reasoning depth). This is the ONLY branch routed to OpenAI —
       // text/docx extraction below stays on Claude.
-      const base64Data = fileToBase64(file.filepath);
+      const base64Data = fileBuffer.toString('base64');
       const mediaType = getMediaType(fileName);
       const dataUrl = `data:${mediaType};base64,${base64Data}`;
 
@@ -242,9 +269,9 @@ export default async function handler(req, res) {
       // Text mode — extract text first then send to Claude (unchanged)
       let rawText = '';
       if (isDocx) {
-        rawText = await extractDocxText(file.filepath);
+        rawText = await extractDocxText(fileBuffer);
       } else if (isTxt) {
-        rawText = fs.readFileSync(file.filepath, 'utf8');
+        rawText = fileBuffer.toString('utf8');
       } else {
         return res.status(400).json({ error: 'Unsupported file type. Use PDF, JPG, PNG, DOCX or TXT.' });
       }
@@ -301,7 +328,9 @@ export default async function handler(req, res) {
       extracted.source = 'document';
     }
 
-    try { fs.unlinkSync(file.filepath); } catch {}
+    if (typeof file !== 'undefined' && file?.filepath) {
+      try { fs.unlinkSync(file.filepath); } catch {}
+    }
 
     return res.status(200).json({ success: true, extracted });
 

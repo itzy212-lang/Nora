@@ -267,22 +267,47 @@ export default function NewProjectModal({ onClose, onCreated }) {
     setError('Reading document with AI — please wait (15-30 seconds)...');
     try {
       // Process first file for project details, but note all files for scope
-      const formData = new FormData();
-      // Send docx/txt first for project details; drawings second for scope
       const docFile = files.find(f => /\.(docx|doc|txt)$/i.test(f.name)) || files[0];
-      formData.append('file', docFile);
-      const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
+
+      const SMALL_FILE_THRESHOLD = 4 * 1024 * 1024; // stay safely under Vercel's ~4.5MB request ceiling
       let json;
-      try {
-        json = await res.json();
-      } catch {
-        throw new Error(
-          res.status === 413
-            ? 'File is too large to upload. Try a smaller file or a lower-resolution scan (under ~4MB).'
-            : `Server error (${res.status}). Please try again with a smaller file.`
-        );
+
+      if (docFile.size < SMALL_FILE_THRESHOLD) {
+        // Small file — send directly, faster (no extra storage round-trip)
+        const formData = new FormData();
+        formData.append('file', docFile);
+        formData.append('drawing_type', 'general');
+        const res = await fetch('/api/extract-doc', { method: 'POST', body: formData });
+        try {
+          json = await res.json();
+        } catch {
+          throw new Error(`Server error (${res.status}). Please try again.`);
+        }
+        if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
+      } else {
+        // Large file — upload to storage first (bypasses Vercel's request body limit
+        // entirely), then tell the API where to find it.
+        setError('Uploading large file — please wait...');
+        const storagePath = `extract-tmp/${Date.now()}_${docFile.name.replace(/[^\w.\-]/g, '_')}`;
+        const { error: uploadError } = await sb.storage.from('chat-temp-uploads').upload(storagePath, docFile, {
+          contentType: docFile.type || 'application/octet-stream',
+        });
+        if (uploadError) throw new Error('Could not upload file: ' + uploadError.message);
+
+        setError('Reading document with AI — please wait (15-30 seconds)...');
+        const res = await fetch('/api/extract-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storage_path: storagePath, file_name: docFile.name, drawing_type: 'general' }),
+        });
+        try {
+          json = await res.json();
+        } catch {
+          throw new Error(`Server error (${res.status}). Please try again.`);
+        }
+        if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
       }
-      if (!res.ok) throw new Error(json.error || 'API error ' + res.status);
+
       const { extracted } = json;
       if (!extracted) throw new Error('Nothing extracted');
       if (extracted.site_address) setForm(f => ({ ...f, boPremise: extracted.site_address, works: extracted.works_description || f.works }));
