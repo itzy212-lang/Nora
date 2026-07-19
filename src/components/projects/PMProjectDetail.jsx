@@ -3398,35 +3398,65 @@ Proceed?`
                               return parseFloat(item.client_charge || 0);
                             };
                             const fmtMoney = (v) => `£${parseFloat(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                            const total = scopeItems.reduce((s, item) => s + itemCharge(item), 0);
+                            const subtotal = scopeItems.reduce((s, item) => s + itemCharge(item), 0);
+                            const VAT_RATE = 0.20;
+                            const vatAmount = subtotal * VAT_RATE;
+                            const grandTotal = subtotal + vatAmount;
                             const projectAddress = project.bo_premise_address || project.bo_address || '';
                             const clientName = project.client_name || project.bo_1_name || '';
                             const quoteDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
+                            const { data: firm } = await sb.from('firm_settings').select('*').limit(1).maybeSingle();
+                            const firmName = firm?.trading_name || firm?.firm_name || '';
+                            const firmAddressParts = [firm?.address_line1, firm?.address_line2, firm?.city, firm?.postcode].filter(Boolean);
+                            const firmContactParts = [firm?.tel, firm?.email].filter(Boolean);
+
                             const rows = scopeItems.map(item => (
-                              `<tr>` +
-                              `<td style="border:1px solid #C8C8C8;padding:8px 10px;font-size:10pt;vertical-align:top;">` +
+                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
+                              `<div style="flex:1;padding:8px 10px;font-size:10pt;">` +
                               `<div style="font-weight:700;">${esc(item.title)}</div>` +
                               (item.description ? `<div style="color:#4b5563;margin-top:2px;">${esc(item.description)}</div>` : '') +
-                              `</td>` +
-                              `<td style="border:1px solid #C8C8C8;padding:8px 10px;font-size:10pt;text-align:right;white-space:nowrap;vertical-align:top;">${fmtMoney(itemCharge(item))}</td>` +
-                              `</tr>`
+                              `</div>` +
+                              `<div style="flex:0 0 130px;min-width:130px;padding:8px 10px;font-size:10pt;text-align:right;white-space:nowrap;">${fmtMoney(itemCharge(item))}</div>` +
+                              `</div>`
                             )).join('');
 
+                            const infoRow = (label, value) => (
+                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
+                              `<div style="flex:0 0 120px;min-width:120px;background:#F3F4F6;font-weight:700;color:#374151;padding:8px 12px;font-size:10pt;">${esc(label)}</div>` +
+                              `<div style="flex:1;padding:8px 12px;font-size:10pt;">${esc(value)}</div>` +
+                              `</div>`
+                            );
+
+                            const totalRow = (label, value, bold) => (
+                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
+                              `<div style="flex:1;padding:${bold ? '10px' : '8px 10px'};text-align:right;font-size:${bold ? '11pt' : '10pt'};font-weight:${bold ? '700' : '400'};">${esc(label)}</div>` +
+                              `<div style="flex:0 0 130px;min-width:130px;padding:${bold ? '10px' : '8px 10px'};text-align:right;font-size:${bold ? '11pt' : '10pt'};font-weight:${bold ? '700' : '400'};white-space:nowrap;${bold ? 'background:#F3F4F6;' : ''}">${fmtMoney(value)}</div>` +
+                              `</div>`
+                            );
+
                             const html = `<div style="font-family:Arial,sans-serif;">` +
-                              `<div style="text-align:center;margin-bottom:24px;">` +
+                              `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">` +
                               `<div style="font-size:24pt;font-weight:700;color:#1F2937;">QUOTATION</div>` +
+                              (firmName ? `<div style="text-align:right;font-size:9pt;color:#4b5563;line-height:1.5;">` +
+                                `<div style="font-size:12pt;font-weight:700;color:#1F2937;">${esc(firmName)}</div>` +
+                                (firmAddressParts.length ? `<div>${esc(firmAddressParts.join(', '))}</div>` : '') +
+                                (firmContactParts.length ? `<div>${esc(firmContactParts.join(' · '))}</div>` : '') +
+                                `</div>` : '') +
                               `</div>` +
-                              `<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
-                              `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;width:30%;">Project</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(projectAddress)}</td></tr>` +
-                              (clientName ? `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Client</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(clientName)}</td></tr>` : '') +
-                              `<tr><td style="border:1px solid #C8C8C8;padding:8px 12px;background:#F3F4F6;font-weight:700;color:#374151;">Date</td><td style="border:1px solid #C8C8C8;padding:8px 12px;">${esc(quoteDate)}</td></tr>` +
-                              `</table>` +
-                              `<table style="width:100%;border-collapse:collapse;">` +
-                              `<tr><th style="border:1px solid #C8C8C8;padding:8px 10px;background:#1F2937;color:#fff;text-align:left;font-size:10pt;">Description</th><th style="border:1px solid #C8C8C8;padding:8px 10px;background:#1F2937;color:#fff;text-align:right;font-size:10pt;width:110px;">Price</th></tr>` +
+                              `<div style="border-top:1px solid #C8C8C8;margin-bottom:20px;">` +
+                              infoRow('Project', projectAddress) +
+                              (clientName ? infoRow('Client', clientName) : '') +
+                              infoRow('Date', quoteDate) +
+                              `</div>` +
+                              `<div style="display:flex;background:#1F2937;color:#fff;">` +
+                              `<div style="flex:1;padding:8px 10px;font-size:10pt;">Description</div>` +
+                              `<div style="flex:0 0 130px;min-width:130px;padding:8px 10px;font-size:10pt;text-align:right;">Price</div>` +
+                              `</div>` +
                               rows +
-                              `<tr><td style="border:1px solid #C8C8C8;padding:10px;font-weight:700;text-align:right;font-size:11pt;">Total</td><td style="border:1px solid #C8C8C8;padding:10px;font-weight:700;text-align:right;font-size:11pt;background:#F3F4F6;">${fmtMoney(total)}</td></tr>` +
-                              `</table>` +
+                              totalRow('Subtotal', subtotal, false) +
+                              totalRow('VAT (20%)', vatAmount, false) +
+                              totalRow('Total', grandTotal, true) +
                               `</div>`;
 
                             const address = (projectAddress || 'Project').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
