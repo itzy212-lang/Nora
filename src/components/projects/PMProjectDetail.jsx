@@ -1313,12 +1313,25 @@ function MaterialModal({ material, projectId, rooms, subs, onSave, onClose }) {
         )}
 
         <div style={{ marginBottom: 12 }}>
-          <div style={labelStyle}>Task value (£)</div>
+          <div style={labelStyle}>Task value (£) — charged to client</div>
           <input type="number" value={form.task_value}
             onChange={e => set('task_value', e.target.value)}
             placeholder="Value of this task e.g. 2500"
             style={inputStyle} />
           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Used for payment certification and payment schedule</div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task cost (£) — what it costs you</div>
+          <input type="number" value={form.task_cost}
+            onChange={e => set('task_cost', e.target.value)}
+            placeholder="Subcontractor/material cost e.g. 1800"
+            style={inputStyle} />
+          {form.task_value && form.task_cost && (
+            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
+              Margin: £{(parseFloat(form.task_value) - parseFloat(form.task_cost)).toLocaleString()}
+            </div>
+          )}
         </div>
 
         {rooms?.length > 0 && (
@@ -1388,6 +1401,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
     contractor: isNew ? '' : task.contractor || '',
     in_house: isNew ? false : task.in_house || false,
     task_value: isNew ? '' : task.task_value || '',
+    task_cost: isNew ? '' : task.task_cost || '',
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1435,6 +1449,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
         contractor: form.in_house ? null : (form.contractor.trim() || null),
         in_house: form.in_house,
         task_value: form.task_value ? parseFloat(form.task_value) : null,
+        task_cost: form.task_cost ? parseFloat(form.task_cost) : null,
       };
       let result;
       if (isNew) {
@@ -1529,12 +1544,25 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
           </div>
         )}
         <div style={{ marginBottom: 12 }}>
-          <div style={labelStyle}>Task value (£)</div>
+          <div style={labelStyle}>Task value (£) — charged to client</div>
           <input type="number" value={form.task_value}
             onChange={e => set('task_value', e.target.value)}
             placeholder="Value of this task e.g. 2500"
             style={inputStyle} />
           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Used for payment certification and payment schedule</div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={labelStyle}>Task cost (£) — what it costs you</div>
+          <input type="number" value={form.task_cost}
+            onChange={e => set('task_cost', e.target.value)}
+            placeholder="Subcontractor/material cost e.g. 1800"
+            style={inputStyle} />
+          {form.task_value && form.task_cost && (
+            <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
+              Margin: £{(parseFloat(form.task_value) - parseFloat(form.task_cost)).toLocaleString()}
+            </div>
+          )}
         </div>
 
         {rooms?.length > 0 && (
@@ -2917,6 +2945,7 @@ Proceed?`
                             contractor: item.subcontractor_name || null,
                             in_house: item.in_house || false,
                             task_value: item.client_charge ? Math.round(item.client_charge * share * 100) / 100 : null,
+                            task_cost: item.cost ? Math.round(item.cost * share * 100) / 100 : null,
                             status: 'not_started',
                             position: position++,
                           });
@@ -2931,6 +2960,7 @@ Proceed?`
                           contractor: item.subcontractor_name || null,
                           in_house: item.in_house || false,
                           task_value: item.client_charge || null,
+                          task_cost: item.cost || null,
                           status: 'not_started',
                           position: position++,
                         });
@@ -3513,6 +3543,23 @@ Proceed?`
                 + Add Task
               </button>
             </div>
+
+            {tasks.length > 0 && (() => {
+              const totalValue = tasks.reduce((s, t) => s + parseFloat(t.task_value || 0), 0);
+              const totalCost = tasks.reduce((s, t) => s + parseFloat(t.task_cost || 0), 0);
+              const margin = totalValue - totalCost;
+              const uncostedCount = tasks.filter(t => t.task_value > 0 && !t.task_cost).length;
+              return (
+                <div style={{ display: 'flex', gap: 16, padding: '10px 14px', background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                  <div><span style={{ fontSize: 11, color: '#6b7280' }}>Total value: </span><span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalValue)}</span></div>
+                  <div><span style={{ fontSize: 11, color: '#6b7280' }}>Total cost: </span><span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{fmt(totalCost)}</span></div>
+                  <div><span style={{ fontSize: 11, color: '#6b7280' }}>Margin: </span><span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>{fmt(margin)}</span></div>
+                  {uncostedCount > 0 && (
+                    <div style={{ fontSize: 11, color: '#d97706', fontStyle: 'italic' }}>{uncostedCount} task{uncostedCount !== 1 ? 's' : ''} missing cost</div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ── Gantt chart ── */}
             {!tasksLoading && tasks.length > 0 && (() => {
