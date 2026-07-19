@@ -6,6 +6,8 @@ import { useState, useEffect, useRef } from 'react';
 import sb from '../../supabaseClient';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import WeeklyMinutes from '../minutes/WeeklyMinutes';
+import useDocumentGenerator from '../../hooks/useDocumentGenerator';
+import { buildQuotePlaceholders, buildQuoteFileName } from '../../utils/buildQuotePlaceholders';
 
 const card = () => ({
   background: 'var(--bg)',
@@ -1757,6 +1759,8 @@ function SubModal({ sub, projectId, onSave, onClose }) {
 // ── Main component ────────────────────────────────────────────────────────
 export default function PMProjectDetail({ project: initialProject, onBack, onOpenComposer }) {
   const [project, setProject] = useState(initialProject);
+  const { generateDocument } = useDocumentGenerator();
+  const [quoteGenerating, setQuoteGenerating] = useState(false);
   const [tab, setTab] = useState('overview');
   const [subModal, setSubModal] = useState(null); // null | 'new' | {sub object}
   const [clientPortalStatus, setClientPortalStatus] = useState(null);
@@ -3377,19 +3381,39 @@ Proceed?`
                 <div style={{ display: 'flex', gap: 8 }}>
                   {['quote', 'tender'].map(type => (
                     <button key={type} type="button"
+                      disabled={type === 'quote' && quoteGenerating}
                       onClick={async () => {
                         const unpricedCount = scopeItems.filter(s => !s.cost && !s.client_charge).length;
                         if (unpricedCount > 0) {
                           if (!window.confirm(`${unpricedCount} item${unpricedCount !== 1 ? 's' : ''} still need pricing. Generate anyway?`)) return;
                         }
                         await sb.from('projects').update({ quote_type: type, quote_status: 'draft' }).eq('id', project.id);
-                        alert(`✅ ${type === 'tender' ? 'Tender package' : 'Quote'} saved as draft. Document generation will be available when the quoting platform is connected.`);
+
+                        if (type === 'quote') {
+                          setQuoteGenerating(true);
+                          try {
+                            const r = await generateDocument({
+                              templateKey: 'pm_quote',
+                              mergeData: buildQuotePlaceholders(project, scopeItems),
+                              fileName: buildQuoteFileName(project),
+                              projectId: project.id,
+                              outputAs: 'pdf',
+                            });
+                            if (!r.success) alert(r.error || 'Could not generate quote PDF.');
+                          } catch (err) {
+                            alert(err.message);
+                          } finally {
+                            setQuoteGenerating(false);
+                          }
+                        } else {
+                          alert(`✅ Tender package saved as draft. Document generation for tender packs is not yet built.`);
+                        }
                       }}
                       style={{ flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
                         background: type === 'tender' ? 'transparent' : '#3b82f6',
                         color: '#fff',
                         border: type === 'tender' ? '2px solid #93c5fd' : 'none' }}>
-                      {type === 'quote' ? '📄 Generate Quote' : '📦 Generate Tender Pack'}
+                      {type === 'quote' ? (quoteGenerating ? '⏳ Generating...' : '📄 Generate Quote') : '📦 Generate Tender Pack'}
                     </button>
                   ))}
                 </div>
