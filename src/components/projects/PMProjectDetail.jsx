@@ -3178,7 +3178,12 @@ Proceed?`
                       const roomLinksToInsert = [];
                       for (let i = 0; i < allItems.length; i++) {
                         const item = allItems[i];
+                        const zoneRoomId = matchRoomIdForItem(item);
                         const breakdown = parseRoomBreakdown(item);
+                        // A genuine multi-room breakdown only applies when it covers MULTIPLE distinct rooms
+                        // (the original intent — "Kitchen 3, Living 4, Bedroom 1 2"). A single spurious match
+                        // against prose text must never override a confident zone-based room_id.
+                        const isGenuineBreakdown = breakdown.length > 1;
                         const { data: newItem } = await sb.from('scope_items').insert([{
                           project_id: project.id,
                           title: item.title,
@@ -3189,11 +3194,13 @@ Proceed?`
                           markup_type: 'none',
                           client_charge: 0,
                           cost: null,
-                          room_id: breakdown.length ? null : matchRoomIdForItem(item),
+                          room_id: isGenuineBreakdown ? null : zoneRoomId,
                         }]).select('*').single();
                         if (newItem) {
                           saved.push(newItem);
-                          breakdown.forEach(b => roomLinksToInsert.push({ scope_item_id: newItem.id, room_id: b.room_id, quantity: b.quantity }));
+                          if (isGenuineBreakdown) {
+                            breakdown.forEach(b => roomLinksToInsert.push({ scope_item_id: newItem.id, room_id: b.room_id, quantity: b.quantity }));
+                          }
                         }
                       }
                       if (roomLinksToInsert.length) {

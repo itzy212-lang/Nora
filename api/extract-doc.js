@@ -386,6 +386,7 @@ export default async function handler(req, res) {
       try { fs.unlinkSync(file.filepath); } catch {}
     }
 
+    console.log('[extract-doc] site_address:', extracted.site_address);
     console.log('[extract-doc] scope_items zones:', (extracted.scope_items || []).map(i => ({ title: i.title, zone: i.zone })));
     return res.status(200).json({ success: true, extracted });
 
