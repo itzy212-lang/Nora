@@ -190,11 +190,11 @@ ${notesText}`;
       ],
     }),
   })
-  .then(r => r.json())
-  .then(d => {
-    if (d.error) { console.error('[soc-pipeline] OpenAI error:', JSON.stringify(d.error)); return []; }
+  .then(async r => {
+    const d = await r.json();
+    if (!r.ok || d.error) { console.error('[soc-pipeline] OpenAI error status=' + r.status + ':', JSON.stringify(d.error || d)); return []; }
     const raw = (d.choices?.[0]?.message?.content || '').replace(/^[`]{3}(?:json)?\s*/m, '').replace(/\s*[`]{3}$/m, '').trim();
-    if (!raw) { console.error('[soc-pipeline] Empty response from OpenAI'); return []; }
+    if (!raw) { console.error('[soc-pipeline] Empty response from OpenAI model=gpt-5.6-luna'); return []; }
     try { return JSON.parse(raw).claims || []; } catch(e) { console.error('[soc-pipeline] JSON parse failed:', e.message, 'raw:', raw.slice(0, 200)); return []; }
   })
   .catch(e => { console.error('[soc-pipeline] fetch error:', e.message); return []; });
