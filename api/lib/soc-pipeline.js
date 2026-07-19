@@ -1278,18 +1278,9 @@ Required row:
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
-  const resolvedMode = modelMode || (typeof process !== 'undefined' && process.env.SOC_DRAFT_MODEL) || 'gpt4o'; // default: gpt-4o
-  // Model selection — gpt55=gpt-5.5, gpt54=gpt-5.4, gpt5=gpt-5, anything else=gpt-4o
-  const model = resolvedMode === 'gpt-5.6-terra' ? 'gpt-5.6-terra'
-              : resolvedMode === 'gpt55' ? 'gpt-5.5'
-              : resolvedMode === 'gpt54' ? 'gpt-5.4'
-              : resolvedMode === 'gpt5'  ? 'gpt-5'
-              : 'gpt-4o';
-  const isTerra = resolvedMode === 'gpt-5.6-terra';
-  const isGpt5Family = ['gpt55','gpt54','gpt5'].includes(resolvedMode);
-  const params = (isTerra || isGpt5Family)
-    ? { max_completion_tokens: 32000 }
-    : { temperature: 0.15, max_tokens: 16383 };
+  const resolvedMode = 'gpt-5.6-terra'; // Stage 2 hardcoded to Terra
+  const model = 'gpt-5.6-terra';
+  const params = { max_completion_tokens: 32000 };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
   const aoAddress     = projectMeta.ao_address    || 'Not provided';
