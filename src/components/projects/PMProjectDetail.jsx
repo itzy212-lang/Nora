@@ -3174,12 +3174,16 @@ Proceed?`
                       }
 
                       // Save all items to scope_items table
+                      console.log('[DEBUG] roomLookup at match time:', roomLookup);
+                      console.log('[DEBUG] rooms state at match time:', rooms);
+                      console.log('[DEBUG] createdRooms this run:', createdRooms);
                       const saved = [];
                       const roomLinksToInsert = [];
                       for (let i = 0; i < allItems.length; i++) {
                         const item = allItems[i];
                         const zoneRoomId = matchRoomIdForItem(item);
                         const breakdown = parseRoomBreakdown(item);
+                        console.log('[DEBUG] item:', item.title, '| zone:', item.zone, '| matched room_id:', zoneRoomId);
                         // A genuine multi-room breakdown only applies when it covers MULTIPLE distinct rooms
                         // (the original intent — "Kitchen 3, Living 4, Bedroom 1 2"). A single spurious match
                         // against prose text must never override a confident zone-based room_id.
@@ -3199,7 +3203,7 @@ Proceed?`
                         if (newItem) {
                           saved.push(newItem);
                           if (isGenuineBreakdown) {
-                            breakdown.forEach(b => roomLinksToInsert.push({ scope_item_id: newItem.id, room_id: b.room_id, quantity: b.quantity }));
+                            roomLinksToInsert.push(...breakdown.map(b => ({ scope_item_id: newItem.id, room_id: b.room_id, quantity: b.quantity })));
                           }
                         }
                       }
