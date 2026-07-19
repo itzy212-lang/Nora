@@ -89,10 +89,27 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setDualAIReview(null);
     setDualAISkipped(null);
     setSessionLoadError(null);
-    // Pre-fetch session list for sidebar only
+    // Fetch session list — and auto-load the most recent session's notes if one exists
     fetch('/api/soc-save?project_id=' + projectId)
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.sessions?.length) setSessionHistory(data.sessions); })
+      .then(async sessData => {
+        if (!sessData?.sessions?.length) return;
+        setSessionHistory(sessData.sessions);
+        // Auto-load most recent session for the selected AO
+        const mostRecent = sessData.sessions[0];
+        if (!mostRecent?.sessionId) return;
+        setSocSessionId(mostRecent.sessionId);
+        try {
+          const notesRes = await fetch('/api/soc-save?session_id=' + mostRecent.sessionId);
+          if (!notesRes.ok) return;
+          const notesData = await notesRes.json();
+          if (notesData.notes?.length) {
+            setMessages(notesData.notes
+              .filter(n => n.role === 'user')
+              .map(n => ({ id: n.id, role: 'user', content: n.content })));
+          }
+        } catch (e) { /* non-fatal */ }
+      })
       .catch(() => {});
   }, [projectId, selectedAOIndex]);
 
