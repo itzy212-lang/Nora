@@ -173,17 +173,21 @@ export default async function handler(req, res) {
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
 
-      const { data: user } = await supabase.from('portal_users')
+      // One email can legitimately have multiple active portal accounts (e.g. a subcontractor
+      // invited to several different projects) — check the password against each until one matches,
+      // rather than assuming exactly one row (which throws with .single() and silently breaks login).
+      const { data: candidates } = await supabase.from('portal_users')
         .select('*')
         .eq('email', String(email).toLowerCase().trim())
-        .eq('invite_status', 'active')
-        .single();
+        .eq('invite_status', 'active');
 
-      if (!user || !user.password_hash) return res.status(401).json({ error: 'Invalid email or password' });
+      const user = (candidates || []).find(u => {
+        if (!u.password_hash) return false;
+        const [salt, storedHash] = u.password_hash.split(':');
+        return hashPassword(password, salt) === storedHash;
+      });
 
-      const [salt, storedHash] = user.password_hash.split(':');
-      const testHash = hashPassword(password, salt);
-      if (testHash !== storedHash) return res.status(401).json({ error: 'Invalid email or password' });
+      if (!user) return res.status(401).json({ error: 'Invalid email or password' });
 
       await supabase.from('portal_users').update({ last_login_at: new Date().toISOString() }).eq('id', user.id);
 
@@ -195,6 +199,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         session_token: sessionToken,
         user: { id: user.id, email: user.email, name: user.name, project_id: user.project_id, user_type: user.user_type, subcontractor_id: user.subcontractor_id },
+        other_projects_count: (candidates || []).length - 1,
       });
     }
 
@@ -203,26 +208,25 @@ export default async function handler(req, res) {
       const { email } = req.body;
       if (!email) return res.status(400).json({ error: 'Missing email' });
 
-      const { data: user } = await supabase.from('portal_users')
+      const { data: users } = await supabase.from('portal_users')
         .select('*')
         .eq('email', String(email).toLowerCase().trim())
-        .eq('invite_status', 'active')
-        .single();
+        .eq('invite_status', 'active');
 
       // Always return success even if not found — don't leak whether an email is registered
-      if (!user) return res.status(200).json({ ok: true });
+      if (!users || !users.length) return res.status(200).json({ ok: true });
 
       const resetToken = generateToken();
-      await supabase.from('portal_users').update({
-        invite_token: resetToken, // reuse the same token column — activation flow is now dormant once active
-      }).eq('id', user.id);
+      // Same token applied to every account for this email — one reset link fixes password
+      // access across all projects this person has been invited to.
+      await supabase.from('portal_users').update({ invite_token: resetToken }).in('id', users.map(u => u.id));
 
       const resetUrl = `${process.env.PORTAL_BASE_URL || 'https://nora-d9wy.vercel.app'}/portal/reset?token=${resetToken}`;
 
       const emailSent = await sendPortalEmail({
-        toEmail: user.email,
+        toEmail: users[0].email,
         subject: 'Reset your project portal password',
-        bodyHtml: `<p>Hi ${user.name || ''},</p>` +
+        bodyHtml: `<p>Hi ${users[0].name || ''},</p>` +
           `<p>We received a request to reset your project portal password. Click the link below to set a new one:</p>` +
           `<p><a href="${resetUrl}">${resetUrl}</a></p>` +
           `<p>If you didn't request this, you can ignore this email.</p>`,
@@ -237,8 +241,8 @@ export default async function handler(req, res) {
       if (!token || !password || password.length < 8) {
         return res.status(400).json({ error: 'Invalid token or password too short (min 8 characters)' });
       }
-      const { data: user } = await supabase.from('portal_users').select('*').eq('invite_token', token).eq('invite_status', 'active').single();
-      if (!user) return res.status(404).json({ error: 'Reset link not found or already used' });
+      const { data: users } = await supabase.from('portal_users').select('*').eq('invite_token', token).eq('invite_status', 'active');
+      if (!users || !users.length) return res.status(404).json({ error: 'Reset link not found or already used' });
 
       const salt = crypto.randomBytes(16).toString('hex');
       const hash = hashPassword(password, salt);
@@ -246,10 +250,11 @@ export default async function handler(req, res) {
       const { data: updated, error } = await supabase.from('portal_users').update({
         password_hash: `${salt}:${hash}`,
         invite_token: null, // token is single-use
-      }).eq('id', user.id).select('*').single();
+      }).in('id', users.map(u => u.id)).select('*');
       if (error) throw error;
 
-      return res.status(200).json({ user: { id: updated.id, email: updated.email, name: updated.name, project_id: updated.project_id, user_type: updated.user_type } });
+      const primary = updated[0];
+      return res.status(200).json({ user: { id: primary.id, email: primary.email, name: primary.name, project_id: primary.project_id, user_type: primary.user_type } });
     }
 
     return res.status(400).json({ error: 'Unknown action' });
