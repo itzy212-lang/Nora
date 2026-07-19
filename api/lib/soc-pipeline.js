@@ -1359,11 +1359,8 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     '  "general_notes": []\n' +
     '}';
 
-  // Feature flag — USE_SOC_MASTER_V1=true activates alternative drafting brain
-  const USE_SOC_MASTER_V1 = (typeof process !== 'undefined' && process.env.USE_SOC_MASTER_V1 === 'true');
-  const activeSystem = USE_SOC_MASTER_V1
-    ? SOC_MASTER_V1 + '\n\n' + SOC_RUNTIME_OUTPUT_CONTRACT + '\n\n' + FEW_SHOT_EXAMPLES_V1
-    : DRAFTING_SYSTEM + '\n\n' + FEW_SHOT_EXAMPLES;
+  // SOC_MASTER_V1 hardcoded active — best brain + gold standard examples
+  const activeSystem = SOC_MASTER_V1 + '\n\n' + SOC_RUNTIME_OUTPUT_CONTRACT + '\n\n' + FEW_SHOT_EXAMPLES_V1;
 
   // Try primary model, fall back to gpt-4o if it fails
   async function callModel(m, p) {
@@ -1466,7 +1463,7 @@ export function runCompletenessAudit(draftedResult, claims) {
 
 // ─── Quality audit (async, not in sync pipeline) ──────────────────────────────
 export async function runQualityAudit(draftedResult, apiKey, useV1 = false) {
-  const activeExamples = useV1 ? FEW_SHOT_EXAMPLES_V1 : FEW_SHOT_EXAMPLES;
+  const activeExamples = FEW_SHOT_EXAMPLES_V1; // hardcoded to V1 gold standard
   const rows = [];
   for (const s of (draftedResult.sections || []))
     for (const r of (s.rows || []))
