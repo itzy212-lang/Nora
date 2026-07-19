@@ -447,10 +447,47 @@ export default function NewProjectModal({ onClose, onCreated }) {
         }
       }
 
-      // Save extracted scope items if any
+      // Save extracted scope items if any — create zones/rooms from each item's "zone" field first
+      // (Structure and External always guaranteed, everything else derived from what the AI identified),
+      // matching the same logic used when uploading drawings into an existing project's Scope tab.
       if (isConstruction && extractedScope?.length && data?.id) {
+        // Guarantee Structure and External zones exist for this brand-new project
+        const { data: existingZones } = await sb.from('project_rooms').select('*').eq('project_id', data.id);
+        let allRooms = existingZones || [];
+        const hasStructure = allRooms.some(r => r.zone_type === 'structure');
+        const hasExternal = allRooms.some(r => r.zone_type === 'external');
+        const zonesToCreate = [];
+        if (!hasStructure) zonesToCreate.push({ project_id: data.id, name: 'STRUCTURE', zone_type: 'structure', position: -2 });
+        if (!hasExternal) zonesToCreate.push({ project_id: data.id, name: 'EXTERNAL', zone_type: 'external', position: -1 });
+        if (zonesToCreate.length) {
+          const { data: createdZones } = await sb.from('project_rooms').insert(zonesToCreate).select('*');
+          if (createdZones) allRooms = [...allRooms, ...createdZones];
+        }
+
+        // Derive room names from every item's zone field (excluding Structure/External/Unallocated)
+        const RESERVED_ZONES = new Set(['structure', 'external', 'unallocated', '']);
+        const existingRoomNames = new Set(allRooms.map(r => (r.name || '').trim().toLowerCase()));
+        const roomNamesToCreate = [];
+        extractedScope.forEach(item => {
+          const zone = String(item.zone || '').trim();
+          if (zone && !RESERVED_ZONES.has(zone.toLowerCase()) && !existingRoomNames.has(zone.toLowerCase()) && !roomNamesToCreate.some(n => n.toLowerCase() === zone.toLowerCase())) {
+            roomNamesToCreate.push(zone);
+          }
+        });
+        if (roomNamesToCreate.length) {
+          const newRoomRows = roomNamesToCreate.map((name, i) => ({ project_id: data.id, name: name.toUpperCase(), position: allRooms.length + i }));
+          const { data: createdRooms } = await sb.from('project_rooms').insert(newRoomRows).select('*');
+          if (createdRooms) allRooms = [...allRooms, ...createdRooms];
+        }
+
+        // Build lookup and save each scope item with its matched room_id
+        const roomLookup = {};
+        allRooms.forEach(r => { roomLookup[(r.name || '').trim().toLowerCase()] = r.id; });
+
         for (let i = 0; i < extractedScope.length; i++) {
           const item = extractedScope[i];
+          const zoneKey = String(item.zone || '').trim().toLowerCase();
+          const roomId = zoneKey && roomLookup[zoneKey] ? roomLookup[zoneKey] : null;
           await sb.from('scope_items').insert([{
             project_id: data.id,
             title: item.title,
@@ -460,6 +497,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
             extracted_by_ai: true,
             markup_type: 'none',
             client_charge: 0,
+            room_id: roomId,
           }]);
         }
       }
