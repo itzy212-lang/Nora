@@ -1301,8 +1301,15 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             disabled={!hasContent || processing}
             style={{ ...s.generateBtn, opacity: (!hasContent || processing) ? 0.5 : 1 }}
           >
-            {processing ? 'Generating…' : 'Generate SOC'}
+            {processing ? (processingStatus || 'Generating…') : 'Generate SOC'}
           </button>
+          {processing && processingStatus && (
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              {processingStatus}
+            </div>
+          )}
+          <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', marginTop: 8 }}>
             <input
               type="checkbox"
