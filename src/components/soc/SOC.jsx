@@ -542,6 +542,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
     stopRecording();
     setProcessing(true);
+    setProcessingStatus('Extracting notes…');
 
     try {
       const response = await fetch('/api/generate-soc', {
@@ -629,6 +630,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       alert('Error generating SOC: ' + (err.message || err));
     } finally {
       setProcessing(false);
+      setProcessingStatus('');
     }
   }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, socType, stopRecording, textInput, dualAIEnabled]);
 
