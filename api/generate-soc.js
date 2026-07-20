@@ -1063,20 +1063,16 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
         // Delete existing claims cleanly
         await supabase.from('soc_claims').delete().eq('session_id', sessionId);
         
-        // Extract claims in batches of 8 notes — avoids per-note overhead but stays well within timeout
-        const BATCH_SIZE = 8;
-        const allClaims = [];
-        for (let i = 0; i < allNotes.length; i += BATCH_SIZE) {
-          const batch = allNotes.slice(i, i + BATCH_SIZE);
-          const batchText = batch.map((n, j) => '[' + (i + j + 1) + '] ' + n.content).join('\n\n');
-          try {
-            const batchClaims = await extractAtomicClaims(batchText, apiKey);
-            if (batchClaims.length) allClaims.push(...batchClaims);
-            console.log('[generate-soc] Batch ' + Math.ceil((i+1)/BATCH_SIZE) + '/' + Math.ceil(allNotes.length/BATCH_SIZE) + ': extracted ' + batchClaims.length + ' claims');
-          } catch (e) {
-            console.warn('[generate-soc] Batch ' + i + ' extraction failed:', e.message);
-          }
-        }
+        // Extract claims in parallel — all notes fired simultaneously, results merged in order
+        console.log('[generate-soc] Regenerate: firing ' + allNotes.length + ' parallel Luna extractions');
+        const claimArrays = await Promise.all(
+          allNotes.map((note, i) =>
+            extractAtomicClaims('[' + (i + 1) + '] ' + note.content, apiKey)
+              .catch(e => { console.warn('[generate-soc] Note ' + (i+1) + ' failed:', e.message); return []; })
+          )
+        );
+        const allClaims = claimArrays.flat();
+        console.log('[generate-soc] Parallel extraction complete: ' + allClaims.length + ' total claims');
         
         if (allClaims.length) {
           claims = allClaims;
