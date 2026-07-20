@@ -3519,9 +3519,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       },
     };
 
-    const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'gpt-4o';
-    const DRAFTING_MODEL = process.env.DRAFTING_MODEL || DEFAULT_MODEL;
-    const PROJECT_CHAT_DISCUSS_MODEL = process.env.PROJECT_CHAT_DISCUSS_MODEL || 'gpt-5.6-terra';
+    const DEFAULT_MODEL = 'gpt-5.6-terra'; // hardcoded — all modes use Terra
+    const DRAFTING_MODEL = 'gpt-5.6-terra'; // hardcoded — Draft with Ely uses Terra
+    const PROJECT_CHAT_DISCUSS_MODEL = 'gpt-5.6-terra';
     const activeModel = modeHint === 'draft'
       ? DRAFTING_MODEL
       : (isProjectChat ? PROJECT_CHAT_DISCUSS_MODEL : DEFAULT_MODEL);
