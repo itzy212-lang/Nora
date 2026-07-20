@@ -1045,36 +1045,46 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     } catch (e) { console.warn('[generate-soc] Could not load live claims:', e.message); }
   }
   if (forceReextract && sessionId) {
-    // On regeneration: load existing stored claims, then only extract from notes
-    // that don't already have claims — avoids re-processing entire session
+    // On regeneration: process note by note — same as first-time generation
+    // This avoids sending all notes in one massive call which causes timeouts
     try {
-      const { data: storedClaims } = await supabase
-        .from('soc_claims')
-        .select('*')
+      // First load all notes for this session
+      const { data: allNotes } = await supabase
+        .from('ai_messages')
+        .select('id, content, created_at')
         .eq('session_id', sessionId)
-        .order('note_sequence', { ascending: true })
-        .order('claim_sequence', { ascending: true });
-      if (storedClaims?.length) {
-        claims = storedClaims;
-        claimsFromLive = true;
-        console.log('[generate-soc] Regenerate: loaded ' + storedClaims.length + ' existing claims');
-        // Find which note sequences already have claims
-        const coveredSeqs = new Set(storedClaims.map(c => c.note_sequence).filter(Boolean));
-        // Extract only from new notes not yet covered
-        const allLines = (message || '').split(/\n+/).filter(l => l.trim());
-        const newLines = allLines.filter(l => {
-          const m = l.match(/^\[(\d+)\]/);
-          return m ? !coveredSeqs.has(parseInt(m[1])) : false;
-        });
-        if (newLines.length) {
-          console.log('[generate-soc] Regenerate: extracting from ' + newLines.length + ' new notes');
+        .eq('surface', 'soc')
+        .eq('role', 'user')
+        .order('created_at', { ascending: true });
+
+      if (allNotes?.length) {
+        console.log('[generate-soc] Regenerate: processing ' + allNotes.length + ' notes one by one');
+        
+        // Delete existing claims cleanly
+        await supabase.from('soc_claims').delete().eq('session_id', sessionId);
+        
+        // Extract claims note by note
+        const allClaims = [];
+        for (let i = 0; i < allNotes.length; i++) {
+          const note = allNotes[i];
           try {
-            const newClaims = await extractAtomicClaims(newLines.join('\n'), apiKey);
-            if (newClaims.length) claims = [...claims, ...newClaims];
-          } catch (e) { console.warn('[generate-soc] Delta extraction failed:', e.message); }
+            const noteClaims = await extractAtomicClaims(note.content, apiKey);
+            if (noteClaims.length) {
+              allClaims.push(...noteClaims);
+              console.log('[generate-soc] Note ' + (i+1) + '/' + allNotes.length + ': extracted ' + noteClaims.length + ' claims');
+            }
+          } catch (e) {
+            console.warn('[generate-soc] Note ' + (i+1) + ' extraction failed:', e.message);
+          }
+        }
+        
+        if (allClaims.length) {
+          claims = allClaims;
+          claimsFromLive = true;
+          console.log('[generate-soc] Regenerate complete: ' + claims.length + ' total claims from ' + allNotes.length + ' notes');
         }
       }
-    } catch (e) { console.warn('[generate-soc] Could not load stored claims on regenerate:', e.message); }
+    } catch (e) { console.warn('[generate-soc] Note-by-note regeneration failed:', e.message); }
   }
 
   // Stage 1: Extract if no live claims at all
