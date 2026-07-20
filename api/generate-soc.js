@@ -506,7 +506,7 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     { width: '15.1mm to 25mm', expression: 'Severe' },
   ];
 
-  let html =
+  let html = UNCLEAR_CSS +
     '<div class="soc-document">' +
     '<div class="soc-title-block">' +
     '<div class="soc-main-title">SCHEDULE OF CONDITIONS</div>' +
