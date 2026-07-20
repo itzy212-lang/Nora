@@ -165,7 +165,7 @@ CLAIM TYPE RULES — site_note vs scheduled observation:
 Use claim_type: "site_note" for:
 - Access arrangements: keys, key safes, how access was gained, who let you in
 - Security/locking status at commencement AND at the end of inspection (e.g. "door found locked at commencement, confirmed locked on leaving")
-- General property context that is NOT a defect or condition (e.g. "the whole property has recently been refurbished", "the property appeared recently renovated")
+- Whole-property or whole-house context statements (e.g. "the whole property has recently been refurbished", "the house has been completely renovated") — NOT room-specific finish descriptions. A statement about a specific room (e.g. "the bedroom has been newly decorated", "the room appears recently painted") is a finish_description scheduled row, not a site note.
 - Scaffolding requirements or restrictions
 - Instructions to contractors about protection, precautions or sequencing
 - Windows or doors left in a specific position at the end of inspection
