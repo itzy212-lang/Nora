@@ -1503,7 +1503,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     '}';
 
   // SOC_MASTER_V1 hardcoded active — best brain + gold standard examples
-  const activeSystem = SOC_MASTER_V1 + '\n\n' + SOC_RUNTIME_OUTPUT_CONTRACT + '\n\n' + FEW_SHOT_EXAMPLES_V1;
+  const activeSystem = SOC_MASTER_V1 + '\n\n' + SOC_RUNTIME_OUTPUT_CONTRACT + '\n\n' + FEW_SHOT_EXAMPLES_V1 + '\n\n' + TERRA_REFERENCE_SOC;
 
   // Try primary model, fall back to gpt-4o if it fails
   async function callModel(m, p) {
