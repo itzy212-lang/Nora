@@ -17,6 +17,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [isRecording, setIsRecording] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
   const [pdfProcessing, setPdfProcessing] = useState(false);
   const [oneDriveOverlay, setOneDriveOverlay] = useState(null);
   const [selectedAOIndex, setSelectedAOIndex] = useState(defaultAOIndex != null ? String(defaultAOIndex) : '0');
