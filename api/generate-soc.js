@@ -542,7 +542,13 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
       html +=
         `<tr${rowClass}>` +
         `<td class="cell-ref">${esc(row.ref || '')}</td>` +
-        `<td class="cell-obs">${esc(row.observation || '')}</td>` +
+        (() => {
+          const obs = row.observation || '';
+          const isUnclear = obs.startsWith('[UNCLEAR:');
+          const cleanObs = isUnclear ? obs.replace(/^\[UNCLEAR:[^\]]*\]\s*/, '') : obs;
+          const label = isUnclear ? '<span class="unclear-label">⚠ NEEDS REVIEW — dictation unclear, please confirm before finalising</span>' : '';
+          return `<td class="${isUnclear ? 'cell-obs-unclear' : 'cell-obs'}">${label}${esc(cleanObs)}</td>`;
+        })() +
         `<td class="cell-action">${esc(row.action || '')}</td>` +
         '</tr>';
     });
