@@ -1512,13 +1512,15 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     let r;
     try {
       r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: m, ...p, messages: [
-        { role: m.startsWith('gpt-5.6') ? 'developer' : 'system', content: activeSystem },
-        { role: 'user', content: userPrompt },
-      ]}),
-    });
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: m, ...p, messages: [
+          { role: m.startsWith('gpt-5.6') ? 'developer' : 'system', content: activeSystem },
+          { role: 'user', content: userPrompt },
+        ]}),
+        signal: controller.signal,
+      });
+    } finally { clearTimeout(timeout); }
     if (!r.ok) {
       const errText = await r.text().catch(() => '');
       throw new Error('Drafting API ' + r.status + ' (model=' + m + '): ' + errText.slice(0, 200));
