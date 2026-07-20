@@ -164,7 +164,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           setEditableSections(JSON.parse(JSON.stringify(
             reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
           )));
-          setPhase('preview');
+          setPhase('review');
           return initData.session_id;
         }
       }
