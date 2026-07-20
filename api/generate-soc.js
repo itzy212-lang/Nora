@@ -1063,18 +1063,18 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
         // Delete existing claims cleanly
         await supabase.from('soc_claims').delete().eq('session_id', sessionId);
         
-        // Extract claims note by note
+        // Extract claims in batches of 8 notes — avoids per-note overhead but stays well within timeout
+        const BATCH_SIZE = 8;
         const allClaims = [];
-        for (let i = 0; i < allNotes.length; i++) {
-          const note = allNotes[i];
+        for (let i = 0; i < allNotes.length; i += BATCH_SIZE) {
+          const batch = allNotes.slice(i, i + BATCH_SIZE);
+          const batchText = batch.map((n, j) => '[' + (i + j + 1) + '] ' + n.content).join('\n\n');
           try {
-            const noteClaims = await extractAtomicClaims(note.content, apiKey);
-            if (noteClaims.length) {
-              allClaims.push(...noteClaims);
-              console.log('[generate-soc] Note ' + (i+1) + '/' + allNotes.length + ': extracted ' + noteClaims.length + ' claims');
-            }
+            const batchClaims = await extractAtomicClaims(batchText, apiKey);
+            if (batchClaims.length) allClaims.push(...batchClaims);
+            console.log('[generate-soc] Batch ' + Math.ceil((i+1)/BATCH_SIZE) + '/' + Math.ceil(allNotes.length/BATCH_SIZE) + ': extracted ' + batchClaims.length + ' claims');
           } catch (e) {
-            console.warn('[generate-soc] Note ' + (i+1) + ' extraction failed:', e.message);
+            console.warn('[generate-soc] Batch ' + i + ' extraction failed:', e.message);
           }
         }
         
