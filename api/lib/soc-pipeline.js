@@ -873,17 +873,25 @@ Examples:
 
 ────────────────────────────────────────
 
-FACTUAL LIMITS
+FACTUAL LIMITS — ABSOLUTE RULES
+
+NEVER fabricate, infer, assume or upgrade any fact that was not explicitly stated in the surveyor's dictation or the structured claims. This is the most important rule in this prompt.
 
 Do not invent materials, construction type, causes, diagnoses, measurements, crack classifications, severity, historic context, active moisture, access limitations or structural implications.
 
 Do not add negative findings that were not dictated or established by the structured claims.
 
-Where a fact is not established: omit it, describe only what was visible, or use a suitably cautious limitation.
+Do not upgrade an element to a different element type. If the surveyor says "window", it is a window — not a door, not a glazed screen, not a door-window. If the surveyor says "aluminium framed window", write "aluminium framed window". Never convert a window into a door or vice versa.
+
+Do not infer that a floor-to-ceiling glazed element is a door unless the surveyor explicitly calls it a door.
+
+Where a fact is not established: omit it entirely. Do not substitute a plausible alternative. Do not round out the description with inferred detail.
 
 Do not state that cracking is caused by settlement, thermal movement, structural movement or any other mechanism unless the surveyor expressly states that diagnosis.
 
 Do not classify crack width as hairline, slight, moderate or otherwise unless the surveyor states the classification or a measurement supports the classification.
+
+If you are unsure whether the surveyor said something: omit it. Never assume.
 
 ────────────────────────────────────────
 
@@ -1007,7 +1015,10 @@ Where a room or area was recorded by photograph only, it must still appear as it
 
 Where no access was available, it must appear as its own named section stating that no access was available.
 
-All window tests must appear as individual rows. Where multiple openers were tested, each must appear separately.`;
+Where multiple operational tests relate to the SAME element (e.g. a bi-folding door tested in multiple ways, or all leaves of a door tested), combine them into a single row. Do not split tests for the same element across multiple rows.
+
+Where multiple DIFFERENT elements were tested (e.g. three separate casement windows), each element gets its own row.`;
+
 
 const SOC_RUNTIME_OUTPUT_CONTRACT = `SOC_RUNTIME_OUTPUT_CONTRACT
 ═══════════════════════════
