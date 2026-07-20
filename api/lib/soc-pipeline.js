@@ -160,6 +160,26 @@ Only mark a claim as fully superseded when the amendment explicitly replaces the
 
 SECTION NAMING: Use the room name exactly as the surveyor described it. Do not apply architectural terminology (e.g. 'outrigger', 'annexe', 'extension') unless the surveyor used those exact words. If the surveyor said 'rear kitchen' use 'Rear Kitchen'. If they said 'kitchen family room' use 'Ground Floor Rear Kitchen Family Room'.
 
+CLAIM TYPE RULES — site_note vs scheduled observation:
+
+Use claim_type: "site_note" for:
+- Access arrangements: keys, key safes, how access was gained, who let you in
+- Security/locking status at commencement AND at the end of inspection (e.g. "door found locked at commencement, confirmed locked on leaving")
+- General property context that is NOT a defect or condition (e.g. "the whole property has recently been refurbished", "the property appeared recently renovated")
+- Scaffolding requirements or restrictions
+- Instructions to contractors about protection, precautions or sequencing
+- Windows or doors left in a specific position at the end of inspection
+- Key return or access handover notes
+- Any note the surveyor explicitly flags as "just as a side note" or "for the award" or "to note"
+
+Use claim_type: "general_condition" (scheduled row) ONLY for:
+- Specific observable physical conditions of the property elements
+- Defects, cracks, open joints, staining, deterioration
+- Operational tests of specific elements (windows, doors, mechanisms)
+- Construction descriptions relevant to the party wall
+
+If a statement is procedural, administrative or contextual rather than a physical observation — it is a site_note.
+
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
 Return JSON only: { "claims": [ ... ] }`;
