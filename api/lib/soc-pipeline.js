@@ -1507,7 +1507,11 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
 
   // Try primary model, fall back to gpt-4o if it fails
   async function callModel(m, p) {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 240000); // 240s timeout
+    let r;
+    try {
+      r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: m, ...p, messages: [
