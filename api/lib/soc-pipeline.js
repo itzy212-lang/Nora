@@ -1439,7 +1439,7 @@ ER-03 | At the corner nearest to the sliding doors and flank wall junction, a cr
 ER-04 | To the rendered face below the patio step, horizontal cracking is present, extending in the direction of the boundary. Localised loss of render has occurred at points along this run, revealing the underlying brickwork substrate. On inspection, the cracking appears confined to the render layer and does not appear to extend into the structural masonry. | Record pre-existing defect. Render layer only — monitor during works.
 ER-05 | No defects are noted to the timber boundary fencing or associated cladding. | Record only
 
-END OF COMPLETE REFERENCE DOCUMENT\`;
+END OF COMPLETE REFERENCE DOCUMENT`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
