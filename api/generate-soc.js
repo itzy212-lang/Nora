@@ -1047,9 +1047,12 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   if (forceReextract && sessionId) {
     // Delete cached claims so Stage 1 runs fresh with updated STT corrections
     try {
-      await supabase.from('soc_claims').delete().eq('session_id', sessionId);
+      await Promise.race([
+        supabase.from('soc_claims').delete().eq('session_id', sessionId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('delete timeout')), 8000))
+      ]);
       console.log('[generate-soc] Cleared cached claims for fresh extraction');
-    } catch (e) { console.warn('[generate-soc] Could not clear claims:', e.message); }
+    } catch (e) { console.warn('[generate-soc] Could not clear claims (continuing anyway):', e.message); }
   }
 
   // Stage 1: Extract if no live claims
