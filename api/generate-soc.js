@@ -1073,6 +1073,30 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
         );
         const allClaims = claimArrays.flat();
         console.log('[generate-soc] Parallel extraction complete: ' + allClaims.length + ' total claims');
+
+        // Respect previously excluded rows — load exclusions from soc_reports edit_state
+        // and remove any newly extracted claims that match excluded note sources
+        try {
+          const { data: existingReport } = await supabase
+            .from('soc_reports')
+            .select('edit_state')
+            .eq('session_id', sessionId)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (existingReport?.edit_state?.excluded_notes?.length) {
+            const excludedNoteIds = new Set(existingReport.edit_state.excluded_notes);
+            const before = allClaims.length;
+            // Filter out claims from excluded notes
+            for (let i = allClaims.length - 1; i >= 0; i--) {
+              if (excludedNoteIds.has(allClaims[i].source_note_id)) {
+                allClaims.splice(i, 1);
+              }
+            }
+            console.log('[generate-soc] Excluded ' + (before - allClaims.length) + ' claims from deleted rows');
+          }
+        } catch(e) { console.warn('[generate-soc] Could not load exclusions:', e.message); }
         
         if (allClaims.length) {
           claims = allClaims;
