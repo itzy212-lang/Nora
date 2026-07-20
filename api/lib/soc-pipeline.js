@@ -1344,9 +1344,9 @@ EXAMPLE 21 — ACTION COLUMN RULES (mandatory)
 "Record pre-existing defect. Nature and extent to be re-assessed post-works." — defects where post-works comparison is needed.
 "Record — not tested" — elements that could not be tested (locked, fixed, inaccessible).
 "Further investigation required" — items requiring specialist input before works commence.
-NEVER use "Record only" for a defect.
+NEVER use "Record only" for a defect.;
 
----
+const TERRA_REFERENCE_SOC = `---
 
 COMPLETE REFERENCE DOCUMENT — SQUARE ONE SCHEDULE OF CONDITIONS GOLD STANDARD
 This is a complete Schedule of Conditions prepared by Square One Consulting. This represents the required standard of writing, structure, terminology, action column differentiation, crack description, and professional presentation. Study it in full before drafting any output.
@@ -1419,7 +1419,7 @@ ER-04 | To the rendered face below the patio step, horizontal cracking is presen
 ER-05 | No defects are noted to the timber boundary fencing or associated cladding. | Record only
 
 END OF COMPLETE REFERENCE DOCUMENT
-`;
+``;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
