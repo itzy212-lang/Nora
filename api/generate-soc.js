@@ -1045,17 +1045,39 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     } catch (e) { console.warn('[generate-soc] Could not load live claims:', e.message); }
   }
   if (forceReextract && sessionId) {
-    // Delete cached claims so Stage 1 runs fresh with updated STT corrections
+    // On regeneration: load existing stored claims, then only extract from notes
+    // that don't already have claims — avoids re-processing entire session
     try {
-      await Promise.race([
-        supabase.from('soc_claims').delete().eq('session_id', sessionId),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('delete timeout')), 8000))
-      ]);
-      console.log('[generate-soc] Cleared cached claims for fresh extraction');
-    } catch (e) { console.warn('[generate-soc] Could not clear claims (continuing anyway):', e.message); }
+      const { data: storedClaims } = await supabase
+        .from('soc_claims')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('note_sequence', { ascending: true })
+        .order('claim_sequence', { ascending: true });
+      if (storedClaims?.length) {
+        claims = storedClaims;
+        claimsFromLive = true;
+        console.log('[generate-soc] Regenerate: loaded ' + storedClaims.length + ' existing claims');
+        // Find which note sequences already have claims
+        const coveredSeqs = new Set(storedClaims.map(c => c.note_sequence).filter(Boolean));
+        // Extract only from new notes not yet covered
+        const allLines = (message || '').split(/\n+/).filter(l => l.trim());
+        const newLines = allLines.filter(l => {
+          const m = l.match(/^\[(\d+)\]/);
+          return m ? !coveredSeqs.has(parseInt(m[1])) : false;
+        });
+        if (newLines.length) {
+          console.log('[generate-soc] Regenerate: extracting from ' + newLines.length + ' new notes');
+          try {
+            const newClaims = await extractAtomicClaims(newLines.join('\n'), apiKey);
+            if (newClaims.length) claims = [...claims, ...newClaims];
+          } catch (e) { console.warn('[generate-soc] Delta extraction failed:', e.message); }
+        }
+      }
+    } catch (e) { console.warn('[generate-soc] Could not load stored claims on regenerate:', e.message); }
   }
 
-  // Stage 1: Extract if no live claims
+  // Stage 1: Extract if no live claims at all
   if (!claimsFromLive) {
     console.log('[generate-soc] Stage 1: extracting claims...');
     try {
