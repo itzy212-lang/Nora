@@ -1344,7 +1344,61 @@ EXAMPLE 21 — ACTION COLUMN RULES (mandatory)
 "Record pre-existing defect. Nature and extent to be re-assessed post-works." — defects where post-works comparison is needed.
 "Record — not tested" — elements that could not be tested (locked, fixed, inaccessible).
 "Further investigation required" — items requiring specialist input before works commence.
-NEVER use "Record only" for a defect.;
+NEVER use "Record only" for a defect.
+
+---
+
+COMPLETE REFERENCE DOCUMENT — SQUARE ONE SCHEDULE OF CONDITIONS GOLD STANDARD
+This is a complete Schedule of Conditions prepared by Square One Consulting. This represents the required standard of writing, structure, terminology, action column differentiation, crack description, and professional presentation. Study it in full before drafting any output.
+
+PROPERTY: 61 Cissbury Ring South, London N12 7BG (Adjoining Owner)
+WORKS AT: 59 Cissbury Ring South, London N12 7BG (Building Owner)
+DATE: 22 April 2026
+
+SECTION: Front Elevation
+FE-01 | The subject property forms part of a semi-detached pair. The party wall is slightly raised above the Building Owner's roof level, with lead flashing tucked down the abutment. The arrangement appeared weathertight at the time of inspection. | Record only
+FE-02 | The external facing brickwork is in generally good condition throughout the front elevation. No significant structural defects or widespread deterioration were observed. | Record only
+FE-03 | To the front bay window, a discrete area of missing pointing is present in a vertical alignment, centrally positioned within the bay, approximately equivalent in extent to one full brick. No associated cracking or displacement of surrounding masonry is evident. | Record pre-existing defect. Monitor during works.
+FE-04 | The roof covering appears in good condition, relatively recently renewed, with only minor isolated areas of moss growth. No lifting, slippage or displacement of roof tiles is noted. | Record only
+FE-05 | A shared central chimney stack is present at the ridge. The lead flashing to the Building Owner's side appears in good condition with no visible lifting, displacement or deterioration. | Record only
+
+SECTION: Loft Space
+LS-01 | The dormer cheek is constructed of plasterboard fixed to a timber frame. The structural member at ridge level is formed in timber; no steel beam is present at this location. | Record only
+LS-02 | At the junction between the bulkhead and the dormer cheek, a vertical hairline crack extends approximately 1.0-1.1 metres downward from the corner. | Record pre-existing defect
+LS-03 | At the underside of the timber member supporting the central light fitting, where it meets the dormer cheek on the Building Owner's side, a slight open joint is visible along the line of abutment. | Record pre-existing defect
+LS-04 | To the front elevation side of the ridge, a faint hairline crack extends downward along the face of the dormer cheek for approximately 1.5 metres, dissipating toward eaves level. | Record pre-existing defect
+LS-05 | At the top right-hand corner of the Velux window, a hairline crack extends approximately 250mm upward toward the ridge before bifurcating. One branch extends horizontally toward the dormer cheek. A second branch traces into the Velux reveal, terminating at the frame abutment. Refer to photographs. | Record pre-existing defect. To be monitored during and following notifiable works.
+LS-06 | To the rear dormer, intermittent vertical cracking is noted at the junction between the fixed glazed pane closest to the Building Owner's side and the dormer cheek, and along the head of the glazing. | Record pre-existing defect
+LS-07 | At the base of the fixed glazed pane closest to the Building Owner's side, a pronounced crack and open joint tapers from a wider opening at low level to a hairline at mid-height. | Record pre-existing defect. Nature and extent to be re-assessed post-works.
+LS-08 | Within the front eaves void, the party wall is not visible owing to boarding and plasterboard lining. No defects noted to visible elements. | Record only. Inaccessible area noted.
+LS-10 | At the top right-hand corner of the loft door architrave, a hairline crack extends vertically to the underside of the dormer bulkhead. Remote from notifiable works. | Record only — remote from notifiable works
+
+SECTION: First Floor Front Bedroom
+FF-01 | The party wall is fully concealed behind full-height fitted wardrobes. The chimney breast base is obscured by a chest of drawers. No direct inspection of the party wall face was possible. | Record only. Access restricted.
+FF-02 | Symmetrical vertical hairline open joints at the junction between the fitted wardrobes and the chimney breast recess, extending from cornice level to the underside of the first shelf. | Record pre-existing defect
+FF-03 | Widespread faint and intermittent hairline cracking to the exposed chimney breast face. A continuous open joint runs along the full width of the ceiling abutment. | Record pre-existing defect
+FF-06 | A complex crack pattern to the wall abutting the rear bedroom: a horizontal hairline crack approximately 350mm in length at mid-height, branching upward to ceiling level and downward to socket level, with multiple hairline branches radiating from the socket position. | Record pre-existing defect. Pattern to be photographically monitored.
+FF-09 | The front bay window comprises six sections. Open joints at the base of each frame. The section closest to the Building Owner's property exhibits an open joint extending approximately 80-90mm up the side of the frame. | Record pre-existing defect
+FF-11 | The window casement closest to the Building Owner's side was secured in the locked position and was not tested for operation. | Record — not tested
+
+SECTION: First Floor Rear Bedroom
+FR-03 | A complex pattern of cracking is recorded to the face of the chimney breast: (i) a vertical and diagonal crack from the top left-hand corner downward toward a mirror fitting; (ii) a vertical crack to the right of the mirror, branching toward the front elevation; (iii) two horizontal cracks from behind the mirror toward the fitted wardrobe, with a vertical branch downward; (iv) a horizontal crack to the left of the mirror, with branches upward and downward. | Record pre-existing defect. Extent photographically recorded.
+FR-07 | To the rear bedroom window: an open joint at the base of the frame extending onto the adjacent wall surface. A diagonal crack at the top left-hand corner toward the ceiling. The MDF window sill exhibits an open joint along its wall abutment. | Record pre-existing defect
+FR-08 | Staining to the ceiling indicative of historic water ingress. Dry at inspection. A zigzag crack from the rear wall toward the centre of the ceiling. Two vertical cracks above the window. A quadrant-shaped crack across the ceiling. Refer to photographs. | Record pre-existing defect. Source to be investigated if reactivated during works.
+
+SECTION: Ground Floor Rear Extension
+GR-01 | Full-width sliding doors tested and operated satisfactorily without sticking, binding or impediment. Locking mechanism operated correctly. No visible defects to glazing, frames or threshold. | Record only
+GR-02 | An open joint between the floor tiling and the base of the sliding door frame along the full width of the threshold. | Record pre-existing defect
+GR-04 | At the junction of the flank wall and rear elevation above the sliding door head, a vertical open joint extends onto the ceiling soffit and continues along the flank wall for approximately 1.5 metres. In proximity to the proposed notifiable works. | Record pre-existing defect. To be monitored throughout the works.
+
+SECTION: Ground Floor Front Room
+GF-03 | A vertical crack in the plaster finish approximately 1.0m from the party wall, extending full height from floor to ceiling. Consistent with shrinkage cracking. In proximity to the proposed notifiable works. | Record pre-existing defect. Monitor during and following works.
+
+SECTION: External Rear
+ER-03 | A cracked paving slab and open joint between adjacent slabs at the corner nearest the sliding doors and flank wall junction. Slight movement detectable. | Record pre-existing defect
+ER-04 | Horizontal cracking to the rendered face below the patio step with localised loss of render revealing brickwork substrate. Confined to the render layer only. | Record pre-existing defect. Render layer only — monitor during works.
+
+END OF COMPLETE REFERENCE DOCUMENT`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
