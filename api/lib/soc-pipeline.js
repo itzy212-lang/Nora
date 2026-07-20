@@ -160,26 +160,6 @@ Only mark a claim as fully superseded when the amendment explicitly replaces the
 
 SECTION NAMING: Use the room name exactly as the surveyor described it. Do not apply architectural terminology (e.g. 'outrigger', 'annexe', 'extension') unless the surveyor used those exact words. If the surveyor said 'rear kitchen' use 'Rear Kitchen'. If they said 'kitchen family room' use 'Ground Floor Rear Kitchen Family Room'.
 
-CLAIM TYPE RULES — site_note vs scheduled observation:
-
-Use claim_type: "site_note" for:
-- Access arrangements: keys, key safes, how access was gained, who let you in
-- Security/locking status at commencement AND at the end of inspection (e.g. "door found locked at commencement, confirmed locked on leaving")
-- Whole-property or whole-house context statements (e.g. "the whole property has recently been refurbished", "the house has been completely renovated") — NOT room-specific finish descriptions. A statement about a specific room (e.g. "the bedroom has been newly decorated", "the room appears recently painted") is a finish_description scheduled row, not a site note.
-- Scaffolding requirements or restrictions
-- Instructions to contractors about protection, precautions or sequencing
-- Windows or doors left in a specific position at the end of inspection
-- Key return or access handover notes
-- Any note the surveyor explicitly flags as "just as a side note" or "for the award" or "to note"
-
-Use claim_type: "general_condition" (scheduled row) ONLY for:
-- Specific observable physical conditions of the property elements
-- Defects, cracks, open joints, staining, deterioration
-- Operational tests of specific elements (windows, doors, mechanisms)
-- Construction descriptions relevant to the party wall
-
-If a statement is procedural, administrative or contextual rather than a physical observation — it is a site_note.
-
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
 Return JSON only: { "claims": [ ... ] }`;
@@ -1506,12 +1486,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'Understand the full inspection sequence, all room transitions and all amendments.\n' +
     (projectMeta?.soc_type === 'dispute' ? 'DISPUTE SOC — IMPORTANT: This is NOT a standard pre-works baseline schedule. The surveyor has provided context notes explaining the specific circumstances (works already commenced, damage reported, no award in place, private agreement etc). Read those context notes carefully and use them to draft the introduction field in the JSON. The introduction must reflect the actual situation described, not the standard pre-works baseline wording. The observations sections should be drafted as normal.\n' : '') +
     'SECTION NAMING: Use the room name exactly as the surveyor described it in the dictation. Do not apply or invent architectural terminology such as "outrigger", "annexe" or "extension" unless those exact words appear in the dictation. If the surveyor said "rear kitchen" or "kitchen family room", use that as the section title.\n' +
-    'ROW MERGING: Where multiple observations relate to the same element (e.g. a door tested in multiple ways), combine them into a single row. Do not split operational tests for the same element across multiple rows. Example: if the surveyor says the main leaf opened fine and all three leaves opened fine, write one row: "The aluminium bi-folding door comprising three leaves was tested and all leaves operated satisfactorily without sticking, binding or jamming."
-
-REMOTE FROM WORKS PHRASE — CRITICAL:
-The phrase "recorded for scheduling purposes only" or "remote from the proposed notifiable works" must NEVER be invented or added by Terra. It may only appear if the surveyor explicitly said the room or area is remote from the works or documented photographically only.
-This phrase must appear AT MOST ONCE per section — never repeated across multiple rows in the same section.
-If the phrase already appears in one row of a section, do not include it in any other row of that section.\n' +
+    'ROW MERGING: Where multiple observations relate to the same element (e.g. a door tested in multiple ways), combine them into a single row. Do not split operational tests for the same element across multiple rows. Example: if the surveyor says the main leaf opened fine and all three leaves opened fine, write one row: "The aluminium bi-folding door comprising three leaves was tested and all leaves operated satisfactorily without sticking, binding or jamming."\n' +
     'The 500mm crack: the surveyor corrected "intermittently" — use ONLY the corrected meaning: a single hairline crack extending approximately 500mm.\n' +
     'IMPORTANT: Draft ALL sections from the complete transcript — ground floor, first floor AND external areas. Do not stop until every note has been covered.\n' +
     'SECTION ORDER — MANDATORY: Sections must appear in this exact physical sequence: (1) Ground floor rooms, (2) First floor rooms, (3) Second floor rooms if present, (4) Loft or roof space LAST among internal rooms, (5) External areas, (6) Site notes. Never place loft or roof space before ground floor or first floor rooms.\n' +
