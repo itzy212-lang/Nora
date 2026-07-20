@@ -477,6 +477,7 @@ function disputeIntroductionPlaceholder(projectMeta = {}) {
 }
 
 function renderSocContent(data = {}, config = {}, projectMeta = {}) {
+  const UNCLEAR_CSS = '<style>.cell-obs-unclear{background:#fff3f3!important;border-left:4px solid #cc0000!important;padding:8px 12px;vertical-align:top;line-height:1.6;border:1px solid #c8c8c8}.unclear-label{color:#cc0000;font-weight:700;font-size:10pt;display:block;margin-bottom:5px}</style>';
   const aoAddressText = projectMeta.ao_address || data.ao_address || '';
   const boAddress = projectMeta.bo_address || data.bo_address || '';
   const inspDate = projectMeta.inspection_date || data.inspection_date || '';
