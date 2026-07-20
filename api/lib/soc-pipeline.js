@@ -1146,7 +1146,7 @@ Superseded claims are listed in the checklist. Do not use superseded wording in 
 
 WINDOW TESTS
 
-Each window or door opener tested must appear as a separate row, regardless of where in the transcript the test was dictated.`;
+Where multiple tests relate to the SAME element (e.g. multiple leaves of the same bi-folding door), combine into a single row. Where multiple DIFFERENT elements were tested, each gets its own row. Never upgrade an element type: if the surveyor says window, it is a window, not a door.`;
 
 const FEW_SHOT_EXAMPLES_V1 = `EXAMPLES — SQUARE ONE SCHEDULE OF CONDITION STANDARD
 =====================================================
