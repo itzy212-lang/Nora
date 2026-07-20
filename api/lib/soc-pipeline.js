@@ -1287,7 +1287,64 @@ EXAMPLE 15 — Implicit rear outrigger correction
 Raw: "starting in the rear extension, rear outrigger, no visible defects noted along the party wall"
 Resolved section: Ground Floor Rear Outrigger. "Rear extension" was a false start — discarded.
 Required row:
-"The party wall within the ground-floor rear outrigger was inspected. No visible defects were noted at the time of inspection."`;
+"The party wall within the ground-floor rear outrigger was inspected. No visible defects were noted at the time of inspection."
+
+---
+
+EXAMPLE 16 — Complex bifurcating crack with branching
+
+Raw: "top right corner of the Velux window, crack goes up about 250mm then splits, one branch goes horizontal to the dormer cheek, another traces into the reveal along the head and down the right-hand side to the frame"
+Required row:
+"At the top right-hand corner of the Velux window, a hairline crack extends approximately 250mm upward toward the ridge before bifurcating. One branch extends horizontally toward the dormer cheek, continuing to the junction with the pitched roof slope. A second branch traces into the Velux reveal, running along the junction of the head and right-hand side reveal and terminating at the frame abutment."
+Action: Record pre-existing defect. To be monitored during and following notifiable works.
+
+---
+
+EXAMPLE 17 — Multiple crack runs on chimney breast, numbered sequence
+
+Raw: "chimney breast cracks — vertical diagonal from top left down toward mirror, vertical right of mirror going up branching toward front, two horizontals from behind mirror toward wardrobe with vertical branch down, horizontal left of mirror branching up and down"
+Required row:
+"A complex pattern of cracking is recorded to the face of the chimney breast: (i) a vertical and diagonal crack extending from the top left-hand corner downward toward the mirror fitting; (ii) a vertical crack to the right of the mirror, extending upward and branching toward the front elevation; (iii) two horizontal cracks extending from behind the mirror toward the fitted wardrobe, with a vertical branch extending downward; and (iv) a further horizontal crack to the left of the mirror, with branches extending both upward and downward."
+Action: Record pre-existing defect. Extent photographically recorded.
+
+---
+
+EXAMPLE 18 — Party wall concealed behind wardrobes, chimney breast obscured
+
+Raw: "party wall behind full height fitted wardrobes, chimney breast behind them too, base of chimney breast behind a chest of drawers, no access"
+Required row:
+"The party wall within this room is fully concealed behind full-height fitted wardrobes. The central chimney breast appears to have been partially concealed, with its base obscured by a chest of drawers. No direct inspection of the party wall face was possible in these areas."
+Action: Record only. Access restricted.
+
+---
+
+EXAMPLE 19 — Crack in proximity to works, monitor action
+
+Raw: "vertical crack in plaster about a metre from the party wall, full height floor to ceiling, looks like shrinkage not structural but near the works"
+Required row:
+"A vertical crack is present in the plaster finish approximately 1.0m from the party wall, extending full height from floor level to ceiling. The crack is consistent with shrinkage or restraint cracking and does not appear to be of structural significance. It is, however, in proximity to the proposed notifiable works and should be monitored."
+Action: Record pre-existing defect. Monitor during and following works.
+
+---
+
+EXAMPLE 20 — Historic ceiling staining, dry at inspection
+
+Raw: "ceiling staining looks historic, dry when I inspected, not ongoing"
+Required row:
+"Localised staining, appearing historic in nature, was noted to the ceiling finish. The affected area appeared dry at the time of inspection. No visible evidence of ongoing water ingress was noted at the time of inspection."
+Action: Record pre-existing defect.
+
+---
+
+EXAMPLE 21 — ACTION COLUMN RULES (mandatory)
+
+"Record only" — conditions with no defect; elements remote from works; general finishes in good condition.
+"Record pre-existing defect" — any crack, open joint, staining, deterioration, or operational issue.
+"Record pre-existing defect. Monitor during works." — defects in proximity to the proposed notifiable works.
+"Record pre-existing defect. Nature and extent to be re-assessed post-works." — defects where post-works comparison is needed.
+"Record — not tested" — elements that could not be tested (locked, fixed, inaccessible).
+"Further investigation required" — items requiring specialist input before works commence.
+NEVER use "Record only" for a defect.`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
