@@ -1074,27 +1074,26 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
         const allClaims = claimArrays.flat();
         console.log('[generate-soc] Parallel extraction complete: ' + allClaims.length + ' total claims');
 
-        // Respect previously excluded rows — load exclusions from soc_reports edit_state
-        // and remove any newly extracted claims that match excluded note sources
+        // Respect previously excluded rows — load excluded claim_ids from soc_claims
+        // and filter any newly extracted claims that share the same source_note_id
         try {
-          const { data: existingReport } = await supabase
-            .from('soc_reports')
-            .select('edit_state')
+          const { data: excludedClaims } = await supabase
+            .from('soc_claims')
+            .select('source_note_id, claim_id')
             .eq('session_id', sessionId)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .single();
+            .eq('status', 'excluded');
 
-          if (existingReport?.edit_state?.excluded_notes?.length) {
-            const excludedNoteIds = new Set(existingReport.edit_state.excluded_notes);
+          if (excludedClaims?.length) {
+            const excludedNoteIds = new Set(excludedClaims.map(c => c.source_note_id).filter(Boolean));
+            const excludedClaimIds = new Set(excludedClaims.map(c => c.claim_id).filter(Boolean));
             const before = allClaims.length;
-            // Filter out claims from excluded notes
             for (let i = allClaims.length - 1; i >= 0; i--) {
-              if (excludedNoteIds.has(allClaims[i].source_note_id)) {
+              const c = allClaims[i];
+              if (excludedNoteIds.has(c.source_note_id) || excludedClaimIds.has(c.claim_id)) {
                 allClaims.splice(i, 1);
               }
             }
-            console.log('[generate-soc] Excluded ' + (before - allClaims.length) + ' claims from deleted rows');
+            console.log('[generate-soc] Filtered ' + (before - allClaims.length) + ' claims from previously deleted rows');
           }
         } catch(e) { console.warn('[generate-soc] Could not load exclusions:', e.message); }
         
