@@ -1408,7 +1408,7 @@ ${thread.map((email, index) => `
 Subject: ${email.subject || ''}
 ${cleanEmailBody(email.body || '')}
 `).join('\n---\n')}` : ''}
-`.trim().slice(0, 10000);
+`.trim().slice(0, 40000);
 }
 
 async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null }) {
