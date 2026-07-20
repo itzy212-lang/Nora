@@ -1060,6 +1060,24 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       if (allNotes?.length) {
         console.log('[generate-soc] Regenerate: processing ' + allNotes.length + ' notes one by one');
         
+        // Load exclusions BEFORE deleting — save them for post-extraction filtering
+        let preExcludedNoteIds = new Set();
+        let preExcludedClaimIds = new Set();
+        try {
+          const { data: priorExclusions } = await supabase
+            .from('soc_claims')
+            .select('source_note_id, claim_id')
+            .eq('session_id', sessionId)
+            .eq('status', 'excluded');
+          if (priorExclusions?.length) {
+            priorExclusions.forEach(c => {
+              if (c.source_note_id) preExcludedNoteIds.add(c.source_note_id);
+              if (c.claim_id) preExcludedClaimIds.add(c.claim_id);
+            });
+            console.log('[generate-soc] Loaded ' + priorExclusions.length + ' prior exclusions to preserve');
+          }
+        } catch(e) { console.warn('[generate-soc] Could not load prior exclusions:', e.message); }
+
         // Delete existing claims cleanly
         await supabase.from('soc_claims').delete().eq('session_id', sessionId);
         
@@ -1083,19 +1101,18 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
             .eq('session_id', sessionId)
             .eq('status', 'excluded');
 
-          if (excludedClaims?.length) {
-            const excludedNoteIds = new Set(excludedClaims.map(c => c.source_note_id).filter(Boolean));
-            const excludedClaimIds = new Set(excludedClaims.map(c => c.claim_id).filter(Boolean));
-            const before = allClaims.length;
-            for (let i = allClaims.length - 1; i >= 0; i--) {
-              const c = allClaims[i];
-              if (excludedNoteIds.has(c.source_note_id) || excludedClaimIds.has(c.claim_id)) {
-                allClaims.splice(i, 1);
-              }
+          // Use pre-loaded exclusions (loaded before delete)
+          const before = allClaims.length;
+          for (let i = allClaims.length - 1; i >= 0; i--) {
+            const c = allClaims[i];
+            if (preExcludedNoteIds.has(c.source_note_id) || preExcludedClaimIds.has(c.claim_id)) {
+              allClaims.splice(i, 1);
             }
+          }
+          if (before > allClaims.length) {
             console.log('[generate-soc] Filtered ' + (before - allClaims.length) + ' claims from previously deleted rows');
           }
-        } catch(e) { console.warn('[generate-soc] Could not load exclusions:', e.message); }
+        } catch(e) { console.warn('[generate-soc] Could not apply exclusions:', e.message); }
         
         if (allClaims.length) {
           claims = allClaims;
