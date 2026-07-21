@@ -72,6 +72,26 @@ export default async function handler(req, res) {
 
       try {
         let projectContext = '';
+
+        // Always load thread history — regardless of project link
+        if (email.thread_id) {
+          const { data: thread } = await supabase
+            .from('emails')
+            .select('sender_email, sender_name, body, direction, received_at')
+            .eq('thread_id', email.thread_id)
+            .neq('id', email.id)
+            .order('received_at', { ascending: true })
+            .limit(10);
+
+          if (thread?.length) {
+            const threadText = thread.map(t =>
+              '[' + (t.direction === 'incoming' ? 'FROM: ' + (t.sender_name || t.sender_email) : 'FROM ITZIK:') + ']\n' + (t.body || '').slice(0, 500)
+            ).join('\n\n---\n\n');
+            projectContext = 'THREAD HISTORY (oldest first):\n' + threadText;
+          }
+        }
+
+        // Also load project context if linked
         if (email.project_id) {
           const { data: project } = await supabase
             .from('projects')
@@ -79,22 +99,7 @@ export default async function handler(req, res) {
             .eq('id', email.project_id)
             .single();
           if (project) {
-            projectContext = '\n\nPROJECT: Ref ' + project.ref + ' | ' + project.bo_address + ' | Building Owner: ' + project.bo_names + ' | Works: ' + (project.proposed_works || 'not specified');
-          }
-
-          const { data: thread } = await supabase
-            .from('emails')
-            .select('sender_email, sender_name, body, direction, received_at')
-            .eq('thread_id', email.thread_id)
-            .neq('id', email.id)
-            .order('received_at', { ascending: true })
-            .limit(8);
-
-          if (thread?.length) {
-            const threadText = thread.map(t =>
-              '[' + (t.direction === 'inbound' ? 'FROM: ' + (t.sender_name || t.sender_email) : 'FROM: Itzik Darel') + '] ' + (t.body || '').slice(0, 400)
-            ).join('\n\n---\n\n');
-            projectContext += '\n\nPREVIOUS THREAD:\n' + threadText;
+            projectContext = 'PROJECT: Ref ' + project.ref + ' | ' + project.bo_address + ' | Building Owner: ' + project.bo_names + ' | Works: ' + (project.proposed_works || 'not specified') + '\n\n' + projectContext;
           }
         }
 
