@@ -2115,6 +2115,35 @@ if (syncErr) throw syncErr;
             </div>
           )}
           <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+
+          {/* Auto-draft panel */}
+          {autoDraft && (
+            <div style={{ margin: '0 16px 12px', padding: '12px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>✨ Nora has drafted a response</span>
+                <button onClick={() => { sb.from('email_auto_drafts').update({ status: 'dismissed' }).eq('id', autoDraft.id); setAutoDraft(null); setDraftEmailIds(prev => { const n = new Set(prev); n.delete(selectedEmail?.id); return n; }); }} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>Dismiss</button>
+              </div>
+              <div style={{ fontSize: 12.5, color: '#1f2937', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginBottom: 10, maxHeight: 160, overflowY: 'auto', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1fae5' }}>
+                {autoDraft.body}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => {
+                  setReplyOverlay({ mode: 'reply', prefillBody: autoDraft.body });
+                  sb.from('email_auto_drafts').update({ status: 'used' }).eq('id', autoDraft.id);
+                  setAutoDraft(null);
+                  setDraftEmailIds(prev => { const n = new Set(prev); n.delete(selectedEmail?.id); return n; });
+                }} style={{ flex: 1, padding: '7px 12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                  Use this draft
+                </button>
+                <button onClick={() => {
+                  setReplyOverlay({ mode: 'reply', prefillBody: autoDraft.body });
+                }} style={{ flex: 1, padding: '7px 12px', background: '#fff', color: '#15803d', border: '1px solid #86efac', borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                  Edit before sending
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Appointment detection prompt */}
           {appointmentPrompt && (
             <div style={{ position: 'absolute', bottom: 80, left: 16, right: 16, padding: '10px 14px', background: appointmentPrompt.has_clash ? '#fef2f2' : '#eff6ff', border: `1px solid ${appointmentPrompt.has_clash ? '#ef4444' : '#3b82f6'}`, borderRadius: 8, fontSize: 12.5, zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
