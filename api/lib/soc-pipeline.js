@@ -1514,7 +1514,13 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
 
   console.log('[soc-pipeline] Single-call draft: model=' + model + ' notes=' + Object.keys(rawNotes||{}).length + ' claims=' + activeClaims.length);
 
-  const userPrompt = 'PROPERTY: Adjoining Owner: ' + aoAddress + ' | Building Owner: ' + boAddress + ' | Date: ' + inspDate + '\n\n' +
+  const userPrompt = 'YOU ARE READING RAW VOICE DICTATION FROM A PARTY WALL SURVEYOR.\n' +
+    'There is no pre-processed claim extraction. You must read the raw transcript directly and produce the complete Schedule of Conditions yourself.\n' +
+    'You must handle: speech-to-text errors, false starts, self-corrections, amendments, room transitions and section changes — all from the raw transcript alone.\n' +
+    'Speech-to-text corrections to apply automatically: "bugatti wall" → "party wall" | "plank wall" → "flank wall" | "v-locks"/"velocks" → "VELUX" | "sealing" (ceiling context) → "ceiling" | "real evasion wall" → "rear elevation wall" | "kitched roof" → "pitched roof" | "UPBC" → "UPVC"\n' +
+    'Amendment signals: "actually", "scratch that", "sorry I mean", "just to note on that last one", "going back to", "correction" — when you detect these, the corrected version replaces the previous observation entirely.\n' +
+    'False starts: when a surveyor starts a phrase and immediately corrects it, use only the corrected version.\n\n' +
+    'PROPERTY: Adjoining Owner: ' + aoAddress + ' | Building Owner: ' + boAddress + ' | Date: ' + inspDate + '\n\n' +
     '══════════════════════════════════\n' +
     'COMPLETE RAW TRANSCRIPT (read this as your primary source):\n' +
     '══════════════════════════════════\n' +
