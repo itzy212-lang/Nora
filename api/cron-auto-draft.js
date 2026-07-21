@@ -53,7 +53,7 @@ export default async function handler(req, res) {
 
     for (const email of emails || []) {
       const { data: existing } = await supabase
-        .from('ai_drafts')
+        .from('email_auto_drafts')
         .select('id')
         .eq('email_id', email.id)
         .eq('status', 'pending')
@@ -125,7 +125,7 @@ RULES:
         const draftBody = data.choices?.[0]?.message?.content || '';
         if (!draftBody) throw new Error('Empty draft');
 
-        const { error: saveError } = await supabase.from('ai_drafts').insert({
+        const { error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
           project_id: email.project_id || null,
           thread_id: email.thread_id || null,
