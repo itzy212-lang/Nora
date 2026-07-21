@@ -817,10 +817,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
       property_address: '',
       works_description: '',
       num_aos: numAOs,
-      fee_notice: fees?.fee_notice || 100,
-      fee_soc: fees?.fee_soc || 300,
-      fee_agreed: fees?.fee_agreed || 450,
-      fee_separate: fees?.fee_separate || 600,
+      fee_notice: fees?.fee_notice || 107,
+      fee_soc: fees?.fee_soc || 500,
+      fee_agreed: fees?.fee_agreed || 950,
+      fee_separate: fees?.fee_separate || 950,
     });
 
     if (!quoteData) {
@@ -896,7 +896,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
       mode: hasOriginalEmail ? 'reply' : 'compose',
       to: recipient,
       subject: subject ? `Re: ${subject}` : 'Party Wall Fee Quotation',
-      body: '',
+      body: 'Please find attached our fee proposal in connection with the above property. Do not hesitate to get in touch if you have any questions.\n\nKind regards,',
       replyToEmailId: hasOriginalEmail ? selectedEmailContext.id : undefined,
       originalEmail: hasOriginalEmail ? selectedEmailContext : undefined,
       prefillGreeting: false, // body is empty here; don't add a "Hi X," the user didn't ask for
