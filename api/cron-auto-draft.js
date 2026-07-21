@@ -98,36 +98,36 @@ export default async function handler(req, res) {
           }
         }
 
-        const systemPrompt = `You are Nora, an AI assistant responding to emails on behalf of Itzik Darel of Square One Consulting.
+        // Call ely-smart with full brain — same as Draft with Ely in the app
+        const baseUrl = process.env.VERCEL_URL
+          ? 'https://' + process.env.VERCEL_URL
+          : 'https://nora-d9wy.vercel.app';
 
-RULES:
-- Draft on behalf of Itzik. Sign off: "Kind regards,\nNora\nOn behalf of Itzik Darel | Square One Consulting"
-- NEVER agree to meeting times or dates. If a meeting is requested, say Itzik will be in touch to confirm a suitable time.
-- NEVER commit to deadlines or dates unless clearly stated in the project data.
-- If you have project context, use it to give a specific informed response.
-- If context is insufficient, give a professional acknowledgement and say Itzik will follow up.
-- Do not fabricate project details, notice dates or status.
-- Keep responses concise — 3-4 sentences unless more is needed.`;
+        const elyPayload = {
+          surface: 'inbox_draft',
+          mode: 'draft_with_ely',
+          workflowStage: 'draft_with_ely',
+          prompt: 'Draft a professional response to this email on behalf of Itzik Darel. Sign off as: Kind regards, Nora | On behalf of Itzik Darel, Square One Consulting. Never agree to meeting times or dates.',
+          emailContext: {
+            subject: email.subject,
+            from: email.sender_name || email.sender_email,
+            body: (email.body || '').slice(0, 3000),
+            thread: projectContext,
+          },
+          projectId: email.project_id || null,
+          auto_draft: true,
+        };
 
-        const userPrompt = 'Draft a response to this email.\n\nFROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + (email.body || '').slice(0, 2000) + projectContext;
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const elyRes = await fetch(baseUrl + '/api/ely-smart', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'gpt-5.6-terra',
-            max_completion_tokens: 500,
-            messages: [
-              { role: 'developer', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(elyPayload),
         });
 
-        if (!response.ok) throw new Error('OpenAI ' + response.status);
-        const data = await response.json();
-        const draftBody = data.choices?.[0]?.message?.content || '';
-        if (!draftBody) throw new Error('Empty draft');
+        if (!elyRes.ok) throw new Error('ely-smart ' + elyRes.status);
+        const elyData = await elyRes.json();
+        const draftBody = elyData.reply || elyData.text || elyData.draft || '';
+        if (!draftBody) throw new Error('Empty draft from ely-smart');
 
         const { error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
