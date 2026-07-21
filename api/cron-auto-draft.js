@@ -187,6 +187,50 @@ Read the full thread before drafting. Do not re-agree things already established
         });
 
         if (saveError) throw saveError;
+
+        // Detect confirmed appointment and book calendar event
+        try {
+          const appointmentRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gpt-5.6-luna',
+              max_completion_tokens: 200,
+              messages: [
+                { role: 'developer', content: 'You extract confirmed appointment details from email threads. Respond only with valid JSON or null. If a specific call/meeting time is confirmed in the thread (not just proposed), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM", "duration_minutes": 30, "title": "Call with [name]", "description": "brief context"}. If no confirmed time, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
+                { role: 'user', content: 'EMAIL FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + (email.body || '').slice(0, 1000) + '\n\n' + (projectContext || '') },
+              ],
+            }),
+          });
+
+          if (appointmentRes.ok) {
+            const apptData = await appointmentRes.json();
+            const apptText = apptData.choices?.[0]?.message?.content || '';
+            const appt = JSON.parse(apptText.replace(/```json|```/g, '').trim());
+
+            if (appt?.confirmed && appt.date && appt.time) {
+              const startDt = new Date(appt.date + 'T' + appt.time + ':00');
+              const endDt = new Date(startDt.getTime() + (appt.duration_minutes || 30) * 60000);
+
+              // Save to calendar_events table for Nora to display
+              await supabase.from('calendar_events').insert({
+                title: appt.title || 'Call with ' + (email.sender_name || email.sender_email),
+                description: appt.description || 'Auto-booked from email: ' + email.subject,
+                start_time: startDt.toISOString(),
+                end_time: endDt.toISOString(),
+                source: 'nora_auto_draft',
+                email_id: email.id,
+                project_id: email.project_id || null,
+                created_by: 'cron-auto-draft',
+              }).catch(e => console.warn('[cron-auto-draft] Calendar insert failed:', e.message));
+
+              console.log('[cron-auto-draft] Booked calendar event:', appt.title, appt.date, appt.time);
+            }
+          }
+        } catch (calErr) {
+          console.warn('[cron-auto-draft] Calendar detection failed:', calErr.message);
+        }
+
         results.drafted++;
 
       } catch (e) {
