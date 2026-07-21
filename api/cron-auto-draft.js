@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     const { data: emails, error } = await supabase
       .from('emails')
       .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction')
-      .eq('direction', 'inbound')
+      .eq('direction', 'incoming')
       .eq('is_draft', false)
       .gte('received_at', since)
       .order('received_at', { ascending: false })
