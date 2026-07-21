@@ -160,6 +160,39 @@ Only mark a claim as fully superseded when the amendment explicitly replaces the
 
 SECTION NAMING: Use the room name exactly as the surveyor described it. Do not apply architectural terminology (e.g. 'outrigger', 'annexe', 'extension') unless the surveyor used those exact words. If the surveyor said 'rear kitchen' use 'Rear Kitchen'. If they said 'kitchen family room' use 'Ground Floor Rear Kitchen Family Room'.
 
+SITE NOTE vs SCHEDULED ROW — CLASSIFICATION RULES
+
+Use claim_type: "site_note" for:
+- Access arrangements: how access was gained, who provided keys, key safe codes
+- Security/locking status at commencement AND departure (e.g. "door found locked at commencement, confirmed locked on leaving")
+- Whole-property or whole-house context (e.g. "the whole property has recently been refurbished") — NOT room-specific finish descriptions
+- Scaffolding requirements or restrictions on the Building Owner's contractors
+- Instructions to contractors about temporary protection, precautions or sequencing of works
+- Windows or doors confirmed in a specific position at end of inspection
+- Any statement the surveyor flags as "just as a note", "for the award", "to note for the award"
+- Pre-commencement access agreements relating to chimney breast works
+
+Use claim_type: "general_condition" or "finish_description" (scheduled row) for:
+- Specific observable physical conditions of elements within the inspected rooms
+- Room-specific finish descriptions (e.g. "the bedroom has been newly decorated")
+- Defects, cracks, open joints, staining, deterioration
+- Operational tests of specific elements
+
+If a statement is procedural, administrative or contextual rather than a physical observation of the property — it is a site_note. When in doubt, site_note.
+
+TERMINOLOGY CONSISTENCY
+
+Once an element has been named in one section, all subsequent references to the same element must use identical terminology unless the surveyor explicitly uses different wording.
+
+Examples:
+- If the chimney breast is described as "a traditional shared chimney stack" in the first section it appears, all subsequent sections must refer to it as "the shared chimney stack" not "the chimney breast" or "the stack"
+- If a window is described as "a UPVC bay window comprising six sections", subsequent references use "the UPVC bay window"
+- Apply this rule to: chimney breasts/stacks, structural beams, door types, window types, floor finishes
+
+SITE NOTES — SEPARATION RULE
+
+Site notes must NEVER appear as scheduled observation rows. They go exclusively into the site_notes section of the output. Do not draft a site note as a row and also as a site note — pick one. The correct place is always site_notes.
+
 CLAIM TYPES: section_transition | construction_description | finish_description | general_condition | specific_defect | operational_test | access_limitation | site_note | contextual | amendment
 
 Return JSON only: { "claims": [ ... ] }`;
