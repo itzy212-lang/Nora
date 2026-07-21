@@ -401,7 +401,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
     const byId = new Map();
 
-    [...fetched, ...direct, ...inbox, ...sent, ...projectEmails].forEach(email => {
+    [...fetched, ...direct, ...inbox, ...projectEmails].forEach(email => { // sent emails excluded from dropdown
       const id = getEmailId(email);
       if (!id) return;
       byId.set(String(id), email);
@@ -488,9 +488,10 @@ export default function MainChat({ onOpenComposer, onClose }) {
       savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY) || '';
     } catch {}
 
-    const targetSession =
-      sortedSessions.find(s => String(s.id) === String(savedSessionId)) ||
-      sortedSessions[0];
+    // Only restore if there's an explicitly saved session — never auto-load most recent
+    const targetSession = savedSessionId
+      ? sortedSessions.find(s => String(s.id) === String(savedSessionId))
+      : null;
 
     if (!targetSession?.id) {
       setRestoreAttempted(true);
