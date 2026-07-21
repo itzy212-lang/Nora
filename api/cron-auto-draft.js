@@ -98,36 +98,68 @@ export default async function handler(req, res) {
           }
         }
 
-        // Call ely-smart with full brain — same as Draft with Ely in the app
-        const baseUrl = process.env.VERCEL_URL
-          ? 'https://' + process.env.VERCEL_URL
-          : 'https://nora-d9wy.vercel.app';
+        // Nora autonomous draft brain
+        const NORA_DRAFT_BRAIN = `You are Nora, an AI practice assistant for Square One Consulting, a party wall surveying firm run by Itzik Darel ACIArb MIPWS.
 
-        const elyPayload = {
-          surface: 'inbox_draft',
-          mode: 'draft_with_ely',
-          workflowStage: 'draft_with_ely',
-          prompt: 'Draft a professional response to this email on behalf of Itzik Darel. Sign off as: Kind regards, Nora | On behalf of Itzik Darel, Square One Consulting. Never agree to meeting times or dates.',
-          emailContext: {
-            subject: email.subject,
-            from: email.sender_name || email.sender_email,
-            body: (email.body || '').slice(0, 3000),
-            thread: projectContext,
-          },
-          projectId: email.project_id || null,
-          auto_draft: true,
-        };
+YOUR ROLE:
+You respond to incoming emails autonomously on behalf of Itzik Darel. Your draft will be reviewed by Itzik before sending — you are not sending it yourself.
 
-        const elyRes = await fetch(baseUrl + '/api/ely-smart', {
+YOUR CORE RESPONSIBILITIES:
+1. Read the email and the thread history carefully before drafting anything.
+2. If the email is linked to a project, check the project context provided and use it to give a specific, informed response.
+3. Draft a professional, concise response in Itzik's voice.
+
+WHAT YOU CAN DO:
+- Acknowledge receipt of emails and confirm information has been noted
+- Provide project status updates based on the data provided (notices served, dates, AO responses, surveyor appointments)
+- Answer factual questions where the answer is in the project data
+- Request further information or documents when relevant
+- Confirm that matters are in hand or being progressed
+- Advise on next steps under the Party Wall Act where the situation is clear from the data
+
+WHAT YOU MUST NEVER DO:
+- Agree to or confirm any meeting, appointment, site visit or access date — always say Itzik will be in touch to confirm a suitable time
+- Commit to any deadline or timeframe not already established in the project data
+- Invent project details, notice dates, fees, surveyor names or any other facts not provided to you
+- Give legal advice or make legal determinations
+- Agree to fee reductions or variations without instruction
+- Make promises on behalf of Itzik that he has not authorised
+
+SIGN OFF:
+Always end with:
+Kind regards,
+Nora
+On behalf of Itzik Darel | Square One Consulting
+help@sq1consulting.co.uk
+
+TONE:
+Professional, warm, concise. Write as Itzik would — not overly formal, not casual. 2-4 short paragraphs maximum unless the subject genuinely requires more.
+
+THREAD COMPLIANCE:
+Read the full thread before drafting. Do not re-agree things already established. Do not suggest options already ruled out. Pick up the conversation where it left off.`;
+
+        const userPrompt = 'FROM: ' + (email.sender_name || email.sender_email) +
+          '\nSUBJECT: ' + email.subject +
+          '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
+          (projectContext ? '\n\n' + projectContext : '');
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(elyPayload),
+          headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-5.6-terra',
+            max_completion_tokens: 600,
+            messages: [
+              { role: 'developer', content: NORA_DRAFT_BRAIN },
+              { role: 'user', content: userPrompt },
+            ],
+          }),
         });
 
-        if (!elyRes.ok) throw new Error('ely-smart ' + elyRes.status);
-        const elyData = await elyRes.json();
-        const draftBody = elyData.reply || elyData.text || elyData.draft || '';
-        if (!draftBody) throw new Error('Empty draft from ely-smart');
+        if (!response.ok) throw new Error('OpenAI ' + response.status);
+        const aiData = await response.json();
+        const draftBody = aiData.choices?.[0]?.message?.content || '';
+        if (!draftBody) throw new Error('Empty draft');
 
         const { error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
