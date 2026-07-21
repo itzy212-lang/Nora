@@ -134,26 +134,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     // failure in the secondary fetches below (notes history, existing report)
     // can never leave the session "not ready" from the user's perspective.
     setSocSessionId(initData.session_id);
-    return initData.session_id; // return so caller can use immediately without waiting for state
 
-    // Load existing notes only if NOT forcing a new session
-    if (!forceNew) {
-      try {
-        const notesRes = await fetch('/api/soc-save?session_id=' + initData.session_id);
-        if (notesRes.ok) {
-          const notesData = await notesRes.json();
-          if (notesData.notes?.length) {
-            setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
-          }
-        } else {
-          console.warn('[SOC] notes fetch returned', notesRes.status, '— continuing without history.');
-        }
-      } catch (err) {
-        console.warn('[SOC] notes fetch failed — continuing without history:', err);
-      }
-    }
-
-    // Load existing SOC report for this session if one exists — best-effort, non-fatal.
+    // Load saved report first — if exists, go straight to review/preview
     try {
       const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${initData.session_id}`);
       if (reportRes.ok) {
@@ -172,6 +154,23 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     } catch (err) {
       console.warn('[SOC] report fetch failed — continuing to recording phase:', err);
     }
+
+    // No saved report — load notes history
+    if (!forceNew) {
+      try {
+        const notesRes = await fetch('/api/soc-save?session_id=' + initData.session_id);
+        if (notesRes.ok) {
+          const notesData = await notesRes.json();
+          if (notesData.notes?.length) {
+            setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+          }
+        }
+      } catch (err) {
+        console.warn('[SOC] notes fetch failed:', err);
+      }
+    }
+
+    return initData.session_id;
 
     return initData.session_id;
   }, [projectId]);
