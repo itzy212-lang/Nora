@@ -147,10 +147,10 @@ export default async function handler(req, res) {
 <hr style="border:none;border-top:0.5px solid ${BORDER};margin-bottom:8px;"/>
 <ul style="padding-left:14px;margin-bottom:8px;">
   <li style="font-size:7.5pt;color:#111;margin-bottom:5px;line-height:1.4;">
-    <b>Failure to Respond within 14 Days:</b> If no response is received within 14 days of the service date, the Adjoining Owner is deemed to have dissented and a dispute arises under the Act. Options 1 and 2 are no longer available; Options 3 and 4 become the primary routes. A Section 10 notice will be served — <i>there is no additional charge for this; it is included within the original notice fee.</i>
+    <b>Failure to Respond within 14 Days:</b> If no response is received within 14 days of the service date, the Adjoining Owner is deemed to have dissented and a dispute arises under the Act. Options 1 and 2 are no longer available; Options 3 and 4 become the primary routes. A Section 10 notice will be served, there is no additional charge for this as it is included in the original notice fee.
   </li>
   <li style="font-size:7.5pt;color:#111;line-height:1.4;">
-    <b>Surveyor Appointment under Section 10(4)(b):</b> If, after 10 days from service of the Section 10 notice, the Adjoining Owner has not appointed a surveyor, an appointment may be made on their behalf under s.10(4)(b). This cannot be myself — an independent second surveyor must be instructed.
+    <b>Surveyor Appointment under Section 10(4)(b):</b> If, after 10 days from service of the Section 10 notice, the Adjoining Owner has not appointed a surveyor, an appointment may be made on their behalf under s.10(4)(b). This cannot be myself, an independent second surveyor must be appointed.
   </li>
 </ul>
 <hr style="border:none;border-top:0.5px solid ${BORDER};margin-bottom:6px;"/>
