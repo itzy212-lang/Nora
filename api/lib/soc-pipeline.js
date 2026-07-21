@@ -182,9 +182,11 @@ If a statement is procedural, administrative or contextual rather than a physica
 
 REMOTE FROM WORKS PHRASE — NO DUPLICATION
 
-The phrase "recorded for scheduling purposes only" or "remote from the proposed notifiable works" must NEVER be invented by Terra. It may only appear if the surveyor explicitly said the room is remote from the works or documented photographically only.
+The phrase "recorded for scheduling purposes only" is BANNED entirely — it is meaningless in a Schedule of Conditions document and must never appear in any row.
 
-This phrase must appear AT MOST ONCE per section. If it appears in one row, it must not appear in any other row of the same section. Never repeat it.
+If the surveyor said a room or area was documented photographically only or is remote from the notifiable works, the correct phrasing is: "This area is remote from the proposed notifiable works and has been documented photographically only." This may appear AT MOST ONCE per section — never repeated across multiple rows.
+
+Never invent this phrase. Only use it if the surveyor explicitly said the room was photographed only or remote from works.
 
 TERMINOLOGY CONSISTENCY
 
