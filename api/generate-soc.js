@@ -1083,17 +1083,8 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     } catch (e) { console.warn('[generate-soc] Note-by-note regeneration failed:', e.message); }
   }
 
-  // Stage 1: Extract if no live claims at all
-  if (!claimsFromLive) {
-    console.log('[generate-soc] Stage 1: extracting claims...');
-    try {
-      claims = await extractAtomicClaims(message, apiKey);
-    } catch (e) {
-      console.warn('[generate-soc] Stage 1 failed:', e.message);
-    }
-    if (!claims.length) throw new Error('GENERATION_INCOMPLETE: No claims extracted. Please retry.');
-  }
-  console.log(`[generate-soc] ${claimsFromLive ? 'Loaded' : 'Extracted'} ${claims.length} claims`);
+  // Stage 1 bypassed — Terra reads raw notes directly (two-stage pipeline)
+  console.log('[generate-soc] Two-stage: skipping extraction, passing raw notes to Terra...');
 
   // Stage 2: Professional drafting (section-batched)
   console.log('[generate-soc] Stage 2: drafting...');
