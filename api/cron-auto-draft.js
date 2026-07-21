@@ -10,6 +10,10 @@ const SKIP_SENDERS = [
   'noreply', 'no-reply', 'donotreply', 'do-not-reply',
   'notifications@', 'mailer@', 'newsletter@', 'updates@',
   'bounce@', 'postmaster@',
+  'xero.com', 'invoicereminders@', 'accounting@', 'billing@',
+  'sage.com', 'quickbooks', 'hmrc', 'gov.uk',
+  'linkedin.com', 'twitter.com', 'facebook.com',
+  'google.com', 'microsoft.com', 'apple.com',
 ];
 
 const SKIP_FOLDERS = ['junk', 'spam', 'deleted', 'trash', 'junkemail'];
