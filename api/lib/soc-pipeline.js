@@ -180,6 +180,12 @@ Use claim_type: "general_condition" or "finish_description" (scheduled row) for:
 
 If a statement is procedural, administrative or contextual rather than a physical observation of the property — it is a site_note. When in doubt, site_note.
 
+REMOTE FROM WORKS PHRASE — NO DUPLICATION
+
+The phrase "recorded for scheduling purposes only" or "remote from the proposed notifiable works" must NEVER be invented by Terra. It may only appear if the surveyor explicitly said the room is remote from the works or documented photographically only.
+
+This phrase must appear AT MOST ONCE per section. If it appears in one row, it must not appear in any other row of the same section. Never repeat it.
+
 TERMINOLOGY CONSISTENCY
 
 Once an element has been named in one section, all subsequent references to the same element must use identical terminology unless the surveyor explicitly uses different wording.
