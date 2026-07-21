@@ -142,6 +142,24 @@ export default async function handler(req, res) {
         .eq('id', session_id);
 
       if (error) return res.status(500).json({ error: error.message });
+
+      // Fire process-soc-note non-blocking — stateful per-note processing
+      // This maintains soc_observations live so Generate only needs Terra drafting
+      const baseUrl = process.env.VERCEL_URL
+        ? 'https://' + process.env.VERCEL_URL
+        : 'http://localhost:3000';
+      fetch(baseUrl + '/api/process-soc-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id,
+          project_id: project_id || null,
+          ao_id: req.body.ao_id || null,
+          content,
+          openai_key: process.env.OPENAI_API_KEY,
+        }),
+      }).catch(e => console.warn('[soc-save] process-soc-note fire-and-forget failed:', e.message));
+
       return res.status(200).json({ ok: true });
     }
 
