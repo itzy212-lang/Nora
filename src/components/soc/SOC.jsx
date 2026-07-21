@@ -91,25 +91,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setDualAISkipped(null);
     setSessionLoadError(null);
     // Fetch session list — and auto-load the most recent session's notes if one exists
+    // Only fetch session history for sidebar — do NOT auto-load any session
+    // User must explicitly choose from history or start new
     fetch('/api/soc-save?project_id=' + projectId)
       .then(r => r.ok ? r.json() : null)
-      .then(async sessData => {
-        if (!sessData?.sessions?.length) return;
-        setSessionHistory(sessData.sessions);
-        // Auto-load most recent session for the selected AO
-        const mostRecent = sessData.sessions[0];
-        if (!mostRecent?.sessionId) return;
-        setSocSessionId(mostRecent.sessionId);
-        try {
-          const notesRes = await fetch('/api/soc-save?session_id=' + mostRecent.sessionId);
-          if (!notesRes.ok) return;
-          const notesData = await notesRes.json();
-          if (notesData.notes?.length) {
-            setMessages(notesData.notes
-              .filter(n => n.role === 'user')
-              .map(n => ({ id: n.id, role: 'user', content: n.content })));
-          }
-        } catch (e) { /* non-fatal */ }
+      .then(sessData => {
+        if (sessData?.sessions?.length) setSessionHistory(sessData.sessions);
       })
       .catch(() => {});
   }, [projectId, selectedAOIndex]);
@@ -219,16 +206,39 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setMessages([]);
     setPreviewHtml('');
     setStructuredData(null);
+    setEditableSections([]);
+    setReportId(null);
     setQaReviewRawNotes('');
     setDualAIReview(null);
     setDualAISkipped(null);
     setSidebarOpen(false);
 
-    const res = await fetch(`/api/soc-save?session_id=${session.sessionId}`);
-    const data = await res.json();
-    if (data.notes?.length) {
-      setMessages(data.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
-    }
+    // Check for saved generated report first
+    try {
+      const reportRes = await fetch(`/api/soc-save?action=load_report&session_id=${session.sessionId}`);
+      if (reportRes.ok) {
+        const reportData = await reportRes.json();
+        if (reportData.preview_html && reportData.structured_data) {
+          setPreviewHtml(reportData.preview_html);
+          setStructuredData(reportData.structured_data);
+          setReportId(reportData.report_id || null);
+          setEditableSections(JSON.parse(JSON.stringify(
+            reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
+          )));
+          setPhase('review');
+          return;
+        }
+      }
+    } catch (e) { /* non-fatal — fall through to notes */ }
+
+    // No generated report — load raw notes and go to recording
+    try {
+      const res = await fetch(`/api/soc-save?session_id=${session.sessionId}`);
+      const data = await res.json();
+      if (data.notes?.length) {
+        setMessages(data.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+      }
+    } catch (e) { /* non-fatal */ }
     setPhase('recording');
   }, []);
 
