@@ -1083,8 +1083,23 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
     } catch (e) { console.warn('[generate-soc] Note-by-note regeneration failed:', e.message); }
   }
 
-  // Stage 1 bypassed — Terra reads raw notes directly (two-stage pipeline)
-  console.log('[generate-soc] Two-stage: skipping extraction, passing raw notes to Terra...');
+  // Load live structured observations from soc_observations (maintained per-note by process-soc-note)
+  // Fall back to raw notes if no observations exist yet
+  let liveObservations = [];
+  try {
+    const { data: obs } = await supabase
+      .from('soc_observations')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true });
+    if (obs?.length) {
+      liveObservations = obs;
+      console.log('[generate-soc] Loaded ' + obs.length + ' live observations from soc_observations');
+    }
+  } catch(e) { console.warn('[generate-soc] Could not load live observations:', e.message); }
+
+  console.log('[generate-soc] Two-stage: passing ' + (liveObservations.length ? 'structured observations' : 'raw notes') + ' to Terra...');
 
   // Stage 2: Professional drafting (section-batched)
   console.log('[generate-soc] Stage 2: drafting...');
@@ -1099,7 +1114,10 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       const m = line.match(/^\[(\d+)\]\s*(.*)/s);
       if (m) rawNotesBySeq[parseInt(m[1])] = m[2].trim();
     }
-    const draft = await draftFromClaims(claims, projectMeta, apiKey, socDraftModel, rawNotesBySeq);
+    const draft = await draftFromClaims(
+      liveObservations.length ? liveObservations : claims,
+      projectMeta, apiKey, socDraftModel, rawNotesBySeq
+    );
     if (draft?._drafting_metadata) {
       draftMeta = draft._drafting_metadata;
       delete draft._drafting_metadata;
