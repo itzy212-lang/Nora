@@ -76,6 +76,15 @@
     },
     "api/polish-works.js": {
       "maxDuration": 30
+    },
+    "api/cron-auto-draft.js": {
+      "maxDuration": 120
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron-auto-draft",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }
