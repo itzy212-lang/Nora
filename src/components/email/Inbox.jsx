@@ -1610,6 +1610,19 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     return () => clearInterval(interval);
   }, [loadEmails]);
 
+  // Load draft IDs for inbox badge
+  const [draftEmailIds, setDraftEmailIds] = useState(new Set());
+  useEffect(() => {
+    if (!sb) return;
+    sb.from('email_auto_drafts')
+      .select('email_id')
+      .eq('status', 'pending')
+      .then(({ data }) => {
+        if (data?.length) setDraftEmailIds(new Set(data.map(d => d.email_id)));
+      })
+      .catch(() => {});
+  }, []);
+
   const loadThread = useCallback(async (email) => {
     if (!sb || !email.thread_id) { setThreadEmails([email]); return; }
     try {
@@ -1621,10 +1634,23 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
   const [appointmentPrompt, setAppointmentPrompt] = useState(null);
   const [bookingOverlay, setBookingOverlay] = useState(null); // pre-filled booking form
 
+  const [autoDraft, setAutoDraft] = useState(null);
+
   const handleSelect = async (email) => {
     setSelectedEmail(email);
-    setAppointmentPrompt(null); // clear any previous prompt
+    setAppointmentPrompt(null);
+    setAutoDraft(null);
     loadThread(email);
+    // Load auto-draft if one exists for this email
+    if (sb && email.id) {
+      sb.from('email_auto_drafts')
+        .select('*')
+        .eq('email_id', email.id)
+        .eq('status', 'pending')
+        .maybeSingle()
+        .then(({ data }) => { if (data) setAutoDraft(data); })
+        .catch(() => {});
+    }
     if (isMobile) setMobileShowEmail(true);
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
