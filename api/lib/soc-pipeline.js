@@ -939,6 +939,8 @@ The new room statement is a navigation command — not an observation row. Do no
 ROOM NAMING:
 Use the surveyor's stated room name and floor level. Never invent a floor level. Never assume a rear bedroom is on the first floor unless stated. The surveyor's stated floor level is authoritative even where the layout appears unusual.
 
+CRITICAL — NEVER RENAME ROOMS: If the surveyor says "ground floor front room", the section title is "Ground Floor Front Room". Never rename it to "Lounge", "Dining Room", "Living Room", "Reception Room" or any other name unless the surveyor explicitly uses those words. If the surveyor says "rear room", it is "Rear Room" — not "Dining Room", not "Lounge". Property layouts vary enormously. You do not know which room serves which purpose unless told. Never assume.
+
 Do not merge rooms where there is a realistic possibility they are different rooms.
 
 Where the surveyor explicitly corrects a room name, update the section identity and move affected observations to the corrected section.
