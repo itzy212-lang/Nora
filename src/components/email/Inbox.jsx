@@ -1042,7 +1042,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 }
 
 // ── Email row card ────────────────────────────────────────────────────────────
-function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
+function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDraft }) {
   const unread  = !email.is_read;
   const replied = email.is_replied;
   const flagged = email.flagged;
@@ -1099,6 +1099,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete }) {
             {replied && <span style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
             {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
             {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
+            {hasDraft && <span title="Nora has drafted a response" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, border: '1px solid #bbf7d0' }}>✨ Draft ready</span>}
             {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
           </div>
         </div>
@@ -2048,7 +2049,7 @@ if (syncErr) throw syncErr;
             : filtered.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No emails in {folder}</div>
             : filtered.map(email => (
-              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} />
+              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(email.id)} />
             ))
           }
         </div>
