@@ -204,9 +204,11 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     originalNoticeDate,
     section10NoticeDate: noticeDate,
     notifiableWorks: worksItems?.length
-      ? worksItems.filter(w => w.trim()).join('\n')
+      ? worksItems.map(w => typeof w === 'object' ? (w.text || w.item || '') : String(w)).filter(Boolean).join('\n')
       : (project?.works || ''),
-    works_items: (worksItems?.length ? worksItems.filter(w => w.trim()) : (project?.works ? [project.works] : [])).map(item => ({ item })),
+    works_items: (worksItems?.length
+      ? worksItems.map(w => ({ item: typeof w === 'object' ? (w.text || w.item || '') : String(w) })).filter(w => w.item)
+      : (project?.works ? [{ item: project.works }] : [])),
     includeCover,
     allSections: allSections.length ? allSections : [sectionKey],
     section2Subsections,
