@@ -114,7 +114,11 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     setCreateFollowUp(!!opts.followUp);
     setDirty(false);
     setDraftNote('Draft not saved');
-    setAttachments(opts.attachments || []);
+    const baseAttachments = opts.attachments || [];
+    if (opts.oneDriveAttachment) {
+      baseAttachments.push({ ...opts.oneDriveAttachment, source: 'onedrive' });
+    }
+    setAttachments(baseAttachments);
     replyInfoRef.current = {
       replyToEmailId: opts.replyToEmailId || '',
       threadId: opts.threadId || null, // null on compose — don't generate fake threadId that triggers email fetch
