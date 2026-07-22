@@ -467,6 +467,7 @@ export default function App() {
           <Accounting
             projects={state.projects || []}
             settings={settings || {}}
+            onOpenComposer={(opts) => { setComposerOpts(opts); }}
           />
         );
       case 'soc':
