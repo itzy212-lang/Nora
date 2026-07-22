@@ -5,7 +5,7 @@ import InvoiceModal from './InvoiceModal';
 const fmt = (n) => `£${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
 
-export default function Accounting({ projects = [], settings = {} }) {
+export default function Accounting({ projects = [], settings = {}, onOpenComposer }) {
   const isMobile = window.innerWidth < 768;
   const { invoices, loading, createInvoice, updateInvoice, markPaid, deleteInvoice, getStats } = useInvoices();
   const [tab, setTab] = useState('dashboard');
@@ -245,6 +245,7 @@ export default function Accounting({ projects = [], settings = {} }) {
           settings={settings}
           projects={projects}
           onSave={handleSave}
+          onEmail={onOpenComposer ? (opts) => onOpenComposer({ mode: 'compose', ...opts }) : undefined}
           onClose={() => { setShowModal(false); setEditingInvoice(null); }}
         />
       )}
