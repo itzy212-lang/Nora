@@ -429,7 +429,8 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
                 const total = form.items.reduce((s, it) => s + (parseFloat(it.total) || 0), 0);
                 const vatAmt = total * ((parseFloat(form.vat_rate) || 0) / 100);
                 const grand = total + vatAmt;
-                const body = `Hi ${form.bill_to_name || ''},\n\nI hope you are well. I am writing to follow up on invoice ${form.invoice_number}${form.due_date ? `, which was due on ${form.due_date}` : ''}, for the amount of £${grand.toFixed(2)}${form.vat_rate > 0 ? ' (inc. VAT)' : ''}.\n\nCould you please arrange payment at your earliest convenience? If you have any queries regarding this invoice, please do not hesitate to get in touch.\n\nKind regards,`;
+                const firstName = (form.bill_to_name || '').split(' ')[0] || form.bill_to_name || '';
+                const body = `Hi ${firstName},\n\nI hope you are well. I am writing to follow up on invoice ${form.invoice_number}${form.due_date ? `, which was due on ${form.due_date},` : ','} for the amount of £${grand.toFixed(2)}${form.vat_rate > 0 ? ' (inc. VAT)' : ''}. This may be an oversight — if you could please let me know once the invoice has been settled, that would be much appreciated. If you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind regards,\nNora\nOn behalf of Itzik Darel`;
                 onEmail({ subject: `Invoice ${form.invoice_number} — Payment Reminder`, body, to: form.bill_to_email || '' });
               }}
               style={{ ...styles.cancelBtn, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}
