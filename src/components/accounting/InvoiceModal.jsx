@@ -423,6 +423,20 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
               {saving ? 'Preparing...' : 'Save & Email'}
             </button>
           )}
+          {isEdit && form.status !== 'paid' && onEmail && (
+            <button
+              onClick={() => {
+                const total = form.items.reduce((s, it) => s + (parseFloat(it.total) || 0), 0);
+                const vatAmt = total * ((parseFloat(form.vat_rate) || 0) / 100);
+                const grand = total + vatAmt;
+                const body = `Hi ${form.bill_to_name || ''},\n\nI hope you are well. I am writing to follow up on invoice ${form.invoice_number}${form.due_date ? `, which was due on ${form.due_date}` : ''}, for the amount of £${grand.toFixed(2)}${form.vat_rate > 0 ? ' (inc. VAT)' : ''}.\n\nCould you please arrange payment at your earliest convenience? If you have any queries regarding this invoice, please do not hesitate to get in touch.\n\nKind regards,`;
+                onEmail({ subject: `Invoice ${form.invoice_number} — Payment Reminder`, body, to: form.bill_to_email || '' });
+              }}
+              style={{ ...styles.cancelBtn, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}
+            >
+              Chase Payment
+            </button>
+          )}
           {isEdit && (
             <button onClick={() => handleSave('save')} disabled={saving} style={styles.saveBtn}>
               {saving ? 'Saving...' : 'Save Changes'}
