@@ -241,8 +241,63 @@ Read the full thread before drafting. Do not re-agree things already established
       }
     }
 
-    console.log('[cron-auto-draft] Done:', results);
-    return res.status(200).json({ ok: true, ...results });
+    // ── AUTO-CHASER: send payment reminders for invoices 3+ days overdue ──────
+    const chaserResults = { checked: 0, chased: 0, errors: 0 };
+    try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const { data: overdueInvoices } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, bill_to_name, bill_to_email, due_date, total, vat_rate, vat_amount, chaser_sent_at, chaser_count')
+        .eq('status', 'unpaid')
+        .not('due_date', 'is', null)
+        .lte('due_date', threeDaysAgo);
+
+      for (const inv of overdueInvoices || []) {
+        chaserResults.checked++;
+        // Skip if chaser already sent in last 7 days
+        if (inv.chaser_sent_at) {
+          const daysSince = (Date.now() - new Date(inv.chaser_sent_at).getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSince < 7) continue;
+        }
+        if (!inv.bill_to_email) continue;
+
+        try {
+          const firstName = (inv.bill_to_name || '').split(' ')[0] || inv.bill_to_name || '';
+          const grand = parseFloat(inv.total || 0) + parseFloat(inv.vat_amount || 0);
+          const vatNote = parseFloat(inv.vat_rate || 0) > 0 ? ' (inc. VAT)' : '';
+          const body = `Hi ${firstName},\n\nI hope you are well. I am writing to follow up on invoice ${inv.invoice_number}${inv.due_date ? `, which was due on ${new Date(inv.due_date).toLocaleDateString('en-GB')},` : ','} for the amount of £${grand.toFixed(2)}${vatNote}. This may be an oversight — if you could please let me know once the invoice has been settled, that would be much appreciated. If you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind regards,\nNora\nOn behalf of Itzik Darel`;
+
+          // Send via email API
+          const sendRes = await fetch((process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://nora-d9wy.vercel.app') + '/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: inv.bill_to_email,
+              subject: `Invoice ${inv.invoice_number} — Payment Reminder`,
+              body,
+              from_name: 'Square One Consulting',
+            }),
+          });
+
+          if (sendRes.ok) {
+            await supabase.from('invoices').update({
+              chaser_sent_at: new Date().toISOString(),
+              chaser_count: (inv.chaser_count || 0) + 1,
+            }).eq('id', inv.id);
+            chaserResults.chased++;
+            console.log('[cron-auto-draft] Chaser sent for invoice', inv.invoice_number, 'to', inv.bill_to_email);
+          }
+        } catch (e) {
+          chaserResults.errors++;
+          console.warn('[cron-auto-draft] Chaser failed for invoice', inv.invoice_number, e.message);
+        }
+      }
+    } catch (e) {
+      console.warn('[cron-auto-draft] Auto-chaser error:', e.message);
+    }
+
+    console.log('[cron-auto-draft] Done:', results, 'Chasers:', chaserResults);
+    return res.status(200).json({ ok: true, ...results, chasers: chaserResults });
 
   } catch (err) {
     console.error('[cron-auto-draft] Fatal:', err);
