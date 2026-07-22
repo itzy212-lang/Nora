@@ -1617,10 +1617,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     sb.from('email_auto_drafts')
       .select('email_id')
       .eq('status', 'pending')
-      .then(({ data }) => {
-        if (data?.length) setDraftEmailIds(new Set(data.map(d => d.email_id)));
+      .then(({ data, error }) => {
+        console.log('[AutoDraft] drafts query:', data?.length, 'error:', error?.message);
+        if (data?.length) {
+          const ids = new Set(data.map(d => d.email_id));
+          console.log('[AutoDraft] draft IDs loaded:', ids.size);
+          setDraftEmailIds(ids);
+        }
       })
-      .catch(() => {});
+      .catch(e => console.warn('[AutoDraft] failed:', e));
   }, []);
 
   const loadThread = useCallback(async (email) => {
