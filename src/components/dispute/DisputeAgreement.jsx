@@ -318,7 +318,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
             <label style={s.label}>Select project</label>
             <select style={s.select} value={projectId} onChange={e => setProjectId(e.target.value)}>
               <option value="">Select project</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>)}
+              {[...projects].sort((a,b)=>{const aA=a.bo_premise_address||a.bo_address||a.bo||'';const bA=b.bo_premise_address||b.bo_address||b.bo||'';const nA=parseInt((aA.match(/^(\d+)/)||[])[1]||'0',10);const nB=parseInt((bA.match(/^(\d+)/)||[])[1]||'0',10);return nA!==nB?nA-nB:aA.localeCompare(bA);}).map(p => <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>)}
             </select>
           </div>
           <button
