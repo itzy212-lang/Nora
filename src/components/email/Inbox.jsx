@@ -19,9 +19,13 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
   useEffect(() => {
     sb.from('projects').select('id,ref,bo_premise_address').order('ref', { ascending: true })
       .then(({ data }) => setProjects((data || []).sort((a,b) => {
-        const na = parseInt((a.ref||'').replace(/\D/g,''),10)||0;
-        const nb = parseInt((b.ref||'').replace(/\D/g,''),10)||0;
-        return na - nb;
+        // Sort by number at start of address, then alphabetically
+        const addrA = a.bo_premise_address || a.bo || '';
+        const addrB = b.bo_premise_address || b.bo || '';
+        const numA = parseInt(addrA.match(/^(\d+)/)?.[1] || '0', 10);
+        const numB = parseInt(addrB.match(/^(\d+)/)?.[1] || '0', 10);
+        if (numA !== numB) return numA - numB;
+        return addrA.localeCompare(addrB);
       })));
   }, []);
 
