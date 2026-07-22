@@ -29,7 +29,9 @@ function shouldSkip(email) {
 }
 
 export default async function handler(req, res) {
-  const isCron = req.headers['x-vercel-cron'] === '1';
+  // Allow Vercel cron (GET) and manual triggers (POST)
+  // Also allow any GET from vercel-cron user agent
+  const isCron = req.headers['x-vercel-cron'] === '1' || (req.method === 'GET' && req.headers['user-agent']?.includes('vercel-cron'));
   const isManual = req.method === 'POST' && req.headers['x-nora-manual'] === 'true';
   if (!isCron && !isManual) return res.status(401).json({ error: 'Unauthorized' });
 
