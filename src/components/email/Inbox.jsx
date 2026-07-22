@@ -1610,23 +1610,28 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
     return () => clearInterval(interval);
   }, [loadEmails]);
 
-  // Load draft IDs for inbox badge
+  // Load draft IDs for inbox badge — reload periodically
   const [draftEmailIds, setDraftEmailIds] = useState(new Set());
-  useEffect(() => {
+  const loadDraftIds = useCallback(() => {
     if (!sb) return;
     sb.from('email_auto_drafts')
       .select('email_id')
       .eq('status', 'pending')
       .then(({ data, error }) => {
-        console.log('[AutoDraft] drafts query:', data?.length, 'error:', error?.message);
-        if (data?.length) {
-          const ids = new Set(data.map(d => d.email_id));
-          console.log('[AutoDraft] draft IDs loaded:', ids.size);
-          setDraftEmailIds(ids);
-        }
+        if (error) { console.warn('[AutoDraft] query error:', error.message); return; }
+        const ids = new Set((data || []).map(d => String(d.email_id)));
+        console.log('[AutoDraft] loaded', ids.size, 'draft IDs');
+        setDraftEmailIds(ids);
       })
       .catch(e => console.warn('[AutoDraft] failed:', e));
   }, []);
+
+  useEffect(() => {
+    loadDraftIds();
+    // Reload every 2 minutes to pick up new auto-drafts
+    const interval = setInterval(loadDraftIds, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadDraftIds]);
 
   const loadThread = useCallback(async (email) => {
     if (!sb || !email.thread_id) { setThreadEmails([email]); return; }
@@ -2080,7 +2085,7 @@ if (syncErr) throw syncErr;
             : filtered.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No emails in {folder}</div>
             : filtered.map(email => (
-              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(email.id)} />
+              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(String(email.id))} />
             ))
           }
         </div>
