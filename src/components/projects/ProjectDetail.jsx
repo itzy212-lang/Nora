@@ -3448,6 +3448,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     handleOpenNoticeModal(ao, []);
   }, [handleOpenNoticeModal]);
 
+  // Batch serve — opens modal with no specific AO so all AOs are selectable
+  const handleServeBatch = useCallback(() => {
+    setNoticeModal({ ao: null, defaultSections: [] });
+  }, []);
+
   const handleServe104b = useCallback(async (ao) => {
     if (!window.confirm('Confirm 10(4)(b) papers have been served?')) return;
     const date = new Date().toISOString().slice(0, 10);
