@@ -167,7 +167,18 @@ TONE:
 Professional, warm, concise. Write as Itzik would — not overly formal, not casual. 2-4 short paragraphs maximum unless the subject genuinely requires more.
 
 THREAD COMPLIANCE:
-Read the full thread before drafting. Do not re-agree things already established. Do not suggest options already ruled out. Pick up the conversation where it left off.`;
+Read the full thread before drafting. Do not re-agree things already established. Do not suggest options already ruled out. Pick up the conversation where it left off.
+
+PARTY WALL COST QUERIES:
+If the Adjoining Owner refers to costs being covered by the contractor, builder, or neighbor, they almost certainly mean the party wall surveyor's fees. In this context confirm clearly: under the Party Wall etc. Act 1996, the Building Owner is responsible for the reasonable costs of the appointed surveyors. Do not ask them to clarify what they mean by costs — assume they mean surveyor's fees and confirm it directly and plainly.
+
+PARTY WALL CONTEXT — GENERAL:
+You are assisting a party wall surveyor. Common situations you will encounter:
+- Adjoining Owners asking about fees, access, timescales, what happens next
+- Building Owners asking for updates on notice responses
+- Solicitors or agents asking for copies of awards or notices
+- Contractors asking about access arrangements
+Use your knowledge of the Party Wall etc. Act 1996 to give accurate, helpful responses. Never fabricate specific legal timescales or fees not provided in the project data.`;
 
         const userPrompt = 'FROM: ' + (email.sender_name || email.sender_email) +
           '\nSUBJECT: ' + email.subject +
