@@ -1603,6 +1603,8 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
         const { data, error } = await sb.functions.invoke('sync_outlook', { body: {} });
         if (!error && data?.newEmails > 0) {
           await loadEmails({ incremental: true });
+          // Chain auto-draft immediately after sync — eliminates up to 15 min delay
+          fetch('/api/cron-auto-draft', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' }, body: '{}' }).catch(() => {});
         }
       } catch (err) {
         console.warn('[auto-sync] error:', err);
@@ -1705,6 +1707,8 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
 if (syncErr) throw syncErr;
       await new Promise(r => setTimeout(r, 1000));
       try { await sb.rpc('match_emails_to_projects') } catch(_) {}
+      // Chain auto-draft immediately after sync — eliminates up to 15 min delay
+      fetch('/api/cron-auto-draft', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' }, body: '{}' }).catch(() => {});
       // Only reload if new emails came in
       if (!result?.data || result?.data?.newEmails > 0) {
         await loadEmails();
