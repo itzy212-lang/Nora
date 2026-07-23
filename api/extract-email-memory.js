@@ -102,11 +102,35 @@ ${body.slice(0, 6000)}`;
       importance_score: 0.7,
     }));
 
-    const { error } = await supabase.from('project_memory').insert(rows);
+    const { data: inserted, error } = await supabase.from('project_memory').insert(rows).select('id, summary');
 
     if (error) {
       console.error('[extract-email-memory] insert error:', error.message);
       return res.status(500).json({ error: error.message });
+    }
+
+    // Generate embeddings for each inserted row — non-blocking
+    if (inserted?.length && process.env.OPENAI_API_KEY) {
+      (async () => {
+        for (const row of inserted) {
+          try {
+            const embRes = await fetch('https://api.openai.com/v1/embeddings', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + process.env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: 'text-embedding-3-small', input: row.summary }),
+            });
+            if (!embRes.ok) continue;
+            const embData = await embRes.json();
+            const embedding = embData.data?.[0]?.embedding;
+            if (embedding) {
+              await supabase.from('project_memory').update({ embedding }).eq('id', row.id);
+            }
+          } catch (e) {
+            console.warn('[extract-email-memory] embedding failed for', row.id, e.message);
+          }
+        }
+        console.log(`[extract-email-memory] embeddings generated for ${inserted.length} facts`);
+      })();
     }
 
     console.log(`[extract-email-memory] saved ${facts.length} facts for project ${project_id}`);
