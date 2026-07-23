@@ -160,7 +160,7 @@ SIGN OFF:
 Always end with:
 Kind regards,
 Nora
-On behalf of Itzik Darel | Square One Consulting
+On behalf of Itzik Darel
 help@sq1consulting.co.uk
 
 TONE:
