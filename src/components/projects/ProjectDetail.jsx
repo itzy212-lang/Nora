@@ -4237,6 +4237,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 </button>
               </div>
 
+              {aos.length > 1 && aos.filter(a => !a.noticed_date && !a.notice_served_date).length > 1 && (
+                <button
+                  onClick={handleServeBatch}
+                  style={{ width: '100%', marginBottom: 12, padding: '10px 16px', borderRadius: 10, border: '2px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+                >
+                  ⚡ Serve notice to multiple adjoining owners
+                </button>
+              )}
+
               {aos.length === 0 ? (
                 <div style={{ ...card({ padding: '20px', textAlign: 'center' }) }}>
                   <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>
