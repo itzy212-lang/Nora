@@ -313,6 +313,31 @@ Read the full thread before drafting. Do not re-agree things already established
       console.warn('[cron-auto-draft] Auto-chaser error:', e.message);
     }
 
+    // ── BACKFILL EMBEDDINGS for any project_memory rows missing them ────────────
+    try {
+      const { data: missingEmbeddings } = await supabase
+        .from('project_memory')
+        .select('id, summary')
+        .is('embedding', null)
+        .limit(20);
+
+      if (missingEmbeddings?.length) {
+        for (const row of missingEmbeddings) {
+          try {
+            const embRes = await fetch('https://api.openai.com/v1/embeddings', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: 'text-embedding-3-small', input: row.summary }),
+            });
+            const embData = await embRes.json();
+            const embedding = embData.data?.[0]?.embedding;
+            if (embedding) await supabase.from('project_memory').update({ embedding }).eq('id', row.id);
+          } catch(e) { /* non-fatal */ }
+        }
+        console.log('[cron-auto-draft] Backfilled embeddings for', missingEmbeddings.length, 'rows');
+      }
+    } catch(e) { console.warn('[cron-auto-draft] Embedding backfill error:', e.message); }
+
     console.log('[cron-auto-draft] Done:', results, 'Chasers:', chaserResults);
     return res.status(200).json({ ok: true, ...results, chasers: chaserResults });
 
