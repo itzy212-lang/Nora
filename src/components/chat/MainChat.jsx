@@ -1159,7 +1159,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Ely</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Nora</div>
           <div style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selectedProject
               ? projectLabel(selectedProject)
