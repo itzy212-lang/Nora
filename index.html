@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -12,20 +12,10 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/icons/icon.svg" />
   <title>Nora — Virtual Assistant</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <script>
-    (function() {
-      try {
-        var s = JSON.parse(localStorage.getItem('ely5_settings') || '{}');
-        if (s.theme === 'light') document.body.classList.add('light');
-        else if (s.theme === 'system' && window.matchMedia && !window.matchMedia('(prefers-color-scheme:dark)').matches)
-          document.body.classList.add('light');
-      } catch(e) {}
-    })();
-  </script>
-</head>
-<body>
+
+  <!-- Splash styles in HEAD so they apply before first paint -->
   <style>
+    html, body { margin: 0; padding: 0; }
     #nora-splash {
       position: fixed; inset: 0; z-index: 99999;
       background: #0a0a0a;
@@ -34,8 +24,8 @@
       transition: opacity 0.5s ease;
     }
     #nora-splash .nora-text {
-      font-family: 'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif;
-      font-size: 64px; font-weight: 300; letter-spacing: -1px;
+      font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 64px; font-weight: 200; letter-spacing: -1px;
       color: white; line-height: 1;
     }
     #nora-splash .nora-dots {
@@ -46,6 +36,7 @@
       width: 9px; height: 9px; border-radius: 50%;
       background: white; display: inline-block;
       animation: noraDotUp 1.4s ease-in-out infinite;
+      opacity: 0.15;
     }
     #nora-splash .d2 { animation-delay: 0.3s; }
     #nora-splash .d3 { animation-delay: 0.6s; }
@@ -55,11 +46,45 @@
       60% { opacity: 0.15; transform: translateY(0); }
     }
     #nora-splash .nora-sub {
-      font-family: 'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif;
-      font-size: 12px; color: rgba(255,255,255,0.35);
+      font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 11px; color: rgba(255,255,255,0.35);
       letter-spacing: 3px; margin-top: 10px; font-weight: 300;
+      text-transform: lowercase;
     }
   </style>
+
+  <script>
+    // Theme — runs before paint
+    (function() {
+      try {
+        var s = JSON.parse(localStorage.getItem('ely5_settings') || '{}');
+        if (s.theme === 'light') document.body.classList.add('light');
+        else if (s.theme === 'system' && window.matchMedia && !window.matchMedia('(prefers-color-scheme:dark)').matches)
+          document.body.classList.add('light');
+      } catch(e) {}
+    })();
+
+    // Splash timing
+    var _splashStart = Date.now();
+    window.__hideSplash = function() {
+      var el = document.getElementById('nora-splash');
+      if (!el) return;
+      var elapsed = Date.now() - _splashStart;
+      var minTime = 2000;
+      var delay = Math.max(0, minTime - elapsed);
+      setTimeout(function() {
+        el.style.opacity = '0';
+        setTimeout(function() { el.remove(); }, 500);
+      }, delay);
+    };
+  </script>
+
+  <!-- Google Fonts loaded async — non-blocking -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'" />
+</head>
+<body>
   <div id="nora-splash">
     <div style="display:flex;align-items:baseline">
       <span class="nora-text">nora</span>
@@ -71,20 +96,7 @@
     </div>
     <div class="nora-sub">virtual assistant</div>
   </div>
-  <script>
-    var _splashStart = Date.now();
-    window.__hideSplash = function() {
-      var el = document.getElementById('nora-splash');
-      if (!el) return;
-      var elapsed = Date.now() - _splashStart;
-      var minTime = 2000; // minimum 2 seconds
-      var delay = Math.max(0, minTime - elapsed);
-      setTimeout(function() {
-        el.style.opacity = '0';
-        setTimeout(function() { el.style.display = 'none'; }, 500);
-      }, delay);
-    };
-  </script>
+
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
   <script>
