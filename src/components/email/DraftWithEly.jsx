@@ -329,7 +329,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
         <div className="draft-ely-header">
           <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>✨</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Draft with Ely</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Draft with Nora</div>
             <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>
               {email?.subject ? `Re: ${email.subject.slice(0, 40)}` : 'New draft'}
             </div>
