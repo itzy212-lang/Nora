@@ -616,10 +616,24 @@ ${threadText}`;
             {messages.map(msg => (
               <div key={msg.id}>
                 {msg.role === 'user' && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <div style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div
+                      style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', userSelect: 'none' }}
+                      onTouchStart={(e) => {
+                        e._lpTimer = setTimeout(() => {
+                          navigator.clipboard.writeText(msg.content || '');
+                          e.target.style.opacity = '0.6';
+                          setTimeout(() => { e.target.style.opacity = '1'; }, 600);
+                        }, 500);
+                      }}
+                      onTouchEnd={(e) => clearTimeout(e._lpTimer)}
+                    >
                       {msg.content}
                     </div>
+                    <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, cursor: 'pointer', padding: '1px 6px' }}
+                      onClick={() => navigator.clipboard.writeText(msg.content || '')}>
+                      Copy
+                    </span>
                   </div>
                 )}
                 {msg.role === 'system' && (
