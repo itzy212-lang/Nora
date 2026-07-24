@@ -7,9 +7,6 @@ export default function SplashScreen({ onDone }) {
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
-    // Hide the HTML pre-splash immediately — React takes over animation
-    if (window.__hideSplash) window.__hideSplash();
-
     // Animate dots manually — guaranteed to work on first render
     let frame = 0;
     const interval = setInterval(() => {
