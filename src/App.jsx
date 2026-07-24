@@ -11,6 +11,7 @@ import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
 import LoginScreen from './components/layout/LoginScreen';
+import SplashScreen from './components/layout/SplashScreen';
 
 // Features
 import ProjectList from './components/projects/ProjectList';
