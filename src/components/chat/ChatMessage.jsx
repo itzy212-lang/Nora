@@ -343,6 +343,29 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
         )}
       </div>
 
+      {/* Copy + Play for ALL AI messages */}
+      {!isUser && (msg.content || msg.draft || displayDraftText || actionText) && !isDraft && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
+          <button type="button" onClick={() => speaking ? stop() : speak(msg.content || '')} style={{
+            border: '1px solid var(--border)', background: speaking ? 'var(--blue-bg)' : 'var(--bg2)',
+            color: speaking ? 'var(--blue)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
+            fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
+            {speaking ? '⏹ Stop' : '▶ Play'}
+          </button>
+          <button type="button" onClick={async () => {
+            const ok = await copyToClipboard(msg.content || '');
+            if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1800); }
+          }} style={{
+            border: '1px solid var(--border)', background: copied ? 'var(--green-bg)' : 'var(--bg2)',
+            color: copied ? 'var(--green)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
+            fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
+          }}>
+            {copied ? '✓ Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+
       {isDraft && (displayDraftText || actionText).trim().length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7, marginLeft: 4 }}>
           <button type="button" onClick={() => speaking ? stop() : speak(displayDraftText || actionText)} style={{
@@ -357,7 +380,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
             color: copied ? 'var(--green)' : 'var(--text2)', borderRadius: 99, padding: '4px 10px',
             fontSize: 11.5, cursor: 'pointer', fontWeight: 500,
           }}>
-            {copied ? 'Copied' : 'Copy draft'}
+            {copied ? '✓ Copied' : 'Copy'}
           </button>
 
           <button type="button" onClick={handleCompose} style={{
