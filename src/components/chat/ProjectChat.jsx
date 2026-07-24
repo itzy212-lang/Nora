@@ -1530,7 +1530,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   value={input}
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={loading ? 'Ely is thinking...' : `Ask about ${projectRef || 'this project'}...`}
+                  placeholder={loading ? 'Nora is thinking...' : `Ask about ${projectRef || 'this project'}...`}
                   rows={1}
                   style={{
                     flex: 1, background: 'var(--bg3)', border: '1.5px solid var(--border)',
