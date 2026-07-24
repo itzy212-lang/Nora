@@ -232,7 +232,7 @@ Be direct and practical. When drafting clauses, produce complete ready-to-use wo
             color: loading || !doc1 || (mode === 'compare' && !doc2) ? 'var(--text3)' : '#fff',
             fontSize: 14, fontWeight: 600, cursor: loading || !doc1 ? 'not-allowed' : 'pointer',
           }}>
-          {loading ? '✨ Reviewing…' : mode === 'benchmark' ? '✨ Review with Ely' : '✨ Compare with Ely'}
+          {loading ? '✨ Reviewing…' : mode === 'benchmark' ? '✨ Review with Nora' : '✨ Compare with Nora'}
         </button>
 
         {mode === 'benchmark' && !review && !loading && (
@@ -282,7 +282,7 @@ Be direct and practical. When drafting clauses, produce complete ready-to-use wo
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✨</div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Continue with Ely</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>Ask Ely to draft clauses, discard points, rewrite wording, or produce a final amendment list</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>Ask Nora to draft clauses, discard points, rewrite wording, or produce a final amendment list</div>
             </div>
           </div>
 
@@ -331,7 +331,7 @@ Be direct and practical. When drafting clauses, produce complete ready-to-use wo
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChat(); }}}
-              placeholder="Ask Ely to draft a clause, discard a point, rewrite something…"
+              placeholder="Ask Nora to draft a clause, discard a point, rewrite something…"
               rows={2}
               style={{ flex: 1, padding: '9px 12px', fontSize: 13, resize: 'none', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', outline: 'none' }}
             />
