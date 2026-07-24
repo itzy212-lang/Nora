@@ -50,9 +50,9 @@ export default function SplashScreen({ onDone }) {
           lineHeight: 1, color: 'white',
         }}>nora</span>
         <span style={{ display: 'flex', alignItems: 'flex-end', gap: 7, paddingLeft: 9, paddingBottom: 12 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot1, transform: `translateY(${(1 - dot1) * 3}px)` }}/>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot2, transform: `translateY(${(1 - dot2) * 3}px)` }}/>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot3, transform: `translateY(${(1 - dot3) * 3}px)` }}/>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot1, transform: `translateY(${-(dot1 - 0.15) * 6}px)` }}/>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot2, transform: `translateY(${-(dot2 - 0.15) * 6}px)` }}/>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot3, transform: `translateY(${-(dot3 - 0.15) * 6}px)` }}/>
         </span>
       </div>
       <div style={{
