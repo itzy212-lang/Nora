@@ -641,6 +641,15 @@ ${threadText}`;
                         </div>
                         <div style={{ padding: '10px 13px', fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{msg.draft}</div>
                         <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', background: 'rgba(79,127,255,0.05)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button onClick={() => {
+                              const u = window.speechSynthesis;
+                              if (u.speaking) { u.cancel(); return; }
+                              const ut = new SpeechSynthesisUtterance(msg.draft);
+                              u.speak(ut);
+                            }}
+                            style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer' }}>
+                            ▶ Play
+                          </button>
                           <button onClick={() => navigator.clipboard.writeText(msg.draft)}
                             style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--blue)', background: 'transparent', color: 'var(--blue)', cursor: 'pointer' }}>
                             Copy
