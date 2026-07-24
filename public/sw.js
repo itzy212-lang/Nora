@@ -1,5 +1,5 @@
 // Nora Service Worker — PWA offline support
-const CACHE_NAME = 'nora-v2';
+const CACHE_NAME = 'nora-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
