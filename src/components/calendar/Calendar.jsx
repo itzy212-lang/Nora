@@ -850,20 +850,26 @@ export default function Calendar({ onOpenProject }) {
         />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--text)', fontSize: 15 }}>←</button>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', minWidth: 200 }}>{headerLabel}</div>
-          <button onClick={() => navigate(1)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--text)', fontSize: 15 }}>→</button>
-          <button onClick={() => { setCurrentDate(new Date()); setSelectedDate(todayYMD()); }}
-            style={{ padding: '5px 14px', border: '1px solid var(--border)', borderRadius: 8, background: 'none', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer' }}>Today</button>
+      {/* Calendar header — two rows on mobile */}
+      <div style={{ marginBottom: 12 }}>
+        {/* Row 1: nav + month label */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => navigate(-1)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', color: 'var(--text)', fontSize: 15 }}>←</button>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{headerLabel}</div>
+            <button onClick={() => navigate(1)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', color: 'var(--text)', fontSize: 15 }}>→</button>
+          </div>
+          <button onClick={() => openAddTask(selectedDate || todayYMD())}
+            className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99, flexShrink: 0 }}>+ Add</button>
         </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        {/* Row 2: Today + view switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => { setCurrentDate(new Date()); setSelectedDate(todayYMD()); }}
+            style={{ padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'none', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', flexShrink: 0 }}>Today</button>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flex: 1 }}>
             {['Month','Week','Day'].map(v => (
               <button key={v} onClick={() => setView(v.toLowerCase())} style={{
-                padding: '6px 16px', border: 'none', cursor: 'pointer', fontSize: 13,
+                flex: 1, padding: '6px 0', border: 'none', cursor: 'pointer', fontSize: 13,
                 background: view === v.toLowerCase() ? 'var(--blue)' : 'var(--bg2)',
                 color: view === v.toLowerCase() ? '#fff' : 'var(--text2)',
                 fontWeight: view === v.toLowerCase() ? 600 : 400,
@@ -871,8 +877,6 @@ export default function Calendar({ onOpenProject }) {
               }}>{v}</button>
             ))}
           </div>
-          <button onClick={() => openAddTask(selectedDate || todayYMD())}
-            className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>+ Add</button>
         </div>
       </div>
 
