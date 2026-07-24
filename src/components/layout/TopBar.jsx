@@ -56,9 +56,8 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
           <span style={{ fontSize: 11 }}>{autoPlay ? 'On' : 'Off'}</span>
         </button>
         <button
-          className="btn btn-sm btn-primary"
           onClick={() => onNavigate('chat')}
-          style={{ gap: 5 }}
+          style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           ✨ Ask Nora
         </button>
