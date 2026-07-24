@@ -72,12 +72,17 @@
     <div class="nora-sub">virtual assistant</div>
   </div>
   <script>
+    var _splashStart = Date.now();
     window.__hideSplash = function() {
       var el = document.getElementById('nora-splash');
-      if (el) {
+      if (!el) return;
+      var elapsed = Date.now() - _splashStart;
+      var minTime = 2000; // minimum 2 seconds
+      var delay = Math.max(0, minTime - elapsed);
+      setTimeout(function() {
         el.style.opacity = '0';
         setTimeout(function() { el.style.display = 'none'; }, 500);
-      }
+      }, delay);
     };
   </script>
   <div id="root"></div>
