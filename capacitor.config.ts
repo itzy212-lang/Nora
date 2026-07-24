@@ -12,13 +12,14 @@ const config: CapacitorConfig = {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
     SplashScreen: {
-      launchShowDuration: 1500,
-      backgroundColor: '#ffffff',
+      launchShowDuration: 0,
+      backgroundColor: '#0a0a0a',
       showSpinner: false,
+      autoHide: true,
     },
     StatusBar: {
-      style: 'Default',
-      backgroundColor: '#ffffff',
+      style: 'Dark',
+      backgroundColor: '#0a0a0a',
     },
   },
 };
