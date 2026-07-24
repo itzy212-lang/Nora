@@ -241,7 +241,7 @@ function extractDraft(text) {
   return null;
 }
 
-// ── Draft with Ely — full screen overlay ─────────────────────────────────────
+// ── Draft with Nora — full screen overlay ─────────────────────────────────────
 // Left: original email in full | Right: Ely collaboration with voice
 
 function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft, onClose }) {
@@ -503,7 +503,7 @@ ${threadText}`;
       console.error('[DraftWithEly] callEly error:', err);
       setMessages(prev => [...prev, {
         id: Date.now() + 1, role: 'ely',
-        explanation: 'Could not connect to Ely. Please try again.', draft: null,
+        explanation: 'Could not connect to Nora. Please try again.', draft: null,
       }]);
     } finally {
       setLoading(false);
@@ -536,7 +536,7 @@ ${threadText}`;
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✨</div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Draft with Ely</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Draft with Nora</div>
             <div style={{ fontSize: 11, color: 'var(--text3)' }}>{email?.subject}</div>
           </div>
         </div>
@@ -553,7 +553,7 @@ ${threadText}`;
                   || '';
                 // Strip Subject line from body before transferring to composer
                 const cleanedBody = body.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
-                if (!cleanedBody) { alert('Ask Ely to produce a draft first.'); return; }
+                if (!cleanedBody) { alert('Ask Nora to produce a draft first.'); return; }
                 if (onSendWithDraft) {
                   onSendWithDraft({
                     to: email?.sender_email || '',
@@ -708,7 +708,7 @@ ${threadText}`;
               value={input}
               onChange={setInput}
               onSend={handleSend}
-              placeholder="Ask Ely to adjust, change tone, add a point…"
+              placeholder="Ask Nora to adjust, change tone, add a point…"
               disabled={loading}
               loading={loading}
             />
@@ -940,7 +940,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 contentEditable
                 suppressContentEditableWarning
                 onInput={e => setBody(e.currentTarget.innerHTML)}
-                data-placeholder="Type your reply here, or use ✨ Draft with Ely…"
+                data-placeholder="Type your reply here, or use ✨ Draft with Nora…"
                 style={{
                   flex: 1, minHeight: 320, padding: '8px 12px',
                   fontSize: 13, background: '#fff',
@@ -1009,14 +1009,14 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
             {/* Footer buttons — two rows on mobile */}
             <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Row 1: Attach + Draft with Ely */}
+              {/* Row 1: Attach + Draft with Nora */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
                   📎 Attach
                 </button>
                 {!showEly && (
                   <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-                    ✨ Draft with Ely
+                    ✨ Draft with Nora
                   </button>
                 )}
               </div>
