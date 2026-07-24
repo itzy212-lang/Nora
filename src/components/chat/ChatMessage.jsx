@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { renderMarkdown } from '../../utils/formatters';
 import DraftCard from './DraftCard';
 import { useSpeech } from '../../hooks/useSpeech';
@@ -158,6 +158,18 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
+  const [userCopied, setUserCopied] = useState(false);
+  const longPressTimer = useRef(null);
+
+  const handleUserLongPressStart = () => {
+    longPressTimer.current = setTimeout(async () => {
+      const ok = await copyToClipboard(msg.content || '');
+      if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
+    }, 500);
+  };
+  const handleUserLongPressEnd = () => {
+    clearTimeout(longPressTimer.current);
+  };
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const { speak, stop, speaking, autoPlay } = useSpeech();
@@ -310,7 +322,17 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
       <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
         {isUser ? (
-          msg.content
+          <span
+            onMouseDown={handleUserLongPressStart}
+            onMouseUp={handleUserLongPressEnd}
+            onMouseLeave={handleUserLongPressEnd}
+            onTouchStart={handleUserLongPressStart}
+            onTouchEnd={handleUserLongPressEnd}
+            style={{ display: 'block', userSelect: 'none' }}
+          >
+            {msg.content}
+            {userCopied && <span style={{ marginLeft: 8, fontSize: 10, opacity: 0.7 }}>✓ Copied</span>}
+          </span>
         ) : isDraft ? (
           <div
             className="draft-body"
@@ -342,6 +364,19 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
           </button>
         )}
       </div>
+
+      {/* Copy button for user messages */}
+      {isUser && msg.content && (
+        <button type="button" onClick={async () => {
+          const ok = await copyToClipboard(msg.content || '');
+          if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
+        }} style={{
+          border: 'none', background: 'none', color: 'var(--text3)',
+          fontSize: 11, cursor: 'pointer', padding: '2px 4px', marginTop: 2, alignSelf: 'flex-end',
+        }}>
+          {userCopied ? '✓ Copied' : 'Copy'}
+        </button>
+      )}
 
       {/* Copy + Play for ALL AI messages */}
       {!isUser && (msg.content || msg.draft || displayDraftText || actionText) && !isDraft && (
