@@ -1015,7 +1015,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                   📎 Attach
                 </button>
                 {!showEly && (
-                  <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+                  <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
                     ✨ Draft with Nora
                   </button>
                 )}
