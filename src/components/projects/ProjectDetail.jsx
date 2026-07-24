@@ -2350,7 +2350,7 @@ function ProjectChat({ project, onOpenComposer }) {
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', padding: isMobile ? '50px 16px' : '40px 16px', color: 'var(--text3)', fontSize: 13 }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
-              Ask Ely anything about {projectRef}
+              Ask Nora anything about {projectRef}
             </div>
           )}
 
