@@ -45,22 +45,34 @@ export default function LoginScreen({ onLogin }) {
         background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--rxl)',
         padding: 32, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#fff' }}>
-            E
+        {/* Nora animated logo */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+          <style>{`
+            @keyframes noraPulse {
+              0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
+              28% { opacity: 1; transform: translateY(-4px); }
+            }
+            .nora-dot { animation: noraPulse 1.4s ease-in-out infinite; border-radius: 50%; background: var(--text); display: inline-block; }
+            .nora-dot-1 { animation-delay: 0s; }
+            .nora-dot-2 { animation-delay: 0.22s; }
+            .nora-dot-3 { animation-delay: 0.44s; }
+          `}</style>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
+            <span style={{ fontFamily: "'Bahnschrift Light', 'DIN Alternate', sans-serif", fontSize: 48, fontWeight: 300, letterSpacing: '-1px', lineHeight: 1 }}>nora</span>
+            <span style={{ display: 'flex', alignItems: 'flex-end', gap: 5, paddingLeft: 6, paddingBottom: 8 }}>
+              <span className="nora-dot nora-dot-1" style={{ width: 5, height: 5 }}/>
+              <span className="nora-dot nora-dot-2" style={{ width: 5, height: 5 }}/>
+              <span className="nora-dot nora-dot-3" style={{ width: 5, height: 5 }}/>
+            </span>
           </div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>Ely</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)' }}>Practice Assistant</div>
-          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', letterSpacing: '2px', marginTop: 4 }}>virtual assistant</div>
         </div>
 
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 6 }}>
           {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
-          {mode === 'login' ? 'Welcome back to your practice assistant.' : mode === 'signup' ? 'Get started with party wall management.' : 'Enter your email to reset your password.'}
+          {mode === 'login' ? 'Welcome back.' : mode === 'signup' ? 'Get started with party wall management.' : 'Enter your email to reset your password.'}
         </p>
 
         {error && (
