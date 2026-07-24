@@ -63,24 +63,30 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
       flexDirection: 'column', overflowY: 'auto',
     }}>
 
-      {/* Firm header */}
+      {/* Nora logo header */}
       <div style={{
-        padding: '18px 16px 16px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', gap: 11,
+        padding: '16px 16px 14px', borderBottom: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
       }}>
-        <div style={{
-          width: 38, height: 38, borderRadius: 9, background: 'var(--blue)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
-        }}>
-          {firmInitial}
+        <style>{`
+          @keyframes noraSidebarPulse {
+            0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
+            28% { opacity: 1; transform: translateY(-3px); }
+          }
+          .nora-sb-dot { animation: noraSidebarPulse 1.4s ease-in-out infinite; border-radius: 50%; background: var(--text); display: inline-block; }
+          .nora-sb-dot-1 { animation-delay: 0s; }
+          .nora-sb-dot-2 { animation-delay: 0.22s; }
+          .nora-sb-dot-3 { animation-delay: 0.44s; }
+        `}</style>
+        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+          <span style={{ fontFamily: "'Bahnschrift Light', 'DIN Alternate', sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text)' }}>nora</span>
+          <span style={{ display: 'flex', alignItems: 'flex-end', gap: 4, paddingLeft: 4, paddingBottom: 5 }}>
+            <span className="nora-sb-dot nora-sb-dot-1" style={{ width: 4, height: 4 }}/>
+            <span className="nora-sb-dot nora-sb-dot-2" style={{ width: 4, height: 4 }}/>
+            <span className="nora-sb-dot nora-sb-dot-3" style={{ width: 4, height: 4 }}/>
+          </span>
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {firmName}
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>{role}</div>
-        </div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '1.5px', marginTop: 2 }}>virtual assistant</div>
       </div>
 
       {/* Navigation */}
