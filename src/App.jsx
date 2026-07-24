@@ -369,10 +369,36 @@ export default function App() {
 
   if (!authChecked) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#fff', margin: '0 auto 12px' }}>E</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading…</div>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
+        <style>{`
+          @keyframes noraSplashPulse {
+            0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
+            28% { opacity: 1; transform: translateY(-7px); }
+          }
+          .nora-splash-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: white;
+            display: inline-block;
+            animation: noraSplashPulse 1.4s ease-in-out infinite;
+          }
+          .nora-splash-dot:nth-child(1) { animation-delay: 0s; }
+          .nora-splash-dot:nth-child(2) { animation-delay: 0.22s; }
+          .nora-splash-dot:nth-child(3) { animation-delay: 0.44s; }
+        `}</style>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            <span style={{
+              fontFamily: "'Bahnschrift Light', 'DIN Alternate', sans-serif",
+              fontSize: 64, fontWeight: 300, letterSpacing: '-1px', lineHeight: 1, color: 'white'
+            }}>nora</span>
+            <span style={{ display: 'flex', alignItems: 'flex-end', gap: 6, paddingLeft: 8, paddingBottom: 10 }}>
+              <span className="nora-splash-dot"/>
+              <span className="nora-splash-dot"/>
+              <span className="nora-splash-dot"/>
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', letterSpacing: '3px', marginTop: 8 }}>
+            virtual assistant
+          </div>
         </div>
       </div>
     );
