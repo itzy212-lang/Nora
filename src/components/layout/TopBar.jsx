@@ -39,22 +39,7 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
         <h2>{VIEW_TITLES[currentView] || currentView}</h2>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          onClick={toggleAutoPlay}
-          title={autoPlay ? 'Voice on — tap to mute' : 'Voice off — tap to enable'}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            height: 32, borderRadius: 99, padding: '0 10px',
-            background: autoPlay ? 'var(--blue-bg)' : 'var(--bg3)',
-            border: autoPlay ? '1px solid var(--blue)' : '1px solid var(--border)',
-            cursor: 'pointer', flexShrink: 0,
-            color: autoPlay ? 'var(--blue)' : 'var(--text2)',
-            fontSize: 13, fontWeight: 500,
-          }}
-        >
-          <span style={{ fontSize: 15 }}>{autoPlay ? '🔊' : '🔇'}</span>
-          <span style={{ fontSize: 11 }}>{autoPlay ? 'On' : 'Off'}</span>
-        </button>
+
         <button
           onClick={() => onNavigate('chat')}
           style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
