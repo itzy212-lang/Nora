@@ -11,6 +11,7 @@ import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
 import LoginScreen from './components/layout/LoginScreen';
+import SplashScreen from './components/layout/SplashScreen';
 
 // Features
 import ProjectList from './components/projects/ProjectList';
@@ -367,41 +368,10 @@ export default function App() {
     } catch {}
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
-  if (!authChecked) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
-        <style>{`
-          @keyframes noraSplashPulse {
-            0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
-            28% { opacity: 1; transform: translateY(-7px); }
-          }
-          .nora-splash-dot {
-            width: 8px; height: 8px; border-radius: 50%; background: white;
-            display: inline-block;
-            animation: noraSplashPulse 1.4s ease-in-out infinite;
-          }
-          .nora-splash-dot:nth-child(1) { animation-delay: 0s; }
-          .nora-splash-dot:nth-child(2) { animation-delay: 0.22s; }
-          .nora-splash-dot:nth-child(3) { animation-delay: 0.44s; }
-        `}</style>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <span style={{
-              fontFamily: "'Bahnschrift Light', 'DIN Alternate', sans-serif",
-              fontSize: 64, fontWeight: 300, letterSpacing: '-1px', lineHeight: 1, color: 'white'
-            }}>nora</span>
-            <span style={{ display: 'flex', alignItems: 'flex-end', gap: 6, paddingLeft: 8, paddingBottom: 10 }}>
-              <span className="nora-splash-dot"/>
-              <span className="nora-splash-dot"/>
-              <span className="nora-splash-dot"/>
-            </span>
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', letterSpacing: '3px', marginTop: 8 }}>
-            virtual assistant
-          </div>
-        </div>
-      </div>
-    );
+  const [splashDone, setSplashDone] = useState(false);
+
+  if (!authChecked || !splashDone) {
+    return <SplashScreen onDone={() => setSplashDone(true)} />;
   }
 
   if (!currentUser) {
