@@ -11,7 +11,6 @@ import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
 import LoginScreen from './components/layout/LoginScreen';
-import SplashScreen from './components/layout/SplashScreen';
 
 // Features
 import ProjectList from './components/projects/ProjectList';
@@ -368,11 +367,12 @@ export default function App() {
     } catch {}
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
-  const [splashDone, setSplashDone] = useState(false);
-
-  if (!authChecked || !splashDone) {
-    return <SplashScreen onDone={() => setSplashDone(true)} />;
-  }
+  // Hide the HTML splash once auth is checked and app is ready
+  useEffect(() => {
+    if (authChecked && window.__hideSplash) {
+      setTimeout(() => window.__hideSplash(), 800);
+    }
+  }, [authChecked]);
 
   if (!currentUser) {
     return <LoginScreen onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
