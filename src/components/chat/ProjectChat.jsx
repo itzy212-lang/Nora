@@ -1228,9 +1228,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
             {messages.length === 0 && (
               <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text3)' }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>💬</div>
-                <div style={{ fontSize: 13 }}>Ask Ely about this project</div>
+                <div style={{ fontSize: 13 }}>Ask Nora about this project</div>
                 <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text3)' }}>
-                  Ely can use linked emails, project memory, uploaded files and this chat history for {projectLabel}.
+                  Nora can use linked emails, project memory, uploaded files and this chat history for {projectLabel}.
                 </div>
               </div>
             )}
