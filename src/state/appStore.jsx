@@ -119,7 +119,7 @@ function reducer(state, action) {
       };
 
     case 'SET_EMAILS':
-      return { ...state, emails: action.payload };
+      return { ...state, emails: action.payload, emailsLoadedAt: Date.now() };
     case 'SET_LEADS':
       return { ...state, leads: action.payload };
 
