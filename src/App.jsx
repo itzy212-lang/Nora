@@ -367,12 +367,7 @@ export default function App() {
     } catch {}
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
-  // Hide the HTML splash once auth is checked and app is ready
-  useEffect(() => {
-    if (authChecked && window.__hideSplash) {
-      setTimeout(() => window.__hideSplash(), 800);
-    }
-  }, [authChecked]);
+
 
   if (!currentUser) {
     return <LoginScreen onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
