@@ -1760,7 +1760,7 @@ function WelcomeScreen({ onSend, userName }) {
       </h2>
 
       <p style={{ color: 'var(--text2)', fontSize: 13.5, marginBottom: 28, maxWidth: 400, lineHeight: 1.6 }}>
-        I'm Ely, your party wall practice assistant. I can help with legal questions, drafting documents, searching your emails, and managing your cases.
+        I'm Nora, your virtual assistant. I can help with legal questions, drafting documents, searching your emails, and managing your cases.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 540 }}>
