@@ -11,16 +11,17 @@ export default function SplashScreen({ onDone }) {
     let frame = 0;
     const interval = setInterval(() => {
       frame++;
-      const t = (frame % 14) / 14; // 0..1 over 14 frames (~1.4s at 100ms)
-      const wave = (offset) => {
-        const phase = (t + offset) % 1;
+      // Each dot pulses upward in sequence: dot1 first, dot2 second, dot3 third
+      const wave = (delayFrames) => {
+        const f = Math.max(0, frame - delayFrames);
+        const phase = (f % 14) / 14;
         return phase < 0.28 ? 0.15 + (0.85 * phase / 0.28)
           : phase < 0.55 ? 1 - (0.85 * (phase - 0.28) / 0.27)
           : 0.15;
       };
       setDot1(wave(0));
-      setDot2(wave(0.22));
-      setDot3(wave(0.44));
+      setDot2(wave(3));  // 3 frames later = ~300ms after dot1
+      setDot3(wave(6));  // 6 frames later = ~600ms after dot1
     }, 100);
 
     // Minimum 2.5s display time, then fade out
