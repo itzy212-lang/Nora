@@ -32,7 +32,7 @@ export default function SplashScreen({ onDone }) {
       clearTimeout(fadeTimer);
       clearTimeout(doneTimer);
     };
-  }, [onDone]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{
