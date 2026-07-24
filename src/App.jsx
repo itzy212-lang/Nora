@@ -368,7 +368,11 @@ export default function App() {
     } catch {}
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
+  const [splashDone, setSplashDone] = useState(false);
 
+  if (!authChecked || !splashDone) {
+    return <SplashScreen onDone={() => setSplashDone(true)} />;
+  }
 
   if (!currentUser) {
     return <LoginScreen onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
