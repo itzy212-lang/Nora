@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="90" ry="90" fill="#0a0a0a"/>
+  <text x="50" y="305"
+    font-family="'Bahnschrift Light', 'Bahnschrift', 'DIN Alternate', Arial, sans-serif"
+    font-size="152"
+    font-weight="300"
+    fill="white"
+    letter-spacing="-2">nora</text>
+  <circle cx="382" cy="295" r="11" fill="white" opacity="0.9"/>
+  <circle cx="412" cy="295" r="11" fill="white" opacity="0.6"/>
+  <circle cx="442" cy="295" r="11" fill="white" opacity="0.3"/>
+</svg>
