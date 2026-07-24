@@ -1451,12 +1451,12 @@ export default function MainChat({ onOpenComposer, onClose }) {
               onSend={({ text, file }) => handleSend(text, file)}
               placeholder={
                 selectedEmailContext
-                  ? 'Ask Ely about the selected email thread, or draft a reply...'
+                  ? 'Ask Nora about the selected email thread, or draft a reply...'
                   : selectedProjectId
-                    ? 'Ask Ely about this linked project...'
+                    ? 'Ask Nora about this linked project...'
                     : attachments.length > 0
-                      ? 'Files attached — ask Ely to read them, analyse party wall implications, draft a quote...'
-                      : 'Ask Ely anything — or attach drawings/documents with the + button'
+                      ? 'Files attached — ask Nora to read them, analyse party wall implications, draft a quote...'
+                      : 'Ask Nora anything — or attach drawings/documents with the + button'
               }
               disabled={loading}
               loading={loading}
