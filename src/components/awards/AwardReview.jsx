@@ -281,7 +281,7 @@ Be direct and practical. When drafting clauses, produce complete ready-to-use wo
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg3)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>✨</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Continue with Ely</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Continue with Nora</div>
               <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>Ask Nora to draft clauses, discard points, rewrite wording, or produce a final amendment list</div>
             </div>
           </div>
