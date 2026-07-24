@@ -9,7 +9,7 @@ const VIEW_TITLES = {
   contacts: 'Contacts',
   calendar: 'Calendar',
   inbox: 'Inbox',
-  chat: 'Ask Ely',
+  chat: 'Ask Nora',
   soc: 'SOC Dictation',
   notices: 'Notices',
   awards: 'Awards',
@@ -60,7 +60,7 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
           onClick={() => onNavigate('chat')}
           style={{ gap: 5 }}
         >
-          ✨ Ask Ely
+          ✨ Ask Nora
         </button>
         <button
           onClick={onOpenQuickRef}
