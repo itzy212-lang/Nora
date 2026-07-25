@@ -4671,12 +4671,34 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       <button
                         className="btn btn-sm btn-ghost"
                         style={{ cursor: 'pointer', borderRadius: 99, fontSize: 12 }}
-                        onClick={() => onOpenComposer?.({
-                          mode: 'compose',
-                          projectId: project.id,
-                          subject: f.name?.replace(/\.[^.]+$/, '') || 'Document',
-                          oneDriveAttachment: { name: f.name, url: f.webUrl, item_id: f.id },
-                        })}
+                        onClick={async (e) => {
+                          const btn = e.currentTarget;
+                          btn.disabled = true;
+                          btn.textContent = '…';
+                          try {
+                            const res = await fetch(`/api/onedrive-download?item_id=${encodeURIComponent(f.id)}`);
+                            const data = await res.json();
+                            if (!res.ok || !data.base64) throw new Error(data.error || 'Download failed');
+                            onOpenComposer?.({
+                              mode: 'compose',
+                              projectId: project.id,
+                              subject: f.name?.replace(/\.[^.]+$/, '') || 'Document',
+                              oneDriveAttachment: {
+                                name: data.name || f.name,
+                                contentType: data.mimeType,
+                                contentBytes: data.base64,
+                                item_id: f.id,
+                                url: f.webUrl,
+                              },
+                            });
+                          } catch (err) {
+                            console.error('[email-doc] fetch failed:', err.message);
+                            alert(`Could not load attachment: ${err.message}`);
+                          } finally {
+                            btn.disabled = false;
+                            btn.textContent = 'Email';
+                          }
+                        }}
                       >
                         Email
                       </button>
