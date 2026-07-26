@@ -187,12 +187,11 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   });
 
   // Email attention: flagged first, then unread, sorted oldest-first within each group
-  const flaggedEmails = inboxEmails.filter(e => e.flagged);
-  const unrepliedEmails = inboxEmails.filter(e => !e.flagged && !e.is_replied);
-  const attentionEmails = [
-    ...flaggedEmails.sort((a, b) => new Date(a.received_at) - new Date(b.received_at)),
-    ...unrepliedEmails.sort((a, b) => new Date(a.received_at) - new Date(b.received_at)),
-  ].slice(0, 15);
+  // Only show emails that genuinely need a reply — unreplied, not sent by us
+  const attentionEmails = inboxEmails
+    .filter(e => !e.is_replied)
+    .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))
+    .slice(0, 5);
 
   const unreadCount = inboxEmails.filter(e => !e.is_read).length;
   const flaggedCount = inboxEmails.filter(e => e.flagged).length;
@@ -303,18 +302,20 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
 
       {/* Briefing + Cashflow */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 1fr', gap: 14 }}>
-        <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-              ✨ Briefing
+        <div
+          onClick={() => onNavigate('briefing')}
+          style={{ ...cardStyle, padding: isMobile ? '18px' : '20px', cursor: 'pointer', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #dce8ff', display: 'flex', alignItems: 'center', gap: 16 }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+            ✨
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Morning Briefing</div>
+            <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
+              Nora reviews all projects, deadlines and emails — and walks you through what needs doing today.
             </div>
-            <button onClick={refreshBriefing} disabled={briefingLoading} style={{ background: 'none', border: 'none', color: 'var(--blue)', fontSize: 12, cursor: 'pointer', fontWeight: 500, padding: 0 }}>
-              {briefingLoading ? '…' : '↻ REFRESH'}
-            </button>
           </div>
-          <div style={{ fontSize: isMobile ? 15 : 13, color: briefing ? 'var(--text2)' : 'var(--text3)', lineHeight: 1.7, minHeight: isMobile ? 80 : 60, fontStyle: briefing ? 'normal' : 'italic' }}>
-            {briefingLoading ? 'Generating your briefing…' : briefing || 'Loading briefing…'}
-          </div>
+          <div style={{ fontSize: 20, color: '#93c5fd', flexShrink: 0 }}>›</div>
         </div>
 
         <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
@@ -344,16 +345,11 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-              📧 Emails Needing Attention
+              📧 Needs Reply
             </div>
-            {unreadCount > 0 && (
+            {attentionEmails.length > 0 && (
               <span style={{ fontSize: 10.5, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--red)', padding: '2px 7px', borderRadius: 99 }}>
-                {unreadCount} unread
-              </span>
-            )}
-            {flaggedCount > 0 && (
-              <span style={{ fontSize: 10.5, fontWeight: 600, background: 'rgba(245,158,11,0.1)', color: 'var(--amber)', padding: '2px 7px', borderRadius: 99 }}>
-                {flaggedCount} flagged
+                {attentionEmails.length} unreplied
               </span>
             )}
           </div>
