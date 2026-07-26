@@ -116,11 +116,34 @@ export default async function handler(req, res) {
     const { data: projects } = await sb
       .from('projects')
       .select('id, ref, address, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
-      .not('status', 'in', '(\"complete\",\"closed\",\"award_served\")')
+      const { data: projects, error: projErr } = await sb
+      .from('projects')
+      .select('id, ref, address, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
+      .neq('status', 'complete')
+      .neq('status', 'closed')
+      .neq('status', 'award_served')
       .order('created_at', { ascending: false })
       .limit(100);
 
+      if (projErr) {
+        console.error('[briefing] projects query error:', projErr.message);
+        return res.status(500).json({ error: projErr.message });
+      }
+
     if (!projects?.length) return res.status(200).json({ projects: [], summary: 'No active projects.' });
+
+    // Load AOs from adjoining_owners table (some projects use this instead of projects.aos JSON)
+    const { data: aoRows } = await sb
+      .from('adjoining_owners')
+      .select('*')
+      .in('project_id', (projects || []).map(p => p.id));
+
+    // Group AO table rows by project_id
+    const aosByProject = {};
+    (aoRows || []).forEach(ao => {
+      if (!aosByProject[ao.project_id]) aosByProject[ao.project_id] = [];
+      aosByProject[ao.project_id].push(ao);
+    });
 
     // Load unreplied emails (last 60 days) to detect chasing/unhappy contacts
     const since60 = new Date(Date.now() - 60 * 86400000).toISOString();
@@ -150,7 +173,10 @@ export default async function handler(req, res) {
 
     for (const project of projects) {
       const addr = project.bo_premise_address || project.address || project.ref || project.id;
-      const aos = project.aos || [];
+      // Merge AOs from all sources: adjoining_owners table + projects.aos JSON
+      const tableAos = aosByProject[project.id] || [];
+      const jsonAos = Array.isArray(project.aos) ? project.aos : [];
+      const aos = tableAos.length > 0 ? tableAos : jsonAos;
       const projectEmails = emailsByProject[project.id] || [];
 
       // Find chasing/urgent emails for this project
