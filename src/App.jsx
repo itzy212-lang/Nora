@@ -217,6 +217,7 @@ export default function App() {
     setPendingProjectId('');
     clearCurrentProject();
     setSidebarOpen(false);
+    window.scrollTo(0, 0);
 
     try {
       sessionStorage.setItem('ely_current_view', view);
@@ -239,6 +240,7 @@ export default function App() {
       setProjectView(project);
       setCurrentView('projects');
       setPendingProjectId('');
+      window.scrollTo(0, 0);
 
       try {
         sessionStorage.setItem('ely_current_view', 'projects');
