@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     // Load all active projects with AOs
     const { data: projects, error: projErr } = await sb
       .from('projects')
-      .select('id, ref, address, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
+      .select('id, ref, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
       .neq('status', 'complete')
       .neq('status', 'closed')
       .neq('status', 'award_served')
@@ -169,7 +169,7 @@ export default async function handler(req, res) {
     const briefingProjects = [];
 
     for (const project of projects) {
-      const addr = project.bo_premise_address || project.address || project.ref || project.id;
+      const addr = project.bo_premise_address || project.ref || project.id;
       // Merge AOs from all sources: adjoining_owners table + projects.aos JSON
       const tableAos = aosByProject[project.id] || [];
       const jsonAos = Array.isArray(project.aos) ? project.aos : [];
