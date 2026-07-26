@@ -146,19 +146,32 @@ export default function App() {
       // Handle deep link: ?project=PROJECT_ID (from push notification tap)
       const params = new URLSearchParams(window.location.search);
       const deepProjectId = params.get('project');
-      if (deepProjectId) {
+      const deepEmailId = params.get('email');
+
+      if (deepProjectId || deepEmailId) {
         window.history.replaceState({}, '', window.location.pathname);
-        // Wait for projects to load then open the project
-        const openDeepProject = () => {
-          const { projects } = useApp.getState?.() || {};
-          const proj = (projects || []).find(p => p.id === deepProjectId);
-          if (proj) {
-            dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
-            setCurrentView('projects');
+
+        if (deepProjectId) {
+          const openDeepProject = () => {
+            const { projects } = useApp.getState?.() || {};
+            const proj = (projects || []).find(p => p.id === deepProjectId);
+            if (proj) {
+              dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
+              setCurrentView('projects');
+              window.scrollTo(0, 0);
+            }
+          };
+          setTimeout(openDeepProject, 1500);
+        }
+
+        if (deepEmailId) {
+          // Navigate to inbox and highlight the email
+          setTimeout(() => {
+            dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: deepEmailId });
+            setCurrentView('inbox');
             window.scrollTo(0, 0);
-          }
-        };
-        setTimeout(openDeepProject, 1500);
+          }, 1500);
+        }
       }
       // Load leads into global state for dashboard
       sb.from('leads').select('*').order('created_at', { ascending: false }).then(({ data }) => {
