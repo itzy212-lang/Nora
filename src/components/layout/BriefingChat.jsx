@@ -294,11 +294,27 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
   useEffect(() => {
     setLoading(true);
     fetch('/api/briefing')
-      .then(r => r.json())
-      .then(d => {
+      .then(async r => {
+        const text = await r.text();
+        if (!r.ok) {
+          setLoading(false);
+          addMessage('nora', `Briefing API error ${r.status}: ${text.slice(0, 300)}`);
+          return;
+        }
+        let d;
+        try { d = JSON.parse(text); } catch(e) {
+          setLoading(false);
+          addMessage('nora', `Briefing parse error: ${text.slice(0, 300)}`);
+          return;
+        }
+        if (d.error) {
+          setLoading(false);
+          addMessage('nora', `Briefing error: ${d.error}`);
+          return;
+        }
         setData(d);
         setLoading(false);
-        if (d.totalCards === 0) {
+        if (!d.projects?.length || d.totalCards === 0) {
           addMessage('nora', 'All projects are on track — nothing urgent right now. 🎉');
         } else {
           addMessage('nora',
@@ -306,9 +322,9 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
           );
         }
       })
-      .catch(() => {
+      .catch(err => {
         setLoading(false);
-        addMessage('nora', 'Sorry — I couldn\'t load the briefing right now. Try refreshing.');
+        addMessage('nora', `Network error: ${err.message}`);
       });
   }, [addMessage]);
 
