@@ -1,5 +1,5 @@
 // Nora Service Worker — PWA offline support
-const CACHE_NAME = 'nora-v3';
+const CACHE_NAME = 'nora-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -56,10 +56,11 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Nora', {
       body: data.body || '',
-      icon: '/icons/icon.svg',
-      badge: '/icons/icon.svg',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       tag: data.tag || 'nora-notification',
-      data: data.url ? { url: data.url } : {},
+      data: { url: data.url || '/' },
+      vibrate: [200, 100, 200],
     })
   );
 });
