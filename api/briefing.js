@@ -313,14 +313,39 @@ export default async function handler(req, res) {
     const totalAmber = briefingProjects.reduce((s, p) => s + p.aoCards.filter(c => c.level === 'amber').length, 0);
     const totalCards = totalRed + totalAmber;
 
+    // Build flat unreplied email queue — all unreplied emails, oldest first, capped at 20
+    const flatEmails = (emails || [])
+      .filter(e => !chasingPattern.test(e.subject || '') || true) // include all unreplied
+      .map(e => ({
+        id: e.id,
+        sender: e.sender_name || e.sender_email || 'Unknown',
+        senderEmail: e.sender_email || '',
+        subject: e.subject || '(no subject)',
+        preview: e.body_preview?.slice(0, 150) || '',
+        daysAgo: daysSince(e.received_at),
+        isChasing: chasingPattern.test(e.subject || '') || chasingPattern.test(e.body_preview || ''),
+        projectId: e.project_id || null,
+        projectAddress: e.project_id ? (briefingProjects.find(p => p.id === e.project_id)?.address || '') : '',
+      }))
+      .sort((a, b) => a.daysAgo - b.daysAgo) // oldest first — most overdue first
+      .slice(0, 20);
+
+    const totalEmails = flatEmails.length;
+
     return res.status(200).json({
       projects: briefingProjects,
+      emails: flatEmails,
       totalCards,
       totalRed,
       totalAmber,
-      summary: totalCards === 0
-        ? 'All projects on track — nothing urgent today.'
-        : `${totalRed > 0 ? `${totalRed} urgent` : ''}${totalRed > 0 && totalAmber > 0 ? ' · ' : ''}${totalAmber > 0 ? `${totalAmber} upcoming` : ''} across ${briefingProjects.length} project${briefingProjects.length !== 1 ? 's' : ''}.`,
+      totalEmails,
+      summary: totalCards === 0 && totalEmails === 0
+        ? 'All projects on track — nothing urgent.'
+        : [
+            totalRed > 0 ? `${totalRed} urgent AO${totalRed !== 1 ? 's' : ''}` : '',
+            totalAmber > 0 ? `${totalAmber} AO${totalAmber !== 1 ? 's' : ''} need attention` : '',
+            totalEmails > 0 ? `${totalEmails} email${totalEmails !== 1 ? 's' : ''} to reply to` : '',
+          ].filter(Boolean).join(' · '),
     });
 
   } catch (err) {
