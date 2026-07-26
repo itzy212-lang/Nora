@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
+import useDocumentGenerator from '../../hooks/useDocumentGenerator';
+import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 
 const cardStyle = {
   background: '#ffffff',
@@ -62,6 +64,8 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const [freshLeads, setFreshLeads] = useState(leads);
   const [inboxEmails, setInboxEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  const [actioningAOs, setActioningAOs] = useState({}); // key: `${projectId}:${aoId}` → 'loading' | 'done'
+  const { generateDocument } = useDocumentGenerator();
 
   // Load leads
   useEffect(() => {
@@ -266,6 +270,75 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
     setBriefingLoading(false);
   }, [projects, upcoming, activeProjects, needsAttention, unreadCount, flaggedCount, attentionEmails.length, unpaidInvoices, activeLeads.length]);
 
+  // Generate notice directly from dashboard AO card
+  const handleGenerateNotice = useCallback(async ({ project, ao, action }) => {
+    const key = `${project.id}:${ao?.id || ao?.num}`;
+    setActioningAOs(prev => ({ ...prev, [key]: 'loading' }));
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+
+      if (action === 's104b') {
+        // s.10(4)(b) — no document to generate, just confirm served and date-stamp
+        const updatedAOs = (project.aos || []).map(a =>
+          (a.id === ao.id || a.num === ao.num)
+            ? { ...a, s104b_served_date: today, s104bServedDate: today, status: 's104b' }
+            : a
+        );
+        await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+        setActioningAOs(prev => ({ ...prev, [key]: 'done' }));
+        return;
+      }
+
+      if (action === 's10') {
+        // Section 10 notice — generate document, download, then update AO status
+        const placeholders = buildNoticePlaceholders(project, ao, {
+          noticeType: 's10',
+          noticeSection: 'Section 10',
+          noticeDate: today,
+          originalNoticeDate: ao?.notice_served_date || ao?.noticeServedDate || today,
+          section10NoticeDate: today,
+          notifiableWorks: project?.works || '',
+          works_items: project?.works ? [{ item: project.works }] : [],
+          includeCover: false,
+          allSections: ['s10'],
+          section2Subsections: '',
+        });
+
+        const aoAddr = ao?.premise || ao?.address || ao?.ao_address || '';
+        const fileName = `Section 10 Notice - ${aoAddr || ao?.name || 'AO'}.docx`;
+
+        const result = await generateDocument({
+          templateKey: 's10',
+          mergeData: { ...placeholders, project_id: project.id, ao_id: ao?.id || String(ao?.num || ''), file_name: fileName, category: 'notice', section_type: 's10' },
+          fileName,
+          projectId: project.id,
+        });
+
+        if (!result?.success) throw new Error(result?.error || 'Generation failed');
+
+        // Update AO status in Supabase
+        const updatedAOs = (project.aos || []).map(a =>
+          (a.id === ao.id || a.num === ao.num)
+            ? { ...a, s10_served_date: today, s10ServedDate: today, status: 's10' }
+            : a
+        );
+        await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+        setActioningAOs(prev => ({ ...prev, [key]: 'done' }));
+        return;
+      }
+
+    } catch (err) {
+      console.error('[handleGenerateNotice]', err);
+      alert(`Could not generate notice: ${err.message}`);
+      setActioningAOs(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  }, [generateDocument, sb]);
+
   // Auto-load briefing once per session (cached per calendar day)
   useEffect(() => {
     if (briefingLoaded.current) return;
@@ -426,11 +499,13 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
                 const dotCol = level === 'red' ? '#ef4444' : '#f59e0b';
                 const badgeCol = level === 'red' ? { bg: 'rgba(239,68,68,0.1)', text: 'var(--red)' } : { bg: 'rgba(245,158,11,0.1)', text: 'var(--amber)' };
                 return (
-                  <div key={idx} style={{ border: `1px solid ${borderCol}`, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+                  <div key={idx} style={{ border: `1px solid ${borderCol}`, borderRadius: 12, overflow: 'hidden', background: '#fff', opacity: actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'done' ? 0.5 : 1, transition: 'opacity 0.4s' }}>
                     {/* Strip */}
                     <div style={{ background: bgCol, padding: '8px 13px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotCol, flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: dotCol }}>{level === 'red' ? 'Action required' : 'Deadline approaching'}</span>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'done' ? '#10b981' : dotCol, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'done' ? '#10b981' : dotCol }}>
+                        {actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'done' ? 'Done ✓' : level === 'red' ? 'Action required' : 'Deadline approaching'}
+                      </span>
                       <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 600, background: badgeCol.bg, color: badgeCol.text, padding: '2px 7px', borderRadius: 99 }}>{reason}</span>
                     </div>
                     {/* Body */}
@@ -441,18 +516,25 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
                         <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{p.ref || ''}</div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button
-                          onClick={() => onOpenProject?.(p)}
-                          style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: level === 'red' ? '#ef4444' : '#f59e0b', color: '#fff', whiteSpace: 'nowrap' }}
-                        >
-                          {action === 's104b' ? '⚡ s.10(4)(b)' : action === 's10' ? '📋 Section 10' : '👤 Add Surveyor'}
-                        </button>
-                        <button
-                          onClick={() => onOpenProject?.(p)}
-                          style={{ fontSize: 11.5, fontWeight: 500, padding: '6px 10px', borderRadius: 8, border: '1px solid #e8eaed', cursor: 'pointer', background: '#fff', color: 'var(--text3)' }}
-                        >
-                          Open →
-                        </button>
+                        {actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'done' ? (
+                          <span style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>✓ Done</span>
+                        ) : (
+                          <>
+                            <button
+                              disabled={actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading'}
+                              onClick={() => handleGenerateNotice({ project: p, ao, action })}
+                              style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: level === 'red' ? '#ef4444' : '#f59e0b', color: '#fff', whiteSpace: 'nowrap', opacity: actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading' ? 0.6 : 1 }}
+                            >
+                              {actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading' ? '…' : action === 's104b' ? '⚡ Confirm s.10(4)(b)' : action === 's10' ? '📋 Generate Section 10' : '👤 Add Surveyor'}
+                            </button>
+                            <button
+                              onClick={() => onOpenProject?.(p)}
+                              style={{ fontSize: 11.5, fontWeight: 500, padding: '6px 10px', borderRadius: 8, border: '1px solid #e8eaed', cursor: 'pointer', background: '#fff', color: 'var(--text3)' }}
+                            >
+                              Open →
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
