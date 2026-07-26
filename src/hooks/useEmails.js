@@ -166,6 +166,24 @@ export function useEmails() {
 
           // Trigger auto-linking on new emails
           sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
+
+          // Push notification for each new inbound email
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            const inbound = newRows.filter(e =>
+              e.direction === 'incoming' || (!e.direction && !e.is_sent)
+            );
+            inbound.forEach(email => {
+              navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification(`📧 ${email.sender_name || email.sender_email || 'New email'}`, {
+                  body: email.subject || '(no subject)',
+                  icon: '/icons/icon-192.png',
+                  badge: '/icons/icon-192.png',
+                  tag: `email-${email.id}`,
+                  data: { url: `/?email=${email.id}` },
+                });
+              }).catch(() => {});
+            });
+          }
         }
         return data;
       }
