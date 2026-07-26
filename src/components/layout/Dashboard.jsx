@@ -300,6 +300,70 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         <StatCard label="Lead pipeline" value={fmt(leadPipeline)} colour="purple" isMobile={isMobile} />
       </div>
 
+
+      {/* Briefing + Cashflow */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 1fr', gap: 14 }}>
+        <div
+          onClick={() => onNavigate('briefing')}
+          style={{ ...cardStyle, padding: isMobile ? '18px' : '20px', cursor: 'pointer', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #dce8ff', display: 'flex', alignItems: 'center', gap: 16 }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+            ✨
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Briefing</div>
+            <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
+              Nora reviews all projects, deadlines and emails — and walks you through what needs doing today.
+            </div>
+          </div>
+          <div style={{ fontSize: 20, color: '#93c5fd', flexShrink: 0 }}>›</div>
+        </div>
+
+        <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>💰 Cash Flow</div>
+            <span onClick={() => onNavigate('accounting')} style={{ fontSize: 11, color: 'var(--blue)', cursor: 'pointer', fontWeight: 500 }}>VIEW →</span>
+          </div>
+          {[
+            { label: 'Paid this month', val: fmt(paidThisMonth), colour: 'var(--green)' },
+            { label: 'Unpaid invoices', val: fmt(unpaidInvoices), colour: 'var(--amber)' },
+            { label: 'Overdue', val: fmt(overdue), colour: 'var(--red)' },
+          ].map(({ label, val, colour }) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #edf0f4', fontSize: isMobile ? 15 : 12.5 }}>
+              <span style={{ color: 'var(--text2)' }}>{label}</span>
+              <span style={{ fontWeight: 600, color: colour }}>{val}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0 0', fontSize: isMobile ? 16 : 13 }}>
+            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Remaining to invoice</span>
+            <span style={{ fontWeight: 700, color: 'var(--blue)', fontSize: isMobile ? 22 : 15 }}>{fmt(feePipeline)}</span>
+          </div>
+        </div>
+      </div>
+
+
+        {/* Next 14 Days */}
+        <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px', overflowY: 'auto', maxHeight: isMobile ? 'unset' : 340 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>📅 Next 14 Days</div>
+            <span onClick={() => onNavigate('calendar')} style={{ fontSize: 11.5, color: 'var(--blue)', cursor: 'pointer', fontWeight: 500 }}>CALENDAR →</span>
+          </div>
+          {dayGroups.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic' }}>No upcoming deadlines.</div>
+          ) : dayGroups.map(({ label, items }) => (
+            <div key={label} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: 5 }}>{label}</div>
+              {items.map((item, i) => (
+                <div key={i} onClick={() => item.projectId && onOpenProject?.(projects.find(p => p.id === item.projectId))} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '12px' : '7px 10px', fontSize: isMobile ? 14 : 12.5, color: 'var(--text2)', cursor: item.projectId ? 'pointer' : 'default', border: '1px solid #edf0f4', background: '#fafafa', borderRadius: 10, marginBottom: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.projectId && <span style={{ fontSize: 10.5, color: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}>open</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
       {/* AO Attention Cards */}
       {(() => {
         const redAOs = [];
@@ -398,45 +462,6 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         );
       })()}
 
-      {/* Briefing + Cashflow */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 1fr', gap: 14 }}>
-        <div
-          onClick={() => onNavigate('briefing')}
-          style={{ ...cardStyle, padding: isMobile ? '18px' : '20px', cursor: 'pointer', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #dce8ff', display: 'flex', alignItems: 'center', gap: 16 }}
-        >
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-            ✨
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Briefing</div>
-            <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
-              Nora reviews all projects, deadlines and emails — and walks you through what needs doing today.
-            </div>
-          </div>
-          <div style={{ fontSize: 20, color: '#93c5fd', flexShrink: 0 }}>›</div>
-        </div>
-
-        <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>💰 Cash Flow</div>
-            <span onClick={() => onNavigate('accounting')} style={{ fontSize: 11, color: 'var(--blue)', cursor: 'pointer', fontWeight: 500 }}>VIEW →</span>
-          </div>
-          {[
-            { label: 'Paid this month', val: fmt(paidThisMonth), colour: 'var(--green)' },
-            { label: 'Unpaid invoices', val: fmt(unpaidInvoices), colour: 'var(--amber)' },
-            { label: 'Overdue', val: fmt(overdue), colour: 'var(--red)' },
-          ].map(({ label, val, colour }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #edf0f4', fontSize: isMobile ? 15 : 12.5 }}>
-              <span style={{ color: 'var(--text2)' }}>{label}</span>
-              <span style={{ fontWeight: 600, color: colour }}>{val}</span>
-            </div>
-          ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0 0', fontSize: isMobile ? 16 : 13 }}>
-            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Remaining to invoice</span>
-            <span style={{ fontWeight: 700, color: 'var(--blue)', fontSize: isMobile ? 22 : 15 }}>{fmt(feePipeline)}</span>
-          </div>
-        </div>
-      </div>
 
       {/* Emails needing attention */}
       <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
@@ -534,8 +559,6 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         )}
       </div>
 
-      {/* Leads + Next 14 Days */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr', gap: 14 }}>
 
         {/* Leads */}
         <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px' }}>
@@ -563,29 +586,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
           })}
         </div>
 
-        {/* Next 14 Days */}
-        <div style={{ ...cardStyle, padding: isMobile ? '18px' : '16px 20px', overflowY: 'auto', maxHeight: isMobile ? 'unset' : 340 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>📅 Next 14 Days</div>
-            <span onClick={() => onNavigate('calendar')} style={{ fontSize: 11.5, color: 'var(--blue)', cursor: 'pointer', fontWeight: 500 }}>CALENDAR →</span>
-          </div>
-          {dayGroups.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic' }}>No upcoming deadlines.</div>
-          ) : dayGroups.map(({ label, items }) => (
-            <div key={label} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: 5 }}>{label}</div>
-              {items.map((item, i) => (
-                <div key={i} onClick={() => item.projectId && onOpenProject?.(projects.find(p => p.id === item.projectId))} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isMobile ? '12px' : '7px 10px', fontSize: isMobile ? 14 : 12.5, color: 'var(--text2)', cursor: item.projectId ? 'pointer' : 'default', border: '1px solid #edf0f4', background: '#fafafa', borderRadius: 10, marginBottom: 5 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.projectId && <span style={{ fontSize: 10.5, color: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}>open</span>}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
 
-      </div>
     </div>
   );
 }
