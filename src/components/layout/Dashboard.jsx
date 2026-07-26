@@ -300,6 +300,104 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         <StatCard label="Lead pipeline" value={fmt(leadPipeline)} colour="purple" isMobile={isMobile} />
       </div>
 
+      {/* AO Attention Cards */}
+      {(() => {
+        const redAOs = [];
+        const amberAOs = [];
+        projects.filter(p => !isProjectClosed(p)).forEach(p => {
+          (p.aos || []).forEach(ao => {
+            const st = (ao?.status || '').toLowerCase();
+            const done = ['consent','complete','award_served'].includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
+            if (done) return;
+            const now = Date.now();
+            const cd = ao?.consentDeadline || ao?.consent_deadline;
+            const sd = ao?.s10Deadline || ao?.s10_deadline;
+            const cdDays = cd ? Math.ceil((new Date(cd).getTime() - now) / 86400000) : null;
+            const sdDays = sd ? Math.ceil((new Date(sd).getTime() - now) / 86400000) : null;
+            const hasSurv = !!(ao?.surv_name || ao?.surveyorName || ao?.agreed_surveyor);
+            const s10Served = !!(ao?.s10_served_date || ao?.s10ServedDate);
+            const s104bServed = !!(ao?.s104b_served_date || ao?.s104bServedDate);
+
+            let level = null, reason = null, action = null;
+
+            if (sdDays !== null && sdDays < 0 && !s104bServed) {
+              level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
+            } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && !s10Served) {
+              level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';
+            } else if (st === 'dissent' && !hasSurv) {
+              level = 'red'; reason = 'Dissent — no surveyor appointed'; action = 'add_surveyor';
+            } else if (sdDays !== null && sdDays >= 0 && sdDays <= 5) {
+              level = 'amber'; reason = `Section 10 expires in ${sdDays}d`; action = 's104b';
+            } else if (cdDays !== null && cdDays >= 0 && cdDays <= 3 && st !== 'dissent') {
+              level = 'amber'; reason = `Consent deadline in ${cdDays}d`; action = 's10';
+            }
+
+            if (!level) return;
+
+            const entry = { project: p, ao, level, reason, action, cdDays, sdDays };
+            if (level === 'red') redAOs.push(entry); else amberAOs.push(entry);
+          });
+        });
+
+        const allAOs = [...redAOs, ...amberAOs];
+        if (allAOs.length === 0) return null;
+
+        return (
+          <div style={{ ...cardStyle, padding: isMobile ? '16px' : '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>⚠️ Adjoining Owners — Action Needed</div>
+                {redAOs.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--red)', padding: '2px 7px', borderRadius: 99 }}>{redAOs.length} urgent</span>}
+                {amberAOs.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, background: 'rgba(245,158,11,0.1)', color: 'var(--amber)', padding: '2px 7px', borderRadius: 99 }}>{amberAOs.length} soon</span>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {allAOs.map(({ project: p, ao, level, reason, action }, idx) => {
+                const aoName = ao?.name || ao?.ao_name || 'Adjoining Owner';
+                const aoAddr = ao?.premise || ao?.address || ao?.ao_address || '';
+                const projAddr = p.bo_premise_address || p.address || p.ref || '';
+                const borderCol = level === 'red' ? '#fca5a5' : '#fde68a';
+                const bgCol = level === 'red' ? '#fff5f5' : '#fffbeb';
+                const dotCol = level === 'red' ? '#ef4444' : '#f59e0b';
+                const badgeCol = level === 'red' ? { bg: 'rgba(239,68,68,0.1)', text: 'var(--red)' } : { bg: 'rgba(245,158,11,0.1)', text: 'var(--amber)' };
+                return (
+                  <div key={idx} style={{ border: `1px solid ${borderCol}`, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+                    {/* Strip */}
+                    <div style={{ background: bgCol, padding: '8px 13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotCol, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: dotCol }}>{level === 'red' ? 'Action required' : 'Deadline approaching'}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 600, background: badgeCol.bg, color: badgeCol.text, padding: '2px 7px', borderRadius: 99 }}>{reason}</span>
+                    </div>
+                    {/* Body */}
+                    <div style={{ padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>{aoName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{aoAddr || projAddr}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{p.ref || ''}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={() => onOpenProject?.(p)}
+                          style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: level === 'red' ? '#ef4444' : '#f59e0b', color: '#fff', whiteSpace: 'nowrap' }}
+                        >
+                          {action === 's104b' ? '⚡ s.10(4)(b)' : action === 's10' ? '📋 Section 10' : '👤 Add Surveyor'}
+                        </button>
+                        <button
+                          onClick={() => onOpenProject?.(p)}
+                          style={{ fontSize: 11.5, fontWeight: 500, padding: '6px 10px', borderRadius: 8, border: '1px solid #e8eaed', cursor: 'pointer', background: '#fff', color: 'var(--text3)' }}
+                        >
+                          Open →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Briefing + Cashflow */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 1fr', gap: 14 }}>
         <div
@@ -310,7 +408,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
             ✨
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Morning Briefing</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Briefing</div>
             <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
               Nora reviews all projects, deadlines and emails — and walks you through what needs doing today.
             </div>
