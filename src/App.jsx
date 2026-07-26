@@ -21,6 +21,7 @@ import Inbox from './components/email/Inbox';
 import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
+import BriefingChat from './components/layout/BriefingChat';
 import Calendar from './components/calendar/Calendar';
 import Accounting from './components/accounting/Accounting';
 import InvoiceModal from './components/accounting/InvoiceModal';
@@ -446,6 +447,8 @@ export default function App() {
     switch (currentView) {
       case 'dashboard':
         return <Dashboard onNavigate={handleNavigate} onOpenProject={handleOpenProject} />;
+      case 'briefing':
+        return <BriefingChat onBack={() => handleNavigate('dashboard')} onOpenProject={handleOpenProject} onOpenComposer={(opts) => { setComposerOpts(opts); }} />;
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
