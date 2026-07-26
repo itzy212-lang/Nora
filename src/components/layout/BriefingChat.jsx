@@ -299,10 +299,10 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
         setData(d);
         setLoading(false);
         if (d.totalCards === 0) {
-          addMessage('nora', 'Good morning Itzik — all projects are on track. Nothing urgent today. 🎉');
+          addMessage('nora', 'All projects are on track — nothing urgent right now. 🎉');
         } else {
           addMessage('nora',
-            `Good morning Itzik. I've reviewed everything. ${d.totalRed > 0 ? `**${d.totalRed} urgent item${d.totalRed !== 1 ? 's' : ''}** ` : ''}${d.totalAmber > 0 ? `${d.totalRed > 0 ? 'and ' : ''}${d.totalAmber} needing attention ` : ''}across ${d.projects.length} project${d.projects.length !== 1 ? 's' : ''}. Let's work through them.`
+            `I've reviewed everything. ${d.totalRed > 0 ? `**${d.totalRed} urgent item${d.totalRed !== 1 ? 's' : ''}** ` : ''}${d.totalAmber > 0 ? `${d.totalRed > 0 ? 'and ' : ''}${d.totalAmber} needing attention ` : ''}across ${d.projects.length} project${d.projects.length !== 1 ? 's' : ''}. Let's work through them.`
           );
         }
       })
