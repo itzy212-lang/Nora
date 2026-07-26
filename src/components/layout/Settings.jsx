@@ -3,7 +3,7 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
 
-const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account', 'AI'];
+const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account', 'AI', 'Nora'];
 
 const TEMPLATE_LABELS = {
   loa_bo: 'LoA - Building Owner',
@@ -524,6 +524,130 @@ function EmailTab() {
   );
 }
 
+function NoraTab() {
+  const [settings, setSettings] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const [firmId, setFirmId] = React.useState(null);
+
+  React.useEffect(() => {
+    sb.from('firm_settings').select('*').limit(1).maybeSingle().then(({ data }) => {
+      if (data) {
+        setFirmId(data.id);
+        setSettings({
+          nora_auto_send:        data.nora_auto_send        ?? false,
+          nora_auto_draft:       data.nora_auto_draft       ?? false,
+          nora_use_templates:    data.nora_use_templates    ?? true,
+          nora_personality:      data.nora_personality      || 'professional',
+        });
+      } else {
+        setSettings({ nora_auto_send: false, nora_auto_draft: false, nora_use_templates: true, nora_personality: 'professional' });
+      }
+    });
+  }, []);
+
+  const save = async (patch) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    setSaving(true);
+    const payload = {
+      nora_auto_send:     next.nora_auto_send,
+      nora_auto_draft:    next.nora_auto_draft,
+      nora_use_templates: next.nora_use_templates,
+      nora_personality:   next.nora_personality,
+      updated_at: new Date().toISOString(),
+    };
+    if (firmId) {
+      await sb.from('firm_settings').update(payload).eq('id', firmId);
+    } else {
+      const { data } = await sb.from('firm_settings').insert([payload]).select('id').single();
+      if (data?.id) setFirmId(data.id);
+    }
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  if (!settings) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading…</div>;
+
+  const row = (label, desc, key) => (
+    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{label}</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{desc}</div>
+      </div>
+      <div
+        onClick={() => save({ [key]: !settings[key] })}
+        style={{
+          width: 42, height: 24, borderRadius: 99, cursor: 'pointer', flexShrink: 0,
+          background: settings[key] ? 'var(--accent, #2563eb)' : 'var(--border)',
+          position: 'relative', transition: 'background 0.2s',
+        }}
+      >
+        <div style={{
+          position: 'absolute', top: 3, left: settings[key] ? 21 : 3,
+          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </div>
+    </div>
+  );
+
+  const PERSONALITIES = [
+    { value: 'professional', label: 'Professional', desc: 'Formal, measured, precise — standard surveyor tone' },
+    { value: 'conversational', label: 'Conversational', desc: 'Friendly but professional — approachable and clear' },
+    { value: 'warm', label: 'Warm', desc: 'Empathetic and personable — good for difficult AO relations' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>
+        Control how Nora behaves across the app. Changes take effect immediately.
+      </div>
+
+      {row('Auto-send emails', 'Nora sends drafted emails automatically without asking for review first', 'nora_auto_send')}
+      {row('Auto-draft responses', 'Nora automatically drafts a reply when an email arrives that needs a response', 'nora_auto_draft')}
+      {row('Use built-in notice templates', 'Use SQ1 master templates for notices and awards rather than custom uploads', 'nora_use_templates')}
+
+      {/* Personality selector */}
+      <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Nora personality</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>How Nora sounds when drafting emails and notices on your behalf</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {PERSONALITIES.map(p => (
+            <div
+              key={p.value}
+              onClick={() => save({ nora_personality: p.value })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                borderRadius: 8, cursor: 'pointer',
+                border: `1.5px solid ${settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'var(--border)'}`,
+                background: settings.nora_personality === p.value ? 'var(--blue-bg, #eff6ff)' : 'var(--bg)',
+              }}
+            >
+              <div style={{
+                width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                border: `2px solid ${settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'var(--border)'}`,
+                background: settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'transparent',
+              }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.label}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{p.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {(saving || saved) && (
+        <div style={{ fontSize: 12, color: saving ? 'var(--text3)' : 'var(--green)', textAlign: 'right' }}>
+          {saving ? 'Saving…' : '✓ Saved'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AITab() {
   const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
   const [progress, setProgress] = useState({ emails: 0, messages: 0, memory: 0, errors: 0, batches: 0, last_error: null });
@@ -696,6 +820,7 @@ export default function Settings() {
       {activeTab === 'Invoice' && <InvoiceSettings />}
       {activeTab === 'Account' && <AccountTab />}
       {activeTab === 'AI' && <AITab />}
+      {activeTab === 'Nora' && <NoraTab />}
     </div>
   );
 }
