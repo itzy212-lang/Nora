@@ -113,10 +113,7 @@ export default async function handler(req, res) {
     const sb = getSupabase();
 
     // Load all active projects with AOs
-    const { data: projects } = await sb
-      .from('projects')
-      .select('id, ref, address, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
-      const { data: projects, error: projErr } = await sb
+    const { data: projects, error: projErr } = await sb
       .from('projects')
       .select('id, ref, address, bo_premise_address, status, created_at, aos, fee, fee_invoiced')
       .neq('status', 'complete')
