@@ -22,6 +22,7 @@ import EmailComposer from './components/email/EmailComposer';
 import MainChat from './components/chat/MainChat';
 import AwardReview from './components/awards/AwardReview';
 import BriefingChat from './components/layout/BriefingChat';
+import { registerPushNotifications } from './hooks/usePushNotifications';
 import Calendar from './components/calendar/Calendar';
 import Accounting from './components/accounting/Accounting';
 import InvoiceModal from './components/accounting/InvoiceModal';
@@ -138,6 +139,27 @@ export default function App() {
     if (currentUser) {
       loadProjects();
       loadEmails();
+
+      // Register push notifications after login (deferred so it doesn't block)
+      setTimeout(() => registerPushNotifications(currentUser.email), 3000);
+
+      // Handle deep link: ?project=PROJECT_ID (from push notification tap)
+      const params = new URLSearchParams(window.location.search);
+      const deepProjectId = params.get('project');
+      if (deepProjectId) {
+        window.history.replaceState({}, '', window.location.pathname);
+        // Wait for projects to load then open the project
+        const openDeepProject = () => {
+          const { projects } = useApp.getState?.() || {};
+          const proj = (projects || []).find(p => p.id === deepProjectId);
+          if (proj) {
+            dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
+            setCurrentView('projects');
+            window.scrollTo(0, 0);
+          }
+        };
+        setTimeout(openDeepProject, 1500);
+      }
       // Load leads into global state for dashboard
       sb.from('leads').select('*').order('created_at', { ascending: false }).then(({ data }) => {
         if (data) dispatch({ type: 'SET_LEADS', payload: data });
