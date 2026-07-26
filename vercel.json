@@ -79,12 +79,19 @@
     },
     "api/cron-auto-draft.js": {
       "maxDuration": 120
+    },
+    "api/cron-push-notify.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/cron-auto-draft",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron-push-notify",
+      "schedule": "0 9 * * *"
     }
   ]
 }
