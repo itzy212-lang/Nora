@@ -329,26 +329,23 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
 
     if (action.id === 'generate_s104b') {
       addMessage('user', 'Generate s.10(4)(b)');
-      addMessage('nora', `Generating Section 10(4)(b) appointment letter for ${card.name}…`);
-      // TODO: wire to document generation
-      setTimeout(() => {
-        addMessage('nora', `Done — s.10(4)(b) letter generated for ${card.name}. Ready to serve.`);
-        setDoneCards(prev => new Set([...prev, key]));
-      }, 1200);
+      addMessage('nora', `Opening ${card.name}'s project — use the s.10(4)(b) button to generate the appointment letter.`);
+      setDoneCards(prev => new Set([...prev, key]));
+      if (onOpenProject) { const proj = data?.projects?.find(p => p.id === projectId); onOpenProject(proj || projectId); }
     }
 
     if (action.id === 'generate_s10') {
       addMessage('user', 'Generate Section 10 notice');
-      addMessage('nora', `Generating Section 10 notice for ${card.name}…`);
-      setTimeout(() => {
-        addMessage('nora', `Done — Section 10 notice generated for ${card.name}.`);
-        setDoneCards(prev => new Set([...prev, key]));
-      }, 1200);
+      addMessage('nora', `Opening ${card.name}'s project — use the Section 10 button to generate and serve the notice.`);
+      setDoneCards(prev => new Set([...prev, key]));
+      if (onOpenProject) { const proj = data?.projects?.find(p => p.id === projectId); onOpenProject(proj || projectId); }
     }
 
     if (action.id === 'add_surveyor') {
       addMessage('user', 'Add surveyor');
-      if (onOpenProject) onOpenProject(projectId);
+      addMessage('nora', `Opening ${card.name}'s project — add the surveyor details in the AO card.`);
+      setDoneCards(prev => new Set([...prev, key]));
+      if (onOpenProject) { const proj = data?.projects?.find(p => p.id === projectId); onOpenProject(proj || projectId); }
     }
 
     if (action.id === 'email_ao') {
@@ -397,7 +394,7 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
           <button style={s.backBtn} onClick={onBack}>← Back</button>
           <div style={s.avatar}>N</div>
           <div>
-            <div style={s.topbarTitle}>Morning Briefing</div>
+            <div style={s.topbarTitle}>Briefing</div>
             <div style={s.topbarSub}>
               {loading ? 'Loading…' : data?.totalCards === 0 ? 'All clear' : data?.summary}
             </div>
