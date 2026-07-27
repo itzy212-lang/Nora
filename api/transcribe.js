@@ -119,7 +119,13 @@ export default async function handler(req, res) {
       'party wall notice, section 10 award, party structure notice, ' +
       'Square One Consulting, SQ1, Itzik Darel, ' +
       'enclosure, underpinning, excavation, chimney breast, RSJ, steel beam, ' +
-      'structural engineer, planning permission, building regulations.';
+      'structural engineer, planning permission, building regulations, ' +
+      'schedule of condition, schedule of conditions, ' +
+      'hairline crack, hairline fracture, diagonal crack, settlement crack, shrinkage crack, ' +
+      'abutting, abutment, adjoining, flank wall, party wall, party fence wall, ' +
+      'millimetre, millimetres, mm, render, pointing, repointing, spalling, ' +
+      'brickwork, blockwork, masonry, mortar joint, lintel, joist, rafter, ' +
+      'damp proof course, DPC, threshold, soffit, reveal, cill, sill.';
 
     const modelPart = Buffer.from(
       `${CRLF}--${boundary2}${CRLF}` +
