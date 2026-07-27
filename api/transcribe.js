@@ -125,7 +125,8 @@ export default async function handler(req, res) {
       'abutting, abutment, adjoining, flank wall, party wall, party fence wall, ' +
       'millimetre, millimetres, mm, render, pointing, repointing, spalling, ' +
       'brickwork, blockwork, masonry, mortar joint, lintel, joist, rafter, ' +
-      'damp proof course, DPC, threshold, soffit, reveal, cill, sill.';
+      'damp proof course, DPC, threshold, soffit, reveal, cill, sill, ' +
+      'perished, mezzanine, horizontal, vertical, diagonal.';
 
     const modelPart = Buffer.from(
       `${CRLF}--${boundary2}${CRLF}` +
