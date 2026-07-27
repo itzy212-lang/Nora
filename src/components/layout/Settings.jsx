@@ -3,7 +3,7 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
 
-const TABS = ['Firm', 'Templates', 'Email', 'Invoice', 'Account', 'AI', 'Nora'];
+const TABS = ['Firm', 'Templates', 'Placeholders', 'Email', 'Invoice', 'Account', 'AI', 'Nora'];
 
 const TEMPLATE_LABELS = {
   loa_bo: 'LoA - Building Owner',
@@ -238,6 +238,171 @@ function TemplatesTab() {
                 {uploading === tpl.template_key ? 'Uploading...' : '↑ Replace'}
               </button>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function PlaceholdersTab() {
+  const [copied, setCopied] = useState(null);
+
+  const copy = (text, id) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(id);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
+  const groups = [
+    {
+      title: 'Building Owner',
+      items: [
+        { key: 'BO_NAME', desc: 'Full name(s) of building owner(s)' },
+        { key: 'BO_NAME_1', desc: 'First building owner name' },
+        { key: 'BO_NAME_2', desc: 'Second building owner name (if any)' },
+        { key: 'BO_PREMISE', desc: 'Building owner property address' },
+        { key: 'BO_SERVICE_ADDRESS', desc: 'Building owner service address' },
+        { key: 'BO_PARTY', desc: '"Building Owner" or "Building Owners"' },
+        { key: 'BO_I_WE', desc: '"I" or "We" (based on number of BOs)' },
+        { key: 'BO_MY_OUR', desc: '"my" or "our"' },
+        { key: 'BO_AM_ARE', desc: '"am" or "are"' },
+        { key: 'BO_OWNER_S', desc: '"owner" or "owners"' },
+      ],
+    },
+    {
+      title: 'Adjoining Owner',
+      items: [
+        { key: 'AO_NAME', desc: 'Full name(s) of adjoining owner(s)' },
+        { key: 'AO_NAME_1', desc: 'First adjoining owner name' },
+        { key: 'AO_NAME_2', desc: 'Second adjoining owner name (if any)' },
+        { key: 'AO_PREMISE', desc: 'Adjoining owner property address' },
+        { key: 'AO_SERVICE_ADDRESS', desc: 'Adjoining owner service address' },
+        { key: 'AO_SERVICE_LINE_1', desc: 'AO service address line 1' },
+        { key: 'AO_SERVICE_LINE_2', desc: 'AO service address line 2' },
+        { key: 'AO_SERVICE_LINE_3', desc: 'AO service address line 3' },
+        { key: 'AO_PARTY', desc: '"Adjoining Owner" or "Adjoining Owners"' },
+        { key: 'AO_I_WE', desc: '"I" or "We" (based on number of AOs)' },
+        { key: 'AO_MY_OUR', desc: '"my" or "our"' },
+        { key: 'AO_AM_ARE', desc: '"am" or "are"' },
+        { key: 'AO_OWNER_S', desc: '"owner" or "owners"' },
+        { key: 'AO_SURVEYOR_NAME', desc: 'AO appointed surveyor name' },
+        { key: 'AO_SURVEYOR_FIRM', desc: 'AO appointed surveyor firm' },
+      ],
+    },
+    {
+      title: 'Notice & Dates',
+      items: [
+        { key: 'NOTICE_DATE', desc: 'Notice served date (long format, e.g. 1st January 2026)' },
+        { key: 'NOTICE_DATE_SHORT', desc: 'Notice served date (short, e.g. 2026-01-01)' },
+        { key: 'NOTICE_SECTION', desc: 'Notice section (e.g. Section 1(5), Section 6(1))' },
+        { key: 'NOTICE_SECTION_FULL', desc: 'Full section string including all sections in run' },
+        { key: 'SECTION_10_NOTICE_DATE', desc: 'Section 10 notice date (long format)' },
+        { key: 'SECTION_10_4_B_DATE', desc: 'Section 10(4)(b) date (long format)' },
+        { key: 'SECTION_2_SUBSECTIONS', desc: 'Section 2 subsections (e.g. (a)(f)(j))' },
+        { key: 'NOTIFIABLE_WORKS', desc: 'Description of notifiable works' },
+      ],
+    },
+    {
+      title: 'Multi-Run Notices',
+      items: [
+        { key: 'NOTICE_RUN_1_SECTIONS', desc: 'First notice run sections string' },
+        { key: 'NOTICE_RUN_1_DATE', desc: 'First notice run date' },
+        { key: 'NOTICE_RUN_1_AND', desc: '"and a further Notice under" (if run 2 exists)' },
+        { key: 'NOTICE_RUN_2_SECTIONS', desc: 'Second notice run sections string' },
+        { key: 'NOTICE_RUN_2_DATE', desc: 'Second notice run date' },
+        { key: 'NOTICE_RUN_2_AND', desc: '"and a further Notice under" (if run 3 exists)' },
+        { key: 'NOTICE_RUN_3_SECTIONS', desc: 'Third notice run sections string' },
+        { key: 'NOTICE_RUN_3_DATE', desc: 'Third notice run date' },
+        { key: 'MULTIPLE_NOTICE_RUN_RESPECTFULLY', desc: '"respectively" if multiple runs exist' },
+      ],
+    },
+    {
+      title: 'Award',
+      items: [
+        { key: 'AWARD_DATE', desc: 'Award date (long format)' },
+        { key: 'AWARD_DATE_SHORT', desc: 'Award date (short)' },
+        { key: 'AWARD_TYPE_LABEL', desc: 'e.g. "Agreed Surveyor Award", "Draft Award"' },
+        { key: 'SOC_AGREED_DATE', desc: 'Schedule of conditions agreed date' },
+        { key: 'SCHEDULE_1_DATE', desc: 'First schedule of conditions inspection date' },
+        { key: 'SCHEDULE_2_DATE', desc: 'Second schedule inspection date (if any)' },
+        { key: 'SCHEDULE_3_DATE', desc: 'Third schedule inspection date (if any)' },
+        { key: 'ALL_NOTIFIABLE_WORKS', desc: 'All notifiable works description' },
+        { key: 'SECTION_11_AMOUNT', desc: 'Section 11 security amount (£)' },
+        { key: 'SECURITY_AMOUNT', desc: 'Security amount (£)' },
+        { key: 'THIRD_SURVEYOR', desc: 'Third surveyor name' },
+        { key: 'THIRD_SURVEYOR_FIRM', desc: 'Third surveyor firm' },
+      ],
+    },
+    {
+      title: 'Surveyor / Firm',
+      items: [
+        { key: 'SURVEYOR_NAME', desc: 'Your name' },
+        { key: 'SURVEYOR_FIRM', desc: 'Your firm name' },
+        { key: 'PROJECT_REF', desc: 'Project reference number' },
+      ],
+    },
+    {
+      title: 'LOA (Letter of Appointment)',
+      items: [
+        { key: 'AO_NAME_1', desc: 'First AO name' },
+        { key: 'AO_NAME_2', desc: 'Second AO name (if any)' },
+        { key: 'AO_PREMISE', desc: 'AO property address' },
+        { key: 'AO_SERVICE_ADDRESS', desc: 'AO service address' },
+        { key: 'BO_PREMISE', desc: 'BO property address' },
+      ],
+    },
+  ];
+
+  const rowStyle = {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '9px 12px',
+    borderBottom: '1px solid var(--border)',
+    fontSize: 13,
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Template Placeholders</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.5 }}>
+          Use these placeholders in your Word templates. Wrap each one in double curly braces — e.g. <code style={{ background: 'var(--bg3)', padding: '1px 5px', borderRadius: 4, fontSize: 12 }}>{'{{AO_NAME}}'}</code>. Click the copy button to copy it ready to paste.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {groups.map(group => (
+          <div key={group.title} style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg2)' }}>
+            <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {group.title}
+            </div>
+            {group.items.map((item, i) => {
+              const tag = `{{${item.key}}}`;
+              const id = `${group.title}-${item.key}`;
+              const isCopied = copied === id;
+              return (
+                <div key={item.key} style={{ ...rowStyle, background: i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)' }}>
+                  <code style={{ fontSize: 12, background: 'var(--bg3)', padding: '2px 7px', borderRadius: 6, color: 'var(--blue)', fontFamily: 'monospace', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {tag}
+                  </code>
+                  <div style={{ flex: 1, fontSize: 12.5, color: 'var(--text3)' }}>{item.desc}</div>
+                  <button
+                    onClick={() => copy(tag, id)}
+                    style={{
+                      padding: '4px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer',
+                      border: '1px solid var(--border)',
+                      background: isCopied ? 'var(--green-bg)' : 'var(--bg3)',
+                      color: isCopied ? 'var(--green)' : 'var(--text2)',
+                      fontWeight: 500, flexShrink: 0, transition: 'all 0.15s',
+                    }}
+                  >
+                    {isCopied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -816,6 +981,7 @@ export default function Settings() {
 
       {activeTab === 'Firm' && <FirmTab />}
       {activeTab === 'Templates' && <TemplatesTab />}
+      {activeTab === 'Placeholders' && <PlaceholdersTab />}
       {activeTab === 'Email' && <EmailTab />}
       {activeTab === 'Invoice' && <InvoiceSettings />}
       {activeTab === 'Account' && <AccountTab />}
