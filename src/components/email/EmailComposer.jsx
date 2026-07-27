@@ -299,7 +299,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   }, [projectId]);
 
   return (
-    <div className="email-composer-overlay open">
+    <div className="email-composer-shell open">
       <div className="email-composer-header">
         {isMobile ? (
           <button
