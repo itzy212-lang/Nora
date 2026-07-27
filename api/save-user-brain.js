@@ -5,10 +5,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Canonical user UUID — always write here regardless of what identifier the
-// frontend passes. This matches the hardcoded value in get_ely_brain_v2 and
-// prevents the email-keyed row from accumulating content that is never read.
-const CANONICAL_USER_ID = '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
+// Verify bearer token and return authenticated UUID.
+// Returns null if token is missing, invalid or expired.
+async function verifyBearerToken(req) {
+  const authHeader = req.headers?.authorization || req.headers?.Authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) return null;
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user?.id) return null;
+  return user.id;
+}
 
 // ── Content validation ────────────────────────────────────────────────────
 // Only structured, long-term preferences should ever be written to user_brain.
@@ -67,9 +73,16 @@ function isValidMemory(type, note) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // Authenticate — derive user UUID from verified bearer token only.
+  // Never trust user_id from the request body.
+  const user_id = await verifyBearerToken(req);
+  if (!user_id) {
+    return res.status(401).json({ error: 'Unauthorised — valid Supabase session required' });
+  }
 
   const { note, type = 'personal_preference' } = req.body;
 
@@ -83,9 +96,6 @@ export default async function handler(req, res) {
     console.warn('[save-user-brain] rejected note:', validation.reason, '| note preview:', String(note).slice(0, 80));
     return res.status(422).json({ error: validation.reason, rejected: true });
   }
-
-  // Always write to canonical UUID row — ignore any user_id from the request
-  const user_id = CANONICAL_USER_ID;
 
   // Get existing content
   const { data: existing } = await supabase
