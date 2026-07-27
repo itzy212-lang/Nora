@@ -563,44 +563,23 @@ export default function App() {
     </>
   ) : (
     <div className="app">
-      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
+      <TopBar
+        currentView={currentView}
+        onMenuToggle={() => setSidebarOpen(v => !v)}
+        onNavigate={handleNavigate}
+        onOpenNotepad={() => setShowNotepad(true)}
+        onOpenQuickRef={() => setShowQuickRef(true)}
+      />
 
-      <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{
-        width: 216,
-        minWidth: 216,
-        background: 'var(--bg2)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        // Inline style was hardcoded to 50 and silently overrode the .sidebar
-        // CSS class's z-index (raised to 500 so the sidebar sits above
-        // overlays like the composer) — inline styles always win over class
-        // rules, so the sidebar was still rendering at 50 in practice, behind
-        // the backdrop overlay (z-index 499), which made it look open but
-        // swallow every tap. Now matches the CSS class.
-        zIndex: 500,
-        overflowY: 'auto',
-        transition: 'transform 0.3s',
-      }}>
-        <Sidebar
-          currentView={currentView}
-          onNavigate={handleNavigate}
-          onRaiseInvoice={() => handleRaiseInvoice(null)}
-          onClose={() => setSidebarOpen(false)}
-        />
-      </div>
-
-      <div className="main">
-        <TopBar
-          currentView={currentView}
-          onMenuToggle={() => setSidebarOpen(v => !v)}
-          onNavigate={handleNavigate}
-          onOpenNotepad={() => setShowNotepad(true)}
-          onOpenQuickRef={() => setShowQuickRef(true)}
-        />
-
-        <div className="content">
-          {renderContent()}
+      <div className="app-body">
+        <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
+        <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{ width: 216, minWidth: 216, background: 'var(--bg2)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', zIndex: 500, overflowY: 'auto', transition: 'transform 0.3s' }}>
+          <Sidebar currentView={currentView} onNavigate={handleNavigate} onRaiseInvoice={() => handleRaiseInvoice(null)} onClose={() => setSidebarOpen(false)} />
+        </div>
+        <div className="main">
+          <div className="content">
+            {renderContent()}
+          </div>
         </div>
       </div>
 
