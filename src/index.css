@@ -213,8 +213,15 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 .mail-list-toolbar { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; background: var(--bg4); }
 .mail-reader-empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text3); padding: 30px; text-align: center; }
 .mail-reply-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
-.email-composer-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: none; flex-direction: column; }
+.email-composer-overlay { position: fixed; top: 54px; left: 0; right: 0; bottom: 0; z-index: 390; background: var(--bg); display: none; flex-direction: column; }
 .email-composer-overlay.open { display: flex; }
+.email-body-editor p { margin: 0 0 10px 0; }
+.email-body-editor p:last-child { margin-bottom: 0; }
+.email-body-editor br + br { display: block; margin-top: 8px; }
+.email-body-editor ul, .email-body-editor ol { margin: 8px 0 10px 20px; padding-left: 4px; }
+.email-body-editor ul { list-style-type: disc; }
+.email-body-editor ol { list-style-type: decimal; }
+.email-body-editor li { margin: 4px 0; padding-left: 4px; line-height: 1.6; }
 .email-composer-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--bg2); flex-shrink: 0; }
 .email-composer-body { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 0; }
 .email-composer-fields { margin-bottom: 0; }
