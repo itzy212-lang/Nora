@@ -589,22 +589,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   );
 }
 
-const style = document.createElement('style');
-style.textContent = `
-.email-composer-overlay { position: fixed; top: 54px; left: 0; right: 0; bottom: 0; z-index: 390; background: var(--bg); display: none; flex-direction: column; }
-.email-composer-overlay.open { display: flex; }
-.email-body-editor p { margin: 0 0 10px 0; }
-.email-body-editor p:last-child { margin-bottom: 0; }
-.email-body-editor br + br { display: block; margin-top: 8px; }
-.email-body-editor ul, .email-body-editor ol { margin: 8px 0 10px 20px; padding-left: 4px; }
-.email-body-editor ul { list-style-type: disc; }
-.email-body-editor ol { list-style-type: decimal; }
-.email-body-editor li { margin: 4px 0; padding-left: 4px; line-height: 1.6; }
-`;
-if (!document.getElementById('email-composer-style')) {
-  style.id = 'email-composer-style';
-  document.head.appendChild(style);
-}
+// Styles moved to index.css to avoid stale injected-style-tag caching
 
 
 
