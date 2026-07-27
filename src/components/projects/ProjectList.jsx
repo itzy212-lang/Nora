@@ -465,18 +465,20 @@ export default function ProjectList({ onOpenProject }) {
         const isMob = window.innerWidth <= 768;
         return (
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
-            {/* Search */}
-            <input
-              type="text"
-              placeholder="Search projects…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                flex: 1, padding: '8px 12px', fontSize: 13,
-                background: '#ffffff', border: '1px solid #e5e7eb',
-                borderRadius: 12, color: 'var(--text)', outline: 'none',
-              }}
-            />
+            {/* Search — desktop only */}
+            {!isMob && (
+              <input
+                type="text"
+                placeholder="Search projects…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  flex: 1, padding: '8px 12px', fontSize: 13,
+                  background: '#ffffff', border: '1px solid #e5e7eb',
+                  borderRadius: 12, color: 'var(--text)', outline: 'none',
+                }}
+              />
+            )}
 
             {/* Status filter */}
             <select
