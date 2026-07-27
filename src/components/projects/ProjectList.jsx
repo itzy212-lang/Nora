@@ -319,6 +319,7 @@ export default function ProjectList({ onOpenProject }) {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('active');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -459,85 +460,127 @@ export default function ProjectList({ onOpenProject }) {
         />
       )}
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, alignItems: 'center' }}>
-        <input
-          type="text"
-          placeholder="Search projects…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            fontSize: 13,
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 12,
-            color: 'var(--text)',
-            outline: 'none',
-          }}
-        />
+      {/* ── Toolbar ── */}
+      {(() => {
+        const isMob = window.innerWidth <= 768;
+        return (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search projects…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                flex: 1, padding: '8px 12px', fontSize: 13,
+                background: '#ffffff', border: '1px solid #e5e7eb',
+                borderRadius: 12, color: 'var(--text)', outline: 'none',
+              }}
+            />
 
-        <select
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          style={{
-            padding: '8px 12px',
-            fontSize: 13,
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 12,
-            color: 'var(--text)',
-            cursor: 'pointer',
-          }}
-        >
-          <option value="all">All statuses</option>
-          <option value="active">Active</option>
-          <option value="award_served">Award Served</option>
-          <option value="complete">Complete</option>
-          <option value="on_hold">On hold</option>
-          <option value="dispute">Dispute</option>
-        </select>
+            {/* Status filter */}
+            <select
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              style={{
+                padding: '8px 10px', fontSize: 13,
+                background: '#ffffff', border: '1px solid #e5e7eb',
+                borderRadius: 12, color: 'var(--text)', cursor: 'pointer',
+              }}
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="award_served">Award Served</option>
+              <option value="complete">Complete</option>
+              <option value="on_hold">On hold</option>
+              <option value="dispute">Dispute</option>
+            </select>
 
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ cursor: 'pointer' }}
-          onClick={() => {
-            setLoading(true);
-            loadProjects().finally(() => setLoading(false));
-          }}
-        >
-          ↻ Refresh
-        </button>
+            {/* Desktop-only: Refresh + Sync */}
+            {!isMob && (
+              <>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => { setLoading(true); loadProjects().finally(() => setLoading(false)); }}
+                >
+                  ↻ Refresh
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb' }}
+                  onClick={handleSyncOneDrive}
+                  disabled={syncing}
+                >
+                  {syncing ? '⏳ Syncing…' : '☁ Sync OneDrive'}
+                </button>
+                {syncResult && !syncing && (
+                  <span style={{ fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a' }}>
+                    {syncResult.error ? `Error: ${syncResult.error}`
+                      : (syncResult.projectsCreated === 0 && syncResult.aosCreated === 0)
+                      ? '✓ All folders synced'
+                      : `✓ ${syncResult.projectsCreated} project${syncResult.projectsCreated !== 1 ? 's' : ''}, ${syncResult.aosCreated} AO folder${syncResult.aosCreated !== 1 ? 's' : ''} created`}
+                  </span>
+                )}
+              </>
+            )}
 
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb' }}
-          onClick={handleSyncOneDrive}
-          disabled={syncing}
-          title="Create OneDrive folders for any projects that don't have one yet"
-        >
-          {syncing ? '⏳ Syncing…' : '☁ Sync OneDrive'}
-        </button>
+            {/* + New Project — always visible */}
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+              onClick={() => setShowNewProject(true)}
+            >
+              + New project
+            </button>
 
-        {syncResult && !syncing && (
-          <span style={{ fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a' }}>
-            {syncResult.error
-              ? `Error: ${syncResult.error}`
-              : (syncResult.projectsCreated === 0 && syncResult.aosCreated === 0)
-              ? '✓ All folders already synced'
-              : `✓ ${syncResult.projectsCreated} project${syncResult.projectsCreated !== 1 ? 's' : ''}, ${syncResult.aosCreated} AO folder${syncResult.aosCreated !== 1 ? 's' : ''} created${syncResult.failed ? ` . ${syncResult.failed} failed` : ''}`
-            }
-          </span>
-        )}
-
-        <button
-          className="btn btn-primary btn-sm"
-          style={{ cursor: 'pointer' }}
-          onClick={() => setShowNewProject(true)}
-        >
-          + New project
-        </button>
-      </div>
+            {/* Mobile-only: ⋮ menu for Refresh + Sync */}
+            {isMob && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowMobileMenu(v => !v)}
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    border: '1px solid var(--border)', background: 'var(--bg3)',
+                    fontSize: 18, cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--text2)', flexShrink: 0,
+                  }}
+                >⋮</button>
+                {showMobileMenu && (
+                  <>
+                    <div
+                      onClick={() => setShowMobileMenu(false)}
+                      style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    />
+                    <div style={{
+                      position: 'absolute', top: 40, right: 0, zIndex: 20,
+                      background: 'var(--bg2)', border: '1px solid var(--border)',
+                      borderRadius: 12, boxShadow: 'var(--shadow)',
+                      minWidth: 160, overflow: 'hidden',
+                    }}>
+                      <button
+                        onClick={() => { setShowMobileMenu(false); setLoading(true); loadProjects().finally(() => setLoading(false)); }}
+                        style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: 'var(--text)' }}
+                      >↻ Refresh</button>
+                      <button
+                        onClick={() => { setShowMobileMenu(false); handleSyncOneDrive(); }}
+                        disabled={syncing}
+                        style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb', borderTop: '1px solid var(--border)' }}
+                      >{syncing ? '⏳ Syncing…' : '☁ Sync OneDrive'}</button>
+                      {syncResult && !syncing && (
+                        <div style={{ padding: '8px 16px', fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a', borderTop: '1px solid var(--border)' }}>
+                          {syncResult.error ? `Error: ${syncResult.error}` : '✓ Sync done'}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text3)', fontSize: 13 }}>
