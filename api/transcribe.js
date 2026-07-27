@@ -111,10 +111,23 @@ export default async function handler(req, res) {
       `Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}` +
       `Content-Type: ${mimeType}${CRLF}${CRLF}`
     );
+    const whisperPrompt =
+      'Party Wall etc. Act 1996, adjoining owner, AO, building owner, BO, leaseholder, freeholder, ' +
+      'notifiable works, section 1, section 2, section 3, section 6, section 10, section 10(4)(b), ' +
+      's.10(4)(b), schedule of condition, party wall award, party fence wall, line of junction, ' +
+      'agreed surveyor, appointed surveyor, third surveyor, dissent, consent, ' +
+      'party wall notice, section 10 award, party structure notice, ' +
+      'Square One Consulting, SQ1, Itzik Darel, ' +
+      'enclosure, underpinning, excavation, chimney breast, RSJ, steel beam, ' +
+      'structural engineer, planning permission, building regulations.';
+
     const modelPart = Buffer.from(
       `${CRLF}--${boundary2}${CRLF}` +
       `Content-Disposition: form-data; name="model"${CRLF}${CRLF}` +
       `whisper-1${CRLF}` +
+      `--${boundary2}${CRLF}` +
+      `Content-Disposition: form-data; name="prompt"${CRLF}${CRLF}` +
+      `${whisperPrompt}${CRLF}` +
       `--${boundary2}--${CRLF}`
     );
 
