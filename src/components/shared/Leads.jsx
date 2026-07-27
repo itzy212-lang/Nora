@@ -142,6 +142,7 @@ export default function Leads() {
         }).eq('id', editing.id);
       } else {
         const ref = await nextRef();
+        const { data: { user: currentUser } } = await sb.auth.getUser();
         await sb.from('leads').insert([{
           lead_ref:        ref,
           contact_name:    form.contact_name.trim(),
@@ -156,6 +157,7 @@ export default function Leads() {
           estimated_value: form.estimated_value ? parseFloat(form.estimated_value) : null,
           next_action:     form.next_action.trim() || null,
           notes:           form.notes.trim() || null,
+          user_id:         currentUser?.email || currentUser?.id || null,
         }]);
       }
       setShowModal(false);
