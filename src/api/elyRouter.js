@@ -1,5 +1,7 @@
 // src/api/elyRouter.js — the ONLY place in the app that calls the AI backend
 
+import { getSupabaseClient } from '../supabaseClient';
+
 const ROUTER_URL = '/api/ely-smart';
 
 export async function callEly({
@@ -40,9 +42,20 @@ export async function callEly({
     ...extra,
   };
 
+  // Obtain current Supabase session and extract access token.
+  // Fail clearly if no authenticated session exists — do not fall back to email.
+  const sb = getSupabaseClient();
+  const { data: { session } } = sb ? await sb.auth.getSession() : { data: { session: null } };
+  if (!session?.access_token) {
+    throw new Error('Not authenticated — no Supabase session found');
+  }
+
   const res = await fetch(ROUTER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
     body: JSON.stringify(payload),
   });
 

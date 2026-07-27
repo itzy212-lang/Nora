@@ -58,13 +58,33 @@ function inferProjectId(body = {}) {
   );
 }
 
+// Verify bearer token server-side and return the authenticated UUID.
+// Returns null if token is missing, invalid or expired.
+// Never trusts the request body for identity.
+async function verifyBearerToken(req) {
+  const authHeader = req.headers?.authorization || req.headers?.Authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) return null;
+
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  const { data: { user }, error } = await sb.auth.getUser(token);
+  if (error || !user?.id) return null;
+  return user.id;
+}
+
 function inferUserId(body = {}) {
+  // Body-supplied user IDs are no longer used for authentication.
+  // Identity is derived exclusively from the verified bearer token via verifyBearerToken().
+  // This function is retained only for non-auth purposes (e.g. session scoping where
+  // the caller has already verified identity). Returns null rather than a hardcoded fallback.
   return (
     body.user_id ||
     body.userId ||
     body.currentUser?.id ||
     body.currentUser?.email ||
-    'itzy212@gmail.com'
+    null
   );
 }
 
@@ -2842,6 +2862,13 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
 
+    // ── Authenticate — derive user UUID from verified bearer token only.
+    // Body-supplied user IDs are not trusted for identity.
+    const verifiedUserId = await verifyBearerToken(req);
+    if (!verifiedUserId) {
+      return res.status(401).json({ error: 'Unauthorised — valid Supabase session required' });
+    }
+
     // ── Silent read fast path — must come FIRST before any expensive lookups
 
 
@@ -2850,7 +2877,8 @@ export default async function handler(req, res) {
     const resolvedProject = !projectId ? await resolveProjectFromPrompt(body.prompt) : null;
     if (resolvedProject?.id) projectId = resolvedProject.id;
 
-    const userId = inferUserId(body);
+    // Use verified UUID exclusively — body.userId retained only for non-auth session scoping
+    const userId = verifiedUserId;
 
     // ── Silent read fast path
 
