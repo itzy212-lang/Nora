@@ -591,7 +591,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
 const style = document.createElement('style');
 style.textContent = `
-.email-composer-overlay { position: fixed; inset: 0; z-index: 600; background: var(--bg); display: none; flex-direction: column; }
+.email-composer-overlay { position: fixed; top: 54px; left: 0; right: 0; bottom: 0; z-index: 390; background: var(--bg); display: none; flex-direction: column; }
 .email-composer-overlay.open { display: flex; }
 .email-body-editor p { margin: 0 0 10px 0; }
 .email-body-editor p:last-child { margin-bottom: 0; }
