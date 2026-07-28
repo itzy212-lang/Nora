@@ -248,9 +248,13 @@ Active leads: ${activeLeads.length}.
 Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik." UK English. No bullet points. No AI phrases. Focus on what needs attention. Be direct and practical like a trusted colleague.`;
 
     try {
+      const { data: { session: _dashSession } } = await (sb?.auth.getSession() || Promise.resolve({ data: { session: null } }));
       const res = await fetch('/api/ely-smart', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(_dashSession?.access_token ? { 'Authorization': `Bearer ${ _dashSession.access_token }` } : {}),
+        },
         body: JSON.stringify({ surface: 'morning_briefing', prompt: prompt.replace('${greeting}', greeting) }),
       });
       const data = await res.json();
