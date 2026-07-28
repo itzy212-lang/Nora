@@ -3629,6 +3629,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     section2Subsections = '',
     worksItems = [],
     safeguarding = false,
+    safeguardingMap = {}, // { [aoKey]: boolean } — per-AO safeguarding
     tenureMap = {},
   }) => {
     const noticeDate = suppliedNoticeDate || todayIso();
@@ -3984,6 +3985,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             const aosToServe = servedAOs || (servedAO ? [servedAO] : noticeModal.ao ? [noticeModal.ao] : []);
             return handleServeBatchNoticePack({
               aos: aosToServe,
+              safeguardingMap,
               sections,
               includeCover,
               noticeDate,
