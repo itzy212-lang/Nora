@@ -3920,7 +3920,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               const aoWorksItems = pack.aoWorksItems || [];
               const aoS2Subs = pack.aoS2Subs || '';
 
-              await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding, tenure: tenureMap[aoKey(ao)] || '' });
+              const aoSafeguarding = safeguardingMap[ak] !== undefined ? !!safeguardingMap[ak] : !!safeguarding;
+      await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
 
               const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
               if (nonS10.length > 0) {
