@@ -3644,7 +3644,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const ak = aoKey(ao);
       const warnings = [];
 
-      const aoSections = aoSectionMap[ak]?.length ? aoSectionMap[ak] : sections;
+      // Debug: log what we're working with for each AO
+      console.log('[batch notice] AO:', ak, 'aoSectionMap keys:', Object.keys(aoSectionMap), 'sections:', sections);
+      const aoSections = aoSectionMap[ak]?.length ? aoSectionMap[ak] : (sections || []);
+      console.log('[batch notice] aoSections for', ak, ':', aoSections);
       const aoWorks = aoWorksMap[ak] || {};
       const aoS2Subs = aoS2SubsMap[ak] || section2Subsections;
       const aoWorksItems = Object.entries(aoWorks).flatMap(([sec, items]) =>
@@ -3652,6 +3655,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ) || worksItems;
 
       // Generate documents — do NOT save workflow state yet
+      if (!aoSections?.length) {
+        console.warn('[batch notice] No sections for AO', ak, '— skipping');
+        allWarnings.push(`AO${ao.num || ''}: no sections assigned`);
+        continue;
+      }
       const generatedDocs = [];
       const zip = new PizZip();
       const keysToGenerate = [...aoSections];
