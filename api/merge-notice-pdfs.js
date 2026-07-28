@@ -55,12 +55,13 @@ async function convertDocxToPdf(docxB64, fileName) {
   const pdfJson = await pdfRes.json().catch(() => ({}));
   supabase.storage.from('documents').remove([tempPath]).catch(() => {});
 
-  if (!pdfRes.ok || !pdfJson?.FileUrl) {
+  const pdfUrl = pdfJson?.FileUrl || pdfJson?.pdf;
+  if (!pdfRes.ok || !pdfUrl) {
     throw new Error(`PDF conversion failed: ${JSON.stringify(pdfJson)}`);
   }
 
   // Download the PDF immediately while the URL is fresh
-  const pdfDownload = await fetch(pdfJson.FileUrl);
+  const pdfDownload = await fetch(pdfUrl);
   if (!pdfDownload.ok) throw new Error(`PDF download failed: ${pdfDownload.status}`);
 
   const buffer = await pdfDownload.arrayBuffer();
