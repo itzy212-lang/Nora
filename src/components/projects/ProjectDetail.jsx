@@ -3615,26 +3615,40 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   // Batch version: run workflow-save + doc-generation for ALL AOs, then open review modal once
   const handleServeBatchNoticePack = useCallback(async ({
     aos: batchAOs,
-    sections,
+    aoSectionMap = {}, // { [aoKey]: string[] } — which sections each AO gets
+    aoWorksMap = {},   // { [aoKey]: { [sec]: string[] } }
+    aoS2SubsMap = {},  // { [aoKey]: string }
+    sections,          // legacy flat sections (fallback)
     includeCover,
     noticeDate: suppliedNoticeDate,
     createDeadlineTask = true,
     section2Subsections = '',
     worksItems = [],
     safeguarding = false,
-    tenureMap = {}, // { [aoKey]: tenure }
+    tenureMap = {},
   }) => {
     const noticeDate = suppliedNoticeDate || todayIso();
     const aoQueue = [];
     const allWarnings = [];
 
     for (const ao of batchAOs) {
+      const ak = aoKey(ao);
       const warnings = [];
 
-      // STEP 1: persist workflow state for this AO
-      await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections, worksItems, safeguarding, tenure: tenureMap[aoKey(ao)] || '' });
+      // Use per-AO section/works if provided, fall back to flat fields
+      const aoSections = aoSectionMap[ak]?.length ? aoSectionMap[ak] : sections;
+      const aoWorks = aoWorksMap[ak] || {};
+      const aoS2Subs = aoS2SubsMap[ak] || section2Subsections;
 
-      const nonS10 = sections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
+      // Build worksItems for this AO from per-AO works map
+      const aoWorksItems = Object.entries(aoWorks).flatMap(([sec, items]) =>
+        (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))
+      ) || worksItems;
+
+      // STEP 1: persist workflow state for this AO
+      await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding, tenure: tenureMap[ak] || '' });
+
+      const nonS10 = aoSections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
       if (nonS10.length > 0) {
         const deadline = addDaysIsoFromDate(noticeDate, 14);
         await updateAORecord(ao, {
@@ -3655,7 +3669,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         }
       }
 
-      if (sections.includes('s10')) {
+      if (aoSections.includes('s10')) {
         const deadline = addDaysIsoFromDate(noticeDate, 10);
         await updateAORecord(ao, {
           status: 's10',
@@ -3680,16 +3694,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // STEP 2: generate documents for this AO
       const generatedDocs = [];
       const zip = new PizZip();
-      const keysToGenerate = [...sections];
+      const keysToGenerate = [...aoSections];
       if (includeCover) keysToGenerate.unshift('cover');
 
       for (const key of keysToGenerate) {
         try {
-          const sectionWorks = worksItems
+          const sectionWorks = aoWorksItems
             .filter(w => { if (key === 'cover') return true; const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
             .map(w => (w?.text || w || '').trim())
             .filter(Boolean);
-          const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems: sectionWorks });
+          const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, allSections: aoSections, worksItems: sectionWorks });
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
             mergeData,
