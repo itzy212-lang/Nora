@@ -343,6 +343,7 @@ ${threadText}`;
         chatHistory: [],
         isSilentRead: true,
       }),
+    })
     .then(r => r.json())
     .then(data => {
       const reply = (data.reply || data.replyText || '').trim();
