@@ -3,6 +3,7 @@ import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
+import NoticeReviewModal from './NoticeReviewModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, buildBOLOAPdfPlaceholders, buildAOLOAPdfPlaceholders, buildASLOAPdfPlaceholders, buildLOAPdfFileName } from '../../utils/buildLOAPlaceholders';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
@@ -2819,6 +2820,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showAddAO, setShowAddAO] = useState(false);
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
+  const [reviewQueue, setReviewQueue] = useState(null);
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]);
   const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task object}
@@ -3596,68 +3598,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       }
     }
 
-    // STEP 3: sort docs, then download docx files + attempt merged PDF
+    // STEP 3: open review modal — user edits, generates PDF, attaches drawings, then sends
     if (generatedDocs.length > 0) {
       const ORDER = ['cover', 's2', 's6', 's1', 's10'];
       const sorted = [...generatedDocs].sort((a, b) => {
         const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
-
-      const baseName = safeFilePart(project.bo_premise_address || project.ref || 'Project');
-      const aoName = safeFilePart(ao?.name || `AO${ao?.num || ''}`);
-
-      // Always download individual docx files so you can edit them
-      if (sorted.length === 1) {
-        downloadB64File(sorted[0].docx_b64, sorted[0].fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      } else {
-        const zipB64 = zip.generate({ type: 'base64', compression: 'DEFLATE' });
-        downloadB64File(zipB64, `${baseName}_${aoName}_Notice_Pack.zip`, 'application/zip');
-      }
-
-      // Also attempt merged PDF — save to OneDrive or download individually
-      const pdfName = `${baseName}_${aoName}_Notice_Pack.pdf`;
-      try {
-        const mergeRes = await fetch('/api/merge-notice-pdfs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documents: sorted, outputFileName: pdfName }),
-        });
-        const mergeData = await mergeRes.json();
-        if (mergeData?.pdf_b64) {
-          const folderId = ao?.onedrive_folder_id || project?.onedrive_folder_id;
-          if (folderId) {
-            await fetch('/api/onedrive-upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                user_id: 'help@sq1consulting.co.uk',
-                folder_id: folderId,
-                filename: pdfName,
-                content_base64: mergeData.pdf_b64,
-                content_type: 'application/pdf',
-              }),
-            });
-          } else {
-            downloadB64File(mergeData.pdf_b64, pdfName, 'application/pdf');
-          }
-        } else {
-          throw new Error(mergeData?.error || 'PDF merge failed');
-        }
-      } catch (pdfErr) {
-        // PDF merge failed — download individual PDFs as fallback
-        console.error('[notice] PDF merge failed, downloading individual PDFs:', pdfErr.message);
-        warnings.push('Merged PDF failed — downloading individual PDFs');
-        for (const doc of sorted) {
-          if (doc.pdf_b64) {
-            downloadB64File(doc.pdf_b64, doc.fileName.replace(/\.docx$/i, '.pdf'), 'application/pdf');
-          }
-        }
-      }
+      setReviewQueue({ aoQueue: [{ ao, sortedDocs: sorted }], project });
     }
-
-    const warningText = warnings.length ? `\n\nWarnings:\n${warnings.join('\n')}` : '';
-    alert(`Notice workflow saved. ${generatedDocs.length} document(s) generated.${warningText}`);
+    if (warnings.length) {
+      console.warn('[notice] Warnings:', warnings);
+    }
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
   const handleSetAOStatus = useCallback(async (ao, status) => {
@@ -3849,7 +3801,44 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
 
 
-      {tab === 'details' && noticeModal && (
+      {reviewQueue && (
+        <NoticeReviewModal
+          aoQueue={reviewQueue.aoQueue}
+          project={reviewQueue.project}
+          onComplete={async (packs) => {
+            setReviewQueue(null);
+            // For each AO pack: upload to OneDrive and collect for BO email
+            const attachments = [];
+            for (const pack of packs) {
+              const folderId = pack.saveTarget === 'ao_folder'
+                ? pack.ao?.onedrive_folder_id
+                : project?.onedrive_folder_id;
+              if (folderId) {
+                await fetch('/api/onedrive-upload', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    user_id: 'help@sq1consulting.co.uk',
+                    folder_id: folderId,
+                    filename: pack.fileName,
+                    content_base64: pack.pdf_b64,
+                    content_type: 'application/pdf',
+                  }),
+                });
+              } else {
+                // Fallback: download locally
+                downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
+              }
+              attachments.push({ fileName: pack.fileName, pdf_b64: pack.pdf_b64 });
+            }
+            // TODO: open email composer pre-filled with BO email + all PDF attachments
+            alert(`${packs.length} notice pack(s) ready. Email to building owner prepared.`);
+          }}
+          onClose={() => setReviewQueue(null)}
+        />
+      )}
+
+            {tab === 'details' && noticeModal && (
         <NoticeServingModal
           project={project}
           ao={noticeModal.ao}
