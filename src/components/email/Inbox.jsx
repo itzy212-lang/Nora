@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
+import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
@@ -766,8 +767,6 @@ ${threadText}`;
 }
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
-import { toHtml, cleanSignOff } from '../../utils/draftUtils';
-
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
   const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
   const [cc, setCc]           = useState(mode === 'replyAll'
