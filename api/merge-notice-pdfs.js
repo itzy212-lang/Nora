@@ -2,10 +2,18 @@ import { getServerClient } from './_supabaseAdmin.js';
 
 const API2PDF_KEY = process.env.API2PDF_API_KEY;
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb',
+    },
+  },
+};
+
 async function convertDocxToPdf(docxB64, fileName) {
   const supabase = getServerClient();
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const tempPath = `temp/pdf-merge/${Date.now()}-${safeFileName}`;
+  const tempPath = `temp/pdf-merge/${Date.now()}-${Math.random().toString(36).slice(2)}-${safeFileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from('documents')
@@ -30,12 +38,12 @@ async function convertDocxToPdf(docxB64, fileName) {
 
   const pdfJson = await pdfRes.json().catch(() => ({}));
 
-  // Cleanup temp file
-  await supabase.storage.from('documents').remove([tempPath]).catch(() => {});
+  // Cleanup temp file (non-blocking)
+  supabase.storage.from('documents').remove([tempPath]).catch(() => {});
 
   if (!pdfRes.ok || !pdfJson?.FileUrl) throw new Error(`PDF conversion failed: ${JSON.stringify(pdfJson)}`);
 
-  return pdfJson.FileUrl; // Return URL, not buffer — API2PDF merge accepts URLs
+  return pdfJson.FileUrl;
 }
 
 async function mergePdfs(pdfUrls, fileName) {
@@ -61,31 +69,31 @@ export default async function handler(req, res) {
   if (!API2PDF_KEY) return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
 
   const { documents, outputFileName } = req.body;
-  // documents: [{ key, fileName, docx_b64 }] already in correct order
 
   if (!documents?.length) return res.status(400).json({ error: 'No documents provided' });
 
+  console.log(`[merge-notice-pdfs] Converting ${documents.length} documents`);
+
   try {
-    // Convert all docx to PDF and get URLs
-    const pdfUrls = [];
-    for (const doc of documents) {
-      const url = await convertDocxToPdf(doc.docx_b64, doc.fileName);
-      pdfUrls.push(url);
-    }
+    // Convert all docx to PDF in parallel (faster, avoids sequential timeouts)
+    const pdfUrls = await Promise.all(
+      documents.map(doc => convertDocxToPdf(doc.docx_b64, doc.fileName))
+    );
+
+    console.log(`[merge-notice-pdfs] All ${pdfUrls.length} PDFs converted, merging`);
 
     if (pdfUrls.length === 1) {
-      // Only one doc — just download the PDF directly
       const downloaded = await fetch(pdfUrls[0]);
       const buffer = await downloaded.arrayBuffer();
       return res.status(200).json({ success: true, pdf_b64: Buffer.from(buffer).toString('base64') });
     }
 
-    // Merge all PDFs
     const mergedB64 = await mergePdfs(pdfUrls, outputFileName || 'Notice_Pack.pdf');
+    console.log('[merge-notice-pdfs] Merge complete');
     return res.status(200).json({ success: true, pdf_b64: mergedB64 });
 
   } catch (err) {
-    console.error('[merge-notice-pdfs]', err.message);
+    console.error('[merge-notice-pdfs] Error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 }
