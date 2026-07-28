@@ -1,4 +1,4 @@
-import { getServerClient } from './_supabaseAdmin.js';
+import { createClient } from '@supabase/supabase-js';
 
 const API2PDF_KEY = process.env.API2PDF_API_KEY;
 
@@ -10,8 +10,19 @@ export const config = {
   },
 };
 
+function getServerClient() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+}
+
 async function convertDocxToPdf(docxB64, fileName) {
   const supabase = getServerClient();
+  if (!supabase) throw new Error('Supabase admin client unavailable');
+
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const tempPath = `temp/pdf-merge/${Date.now()}-${Math.random().toString(36).slice(2)}-${safeFileName}`;
 
@@ -65,22 +76,19 @@ async function mergePdfs(pdfUrls, fileName) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
   if (!API2PDF_KEY) return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
 
   const { documents, outputFileName } = req.body;
-
   if (!documents?.length) return res.status(400).json({ error: 'No documents provided' });
 
-  console.log(`[merge-notice-pdfs] Converting ${documents.length} documents`);
+  console.log(`[merge-notice-pdfs] Converting ${documents.length} documents in parallel`);
 
   try {
-    // Convert all docx to PDF in parallel (faster, avoids sequential timeouts)
     const pdfUrls = await Promise.all(
       documents.map(doc => convertDocxToPdf(doc.docx_b64, doc.fileName))
     );
 
-    console.log(`[merge-notice-pdfs] All ${pdfUrls.length} PDFs converted, merging`);
+    console.log(`[merge-notice-pdfs] All ${pdfUrls.length} PDFs converted`);
 
     if (pdfUrls.length === 1) {
       const downloaded = await fetch(pdfUrls[0]);
