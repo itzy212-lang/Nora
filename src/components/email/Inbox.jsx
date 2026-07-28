@@ -465,6 +465,13 @@ ${threadText}`;
         }),
       });
 
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error || `HTTP ${res.status}`;
+        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ely', explanation: `Error: ${errMsg}`, draft: null }]);
+        return;
+      }
+
       const data = await res.json();
 
       // Case review prompt — store pending state, show the question as plain message
