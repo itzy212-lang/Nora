@@ -166,19 +166,21 @@ export default function NoticeServingModal({
     setLoading(true);
 
     try {
-      for (const selectedAO of selectedAOs) {
-        await onServe({
-          ao: selectedAO,
-          sections: selected,
-          includeCover,
-          createDeadlineTask,
-          noticeDate,
-          section2Subsections: s2Subsections,
-          worksItems: Object.entries(sectionWorks).flatMap(([sec, items]) => (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))),
-          safeguarding,
-          tenure: aoTenureTypes[aoKey(selectedAO)] || '',
-        });
-      }
+      const tenureMap = Object.fromEntries(
+        selectedAOs.map(a => [aoKey(a), aoTenureTypes[aoKey(a)] || ''])
+      );
+
+      await onServe({
+        aos: selectedAOs,
+        sections: selected,
+        includeCover,
+        createDeadlineTask,
+        noticeDate,
+        section2Subsections: s2Subsections,
+        worksItems: Object.entries(sectionWorks).flatMap(([sec, items]) => (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))),
+        safeguarding,
+        tenureMap,
+      });
 
       onClose?.();
     } catch (err) {
