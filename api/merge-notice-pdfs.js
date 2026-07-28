@@ -136,12 +136,13 @@ export default async function handler(req, res) {
     const mergeJson = await mergeRes.json().catch(() => ({}));
     console.log('[merge-notice-pdfs] Merge response:', JSON.stringify(mergeJson));
 
-    if (!mergeRes.ok || !mergeJson?.FileUrl) {
+    const mergeUrl = mergeJson?.FileUrl || mergeJson?.pdf;
+    if (!mergeRes.ok || !mergeUrl) {
       throw new Error(`PDF merge failed: ${JSON.stringify(mergeJson)}`);
     }
 
     // Step 4: Download merged PDF
-    const merged = await fetch(mergeJson.FileUrl);
+    const merged = await fetch(mergeUrl);
     if (!merged.ok) throw new Error('Merged PDF download failed');
 
     const mergedBuffer = await merged.arrayBuffer();
