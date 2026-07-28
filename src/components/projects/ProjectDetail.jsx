@@ -3615,13 +3615,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   // Helper: get a stable key for an AO object (used in batch notice flow)
   const aoKey = (item) => String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
 
-  // Batch version: run workflow-save + doc-generation for ALL AOs, then open review modal once
+  // Batch version: generate docs for ALL AOs, open review modal.
+  // Workflow state (status, task) is saved ONLY after user confirms in the modal.
   const handleServeBatchNoticePack = useCallback(async ({
     aos: batchAOs,
-    aoSectionMap = {}, // { [aoKey]: string[] } — which sections each AO gets
-    aoWorksMap = {},   // { [aoKey]: { [sec]: string[] } }
-    aoS2SubsMap = {},  // { [aoKey]: string }
-    sections,          // legacy flat sections (fallback)
+    aoSectionMap = {},
+    aoWorksMap = {},
+    aoS2SubsMap = {},
+    sections,
     includeCover,
     noticeDate: suppliedNoticeDate,
     createDeadlineTask = true,
@@ -3634,67 +3635,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const aoQueue = [];
     const allWarnings = [];
 
+    // Store form data so "Back to Edit" can reopen the modal pre-filled
+    const formData = { batchAOs, aoSectionMap, aoWorksMap, aoS2SubsMap, sections,
+      includeCover, noticeDate, createDeadlineTask, section2Subsections,
+      worksItems, safeguarding, tenureMap };
+
     for (const ao of batchAOs) {
       const ak = aoKey(ao);
       const warnings = [];
 
-      // Use per-AO section/works if provided, fall back to flat fields
       const aoSections = aoSectionMap[ak]?.length ? aoSectionMap[ak] : sections;
       const aoWorks = aoWorksMap[ak] || {};
       const aoS2Subs = aoS2SubsMap[ak] || section2Subsections;
-
-      // Build worksItems for this AO from per-AO works map
       const aoWorksItems = Object.entries(aoWorks).flatMap(([sec, items]) =>
         (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))
       ) || worksItems;
 
-      // STEP 1: persist workflow state for this AO
-      await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding, tenure: tenureMap[ak] || '' });
-
-      const nonS10 = aoSections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
-      if (nonS10.length > 0) {
-        const deadline = addDaysIsoFromDate(noticeDate, 14);
-        await updateAORecord(ao, {
-          status: 'notice_served',
-          notice_served_date: noticeDate,
-          noticeServedDate: noticeDate,
-          consent_deadline: deadline,
-          consentDeadline: deadline,
-        });
-        if (createDeadlineTask) {
-          await createProjectTask({
-            title: `Consent deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
-            description: '14-day notice consent period expired. Review whether Section 10 is required.',
-            due_date: deadline,
-            task_type: 'notice_consent_deadline',
-            ao,
-          });
-        }
-      }
-
-      if (aoSections.includes('s10')) {
-        const deadline = addDaysIsoFromDate(noticeDate, 10);
-        await updateAORecord(ao, {
-          status: 's10',
-          s10_served_date: noticeDate,
-          s10ServedDate: noticeDate,
-          s10_deadline: deadline,
-          s10Deadline: deadline,
-          consent_deadline: '',
-          consentDeadline: '',
-        });
-        if (createDeadlineTask) {
-          await createProjectTask({
-            title: `Section 10 deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
-            description: '10-day Section 10 notice period expired.',
-            due_date: deadline,
-            task_type: 'notice_section10_deadline',
-            ao,
-          });
-        }
-      }
-
-      // STEP 2: generate documents for this AO
+      // Generate documents — do NOT save workflow state yet
       const generatedDocs = [];
       const zip = new PizZip();
       const keysToGenerate = [...aoSections];
@@ -3731,14 +3688,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
         });
-        aoQueue.push({ ao, sortedDocs: sorted });
+        // Store per-AO metadata needed for workflow save on confirm
+        aoQueue.push({ ao, sortedDocs: sorted, aoSections, aoWorksItems, aoS2Subs });
       }
 
       allWarnings.push(...warnings);
     }
 
     if (aoQueue.length > 0) {
-      setReviewQueue({ aoQueue, project });
+      setReviewQueue({ aoQueue, project, formData, includeCover, createDeadlineTask, safeguarding, tenureMap });
     }
 
     if (allWarnings.length) console.warn('[notice batch] Warnings:', allWarnings);
@@ -3939,9 +3897,39 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           project={reviewQueue.project}
           onComplete={async (packs) => {
             setReviewQueue(null);
-            // For each AO pack: upload to OneDrive and collect for BO email
+            const rq = reviewQueue; // capture before null
             const attachments = [];
             for (const pack of packs) {
+              // NOW save workflow state — only after user confirmed
+              const ao = pack.ao;
+              const noticeDate = rq?.formData?.noticeDate || todayIso();
+              const createDeadlineTask = rq?.createDeadlineTask ?? true;
+              const includeCover = rq?.includeCover ?? true;
+              const safeguarding = rq?.safeguarding ?? false;
+              const tenureMap = rq?.tenureMap || {};
+              const aoSections = pack.aoSections || rq?.formData?.sections || [];
+              const aoWorksItems = pack.aoWorksItems || [];
+              const aoS2Subs = pack.aoS2Subs || '';
+
+              await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding, tenure: tenureMap[aoKey(ao)] || '' });
+
+              const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
+              if (nonS10.length > 0) {
+                const deadline = addDaysIsoFromDate(noticeDate, 14);
+                await updateAORecord(ao, { status: 'notice_served', notice_served_date: noticeDate, noticeServedDate: noticeDate, consent_deadline: deadline, consentDeadline: deadline });
+                if (createDeadlineTask) {
+                  await createProjectTask({ title: `Consent deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(), description: '14-day notice consent period expired.', due_date: deadline, task_type: 'notice_consent_deadline', ao });
+                }
+              }
+              if (aoSections.includes('s10')) {
+                const deadline = addDaysIsoFromDate(noticeDate, 10);
+                await updateAORecord(ao, { status: 's10', s10_served_date: noticeDate, s10ServedDate: noticeDate, s10_deadline: deadline, s10Deadline: deadline, consent_deadline: '', consentDeadline: '' });
+                if (createDeadlineTask) {
+                  await createProjectTask({ title: `Section 10 deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(), description: '10-day Section 10 notice period expired.', due_date: deadline, task_type: 'notice_section10_deadline', ao });
+                }
+              }
+
+              // Upload PDF to OneDrive
               const folderId = pack.saveTarget === 'ao_folder'
                 ? pack.ao?.onedrive_folder_id
                 : project?.onedrive_folder_id;
@@ -3958,13 +3946,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   }),
                 });
               } else {
-                // Fallback: download locally
                 downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
               }
               attachments.push({ fileName: pack.fileName, pdf_b64: pack.pdf_b64 });
             }
             // TODO: open email composer pre-filled with BO email + all PDF attachments
             alert(`${packs.length} notice pack(s) ready. Email to building owner prepared.`);
+          }}
+          onBack={() => {
+            // Reopen NoticeServingModal with original form data
+            const fd = reviewQueue?.formData;
+            setReviewQueue(null);
+            if (fd) {
+              setNoticeModal({ ao: null, defaultSections: fd.sections || [], prefillData: fd });
+            }
           }}
           onClose={() => setReviewQueue(null)}
         />
