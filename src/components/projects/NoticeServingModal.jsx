@@ -159,13 +159,15 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
 
   // Toggle whether a section applies to a specific AO
   const toggleSectionAO = (sec, ak) => {
+    // Capture current selectedAO keys outside the setter to avoid stale closure
+    const allSelectedKeys = selectedAOs.map(a => aoKey(a));
     setSectionAOMap(prev => {
       // If no explicit set yet, initialise with ALL selected AOs first
       // so toggling one deselects it rather than selecting only it
       const existing = prev[sec];
       const current = existing
         ? new Set(existing)
-        : new Set(selectedAOs.map(a => aoKey(a)));
+        : new Set(allSelectedKeys);
       if (current.has(ak)) current.delete(ak);
       else current.add(ak);
       return { ...prev, [sec]: current };
