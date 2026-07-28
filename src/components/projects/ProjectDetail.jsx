@@ -3612,6 +3612,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
+  // Helper: get a stable key for an AO object (used in batch notice flow)
+  const aoKey = (item) => String(item?.id || item?.num || item?.ao_id || item?.name || item?.premise || item?.address || '');
+
   // Batch version: run workflow-save + doc-generation for ALL AOs, then open review modal once
   const handleServeBatchNoticePack = useCallback(async ({
     aos: batchAOs,
