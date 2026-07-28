@@ -64,7 +64,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
   // s2Subsections per AO: { [aoKey]: string }
   const [s2SubsectionsMap, setS2SubsectionsMap] = useState({});
 
-  const [safeguarding, setSafeguarding] = useState(false);
+  const [safeguardingMap, setSafeguardingMap] = useState({}); // { [aoKey]: boolean }
   const [aoTenureTypes, setAoTenureTypes] = useState({});
 
   // Works per section per AO: { [`${sec}-${aoKey}`]: string[] }
@@ -228,7 +228,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
         includeCover,
         createDeadlineTask,
         noticeDate,
-        safeguarding,
+        safeguardingMap,
         tenureMap,
         // Legacy flat fields for single-AO compatibility
         sections: selected,
@@ -237,6 +237,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
           const [sec] = k.split('-');
           return (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }));
         }),
+        safeguarding: Object.values(safeguardingMap).some(Boolean), // legacy flat field
       });
 
       onClose?.();
@@ -337,15 +338,24 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
               })}
             </div>
 
-            {/* S6 safeguarding */}
-            {selected.includes('s6') && (
+            {/* S6 safeguarding — per AO */}
+            {selected.includes('s6') && getSectionAOs('s6').length > 0 && (
               <div style={{ marginTop: 10, padding: '12px 14px', background: '#fef9f0', borderRadius: 12, border: '1px solid #fcd34d' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#92400e' }}>
-                  <input type="checkbox" checked={safeguarding} onChange={e => setSafeguarding(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 8 }}>
                   Proposing to underpin / safeguard foundations?
-                </label>
-                <div style={{ fontSize: 11, color: '#92400e', marginTop: 6, paddingLeft: 26 }}>
-                  Tick if yes — leave unticked for "it is <strong>not</strong> proposed to underpin..."
+                </div>
+                {getSectionAOs('s6').map(aoItem => {
+                  const ak = aoKey(aoItem);
+                  const addr = aoAddress(aoItem) || aoItem.name || `AO${aoItem.num || ''}`;
+                  return (
+                    <label key={ak} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#92400e', marginBottom: 6 }}>
+                      <input type="checkbox" checked={!!safeguardingMap[ak]} onChange={e => setSafeguardingMap(prev => ({ ...prev, [ak]: e.target.checked }))} style={{ width: 15, height: 15, cursor: 'pointer' }} />
+                      {getSectionAOs('s6').length > 1 ? addr : 'Yes — tick to confirm'}
+                    </label>
+                  );
+                })}
+                <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+                  Tick for each property where underpinning is proposed. Leave unticked where it is <strong>not</strong> proposed.
                 </div>
               </div>
             )}
