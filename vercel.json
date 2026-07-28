@@ -77,6 +77,12 @@
     "api/polish-works.js": {
       "maxDuration": 30
     },
+    "api/merge-notice-pdfs.js": {
+      "maxDuration": 120
+    },
+    "api/docx-to-html.js": {
+      "maxDuration": 30
+    },
     "api/cron-auto-draft.js": {
       "maxDuration": 120
     },
