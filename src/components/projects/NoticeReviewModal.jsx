@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import mammoth from 'mammoth';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -24,24 +23,17 @@ const INSERT_OPTIONS = [
 
 async function docxB64ToHtml(docx_b64) {
   try {
-    // Convert base64 to ArrayBuffer
-    const binary = atob(docx_b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-    const result = await mammoth.convertToHtml(
-      { arrayBuffer: bytes.buffer },
-      {
-        styleMap: [
-          "p[style-name='Heading 1'] => h2:fresh",
-          "p[style-name='Heading 2'] => h3:fresh",
-        ],
-      }
-    );
-    return result.value || '<p>(Empty document)</p>';
+    const res = await fetch('/api/docx-to-html', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docx_b64 }),
+    });
+    const data = await res.json();
+    if (!data?.html) throw new Error(data?.error || 'Conversion failed');
+    return data.html;
   } catch (err) {
-    console.error('[NoticeReviewModal] mammoth conversion failed:', err);
-    return '<p style="color:#ef4444">[Could not render document content — please generate PDF directly]</p>';
+    console.error('[NoticeReviewModal] docx-to-html failed:', err);
+    return '<p style="color:#ef4444">[Could not render document — check console for details]</p>';
   }
 }
 
@@ -910,4 +902,5 @@ function TabItem({ label, active, onClick, disabled }) {
     </div>
   );
 }
+
 
