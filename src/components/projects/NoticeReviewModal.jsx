@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import mammoth from 'mammoth';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -21,14 +22,27 @@ const INSERT_OPTIONS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function docxB64ToHtml(docx_b64, label) {
-  // Placeholder: in the real implementation, convert docx to HTML via mammoth.
-  // For now we render a styled placeholder that looks like a document section.
-  return `<div class="doc-section-label">${label}</div>
-<div class="doc-body">
-  <p>[Document content rendered from DOCX — ${label}]</p>
-  <p>This section is fully editable. Click to make changes before generating the PDF.</p>
-</div>`;
+async function docxB64ToHtml(docx_b64) {
+  try {
+    // Convert base64 to ArrayBuffer
+    const binary = atob(docx_b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const result = await mammoth.convertToHtml(
+      { arrayBuffer: bytes.buffer },
+      {
+        styleMap: [
+          "p[style-name='Heading 1'] => h2:fresh",
+          "p[style-name='Heading 2'] => h3:fresh",
+        ],
+      }
+    );
+    return result.value || '<p>(Empty document)</p>';
+  } catch (err) {
+    console.error('[NoticeReviewModal] mammoth conversion failed:', err);
+    return '<p style="color:#ef4444">[Could not render document content — please generate PDF directly]</p>';
+  }
 }
 
 function getPageStyle() {
@@ -78,7 +92,26 @@ function ProgressBar({ current, total, aoName }) {
   );
 }
 
-function EditScreen({ docs, editorRefs }) {
+function EditScreen({ docs, editorRefs, loading }) {
+  if (loading) {
+    return (
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#d1d5db', flexDirection: 'column', gap: '12px',
+      }}>
+        <div style={{
+          width: '32px', height: '32px', border: '3px solid #e5e7eb',
+          borderTopColor: '#3b82f6', borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: '13px', color: '#6b7280', fontFamily: '-apple-system, sans-serif' }}>
+          Loading document…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       flex: 1,
@@ -521,6 +554,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
   // Edit state — one editable HTML block per doc section
   const [docs, setDocs] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(true);
   const editorRefs = useRef([]);
 
   // PDF preview state
@@ -536,20 +570,27 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const currentEntry = aoQueue[queueIndex];
   const isLastAO = queueIndex === aoQueue.length - 1;
 
-  // ── Initialise docs when AO changes ──
+  // ── Initialise docs when AO changes — convert docx → HTML via mammoth ──
   useEffect(() => {
     if (!currentEntry) return;
-    const initialDocs = currentEntry.sortedDocs.map(d => ({
-      key: d.key,
-      fileName: d.fileName,
-      docx_b64: d.docx_b64,
-      html: docxB64ToHtml(d.docx_b64, DOC_LABELS[d.key] || d.key),
-    }));
-    setDocs(initialDocs);
+    setDocsLoading(true);
     setTab('edit');
     setPages([]);
     setSelectedPages(new Set());
     editorRefs.current = [];
+
+    (async () => {
+      const converted = await Promise.all(
+        currentEntry.sortedDocs.map(async d => ({
+          key: d.key,
+          fileName: d.fileName,
+          docx_b64: d.docx_b64,
+          html: await docxB64ToHtml(d.docx_b64),
+        }))
+      );
+      setDocs(converted);
+      setDocsLoading(false);
+    })();
   }, [queueIndex, currentEntry]);
 
   // ── Generate PDF from edited content ──
@@ -712,15 +753,6 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={btnStyle('ghost')}>Cancel</button>
-          {tab === 'edit' && (
-            <button
-              onClick={handleGeneratePdf}
-              disabled={generating}
-              style={btnStyle('primary', generating)}
-            >
-              {generating ? generatingMsg : 'Generate PDF →'}
-            </button>
-          )}
           {tab === 'pdf' && (
             <button
               onClick={() => setShowSave(true)}
@@ -746,11 +778,35 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       </div>
 
       {/* ── Main content ── */}
-      <div style={s.main}>
+      <div style={{ ...s.main, flexDirection: 'column' }}>
 
         {/* EDIT tab */}
         {tab === 'edit' && (
-          <EditScreen docs={docs} editorRefs={editorRefs} />
+          <>
+            <EditScreen docs={docs} editorRefs={editorRefs} loading={docsLoading} />
+
+            {/* Sticky footer — always visible */}
+            <div style={{
+              flexShrink: 0,
+              padding: '12px 24px',
+              background: '#161820',
+              borderTop: '1px solid #2a2d3a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: '12px', color: '#475569' }}>
+                {docsLoading ? 'Loading document content…' : 'Review and edit the notices above, then generate the PDF.'}
+              </span>
+              <button
+                onClick={handleGeneratePdf}
+                disabled={generating || docsLoading}
+                style={btnStyle('primary', generating || docsLoading)}
+              >
+                {generating ? generatingMsg : 'Generate PDF →'}
+              </button>
+            </div>
+          </>
         )}
 
         {/* PDF tab */}
@@ -854,3 +910,4 @@ function TabItem({ label, active, onClick, disabled }) {
     </div>
   );
 }
+
