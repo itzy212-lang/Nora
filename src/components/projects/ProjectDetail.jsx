@@ -3612,6 +3612,121 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
 
+  // Batch version: run workflow-save + doc-generation for ALL AOs, then open review modal once
+  const handleServeBatchNoticePack = useCallback(async ({
+    aos: batchAOs,
+    sections,
+    includeCover,
+    noticeDate: suppliedNoticeDate,
+    createDeadlineTask = true,
+    section2Subsections = '',
+    worksItems = [],
+    safeguarding = false,
+    tenureMap = {}, // { [aoKey]: tenure }
+  }) => {
+    const noticeDate = suppliedNoticeDate || todayIso();
+    const aoQueue = [];
+    const allWarnings = [];
+
+    for (const ao of batchAOs) {
+      const warnings = [];
+
+      // STEP 1: persist workflow state for this AO
+      await saveNoticeRecord({ ao, selectedSections: sections, includeCover, noticeDate, section2Subsections, worksItems, safeguarding, tenure: tenureMap[aoKey(ao)] || '' });
+
+      const nonS10 = sections.filter(s => ['s1', 's2', 's3', 's6'].includes(s));
+      if (nonS10.length > 0) {
+        const deadline = addDaysIsoFromDate(noticeDate, 14);
+        await updateAORecord(ao, {
+          status: 'notice_served',
+          notice_served_date: noticeDate,
+          noticeServedDate: noticeDate,
+          consent_deadline: deadline,
+          consentDeadline: deadline,
+        });
+        if (createDeadlineTask) {
+          await createProjectTask({
+            title: `Consent deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
+            description: '14-day notice consent period expired. Review whether Section 10 is required.',
+            due_date: deadline,
+            task_type: 'notice_consent_deadline',
+            ao,
+          });
+        }
+      }
+
+      if (sections.includes('s10')) {
+        const deadline = addDaysIsoFromDate(noticeDate, 10);
+        await updateAORecord(ao, {
+          status: 's10',
+          s10_served_date: noticeDate,
+          s10ServedDate: noticeDate,
+          s10_deadline: deadline,
+          s10Deadline: deadline,
+          consent_deadline: '',
+          consentDeadline: '',
+        });
+        if (createDeadlineTask) {
+          await createProjectTask({
+            title: `Section 10 deadline -- AO${ao.num || ''} ${ao.name || ''}`.trim(),
+            description: '10-day Section 10 notice period expired.',
+            due_date: deadline,
+            task_type: 'notice_section10_deadline',
+            ao,
+          });
+        }
+      }
+
+      // STEP 2: generate documents for this AO
+      const generatedDocs = [];
+      const zip = new PizZip();
+      const keysToGenerate = [...sections];
+      if (includeCover) keysToGenerate.unshift('cover');
+
+      for (const key of keysToGenerate) {
+        try {
+          const sectionWorks = worksItems
+            .filter(w => { if (key === 'cover') return true; const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
+            .map(w => (w?.text || w || '').trim())
+            .filter(Boolean);
+          const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections, allSections: sections, worksItems: sectionWorks });
+          const result = await generateDocument({
+            templateKey: key === 's2' ? 's3' : key,
+            mergeData,
+            fileName: mergeData.file_name,
+            projectId: project.id,
+            skipDownload: true,
+          });
+          if (result?.success && result?.docx_b64) {
+            generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+            addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+          } else {
+            warnings.push(`${key}: ${result?.error || 'document not generated'}`);
+          }
+        } catch (err) {
+          warnings.push(`${key}: ${err.message}`);
+        }
+      }
+
+      if (generatedDocs.length > 0) {
+        const ORDER = ['cover', 's2', 's6', 's1', 's10'];
+        const sorted = [...generatedDocs].sort((a, b) => {
+          const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+        aoQueue.push({ ao, sortedDocs: sorted });
+      }
+
+      allWarnings.push(...warnings);
+    }
+
+    if (aoQueue.length > 0) {
+      setReviewQueue({ aoQueue, project });
+    }
+
+    if (allWarnings.length) console.warn('[notice batch] Warnings:', allWarnings);
+  }, [project, generateDocument, saveNoticeRecord, updateAORecord, createProjectTask]);
+
   const handleSetAOStatus = useCallback(async (ao, status) => {
     const patch = { status, last_status_change: new Date().toISOString() };
 
@@ -3845,9 +3960,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
           generateDocument={generateDocument}
-          onServe={({ ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, tenure }) =>
-            handleServeNoticePack({
-              ao: servedAO || noticeModal.ao,
+          onServe={({ aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, tenureMap }) => {
+            const aosToServe = servedAOs || (servedAO ? [servedAO] : noticeModal.ao ? [noticeModal.ao] : []);
+            return handleServeBatchNoticePack({
+              aos: aosToServe,
               sections,
               includeCover,
               noticeDate,
@@ -3855,9 +3971,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               section2Subsections,
               worksItems,
               safeguarding,
-              tenure,
-            })
-          }
+              tenureMap,
+            });
+          }}
           onClose={() => setNoticeModal(null)}
         />
       )}
