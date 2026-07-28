@@ -321,13 +321,17 @@ If there is no flag, respond with the single word: Ready.
 Thread:
 ${threadText}`;
 
-    fetch('/api/ely-smart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: silentPrompt,
-        surface: 'inbox_draft',
-        mode: 'silent_read',
+    sb?.auth.getSession().then(({ data: { session: _silentSession } }) => {
+      fetch('/api/ely-smart', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(_silentSession?.access_token ? { 'Authorization': `Bearer ${_silentSession.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          prompt: silentPrompt,
+          surface: 'inbox_draft',
+          mode: 'silent_read',
         workflowStage: 'silent_read',
         emailContext: {
           from: email.sender_name || email.sender_email || '',
@@ -432,9 +436,13 @@ ${threadText}`;
         ? `Current working draft:\n---\n${safeWorkingDraft}\n---\n\nInstruction: ${text}`
         : text;
 
+      const { data: { session: _inboxSession } } = await (sb?.auth.getSession() || Promise.resolve({ data: { session: null } }));
       const res = await fetch('/api/ely-smart', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(_inboxSession?.access_token ? { 'Authorization': `Bearer ${_inboxSession.access_token}` } : {}),
+        },
         body: JSON.stringify({
           prompt: promptWithDraft,
           surface: 'inbox_draft',
