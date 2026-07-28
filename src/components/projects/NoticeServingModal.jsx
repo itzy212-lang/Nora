@@ -178,8 +178,12 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
   const getSectionAOs = (sec) => {
     if (!multipleAOs) return selectedAOs; // single AO: always applies
     const assigned = sectionAOMap[sec];
-    if (!assigned || assigned.size === 0) return selectedAOs; // default: all selected AOs
-    return selectedAOs.filter(a => assigned.has(aoKey(a)));
+    // If nothing explicitly assigned, default to all selected AOs
+    if (!assigned || assigned.size === 0) return selectedAOs;
+    // Safely convert Set to array for filtering (guards against state serialisation issues)
+    const assignedKeys = Array.from(assigned);
+    if (!assignedKeys.length) return selectedAOs;
+    return selectedAOs.filter(a => assignedKeys.includes(aoKey(a)));
   };
 
   const handleServe = async () => {
@@ -209,6 +213,10 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
             const works = getWorks(sec, ak).filter(w => w.trim());
             if (works.length) aoWorksMap[ak][sec] = works;
           }
+        }
+        // Fallback: if this AO ended up with no sections, give it all selected sections
+        if (!aoSectionMap[ak].length) {
+          aoSectionMap[ak] = [...selected];
         }
       }
 
