@@ -1,3 +1,4 @@
+import sb from '../../supabaseClient';
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -386,9 +387,13 @@ export default function BriefingChat({ onBack, onOpenProject, onOpenComposer }) 
     addMessage('user', text);
     setSending(true);
     try {
+      const { data: { session: _briefingSession } } = await (sb?.auth.getSession() || Promise.resolve({ data: { session: null } }));
       const res = await fetch('/api/ely-smart', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+          'Content-Type':'application/json',
+          ...(_briefingSession?.access_token ? { 'Authorization': `Bearer ${_briefingSession.access_token}` } : {}),
+        },
         body:JSON.stringify({ prompt:text, surface:'briefing_chat', mode:'discuss' }),
       });
       const d = await res.json();
