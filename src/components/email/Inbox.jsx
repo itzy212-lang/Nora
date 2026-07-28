@@ -322,17 +322,13 @@ If there is no flag, respond with the single word: Ready.
 Thread:
 ${threadText}`;
 
-    sb?.auth.getSession().then(({ data: { session: _silentSession } }) => {
-      fetch('/api/ely-smart', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(_silentSession?.access_token ? { 'Authorization': `Bearer ${_silentSession.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          prompt: silentPrompt,
-          surface: 'inbox_draft',
-          mode: 'silent_read',
+    fetch('/api/ely-smart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: silentPrompt,
+        surface: 'inbox_draft',
+        mode: 'silent_read',
         workflowStage: 'silent_read',
         emailContext: {
           from: email.sender_name || email.sender_email || '',
@@ -347,7 +343,6 @@ ${threadText}`;
         chatHistory: [],
         isSilentRead: true,
       }),
-    })
     .then(r => r.json())
     .then(data => {
       const reply = (data.reply || data.replyText || '').trim();
