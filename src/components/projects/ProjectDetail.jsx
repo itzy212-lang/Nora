@@ -1238,7 +1238,7 @@ function AOCard({
   const lastChange = ao?.last_status_change ? new Date(ao.last_status_change) : null;
   const daysSinceChange = lastChange ? Math.floor((Date.now() - lastChange.getTime()) / 86400000) : null;
   const isStale = !isResolved && noticed && daysSinceChange !== null && daysSinceChange >= 10;
-  const statusLabel = (generatingNotice && statusMeta.action === 'serve_104b') ? 'Generating…' : statusMeta.label;
+  const statusLabel = statusMeta.label;
   const statusColour = statusMeta.colour || colour;
   const socDate = aoSOCDate(ao);
   const socTime = aoSOCTime(ao);
