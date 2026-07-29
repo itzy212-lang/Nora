@@ -3546,6 +3546,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       NOTICE_RUN_2_SECTIONS: 'Section 10',
       // Combined placeholders — single or multiple runs
       // FULL_NOTICE_RUNS/DATES — original notices only, NOT Section 10 (that is separate)
+      // Note: both uppercase and lowercase variants added for docxtemplater compatibility
       FULL_NOTICE_RUNS: (() => {
         const runs = [];
         if (ao?.notice_served_date || ao?.noticeServedDate) runs.push('Section 2(2)');
@@ -3562,6 +3563,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
       })(),
     };
+
+    // Ensure lowercase aliases exist (docxtemplater is case-sensitive)
+    mergeData.full_notice_runs = mergeData.FULL_NOTICE_RUNS;
+    mergeData.full_notice_dates = mergeData.FULL_NOTICE_DATES;
+    mergeData.notice_section_full = mergeData.NOTICE_SECTION_FULL;
+    mergeData.section_10_notice_date = mergeData.SECTION_10_NOTICE_DATE;
+    mergeData['{{NOTICE_SECTION_FULL}}'] = mergeData.NOTICE_SECTION_FULL;
+    mergeData['{{FULL_NOTICE_RUNS}}'] = mergeData.FULL_NOTICE_RUNS;
+    mergeData['{{FULL_NOTICE_DATES}}'] = mergeData.FULL_NOTICE_DATES;
+    mergeData['{{SECTION_10_NOTICE_DATE}}'] = mergeData.SECTION_10_NOTICE_DATE;
 
     // Generate Letter to AO — JSON clone to avoid object reference issues between calls
     const mergeData1 = JSON.parse(JSON.stringify(mergeData));
