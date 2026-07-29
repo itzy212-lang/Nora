@@ -10,8 +10,13 @@ const INSERT_OPTIONS = [
 
 function btn(variant, disabled = false) {
   const base = {
-    padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 500,
-    cursor: disabled ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.15s',
+    padding: '8px 18px',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    border: 'none',
+    transition: 'all 0.15s',
   };
   if (variant === 'ghost') return { ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #2a2d3a' };
   if (variant === 'primary') return { ...base, background: disabled ? '#1e2130' : '#3b82f6', color: disabled ? '#475569' : '#fff' };
@@ -37,6 +42,59 @@ function aoMatches(item, target) {
   return item?.name === target?.name && (item?.premise || item?.address) === (target?.premise || target?.address);
 }
 
+function aoKeyValue(ao) {
+  return String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '');
+}
+
+function prepareLegacyNoticeCompletion(packs) {
+  // ProjectDetail's existing completion callback expects these legacy names.
+  // Supply stable global bindings so every pack retains the correct AO key.
+  const keySequence = packs.flatMap(pack => {
+    const key = aoKeyValue(pack.ao);
+    return [key, key]; // safeguarding lookup, then tenure lookup
+  });
+  let index = 0;
+
+  globalThis.safeguardingMap = globalThis.safeguardingMap || {};
+  globalThis.ak = {
+    [Symbol.toPrimitive]() {
+      const value = keySequence[Math.min(index, Math.max(0, keySequence.length - 1))] || '';
+      index += 1;
+      return value;
+    },
+  };
+}
+
+function openNoticeComposer(project, packs) {
+  const emails = [...new Set(
+    packs
+      .map(pack => pack?.ao?.email || pack?.ao?.ao_email || '')
+      .filter(Boolean)
+      .map(email => String(email).trim())
+  )];
+  const aoAddresses = packs
+    .map(pack => pack?.ao?.premise || pack?.ao?.address || '')
+    .filter(Boolean);
+
+  window.dispatchEvent(new CustomEvent('ely:open-project-composer', {
+    detail: {
+      mode: 'compose',
+      projectId: project?.id,
+      // Never expose separate adjoining owners to each other in a combined batch.
+      to: emails.length === 1 ? emails[0] : '',
+      subject: `Party Wall notices — ${project?.bo_premise_address || project?.address || ''}`,
+      aoAddresses,
+      attachments: packs.map(pack => ({
+        name: pack.fileName,
+        type: 'application/pdf',
+        contentType: 'application/pdf',
+        contentBytes: pack.pdf_b64,
+        source: 'generated',
+      })),
+    },
+  }));
+}
+
 function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
   const [file, setFile] = useState(null);
   const [insertMode, setInsertMode] = useState('after_last');
@@ -57,7 +115,7 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 380 }}>
+      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 380, maxWidth: '92vw' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 16 }}>Attach PDF</div>
         <div onClick={() => fileRef.current?.click()} style={{ border: '1.5px dashed #334155', borderRadius: 8, padding: 20, textAlign: 'center', cursor: 'pointer', marginBottom: 16, color: file ? '#e2e8f0' : '#64748b', fontSize: 13 }}>
           {file ? `✓ ${file.name}` : 'Click to select a PDF'}
@@ -93,7 +151,7 @@ function SaveModal({ project, ao, saving, onConfirm, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 430 }}>
+      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 430, maxWidth: '92vw' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 6 }}>Finalise document</div>
         <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>Choose where the final PDF should be saved.</div>
         {options.map(opt => (
@@ -103,9 +161,9 @@ function SaveModal({ project, ao, saving, onConfirm, onClose }) {
           </label>
         ))}
         <div style={{ fontSize: 12, color: '#64748b', margin: '12px 0 18px', lineHeight: 1.5 }}>
-          Save closes this screen and updates the AO card. Save &amp; Email also opens the email composer for this project with the PDF attached.
+          Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached.
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Cancel</button>
           <button onClick={() => onConfirm(saveTarget, 'save')} disabled={saving} style={btn('ghost', saving)}>{saving ? 'Saving…' : 'Save'}</button>
           <button onClick={() => onConfirm(saveTarget, 'save_email')} disabled={saving} style={btn('success', saving)}>{saving ? 'Saving…' : 'Save & Email'}</button>
@@ -141,7 +199,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const mergePageList = useCallback(async (pageList) => {
     if (!pageList.length) throw new Error('The pack must contain at least one page');
     const response = await fetch('/api/merge-pdfs-b64', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pdfs: pageList.map((page, index) => ({ b64: page.b64, name: page.label || `Page ${index + 1}` })) }),
     });
     const data = await response.json();
@@ -152,23 +211,39 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   useEffect(() => {
     if (!currentEntry) return undefined;
     let cancelled = false;
-    setPdfB64(null); setPdfUrl(null); setPages([]); setCurrentPageIdx(0); setSelectedPageIds(new Set()); setGenerating(true);
+    setPdfB64(null);
+    setPdfUrl(null);
+    setPages([]);
+    setCurrentPageIdx(0);
+    setSelectedPageIds(new Set());
+    setGenerating(true);
+
     (async () => {
       try {
         const mergeRes = await fetch('/api/merge-notice-pdfs', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ documents: currentEntry.sortedDocs, outputFileName: safeFileName(`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`) }),
         });
         const merged = await mergeRes.json();
         if (!mergeRes.ok || !merged?.pdf_b64) throw new Error(merged?.error || 'PDF generation failed');
+
         const splitRes = await fetch('/api/split-pdf', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pdf_b64: merged.pdf_b64, filename: 'notice_pack.pdf' }),
         });
         const split = await splitRes.json();
         if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not prepare PDF pages');
         if (cancelled) return;
-        setPages(split.pages.map((page, index) => ({ id: `notice-${queueIndex}-${index}-${Date.now()}`, label: `Notice pack page ${page.page_num}`, source: 'notice', b64: page.b64, originalPageNumber: page.page_num })));
+
+        setPages(split.pages.map((page, index) => ({
+          id: `notice-${queueIndex}-${index}-${Date.now()}`,
+          label: `Notice pack page ${page.page_num}`,
+          source: 'notice',
+          b64: page.b64,
+          originalPageNumber: page.page_num,
+        })));
         replacePreview(merged.pdf_b64);
       } catch (err) {
         if (!cancelled) alert(`PDF generation failed: ${err.message}`);
@@ -176,6 +251,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         if (!cancelled) setGenerating(false);
       }
     })();
+
     return () => { cancelled = true; };
   }, [queueIndex, currentEntry, replacePreview]);
 
@@ -186,46 +262,89 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const viewerUrl = useMemo(() => pdfUrl ? `${pdfUrl}#page=${currentPageIdx + 1}&zoom=page-width&toolbar=0&navpanes=0` : null, [pdfUrl, currentPageIdx]);
 
   const toggleSelected = useCallback(id => setSelectedPageIds(previous => {
-    const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next;
+    const next = new Set(previous);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
   }), []);
-  const handleSelectAll = useCallback(() => setSelectedPageIds(allSelected ? new Set() : new Set(pages.map(page => page.id))), [allSelected, pages]);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedPageIds(allSelected ? new Set() : new Set(pages.map(page => page.id)));
+  }, [allSelected, pages]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedCount) return;
-    if (selectedCount === pages.length) return alert('At least one page must remain in the pack.');
+    if (selectedCount === pages.length) {
+      alert('At least one page must remain in the pack.');
+      return;
+    }
     if (!window.confirm(`Delete ${selectedCount} selected page${selectedCount === 1 ? '' : 's'} from the PDF?`)) return;
+
     const remaining = pages.filter(page => !selectedPageIds.has(page.id));
     setGenerating(true);
     try {
-      await mergePageList(remaining); setPages(remaining); setSelectedPageIds(new Set()); setCurrentPageIdx(index => Math.min(index, remaining.length - 1));
-    } catch (err) { alert(`Could not delete pages: ${err.message}`); }
-    finally { setGenerating(false); }
+      await mergePageList(remaining);
+      setPages(remaining);
+      setSelectedPageIds(new Set());
+      setCurrentPageIdx(index => Math.min(index, remaining.length - 1));
+    } catch (err) {
+      alert(`Could not delete pages: ${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
   }, [mergePageList, pages, selectedCount, selectedPageIds]);
 
   const handleAttachConfirm = useCallback(async ({ file, position }) => {
-    setShowAttach(false); setGenerating(true);
+    setShowAttach(false);
+    setGenerating(true);
     try {
       const attachB64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Could not read the selected file')); reader.readAsDataURL(file);
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not read the selected file'));
+        reader.readAsDataURL(file);
       });
-      const splitRes = await fetch('/api/split-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }) });
+
+      const splitRes = await fetch('/api/split-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
+      });
       const split = await splitRes.json();
       if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not split the attached PDF');
+
       const stamp = Date.now();
-      const attachedPages = split.pages.map((page, index) => ({ id: `attachment-${stamp}-${index}`, label: split.pages.length === 1 ? file.name : `${file.name} — page ${page.page_num}`, source: 'attachment', fileName: file.name, b64: page.b64, originalPageNumber: page.page_num }));
-      const next = [...pages]; next.splice(Math.min(next.length, position + 1), 0, ...attachedPages);
-      await mergePageList(next); setPages(next); setCurrentPageIdx(Math.min(next.length - 1, position + 1)); setSelectedPageIds(new Set());
-    } catch (err) { alert(`Attach failed: ${err.message}`); }
-    finally { setGenerating(false); }
+      const attachedPages = split.pages.map((page, index) => ({
+        id: `attachment-${stamp}-${index}`,
+        label: split.pages.length === 1 ? file.name : `${file.name} — page ${page.page_num}`,
+        source: 'attachment',
+        fileName: file.name,
+        b64: page.b64,
+        originalPageNumber: page.page_num,
+      }));
+      const next = [...pages];
+      next.splice(Math.min(next.length, position + 1), 0, ...attachedPages);
+      await mergePageList(next);
+      setPages(next);
+      setCurrentPageIdx(Math.min(next.length - 1, position + 1));
+      setSelectedPageIds(new Set());
+    } catch (err) {
+      alert(`Attach failed: ${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
   }, [mergePageList, pages]);
 
   const finalise104b = useCallback(async ({ pack, action }) => {
     const ao = pack.ao;
-    const folderId = pack.saveTarget === 'ao_folder' ? (ao?.onedrive_folder_id || project?.onedrive_folder_id) : project?.onedrive_folder_id;
+    const folderId = pack.saveTarget === 'ao_folder'
+      ? (ao?.onedrive_folder_id || project?.onedrive_folder_id)
+      : project?.onedrive_folder_id;
     if (!folderId) throw new Error('No OneDrive folder is recorded for this adjoining owner or project.');
 
     const uploadRes = await fetch('/api/onedrive-upload', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: 'help@sq1consulting.co.uk', folder_id: folderId, filename: pack.fileName, content_base64: pack.pdf_b64, content_type: 'application/pdf' }),
     });
     const uploadData = await uploadRes.json().catch(() => ({}));
@@ -235,7 +354,9 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       await currentEntry.onConfirm();
     } else if (sb && project?.id) {
       const date = new Date().toISOString().slice(0, 10);
-      const updatedAOs = (project?.aos || []).map(item => aoMatches(item, ao) ? { ...item, s104b_served_date: date, s104bServedDate: date, status: 's104b', updated_at: new Date().toISOString() } : item);
+      const updatedAOs = (project?.aos || []).map(item => aoMatches(item, ao)
+        ? { ...item, s104b_served_date: date, s104bServedDate: date, status: 's104b', updated_at: new Date().toISOString() }
+        : item);
       const { error } = await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
       if (error) throw error;
     }
@@ -247,21 +368,37 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       const aoEmail = ao?.email || ao?.ao_email || '';
       const to = surveyorEmail || aoEmail;
       const cc = surveyorEmail && aoEmail && surveyorEmail.toLowerCase() !== aoEmail.toLowerCase() ? aoEmail : '';
-      window.dispatchEvent(new CustomEvent('ely:open-project-composer', { detail: {
-        mode: 'compose', projectId: project?.id, to, cc,
-        subject: `Section 10(4)(b) appointment — ${ao?.premise || ao?.address || project?.bo_premise_address || ''}`,
-        aoAddresses: [ao?.premise || ao?.address || ''].filter(Boolean),
-        attachments: [{ name: pack.fileName, type: 'application/pdf', contentType: 'application/pdf', contentBytes: pack.pdf_b64, source: 'generated' }],
-      } }));
+      window.dispatchEvent(new CustomEvent('ely:open-project-composer', {
+        detail: {
+          mode: 'compose',
+          projectId: project?.id,
+          to,
+          cc,
+          subject: `Section 10(4)(b) appointment — ${ao?.premise || ao?.address || project?.bo_premise_address || ''}`,
+          aoAddresses: [ao?.premise || ao?.address || ''].filter(Boolean),
+          attachments: [{ name: pack.fileName, type: 'application/pdf', contentType: 'application/pdf', contentBytes: pack.pdf_b64, source: 'generated' }],
+        },
+      }));
     }
   }, [currentEntry, project]);
 
   const handleSaveConfirm = useCallback(async (saveTarget, action) => {
     if (!pdfB64 || saving) return;
     setSaving(true);
+
     const is104b = (currentEntry?.aoSections || []).includes('s10_4b');
     const fileName = safeFileName(`${project?.bo_premise_address || 'Notice'}_${currentEntry.ao?.premise || currentEntry.ao?.name || 'AO'}_${is104b ? '10_4b_Appointment' : 'Notice_Pack'}.pdf`);
-    const pack = { ao: currentEntry.ao, aoSections: currentEntry.aoSections, aoWorksItems: currentEntry.aoWorksItems, aoS2Subs: currentEntry.aoS2Subs, pdf_b64: pdfB64, fileName, saveTarget, completionAction: action };
+    const pack = {
+      ao: currentEntry.ao,
+      aoSections: currentEntry.aoSections,
+      aoWorksItems: currentEntry.aoWorksItems,
+      aoS2Subs: currentEntry.aoS2Subs,
+      pdf_b64: pdfB64,
+      fileName,
+      saveTarget,
+      completionAction: action,
+    };
+
     try {
       if (is104b) {
         await finalise104b({ pack, action });
@@ -269,9 +406,18 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         onClose?.();
         return;
       }
+
       completedPacks.current.push(pack);
-      if (isLastAO) await onComplete?.(completedPacks.current, action);
-      else { setShowSave(false); setQueueIndex(index => index + 1); }
+      if (isLastAO) {
+        const packs = [...completedPacks.current];
+        prepareLegacyNoticeCompletion(packs);
+        await onComplete?.(packs, action);
+        window.dispatchEvent(new CustomEvent('ely:refresh-project-detail'));
+        if (action === 'save_email') openNoticeComposer(project, packs);
+      } else {
+        setShowSave(false);
+        setQueueIndex(index => index + 1);
+      }
     } catch (err) {
       alert(`Could not finalise the document: ${err.message}`);
     } finally {
@@ -284,18 +430,18 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0f1117', zIndex: 500, display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', minHeight: 52, background: '#161820', borderBottom: '1px solid #2a2d3a', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9' }}>{project?.bo_premise_address || 'Notice Pack'}</span>
-          <span style={{ fontSize: 12, color: '#64748b' }}>{aoLabel}</span>
-          {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd' }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 20px', minHeight: 52, background: '#161820', borderBottom: '1px solid #2a2d3a', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, overflow: 'hidden' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project?.bo_premise_address || 'Notice Pack'}</span>
+          <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aoLabel}</span>
+          {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Close</button>
-          {!generating && pdfUrl && <button onClick={() => setShowSave(true)} disabled={saving} style={btn('primary', saving)}>{isLastAO ? 'Finalise →' : `Confirm AO ${queueIndex + 1} & Continue →`}</button>}
         </div>
       </div>
+
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <aside style={{ width: 230, background: '#13151e', borderRight: '1px solid #2a2d3a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: 10, borderBottom: '1px solid #2a2d3a' }}>
@@ -308,27 +454,54 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
               <button onClick={handleDeleteSelected} disabled={generating || !selectedCount} style={{ ...btn('danger', generating || !selectedCount), padding: '6px 8px', flex: 1, fontSize: 11 }}>Delete {selectedCount || ''}</button>
             </div>
           </div>
+
           <div style={{ flex: 1, overflowY: 'auto', padding: 10 }}>
-            {generating && !pages.length ? <div style={{ color: '#64748b', fontSize: 12, textAlign: 'center', marginTop: 24 }}>Preparing pages…</div> : pages.map((page, index) => {
-              const selected = selectedPageIds.has(page.id); const current = currentPageIdx === index;
+            {generating && !pages.length ? (
+              <div style={{ color: '#64748b', fontSize: 12, textAlign: 'center', marginTop: 24 }}>Preparing pages…</div>
+            ) : pages.map((page, index) => {
+              const selected = selectedPageIds.has(page.id);
+              const current = currentPageIdx === index;
               return (
                 <div key={page.id} onClick={() => setCurrentPageIdx(index)} style={{ position: 'relative', display: 'flex', gap: 9, padding: 8, marginBottom: 8, background: current ? '#1a2340' : '#191c26', border: `1px solid ${current ? '#3b82f6' : selected ? '#64748b' : '#2a2d3a'}`, borderRadius: 7, cursor: 'pointer' }}>
                   <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ marginTop: 3, accentColor: '#3b82f6', cursor: 'pointer' }} />
                   <div style={{ width: 48, height: 66, background: '#fff', borderRadius: 2, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>{[88,64,78,54,82,70,45].map((width,row) => <div key={row} style={{ height: row === 0 ? 3 : 2, width: `${width}%`, background: row === 0 ? '#9ca3af' : '#d1d5db', borderRadius: 1 }} />)}</div>
+                    <div style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>{[88, 64, 78, 54, 82, 70, 45].map((width, row) => <div key={row} style={{ height: row === 0 ? 3 : 2, width: `${width}%`, background: row === 0 ? '#9ca3af' : '#d1d5db', borderRadius: 1 }} />)}</div>
                     <span style={{ position: 'absolute', right: 3, bottom: 2, fontSize: 8, color: '#6b7280' }}>{index + 1}</span>
                   </div>
-                  <div style={{ minWidth: 0, paddingTop: 2 }}><div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: current ? 600 : 500 }}>Page {index + 1}</div><div title={page.label} style={{ marginTop: 5, fontSize: 10, color: '#64748b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.label}</div></div>
+                  <div style={{ minWidth: 0, paddingTop: 2 }}>
+                    <div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: current ? 600 : 500 }}>Page {index + 1}</div>
+                    <div title={page.label} style={{ marginTop: 5, fontSize: 10, color: '#64748b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.label}</div>
+                  </div>
                 </div>
               );
             })}
           </div>
         </aside>
+
         <main style={{ flex: 1, background: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
           {generating && <div style={{ position: 'absolute', inset: 0, background: 'rgba(209,213,219,0.8)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: 13, color: '#475569' }}>Updating PDF…</div></div>}
           {viewerUrl ? <iframe key={viewerUrl} src={viewerUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Notice preview" /> : !generating && <div style={{ color: '#ef4444', fontSize: 13 }}>PDF could not be loaded.</div>}
         </main>
       </div>
+
+      {!generating && pdfUrl && (
+        <button
+          onClick={() => setShowSave(true)}
+          disabled={saving}
+          style={{
+            ...btn('primary', saving),
+            position: 'fixed',
+            right: 24,
+            bottom: 24,
+            zIndex: 750,
+            padding: '11px 22px',
+            boxShadow: '0 10px 30px rgba(15,23,42,0.35)',
+          }}
+        >
+          {isLastAO ? 'Finalise →' : `Confirm AO ${queueIndex + 1} & Continue →`}
+        </button>
+      )}
+
       {showAttach && <AttachModal currentPageIdx={currentPageIdx} totalPages={pages.length} onConfirm={handleAttachConfirm} onClose={() => setShowAttach(false)} />}
       {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
     </div>
