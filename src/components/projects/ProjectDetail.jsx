@@ -3567,6 +3567,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // Ensure lowercase aliases exist (docxtemplater is case-sensitive)
     mergeData.full_notice_runs = mergeData.FULL_NOTICE_RUNS;
     mergeData.full_notice_dates = mergeData.FULL_NOTICE_DATES;
+    // Build NOTICE_SECTION_FULL from AO notice history
+    mergeData.NOTICE_SECTION_FULL = (() => {
+      const runs = [];
+      if (ao?.notice_served_date || ao?.noticeServedDate) runs.push('Section 2(2)');
+      if (runs.length === 0) return '';
+      if (runs.length === 1) return runs[0];
+      return runs.slice(0, -1).join(', ') + ' and ' + runs[runs.length - 1];
+    })();
     mergeData.notice_section_full = mergeData.NOTICE_SECTION_FULL;
     mergeData.section_10_notice_date = mergeData.SECTION_10_NOTICE_DATE;
     mergeData['{{NOTICE_SECTION_FULL}}'] = mergeData.NOTICE_SECTION_FULL;
