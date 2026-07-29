@@ -271,6 +271,20 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
+    // AO appointed surveyor details (for 10(4)(b) documents)
+    AO_SURVEYOR_NAME: clean(options.aoSurveyorName || options.ao_surveyor_name || ''),
+    AO_SURVEYOR_FIRM: clean(options.aoSurveyorFirm || options.ao_surveyor_firm || ''),
+    AO_SURVEYOR_EMAIL: clean(options.aoSurveyorEmail || options.ao_surveyor_email || ''),
+    AO_SURVEYOR_PHONE: clean(options.aoSurveyorPhone || options.ao_surveyor_phone || ''),
+    AO_SURVEYOR_ADDRESS: clean(options.aoSurveyorAddress || options.ao_surveyor_address || ''),
+    AO_SURVEYOR_FULL: (() => {
+      const n = clean(options.aoSurveyorName || options.ao_surveyor_name || '');
+      const f = clean(options.aoSurveyorFirm || options.ao_surveyor_firm || '');
+      const a = clean(options.aoSurveyorAddress || options.ao_surveyor_address || '');
+      const parts = [n, f && n ? 'of ' + f : f, a].filter(Boolean);
+      return parts.join(', ');
+    })(),
+
     LEASEHOLDER_SURVEYOR_NOTE: (options.tenure || '').toLowerCase() === 'leaseholder'
       ? 'In the interest of keeping costs down, would you consider using the same surveyor as the other Leaseholders in your building? I am happy to pass these details on to you.'
       : '',
