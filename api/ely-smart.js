@@ -3152,33 +3152,112 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // chat with no email selected — search inbox automatically, no linking needed
     let generalInboxResults = [];
     const asksAboutInbox = isMainChat && !suppliedEmailContext && !body.emailId && !body.threadId && (
-      /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|check my email|search my email|have i.*email|did i.*email|who (is|are|did|confirmed|booked|sent)|any.*appointment|any.*meeting/i.test(prompt)
+      /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|check my email|search my email|have i.*email|did i.*email|who (is|are|did|confirmed|booked|sent)|any.*appointment|any.*meeting|tomorrow|today|yesterday|\d+(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(prompt)
     );
 
     if (asksAboutInbox) {
       try {
         const sb = getSupabase();
         if (sb) {
-          // Extract specific day and topic keywords from the prompt
-          const dayMatch = prompt.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|this week|next week)\b/i);
-          const topicMatch = prompt.match(/\b(appointment|meeting|inspection|soc|survey|visit|site|confirmed)\b/i);
+          const now = new Date();
 
-          const dayTerm = dayMatch ? dayMatch[0].toLowerCase() : '';
-          const topicTerm = topicMatch ? topicMatch[0].toLowerCase() : 'appointment';
-          const searchTerm = dayTerm || topicTerm;
+          // Resolve relative date references to actual date ranges
+          const resolveDate = (p) => {
+            const lower = p.toLowerCase();
+            const d = new Date(now);
+            if (/\btomorrow\b/.test(lower)) { d.setDate(d.getDate() + 1); return { date: d, range: 'day' }; }
+            if (/\btoday\b/.test(lower)) { return { date: d, range: 'day' }; }
+            if (/\byesterday\b/.test(lower)) { d.setDate(d.getDate() - 1); return { date: d, range: 'day' }; }
+            // Day name: next occurrence
+            const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+            const dayMatch = lower.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+            if (dayMatch) {
+              const target = days.indexOf(dayMatch[1]);
+              const current = d.getDay();
+              const diff = (target - current + 7) % 7 || 7;
+              d.setDate(d.getDate() + diff);
+              return { date: d, range: 'day' };
+            }
+            // Explicit date: "30th July", "30 July", "July 30"
+            const explicitMatch = lower.match(/(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)|(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/i);
+            if (explicitMatch) {
+              const months = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+              const dayNum = parseInt(explicitMatch[1] || explicitMatch[4]);
+              const monthStr = (explicitMatch[2] || explicitMatch[3]).toLowerCase();
+              d.setMonth(months[monthStr], dayNum);
+              return { date: d, range: 'day' };
+            }
+            if (/\bthis week\b/.test(lower)) { return { date: d, range: 'week' }; }
+            if (/\bnext week\b/.test(lower)) { d.setDate(d.getDate() + 7); return { date: d, range: 'week' }; }
+            return null;
+          };
 
-          const { data } = await sb
+          const resolved = resolveDate(prompt);
+          const topicMatch = prompt.match(/\b(appointment|meeting|inspection|soc|survey|visit|site|confirmed|schedule|booked|booking)\b/i);
+          const topicTerm = topicMatch ? topicMatch[0].toLowerCase() : '';
+
+          let query = sb
             .from('emails')
-            .select('subject, from_name, from_address, received_at, body_text, folder')
-            .or(`subject.ilike.%${searchTerm}%,body_text.ilike.%${searchTerm}%`)
+            .select('subject, from_name, from_address, received_at, body_text, folder, project_id');
+
+          if (resolved) {
+            // Date-range filter: search emails received around the target date
+            // AND search email bodies/subjects mentioning that date
+            const targetDate = resolved.date;
+            const dayStart = new Date(targetDate); dayStart.setHours(0,0,0,0);
+            const dayEnd = new Date(targetDate); dayEnd.setHours(23,59,59,999);
+            const weekStart = new Date(targetDate); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+
+            // Format target date as strings to search in body
+            const dateStr = targetDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+            const dateStr2 = targetDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            const dateNum = `${targetDate.getDate()}/${targetDate.getMonth()+1}`;
+            const dateNum2 = `${String(targetDate.getDate()).padStart(2,'0')}/${String(targetDate.getMonth()+1).padStart(2,'0')}`;
+
+            if (resolved.range === 'day') {
+              // Search emails received on that day OR mentioning that date in body/subject
+              query = query.or([
+                `received_at.gte.${dayStart.toISOString()}`,
+                `received_at.lte.${dayEnd.toISOString()}`,
+                `subject.ilike.%${dateStr}%`,
+                `body_text.ilike.%${dateStr}%`,
+                `subject.ilike.%${dateStr2}%`,
+                `body_text.ilike.%${dateStr2}%`,
+                `body_text.ilike.%${dateNum}%`,
+                `body_text.ilike.%${dateNum2}%`,
+              ].join(','));
+            } else {
+              query = query
+                .gte('received_at', weekStart.toISOString())
+                .lte('received_at', weekEnd.toISOString());
+            }
+          } else if (topicTerm) {
+            // No date — fall back to topic keyword search
+            query = query.or(`subject.ilike.%${topicTerm}%,body_text.ilike.%${topicTerm}%`);
+          } else {
+            // No date, no topic — get recent emails
+            query = query.order('received_at', { ascending: false }).limit(10);
+          }
+
+          const { data } = await query
             .order('received_at', { ascending: false })
-            .limit(8);
+            .limit(15);
+
+          // Also fetch project titles for context
+          const projectIds = [...new Set((data || []).map(e => e.project_id).filter(Boolean))];
+          let projectMap = {};
+          if (projectIds.length) {
+            const { data: projs } = await sb.from('projects').select('id, bo_premise_address').in('id', projectIds);
+            (projs || []).forEach(p => { projectMap[p.id] = p.bo_premise_address; });
+          }
 
           generalInboxResults = (data || []).map(e => ({
             from: e.from_name || e.from_address || '',
             subject: e.subject || '',
             date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '',
-            body: cleanEmailBody(e.body_text || '').slice(0, 400),
+            body: cleanEmailBody(e.body_text || '').slice(0, 600),
+            project: projectMap[e.project_id] || '',
           }));
         }
       } catch (err) {
