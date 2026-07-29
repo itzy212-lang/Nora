@@ -3502,6 +3502,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // Build merge data directly — bypasses buildNoticeMergeData to avoid placeholder crash
     const aoPremiseAddr = aoAddress(ao) || ao?.name || '';
     const boAddr = project?.bo_premise_address || project?.address || '';
+    // Split AO service address into up to 3 lines
+    const aoServiceAddr = ao?.service_address || ao?.reg_addr || aoPremiseAddr;
+    const addrParts = aoServiceAddr.split(',').map(s => s.trim()).filter(Boolean);
+    let aoLine1 = '', aoLine2 = '', aoLine3 = '';
+    if (addrParts.length === 1) { aoLine1 = addrParts[0]; }
+    else if (addrParts.length === 2) { aoLine1 = addrParts[0]; aoLine2 = addrParts[1]; }
+    else if (addrParts.length === 3) { aoLine1 = addrParts[0]; aoLine2 = addrParts[1]; aoLine3 = addrParts[2]; }
+    else if (addrParts.length >= 4) {
+      aoLine1 = addrParts[0];
+      aoLine2 = addrParts.slice(1, addrParts.length - 2).join(', ');
+      aoLine3 = addrParts.slice(addrParts.length - 2).join(', ');
+    }
     const mergeData = {
       DATE: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
       NOTICE_DATE: (ao?.notice_served_date || ao?.noticeServedDate) ? new Date((ao.notice_served_date || ao.noticeServedDate).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
@@ -3515,7 +3527,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       AO_NAME_2: ao?.name2 || '',
       AO_PREMISE: aoPremiseAddr,
       AO_PREMISE_ADDRESS: aoPremiseAddr,
-      AO_SERVICE_ADDRESS: ao?.service_address || ao?.reg_addr || aoPremiseAddr,
+      AO_SERVICE_ADDRESS: aoServiceAddr,
+      AO_SERVICE_LINE_1: aoLine1,
+      AO_SERVICE_LINE_2: aoLine2,
+      AO_SERVICE_LINE_3: aoLine3,
+      ao_service_line_1: aoLine1,
+      ao_service_line_2: aoLine2,
+      ao_service_line_3: aoLine3,
       AO_SURVEYOR_NAME: survName,
       AO_SURVEYOR_FIRM: survFirm,
       AO_SURVEYOR_EMAIL: ao?.surv_email || ao?.surveyorEmail || '',
