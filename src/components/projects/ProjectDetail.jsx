@@ -3651,11 +3651,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       console.log('[batch notice] aoSections for', ak, ':', aoSections);
       const aoWorks = aoWorksMap[ak] || {};
       const aoS2Subs = aoS2SubsMap[ak] || section2Subsections;
-      const aoWorksItems = Object.entries(aoWorks).flatMap(([sec, items]) =>
+      // Build works items from per-AO map; fall back to legacy flat worksItems if empty
+      const aoWorksFromMap = Object.entries(aoWorks).flatMap(([sec, items]) =>
         (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))
-      ) || worksItems;
-      console.log('[batch notice] aoWorks for', ak, ':', JSON.stringify(aoWorks));
-      console.log('[batch notice] aoWorksItems for', ak, ':', JSON.stringify(aoWorksItems));
+      );
+      const aoWorksItems = aoWorksFromMap.length > 0 ? aoWorksFromMap : (worksItems || []);
+      console.log('[batch notice] aoWorks for', ak, ':', JSON.stringify(aoWorks), '| aoWorksItems:', aoWorksItems.length);
 
       // Generate documents — do NOT save workflow state yet
       if (!aoSections?.length) {
