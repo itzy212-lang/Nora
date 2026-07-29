@@ -198,7 +198,7 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
         )
       : noticeDate;
 
-  const placeholders = buildNoticePlaceholders(project, ao, {
+  const placeholders = buildNoticePlaceholders(project, ao, { ...extraOptions,
     noticeType: sectionKey,
     noticeSection: sectionLabels[sectionKey] || sectionKey,
     noticeDate,
