@@ -86,6 +86,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
 
   const updateWork = (sec, ak, index, value) => {
     const k = workKey(sec, ak);
+    console.log('[works] updateWork key:', k, 'value:', value);
     setSectionWorks(prev => ({ ...prev, [k]: (prev[k] || ['']).map((item, i) => i === index ? value : item) }));
   };
 
@@ -192,6 +193,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
     if (typeof onServe !== 'function') { alert('Notice workflow handler is not connected.'); return; }
 
     setLoading(true);
+    console.log('[works] sectionWorks at submit:', JSON.stringify(sectionWorks));
     try {
       const tenureMap = Object.fromEntries(selectedAOs.map(a => [aoKey(a), aoTenureTypes[aoKey(a)] || '']));
 
