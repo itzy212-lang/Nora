@@ -3500,24 +3500,34 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       });
     }
 
-    const mergeData = buildNoticeMergeData({
-      project,
-      ao,
-      sectionKey: 's10_4b',
-      includeCover: false,
-      noticeDate,
-      allSections: ['s10_4b'],
-      worksItems: [],
-      extraOptions: {
-        aoSurveyorName: survName,
-        aoSurveyorFirm: survFirm,
-        aoSurveyorEmail: ao?.surv_email || ao?.surveyorEmail || '',
-        aoSurveyorPhone: ao?.surv_phone || ao?.surveyorPhone || '',
-        aoSurveyorAddress: ao?.surv_address || ao?.surveyorAddress || '',
-        s10ServedDate,
-        noticeRuns: allNoticeRuns,
-      },
-    });
+    // Build merge data directly — bypasses buildNoticeMergeData to avoid placeholder crash
+    const aoPremiseAddr = aoAddress(ao) || ao?.name || '';
+    const boAddr = project?.bo_premise_address || project?.address || '';
+    const mergeData = {
+      DATE: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+      NOTICE_DATE: longDate(ao?.notice_served_date || ao?.noticeServedDate || ''),
+      SECTION_10_NOTICE_DATE: longDate(s10ServedDate),
+      BO_NAME: project?.bo_1_name || project?.bo || '',
+      BO_PREMISE: boAddr,
+      BO_PREMISE_ADDRESS: boAddr,
+      BO_SERVICE_ADDRESS: boAddr,
+      AO_NAME: ao?.name || '',
+      AO_NAME_1: ao?.name || '',
+      AO_NAME_2: ao?.name2 || '',
+      AO_PREMISE: aoPremiseAddr,
+      AO_PREMISE_ADDRESS: aoPremiseAddr,
+      AO_SERVICE_ADDRESS: ao?.service_address || ao?.reg_addr || aoPremiseAddr,
+      AO_SURVEYOR_NAME: survName,
+      AO_SURVEYOR_FIRM: survFirm,
+      AO_SURVEYOR_EMAIL: ao?.surv_email || ao?.surveyorEmail || '',
+      AO_SURVEYOR_PHONE: ao?.surv_phone || ao?.surveyorPhone || '',
+      SURVEYOR_NAME: project?.surveyor_name || 'Itzik Darel',
+      SURVEYOR_FIRM: project?.surveyor_firm || 'Square One Consulting',
+      NOTICE_RUN_1_DATE: longDate(ao?.notice_served_date || ao?.noticeServedDate || ''),
+      NOTICE_RUN_1_SECTIONS: 'Section 2(2)',
+      NOTICE_RUN_2_DATE: longDate(s10ServedDate),
+      NOTICE_RUN_2_SECTIONS: 'Section 10',
+    };
 
     // Generate Letter to AO
     try {
