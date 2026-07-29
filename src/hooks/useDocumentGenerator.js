@@ -1,4 +1,5 @@
 // src/hooks/useDocumentGenerator.js
+import { useCallback, useMemo } from 'react';
 import sb from '../supabaseClient';
 
 async function loadTemplate(templateKey) {
@@ -41,7 +42,7 @@ async function readJson(response) {
 }
 
 export default function useDocumentGenerator() {
-  const generateDocument = async ({
+  const generateDocument = useCallback(async ({
     templateKey,
     mergeData,
     fileName = 'document.docx',
@@ -97,18 +98,27 @@ export default function useDocumentGenerator() {
 
       return {
         success: true,
+        fileName,
         docx_b64: result.docx_b64 || null,
         pdf_b64: result.pdf_b64 || null,
         storage_path: result.storage_path || null,
         doc_id: result.doc_id || null,
       };
     } catch (error) {
-      console.error('[generateDocument] error:', error);
-      return { success: false, error: error.message };
-    }
-  };
+      console.error('[generateDocument] error:', {
+        templateKey,
+        error,
+        stack: error?.stack,
+      });
 
-  const sendForSignature = async ({
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, []);
+
+  const sendForSignature = useCallback(async ({
     templateKey,
     mergeData,
     fileName = 'Letter of Appointment.pdf',
@@ -171,9 +181,12 @@ export default function useDocumentGenerator() {
       console.error('[sendForSignature] error:', error);
       return { success: false, error: error.message };
     }
-  };
+  }, []);
 
-  return { generateDocument, sendForSignature };
+  return useMemo(
+    () => ({ generateDocument, sendForSignature }),
+    [generateDocument, sendForSignature]
+  );
 }
 
 function downloadB64(b64, fileName, mimeType) {
