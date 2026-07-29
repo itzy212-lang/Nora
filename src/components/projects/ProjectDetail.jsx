@@ -3474,7 +3474,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     if (!window.confirm(`Generate 10(4)(b) papers for ${ao?.premise || ao?.name || 'this AO'}?`)) return;
 
-    setGeneratingNotice(true);
     const noticeDate = todayIso();
     const warnings = [];
     const generatedDocs = [];
@@ -3567,8 +3566,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     } catch (err) {
       warnings.push(`Surveyor Appointment: ${err.message}`);
     }
-
-    setGeneratingNotice(false);
 
     if (generatedDocs.length === 0) {
       alert(`Could not generate 10(4)(b) documents.\n${warnings.join('\n')}`);
