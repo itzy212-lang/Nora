@@ -48,14 +48,14 @@ export default function useDocumentGenerator() {
     fileName = 'document.docx',
     projectId = null,
     skipDownload = false,
-    outputAs = 'docx', // 'docx' | 'pdf' — which format to actually download
+    outputAs = 'docx',
   }) => {
     try {
       console.log('[generateDocument] start', { templateKey, fileName, projectId, outputAs });
 
       const template = await loadTemplate(templateKey);
-
       const enrichedMergeData = { ...(mergeData || {}) };
+
       if (projectId) enrichedMergeData.project_id = projectId;
       enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
 
@@ -65,7 +65,8 @@ export default function useDocumentGenerator() {
         body: JSON.stringify({
           template_b64: template.file_b64,
           merge_data: enrichedMergeData,
-          output_format: 'docx',
+          output_format: outputAs,
+          save_to_onedrive: !skipDownload,
         }),
       });
 
@@ -86,6 +87,7 @@ export default function useDocumentGenerator() {
           if (!result.pdf_b64) {
             throw new Error('PDF conversion failed — no PDF was returned. Check API2PDF_API_KEY is set in Vercel.');
           }
+
           downloadB64(result.pdf_b64, fileName, 'application/pdf');
         } else if (result.docx_b64) {
           downloadB64(
@@ -128,8 +130,8 @@ export default function useDocumentGenerator() {
   }) => {
     try {
       const template = await loadTemplate(templateKey);
-
       const enrichedMergeData = { ...(mergeData || {}) };
+
       if (projectId) enrichedMergeData.project_id = projectId;
       enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
 
@@ -139,7 +141,8 @@ export default function useDocumentGenerator() {
         body: JSON.stringify({
           template_b64: template.file_b64,
           merge_data: enrichedMergeData,
-          output_format: 'docx',
+          output_format: 'pdf',
+          save_to_onedrive: true,
         }),
       });
 
