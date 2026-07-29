@@ -69,15 +69,16 @@ function addAliasFields(base) {
     out[`{{${key}}}`] = value;
     out[`{{${key.toUpperCase()}}}`] = value;
   });
-  // Add combined notice run placeholders now that 'out' is fully built
+  // Add combined notice run placeholders — read from out only, no options reference
   const fullRuns = (() => {
     const runs = [];
     for (let n = 1; n <= 5; n++) {
       const v = out['notice_run_' + n + '_sections'] || out['NOTICE_RUN_' + n + '_SECTIONS'];
       if (v) runs.push(v);
     }
-    if (!runs.length && (options.noticeType || options.noticeSectionsFull)) {
-      runs.push(options.noticeSectionsFull || options.noticeType);
+    if (!runs.length) {
+      const ns = out['NOTICE_SECTION_FULL'] || out['notice_section_full'] || out['NOTICE_SECTIONS_FULL'] || '';
+      if (ns) runs.push(ns);
     }
     return runs.join(' and ');
   })();
@@ -88,7 +89,10 @@ function addAliasFields(base) {
       const v = out['notice_run_' + n + '_date'] || out['NOTICE_RUN_' + n + '_DATE'];
       if (v) dates.push(v);
     }
-    if (!dates.length && options.noticeDate) dates.push(clean(options.noticeDate));
+    if (!dates.length) {
+      const nd = out['NOTICE_DATE'] || out['notice_date'] || '';
+      if (nd) dates.push(nd);
+    }
     if (dates.length === 1) return dates[0];
     if (dates.length === 2) return dates[0] + ' and ' + dates[1];
     return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
@@ -96,8 +100,10 @@ function addAliasFields(base) {
 
   out.FULL_NOTICE_RUNS = fullRuns;
   out.full_notice_runs = fullRuns;
+  out['{{FULL_NOTICE_RUNS}}'] = fullRuns;
   out.FULL_NOTICE_DATES = fullDates;
   out.full_notice_dates = fullDates;
+  out['{{FULL_NOTICE_DATES}}'] = fullDates;
 
   return out;
 }
