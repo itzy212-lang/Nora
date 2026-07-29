@@ -61,59 +61,14 @@ function ownerWords(hasSecond) {
   };
 }
 
-function buildFullNoticeRuns(placeholderObj) {
-  var runParts = [];
-  for (var ri = 1; ri <= 5; ri++) {
-    var rv = placeholderObj['notice_run_' + ri + '_sections'] || placeholderObj['NOTICE_RUN_' + ri + '_SECTIONS'] || '';
-    if (rv) runParts.push(rv);
-  }
-  if (!runParts.length) {
-    var fallback = placeholderObj['NOTICE_SECTION_FULL'] || placeholderObj['notice_section_full'] || '';
-    if (fallback) runParts.push(fallback);
-  }
-  return runParts.join(' and ');
-}
-
-function buildFullNoticeDates(placeholderObj) {
-  var dateParts = [];
-  for (var di = 1; di <= 5; di++) {
-    var dv = placeholderObj['notice_run_' + di + '_date'] || placeholderObj['NOTICE_RUN_' + di + '_DATE'] || '';
-    if (dv) dateParts.push(dv);
-  }
-  if (!dateParts.length) {
-    var fd = placeholderObj['NOTICE_DATE'] || placeholderObj['notice_date'] || '';
-    if (fd) dateParts.push(fd);
-  }
-  if (dateParts.length === 0) return '';
-  if (dateParts.length === 1) return dateParts[0];
-  if (dateParts.length === 2) return dateParts[0] + ' and ' + dateParts[1];
-  return dateParts.slice(0, -1).join(', ') + ' and ' + dateParts[dateParts.length - 1];
-}
-
 function addAliasFields(base) {
   const out = { ...base };
   Object.entries(base).forEach(([key, value]) => {
-    // Only alias string/number values — skip arrays and objects
-    if (value !== null && value !== undefined && typeof value !== 'object') {
-      out[key.toLowerCase()] = value;
-      out[key.toUpperCase()] = value;
-      out[`{{${key}}}`] = value;
-      out[`{{${key.toUpperCase()}}}`] = value;
-    }
+    out[key.toLowerCase()] = value;
+    out[key.toUpperCase()] = value;
+    out[`{{${key}}}`] = value;
+    out[`{{${key.toUpperCase()}}}`] = value;
   });
-
-  const fullRuns = buildFullNoticeRuns(out);
-  const fullDates = buildFullNoticeDates(out);
-
-  out.FULL_NOTICE_RUNS = fullRuns;
-  out.full_notice_runs = fullRuns;
-  out['{{FULL_NOTICE_RUNS}}'] = fullRuns;
-  out['{{full_notice_runs}}'] = fullRuns;
-  out.FULL_NOTICE_DATES = fullDates;
-  out.full_notice_dates = fullDates;
-  out['{{FULL_NOTICE_DATES}}'] = fullDates;
-  out['{{full_notice_dates}}'] = fullDates;
-
   return out;
 }
 
@@ -316,20 +271,6 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
-    // AO appointed surveyor details (for 10(4)(b) documents)
-    AO_SURVEYOR_NAME: clean(options.aoSurveyorName || options.ao_surveyor_name || ''),
-    AO_SURVEYOR_FIRM: clean(options.aoSurveyorFirm || options.ao_surveyor_firm || ''),
-    AO_SURVEYOR_EMAIL: clean(options.aoSurveyorEmail || options.ao_surveyor_email || ''),
-    AO_SURVEYOR_PHONE: clean(options.aoSurveyorPhone || options.ao_surveyor_phone || ''),
-    AO_SURVEYOR_ADDRESS: clean(options.aoSurveyorAddress || options.ao_surveyor_address || ''),
-    AO_SURVEYOR_FULL: (() => {
-      const survN = clean(options.aoSurveyorName || options.ao_surveyor_name || '');
-      const survF = clean(options.aoSurveyorFirm || options.ao_surveyor_firm || '');
-      const survA = clean(options.aoSurveyorAddress || options.ao_surveyor_address || '');
-      const survParts = [survN, survF && survN ? 'of ' + survF : survF, survA].filter(Boolean);
-      return survParts.join(', ');
-    })(),
-
     LEASEHOLDER_SURVEYOR_NOTE: (options.tenure || '').toLowerCase() === 'leaseholder'
       ? 'In the interest of keeping costs down, would you consider using the same surveyor as the other Leaseholders in your building? I am happy to pass these details on to you.'
       : '',
