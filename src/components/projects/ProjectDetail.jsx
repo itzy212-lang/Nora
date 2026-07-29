@@ -162,7 +162,7 @@ function joinOwnerNames(name1, name2) {
   return a || b || '';
 }
 
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '', worksItems = [] }) {
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '', worksItems = [], extraOptions = {} }) {
   const noticeDate = suppliedNoticeDate || todayIso();
   const boPremise = project?.bo_premise_address || project?.address || '';
   const aoPremise = aoAddress(ao);
