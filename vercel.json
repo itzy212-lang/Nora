@@ -80,6 +80,9 @@
     "api/merge-notice-pdfs.js": {
       "maxDuration": 120
     },
+    "api/merge-pdfs-b64.js": {
+      "maxDuration": 120
+    },
     "api/docx-to-html.js": {
       "maxDuration": 30
     },
