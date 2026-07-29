@@ -96,6 +96,8 @@ export default function ProjectDetailNoticeWorkflow(props) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    let active = true;
+
     const openComposer = event => {
       if (event?.detail) props.onOpenComposer?.(event.detail);
     };
@@ -106,14 +108,18 @@ export default function ProjectDetailNoticeWorkflow(props) {
       } catch (error) {
         console.warn('[notice reconciliation] failed:', error?.message || error);
       } finally {
-        setRefreshKey(key => key + 1);
+        if (active) setRefreshKey(key => key + 1);
       }
     };
 
     window.addEventListener('ely:open-project-composer', openComposer);
     window.addEventListener('ely:refresh-project-detail', refreshProject);
 
+    // Repair any previously missed AO status as soon as the project is opened.
+    refreshProject();
+
     return () => {
+      active = false;
       window.removeEventListener('ely:open-project-composer', openComposer);
       window.removeEventListener('ely:refresh-project-detail', refreshProject);
     };
