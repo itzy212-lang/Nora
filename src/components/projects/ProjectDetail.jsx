@@ -3529,11 +3529,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       NOTICE_RUN_2_SECTIONS: 'Section 10',
     };
 
-    // Generate Letter to AO
+    // Generate Letter to AO — JSON clone to avoid object reference issues between calls
+    const mergeData1 = JSON.parse(JSON.stringify(mergeData));
+    const mergeData2 = JSON.parse(JSON.stringify(mergeData));
+
     try {
       const r1 = await generateDocument({
         templateKey: 's10_4b_letter_ao',
-        mergeData,
+        mergeData: mergeData1,
         fileName: `10(4)(b) Letter to AO - ${aoAddress(ao) || ao.name}.docx`,
         projectId: project.id,
         skipDownload: true,
@@ -3551,7 +3554,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     try {
       const r2 = await generateDocument({
         templateKey: 's10_4b_surveyor_appointment',
-        mergeData,
+        mergeData: mergeData2,
         fileName: `10(4)(b) Surveyor Appointment - ${aoAddress(ao) || ao.name}.docx`,
         projectId: project.id,
         skipDownload: true,
