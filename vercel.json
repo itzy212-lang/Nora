@@ -83,6 +83,9 @@
     "api/merge-pdfs-b64.js": {
       "maxDuration": 120
     },
+    "api/split-pdf.js": {
+      "maxDuration": 60
+    },
     "api/docx-to-html.js": {
       "maxDuration": 30
     },
