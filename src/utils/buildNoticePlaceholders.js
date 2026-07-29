@@ -69,6 +69,36 @@ function addAliasFields(base) {
     out[`{{${key}}}`] = value;
     out[`{{${key.toUpperCase()}}}`] = value;
   });
+  // Add combined notice run placeholders now that 'out' is fully built
+  const fullRuns = (() => {
+    const runs = [];
+    for (let n = 1; n <= 5; n++) {
+      const v = out['notice_run_' + n + '_sections'] || out['NOTICE_RUN_' + n + '_SECTIONS'];
+      if (v) runs.push(v);
+    }
+    if (!runs.length && (options.noticeType || options.noticeSectionsFull)) {
+      runs.push(options.noticeSectionsFull || options.noticeType);
+    }
+    return runs.join(' and ');
+  })();
+
+  const fullDates = (() => {
+    const dates = [];
+    for (let n = 1; n <= 5; n++) {
+      const v = out['notice_run_' + n + '_date'] || out['NOTICE_RUN_' + n + '_DATE'];
+      if (v) dates.push(v);
+    }
+    if (!dates.length && options.noticeDate) dates.push(clean(options.noticeDate));
+    if (dates.length === 1) return dates[0];
+    if (dates.length === 2) return dates[0] + ' and ' + dates[1];
+    return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
+  })();
+
+  out.FULL_NOTICE_RUNS = fullRuns;
+  out.full_notice_runs = fullRuns;
+  out.FULL_NOTICE_DATES = fullDates;
+  out.full_notice_dates = fullDates;
+
   return out;
 }
 
@@ -271,30 +301,6 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
-    // Combined notice run strings for simple single-placeholder use
-    FULL_NOTICE_RUNS: (() => {
-      // Builds: "Section 2(2)(a)(b)(c) and Section 6(1)" from all notice runs
-      const runs = [];
-      Object.keys(out).forEach(k => {
-        const m = k.match(/^notice_run_(\d+)_sections$/i);
-        if (m && out[k]) runs.push(out[k]);
-      });
-      if (!runs.length && options.noticeType) runs.push(options.noticeSectionsFull || options.noticeType);
-      return runs.join(' and ');
-    })(),
-    FULL_NOTICE_DATES: (() => {
-      // Builds: "10 June 2026 and 9 July 2026" from all notice run dates
-      const dates = [];
-      Object.keys(out).forEach(k => {
-        const m = k.match(/^notice_run_(\d+)_date$/i);
-        if (m && out[k]) dates.push(out[k]);
-      });
-      if (!dates.length && options.noticeDate) dates.push(clean(options.noticeDate));
-      if (dates.length === 1) return dates[0];
-      if (dates.length === 2) return dates[0] + ' and ' + dates[1];
-      return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
-    })(),
-
     // AO appointed surveyor details (for 10(4)(b) documents)
     AO_SURVEYOR_NAME: clean(options.aoSurveyorName || options.ao_surveyor_name || ''),
     AO_SURVEYOR_FIRM: clean(options.aoSurveyorFirm || options.ao_surveyor_firm || ''),
