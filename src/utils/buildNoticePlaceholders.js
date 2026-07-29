@@ -61,6 +61,35 @@ function ownerWords(hasSecond) {
   };
 }
 
+function buildFullNoticeRuns(placeholderObj) {
+  var runParts = [];
+  for (var ri = 1; ri <= 5; ri++) {
+    var rv = placeholderObj['notice_run_' + ri + '_sections'] || placeholderObj['NOTICE_RUN_' + ri + '_SECTIONS'] || '';
+    if (rv) runParts.push(rv);
+  }
+  if (!runParts.length) {
+    var fallback = placeholderObj['NOTICE_SECTION_FULL'] || placeholderObj['notice_section_full'] || '';
+    if (fallback) runParts.push(fallback);
+  }
+  return runParts.join(' and ');
+}
+
+function buildFullNoticeDates(placeholderObj) {
+  var dateParts = [];
+  for (var di = 1; di <= 5; di++) {
+    var dv = placeholderObj['notice_run_' + di + '_date'] || placeholderObj['NOTICE_RUN_' + di + '_DATE'] || '';
+    if (dv) dateParts.push(dv);
+  }
+  if (!dateParts.length) {
+    var fd = placeholderObj['NOTICE_DATE'] || placeholderObj['notice_date'] || '';
+    if (fd) dateParts.push(fd);
+  }
+  if (dateParts.length === 0) return '';
+  if (dateParts.length === 1) return dateParts[0];
+  if (dateParts.length === 2) return dateParts[0] + ' and ' + dateParts[1];
+  return dateParts.slice(0, -1).join(', ') + ' and ' + dateParts[dateParts.length - 1];
+}
+
 function addAliasFields(base) {
   const out = { ...base };
   Object.entries(base).forEach(([key, value]) => {
@@ -69,41 +98,18 @@ function addAliasFields(base) {
     out[`{{${key}}}`] = value;
     out[`{{${key.toUpperCase()}}}`] = value;
   });
-  // Add combined notice run placeholders — read from out only, no options reference
-  const fullRuns = (() => {
-    const runs = [];
-    for (let n = 1; n <= 5; n++) {
-      const v = out['notice_run_' + n + '_sections'] || out['NOTICE_RUN_' + n + '_SECTIONS'];
-      if (v) runs.push(v);
-    }
-    if (!runs.length) {
-      const ns = out['NOTICE_SECTION_FULL'] || out['notice_section_full'] || out['NOTICE_SECTIONS_FULL'] || '';
-      if (ns) runs.push(ns);
-    }
-    return runs.join(' and ');
-  })();
 
-  const fullDates = (() => {
-    const dates = [];
-    for (let n = 1; n <= 5; n++) {
-      const v = out['notice_run_' + n + '_date'] || out['NOTICE_RUN_' + n + '_DATE'];
-      if (v) dates.push(v);
-    }
-    if (!dates.length) {
-      const nd = out['NOTICE_DATE'] || out['notice_date'] || '';
-      if (nd) dates.push(nd);
-    }
-    if (dates.length === 1) return dates[0];
-    if (dates.length === 2) return dates[0] + ' and ' + dates[1];
-    return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
-  })();
+  const fullRuns = buildFullNoticeRuns(out);
+  const fullDates = buildFullNoticeDates(out);
 
   out.FULL_NOTICE_RUNS = fullRuns;
   out.full_notice_runs = fullRuns;
   out['{{FULL_NOTICE_RUNS}}'] = fullRuns;
+  out['{{full_notice_runs}}'] = fullRuns;
   out.FULL_NOTICE_DATES = fullDates;
   out.full_notice_dates = fullDates;
   out['{{FULL_NOTICE_DATES}}'] = fullDates;
+  out['{{full_notice_dates}}'] = fullDates;
 
   return out;
 }
