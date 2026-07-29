@@ -2399,7 +2399,7 @@ async function searchProjectEmails({ projectId, query, sender, limit = 5 }) {
         .limit(limit);
 
       if (sender) fallback = fallback.or(`from_address.ilike.%${sender}%,from_name.ilike.%${sender}%`);
-      if (query) fallback = fallback.or(`subject.ilike.%${query}%,body_text.ilike.%${query}%`);
+      if (query) fallback = fallback.or(`subject.ilike.%${query}%,body_preview.ilike.%${query}%`);
 
       const { data: fbData } = await fallback;
       return (fbData || []).map(normaliseEmailRecord).filter(Boolean);
@@ -3211,7 +3211,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
           let query = sb
             .from('emails')
-            .select('subject, from_name, from_address, received_at, body_text, folder, project_id');
+            .select('subject, from_name, sender_name, from_address, sender_email, received_at, body_preview, folder, project_id');
 
           if (resolved) {
             // Date-range filter: search emails received around the target date
@@ -3234,11 +3234,11 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
                 `received_at.gte.${dayStart.toISOString()}`,
                 `received_at.lte.${dayEnd.toISOString()}`,
                 `subject.ilike.%${dateStr}%`,
-                `body_text.ilike.%${dateStr}%`,
+                `body_preview.ilike.%${dateStr}%`,
                 `subject.ilike.%${dateStr2}%`,
-                `body_text.ilike.%${dateStr2}%`,
-                `body_text.ilike.%${dateNum}%`,
-                `body_text.ilike.%${dateNum2}%`,
+                `body_preview.ilike.%${dateStr2}%`,
+                `body_preview.ilike.%${dateNum}%`,
+                `body_preview.ilike.%${dateNum2}%`,
               ].join(','));
             } else {
               query = query
@@ -3247,7 +3247,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
             }
           } else if (topicTerm) {
             // No date — fall back to topic keyword search
-            query = query.or(`subject.ilike.%${topicTerm}%,body_text.ilike.%${topicTerm}%`);
+            query = query.or(`subject.ilike.%${topicTerm}%,body_preview.ilike.%${topicTerm}%`);
           } else {
             // No date, no topic — get recent emails
             query = query.order('received_at', { ascending: false }).limit(10);
