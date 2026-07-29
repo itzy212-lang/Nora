@@ -64,6 +64,7 @@ function ownerWords(hasSecond) {
 function addAliasFields(base) {
   const out = { ...base };
   Object.entries(base).forEach(([key, value]) => {
+    if (Array.isArray(value) || (value !== null && typeof value === 'object')) return;
     out[key.toLowerCase()] = value;
     out[key.toUpperCase()] = value;
     out[`{{${key}}}`] = value;
