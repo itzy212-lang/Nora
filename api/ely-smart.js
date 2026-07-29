@@ -1833,6 +1833,19 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
     modeHint === 'draft' ? 'ACTIVE_MODE_DRAFT' : `ACTIVE_MODE_${modeHint}`,
     modeHint === 'draft' ? (brain?.party_wall_drafting?.system_prompt ? 'party_wall_drafting(LATE)' : 'party_wall_drafting:MISSING') : null,
   ].filter(Boolean).join(' | '));
+
+  // Inject inbox/memory search results so GPT can answer appointment/email queries
+  if (inboxSearchResults && inboxSearchResults.length > 0) {
+    const inboxSection = inboxSearchResults.map((r, i) => {
+      if (r.type === 'memory') {
+        return `[Project Note] ${r.project ? r.project + ' — ' : ''}${r.title || ''}: ${r.content || ''}`;
+      }
+      return `[Email ${i+1}] From: ${r.from || 'Unknown'} | Subject: ${r.subject || '(no subject)'} | Date: ${r.date || ''} | Project: ${r.project || 'unlinked'}\n${r.body || ''}`;
+    }).join('\n\n');
+
+    prompt += `\n\n# SEARCH RESULTS — EMAILS AND PROJECT NOTES\n\nThe following results were retrieved when searching for the user's query. Use these directly to answer the question. If the answer is not in these results, say so clearly.\n\n${inboxSection}`;
+  }
+
   return prompt;
 }
 
