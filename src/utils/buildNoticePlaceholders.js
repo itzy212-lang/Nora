@@ -93,10 +93,13 @@ function buildFullNoticeDates(placeholderObj) {
 function addAliasFields(base) {
   const out = { ...base };
   Object.entries(base).forEach(([key, value]) => {
-    out[key.toLowerCase()] = value;
-    out[key.toUpperCase()] = value;
-    out[`{{${key}}}`] = value;
-    out[`{{${key.toUpperCase()}}}`] = value;
+    // Only alias string/number values — skip arrays and objects
+    if (value !== null && value !== undefined && typeof value !== 'object') {
+      out[key.toLowerCase()] = value;
+      out[key.toUpperCase()] = value;
+      out[`{{${key}}}`] = value;
+      out[`{{${key.toUpperCase()}}}`] = value;
+    }
   });
 
   const fullRuns = buildFullNoticeRuns(out);
