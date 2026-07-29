@@ -187,12 +187,29 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); };
   }, [pdfUrl]);
 
-  const handleDeletePage = useCallback((idx) => {
-    if (!window.confirm(`Remove page ${idx + 1} from the PDF?`)) return;
-    setPages(prev => prev.filter((_, i) => i !== idx));
+  const handleDeletePage = useCallback(async (idx) => {
+    const page = pages[idx];
+    if (!page) return;
+    if (!window.confirm(`Remove page ${idx + 1} (${page.label}) from the PDF?`)) return;
+
+    const newPages = pages.filter((_, i) => i !== idx);
     setSelectedPageIdx(null);
-    // In full implementation: regenerate PDF without that page
-  }, []);
+
+    if (page.source === 'attachment') {
+      // Rebuild merged PDF without this attachment page
+      setGenerating(true);
+      try {
+        await rebuildMergedPdf(newPages);
+      } catch (err) {
+        alert(`Could not rebuild PDF: ${err.message}`);
+      } finally {
+        setGenerating(false);
+      }
+    }
+    // For notice pack pages, we don't support deletion yet (would need page-level split of the notice pack)
+
+    setPages(newPages);
+  }, [pages, rebuildMergedPdf]);
 
   const handleAttachConfirm = useCallback(async ({ file, position }) => {
     setShowAttach(false);
@@ -207,40 +224,31 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         reader.readAsDataURL(file);
       });
 
-      // Build ordered document list with attachment inserted at position
-      const id = `attach-${Date.now()}`;
-      const newPage = { id, label: file.name, source: 'attachment', pdf_b64: attachB64 };
-
-      // Insert into pages at position+1
-      const newPages = [...pages];
-      newPages.splice(position + 1, 0, newPage);
-
-      // Re-merge: build documents array in page order
-      // Original doc pages share the main pdf_b64; attachment has its own
-      // We need to re-merge via API using the current main PDF + attachment
-      const mergeRes = await fetch('/api/merge-pdfs-b64', {
+      // Split the attached PDF into individual pages
+      const splitRes = await fetch('/api/split-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          // Pass PDFs in page order: main pack first or second depending on position
-          pdfs: position >= pages.length - 1
-            ? [{ b64: pdfB64, name: 'notice_pack.pdf' }, { b64: attachB64, name: file.name }]
-            : [{ b64: attachB64, name: file.name }, { b64: pdfB64, name: 'notice_pack.pdf' }],
-        }),
+        body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
       });
+      const splitData = await splitRes.json();
+      if (!splitData?.pages?.length) throw new Error(splitData?.error || 'Split failed');
 
-      const data = await mergeRes.json();
-      if (!data?.pdf_b64) throw new Error(data?.error || 'Merge failed');
+      // Add one thumbnail per page from the attachment
+      const ts = Date.now();
+      const newAttachPages = splitData.pages.map((p, i) => ({
+        id: `attach-${ts}-${i}`,
+        label: splitData.pages.length === 1 ? file.name : `${file.name} (p.${p.page_num})`,
+        source: 'attachment',
+        b64: p.b64,
+        page_num: p.page_num,
+      }));
 
-      // Update blob URL
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-      const binary = atob(data.pdf_b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      // Insert attachment pages after the selected position
+      const newPages = [...pages];
+      newPages.splice(position + 1, 0, ...newAttachPages);
 
-      setPdfB64(data.pdf_b64);
-      setPdfUrl(URL.createObjectURL(blob));
+      // Rebuild the full merged PDF from: notice pack + all attachment page b64s in order
+      await rebuildMergedPdf(newPages);
       setPages(newPages);
     } catch (err) {
       alert(`Attach failed: ${err.message}`);
@@ -248,6 +256,43 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       setGenerating(false);
     }
   }, [pages, pdfB64, pdfUrl]);
+
+  // Rebuild the merged PDF from current page list
+  const rebuildMergedPdf = useCallback(async (pageList) => {
+    // Build ordered PDF list: notice pack first (as one PDF), then attachment pages in order
+    const noticePdfEntry = { b64: pdfB64, name: 'notice_pack.pdf' };
+    const attachEntries = pageList
+      .filter(p => p.source === 'attachment')
+      .map(p => ({ b64: p.b64, name: p.label }));
+
+    // Determine order: notice pages come before attachment pages in the list
+    // Find first attachment page position
+    const firstAttachIdx = pageList.findIndex(p => p.source === 'attachment');
+    const pdfsInOrder = firstAttachIdx === 0
+      ? [...pageList.filter(p => p.source === 'attachment').map(p => ({ b64: p.b64, name: p.label })), noticePdfEntry]
+      : [noticePdfEntry, ...pageList.filter(p => p.source === 'attachment').map(p => ({ b64: p.b64, name: p.label }))];
+
+    if (pdfsInOrder.length === 1) {
+      // Only notice pack remaining (all attachments deleted)
+      return; // pdfB64 is already the notice pack
+    }
+
+    const mergeRes = await fetch('/api/merge-pdfs-b64', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfs: pdfsInOrder }),
+    });
+    const data = await mergeRes.json();
+    if (!data?.pdf_b64) throw new Error(data?.error || 'Rebuild failed');
+
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    const binary = atob(data.pdf_b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    setPdfB64(data.pdf_b64);
+    setPdfUrl(URL.createObjectURL(blob));
+  }, [pdfB64, pdfUrl]);
 
   const handleSaveConfirm = useCallback(async (saveTarget) => {
     setShowSave(false);
@@ -394,3 +439,4 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     </div>
   );
 }
+
