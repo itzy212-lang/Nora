@@ -271,6 +271,30 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     NOTIFIABLE_WORKS: notifiableWorks,
     WORKS: notifiableWorks,
     NOT_SAFEGUARDING: options.safeguarding ? '' : 'not',
+    // Combined notice run strings for simple single-placeholder use
+    FULL_NOTICE_RUNS: (() => {
+      // Builds: "Section 2(2)(a)(b)(c) and Section 6(1)" from all notice runs
+      const runs = [];
+      Object.keys(out).forEach(k => {
+        const m = k.match(/^notice_run_(\d+)_sections$/i);
+        if (m && out[k]) runs.push(out[k]);
+      });
+      if (!runs.length && options.noticeType) runs.push(options.noticeSectionsFull || options.noticeType);
+      return runs.join(' and ');
+    })(),
+    FULL_NOTICE_DATES: (() => {
+      // Builds: "10 June 2026 and 9 July 2026" from all notice run dates
+      const dates = [];
+      Object.keys(out).forEach(k => {
+        const m = k.match(/^notice_run_(\d+)_date$/i);
+        if (m && out[k]) dates.push(out[k]);
+      });
+      if (!dates.length && options.noticeDate) dates.push(clean(options.noticeDate));
+      if (dates.length === 1) return dates[0];
+      if (dates.length === 2) return dates[0] + ' and ' + dates[1];
+      return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
+    })(),
+
     // AO appointed surveyor details (for 10(4)(b) documents)
     AO_SURVEYOR_NAME: clean(options.aoSurveyorName || options.ao_surveyor_name || ''),
     AO_SURVEYOR_FIRM: clean(options.aoSurveyorFirm || options.ao_surveyor_firm || ''),
