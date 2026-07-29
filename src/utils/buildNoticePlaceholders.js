@@ -320,11 +320,11 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     AO_SURVEYOR_PHONE: clean(options.aoSurveyorPhone || options.ao_surveyor_phone || ''),
     AO_SURVEYOR_ADDRESS: clean(options.aoSurveyorAddress || options.ao_surveyor_address || ''),
     AO_SURVEYOR_FULL: (() => {
-      const n = clean(options.aoSurveyorName || options.ao_surveyor_name || '');
-      const f = clean(options.aoSurveyorFirm || options.ao_surveyor_firm || '');
-      const a = clean(options.aoSurveyorAddress || options.ao_surveyor_address || '');
-      const parts = [n, f && n ? 'of ' + f : f, a].filter(Boolean);
-      return parts.join(', ');
+      const survN = clean(options.aoSurveyorName || options.ao_surveyor_name || '');
+      const survF = clean(options.aoSurveyorFirm || options.ao_surveyor_firm || '');
+      const survA = clean(options.aoSurveyorAddress || options.ao_surveyor_address || '');
+      const survParts = [survN, survF && survN ? 'of ' + survF : survF, survA].filter(Boolean);
+      return survParts.join(', ');
     })(),
 
     LEASEHOLDER_SURVEYOR_NOTE: (options.tenure || '').toLowerCase() === 'leaseholder'
