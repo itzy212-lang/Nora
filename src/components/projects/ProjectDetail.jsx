@@ -3456,14 +3456,131 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, []);
 
   const handleServe104b = useCallback(async (ao) => {
-    if (!window.confirm('Confirm 10(4)(b) papers have been served?')) return;
-    const date = new Date().toISOString().slice(0, 10);
-    const updatedAOs = (project.aos || []).map(a =>
-      a.id === ao.id ? { ...a, s104b_served_date: date, s104bServedDate: date, status: 's104b' } : a
+    // Check surveyor details are on the AO record
+    const survName = ao?.surv_name || ao?.surveyorName || '';
+    const survFirm = ao?.surv_firm || ao?.surveyorFirm || '';
+
+    if (!survName && !survFirm) {
+      alert('Please add the appointing surveyor details to this AO record first (edit the AO card), then serve the 10(4)(b) papers.');
+      return;
+    }
+
+    if (!window.confirm(`Generate 10(4)(b) papers for ${ao?.premise || ao?.name || 'this AO'}?`)) return;
+
+    const noticeDate = todayIso();
+    const warnings = [];
+    const generatedDocs = [];
+
+    // Build merge data for both documents
+    const s10ServedDate = ao?.s10_served_date || ao?.s10ServedDate || '';
+    const noticeRuns = (project?.notice_runs || []).filter(r =>
+      r.ao_id === ao.id || r.aoId === ao.id
     );
-    await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
-    setProject(p => ({ ...p, aos: updatedAOs }));
-  }, [project, sb]);
+
+    // Collect all notice runs from the AO's history
+    const allNoticeRuns = [];
+    if (ao?.notice_served_date || ao?.noticeServedDate) {
+      allNoticeRuns.push({
+        date: ao.notice_served_date || ao.noticeServedDate,
+        sections: ao.sections_served || ['s2'],
+      });
+    }
+    if (ao?.s10_served_date || ao?.s10ServedDate) {
+      allNoticeRuns.push({
+        date: ao.s10_served_date || ao.s10ServedDate,
+        sections: ['s10'],
+      });
+    }
+
+    const mergeData = buildNoticeMergeData({
+      project,
+      ao,
+      sectionKey: 's10_4b',
+      includeCover: false,
+      noticeDate,
+      allSections: ['s10_4b'],
+      worksItems: [],
+      extraOptions: {
+        aoSurveyorName: survName,
+        aoSurveyorFirm: survFirm,
+        aoSurveyorEmail: ao?.surv_email || ao?.surveyorEmail || '',
+        aoSurveyorPhone: ao?.surv_phone || ao?.surveyorPhone || '',
+        aoSurveyorAddress: ao?.surv_address || ao?.surveyorAddress || '',
+        s10ServedDate,
+        noticeRuns: allNoticeRuns,
+      },
+    });
+
+    // Generate Letter to AO
+    try {
+      const r1 = await generateDocument({
+        templateKey: 's10_4b_letter_ao',
+        mergeData,
+        fileName: `10(4)(b) Letter to AO - ${aoAddress(ao) || ao.name}.docx`,
+        projectId: project.id,
+        skipDownload: true,
+      });
+      if (r1?.success && r1?.docx_b64) {
+        generatedDocs.push({ key: 's10_4b_ao', fileName: r1.fileName || `10(4)(b) Letter to AO - ${aoAddress(ao)}.docx`, docx_b64: r1.docx_b64 });
+      } else {
+        warnings.push(`Letter to AO: ${r1?.error || 'failed'}`);
+      }
+    } catch (err) {
+      warnings.push(`Letter to AO: ${err.message}`);
+    }
+
+    // Generate Surveyor Appointment Letter
+    try {
+      const r2 = await generateDocument({
+        templateKey: 's10_4b_surveyor_appointment',
+        mergeData,
+        fileName: `10(4)(b) Surveyor Appointment - ${aoAddress(ao) || ao.name}.docx`,
+        projectId: project.id,
+        skipDownload: true,
+      });
+      if (r2?.success && r2?.docx_b64) {
+        generatedDocs.push({ key: 's10_4b_surv', fileName: r2.fileName || `10(4)(b) Surveyor Appointment - ${aoAddress(ao)}.docx`, docx_b64: r2.docx_b64 });
+      } else {
+        warnings.push(`Surveyor Appointment: ${r2?.error || 'failed'}`);
+      }
+    } catch (err) {
+      warnings.push(`Surveyor Appointment: ${err.message}`);
+    }
+
+    if (generatedDocs.length === 0) {
+      alert(`Could not generate 10(4)(b) documents.\n${warnings.join('\n')}`);
+      return;
+    }
+
+    if (warnings.length) console.warn('[10(4)(b)]', warnings);
+
+    // Open review modal — same flow as notices
+    // Workflow state saved only after user confirms in the modal
+    setReviewQueue({
+      aoQueue: [{
+        ao,
+        sortedDocs: generatedDocs,
+        aoSections: ['s10_4b'],
+        aoWorksItems: [],
+        aoS2Subs: '',
+        onConfirm: async () => {
+          // Mark as served after confirmation
+          const date = todayIso();
+          const updatedAOs = (project.aos || []).map(a =>
+            a.id === ao.id ? { ...a, s104b_served_date: date, s104bServedDate: date, status: 's104b' } : a
+          );
+          await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+          setProject(p => ({ ...p, aos: updatedAOs }));
+        },
+      }],
+      project,
+      formData: {},
+      includeCover: false,
+      createDeadlineTask: false,
+      safeguarding: false,
+      tenureMap: {},
+    });
+  }, [project, sb, generateDocument, setReviewQueue, setProject]);
 
   const handleServeAward = useCallback(async (ao) => {
     if (!window.confirm('Confirm the award has been served?')) return;
