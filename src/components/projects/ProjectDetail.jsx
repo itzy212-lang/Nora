@@ -173,6 +173,9 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     s3: 'Section 3',
     s6: 'Section 6(1)',
     s10: 'Section 10',
+    s10_4b: 'Section 10(4)(b)',
+    s10_4b_ao: 'Section 10(4)(b)',
+    s10_4b_surv: 'Section 10(4)(b)',
     cover: 'Covering Letter',
   };
 
@@ -182,6 +185,9 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     s3: 'Section 3 Notice',
     s6: 'Section 6(1) Notice',
     s10: 'Section 10 Notice',
+    s10_4b: '10(4)(b) Letter',
+    s10_4b_ao: '10(4)(b) Letter to AO',
+    s10_4b_surv: '10(4)(b) Surveyor Appointment',
     cover: 'Covering Letter',
   };
 
@@ -2821,6 +2827,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
   const [reviewQueue, setReviewQueue] = useState(null);
+  const [generatingNotice, setGeneratingNotice] = useState(false);
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]);
   const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task object}
@@ -3467,6 +3474,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     if (!window.confirm(`Generate 10(4)(b) papers for ${ao?.premise || ao?.name || 'this AO'}?`)) return;
 
+    setGeneratingNotice(true);
     const noticeDate = todayIso();
     const warnings = [];
     const generatedDocs = [];
@@ -3546,6 +3554,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     } catch (err) {
       warnings.push(`Surveyor Appointment: ${err.message}`);
     }
+
+    setGeneratingNotice(false);
 
     if (generatedDocs.length === 0) {
       alert(`Could not generate 10(4)(b) documents.\n${warnings.join('\n')}`);
