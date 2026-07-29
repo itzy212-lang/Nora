@@ -3545,19 +3545,18 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       NOTICE_RUN_2_DATE: s10ServedDate ? new Date(s10ServedDate.slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       NOTICE_RUN_2_SECTIONS: 'Section 10',
       // Combined placeholders — single or multiple runs
+      // FULL_NOTICE_RUNS/DATES — original notices only, NOT Section 10 (that is separate)
       FULL_NOTICE_RUNS: (() => {
         const runs = [];
         if (ao?.notice_served_date || ao?.noticeServedDate) runs.push('Section 2(2)');
-        if (s10ServedDate) runs.push('Section 10');
         if (runs.length === 0) return '';
         if (runs.length === 1) return runs[0];
         return runs.slice(0, -1).join(', ') + ' and ' + runs[runs.length - 1];
       })(),
       FULL_NOTICE_DATES: (() => {
-        const dates = [];
         const fmtD = (d) => d ? new Date(String(d).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '';
+        const dates = [];
         if (ao?.notice_served_date || ao?.noticeServedDate) dates.push(fmtD(ao.notice_served_date || ao.noticeServedDate));
-        if (s10ServedDate) dates.push(fmtD(s10ServedDate));
         if (dates.length === 0) return '';
         if (dates.length === 1) return dates[0];
         return dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1];
