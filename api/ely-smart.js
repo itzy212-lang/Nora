@@ -1434,7 +1434,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 40000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null, inboxSearchResults = [] }) {
 
   // ── MILESTONE 2: Stage 2 Lean Prompt ──────────────────────────────────────
   // When a Stage 1 brief is available, bypass the full 70k prompt and build a
@@ -3539,7 +3539,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
       representation,
-      stage1Brief, // null in single-pass mode, populated in two-stage mode
+      stage1Brief,
+      inboxSearchResults: generalInboxResults, // date/topic search results from emails + project_memory
     });
 
     const messages = await buildMessages({ body, systemPrompt, scopedEmailContext, modeHint });
