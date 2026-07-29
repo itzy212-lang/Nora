@@ -194,16 +194,60 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     // In full implementation: regenerate PDF without that page
   }, []);
 
-  const handleAttachConfirm = useCallback(({ file, position }) => {
-    const id = `attach-${Date.now()}`;
-    setPages(prev => {
-      const next = [...prev];
-      next.splice(position + 1, 0, { id, label: file.name, source: 'attachment', file });
-      return next;
-    });
+  const handleAttachConfirm = useCallback(async ({ file, position }) => {
     setShowAttach(false);
-    // In full implementation: merge attachment PDF into the pack
-  }, []);
+    setGenerating(true);
+
+    try {
+      // Read the attached PDF as base64
+      const attachB64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Build ordered document list with attachment inserted at position
+      const id = `attach-${Date.now()}`;
+      const newPage = { id, label: file.name, source: 'attachment', pdf_b64: attachB64 };
+
+      // Insert into pages at position+1
+      const newPages = [...pages];
+      newPages.splice(position + 1, 0, newPage);
+
+      // Re-merge: build documents array in page order
+      // Original doc pages share the main pdf_b64; attachment has its own
+      // We need to re-merge via API using the current main PDF + attachment
+      const mergeRes = await fetch('/api/merge-pdfs-b64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Pass PDFs in page order: main pack first or second depending on position
+          pdfs: position >= pages.length - 1
+            ? [{ b64: pdfB64, name: 'notice_pack.pdf' }, { b64: attachB64, name: file.name }]
+            : [{ b64: attachB64, name: file.name }, { b64: pdfB64, name: 'notice_pack.pdf' }],
+        }),
+      });
+
+      const data = await mergeRes.json();
+      if (!data?.pdf_b64) throw new Error(data?.error || 'Merge failed');
+
+      // Update blob URL
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      const binary = atob(data.pdf_b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+
+      setPdfB64(data.pdf_b64);
+      setPdfUrl(URL.createObjectURL(blob));
+      setPages(newPages);
+    } catch (err) {
+      alert(`Attach failed: ${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
+  }, [pages, pdfB64, pdfUrl]);
 
   const handleSaveConfirm = useCallback(async (saveTarget) => {
     setShowSave(false);
