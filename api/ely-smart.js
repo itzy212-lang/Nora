@@ -3256,9 +3256,59 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
             from: e.from_name || e.from_address || '',
             subject: e.subject || '',
             date: e.received_at ? new Date(e.received_at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '',
-            body: cleanEmailBody(e.body_text || '').slice(0, 600),
+            body: cleanEmailBody(e.body || '').slice(0, 600),
             project: projectMap[e.project_id] || '',
           }));
+
+          // Also search project_memory across all projects for date/appointment references
+          try {
+            const searchTerms = [];
+            if (resolved) {
+              const d2 = resolved.date;
+              searchTerms.push(
+                `${d2.getDate()} ${d2.toLocaleDateString('en-GB', { month: 'long' })}`,
+                `${d2.getDate()} ${d2.toLocaleDateString('en-GB', { month: 'short' })}`,
+                `${d2.getDate()}/${d2.getMonth()+1}`,
+              );
+            }
+            if (topicTerm) searchTerms.push(topicTerm);
+
+            if (searchTerms.length) {
+              const orFilter = searchTerms.map(t => `content.ilike.%${t}%`).join(',');
+              const { data: memData } = await sb
+                .from('project_memory')
+                .select('content, source_type, created_at, project_id')
+                .or(orFilter)
+                .order('created_at', { ascending: false })
+                .limit(10);
+
+              if (memData?.length) {
+                // Get project addresses for memory entries
+                const memProjectIds = [...new Set(memData.map(m => m.project_id).filter(Boolean))];
+                let memProjectMap = { ...projectMap };
+                if (memProjectIds.length) {
+                  const { data: memProjs } = await sb.from('projects').select('id, bo_premise_address').in('id', memProjectIds);
+                  (memProjs || []).forEach(p => { memProjectMap[p.id] = p.bo_premise_address; });
+                }
+
+                const memResults = memData.map(m => ({
+                  type: 'project_note',
+                  project: memProjectMap[m.project_id] || '',
+                  source: m.source_type || 'note',
+                  date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
+                  content: (m.content || '').slice(0, 500),
+                }));
+
+                // Append to generalInboxResults as project memory hits
+                generalInboxResults = [
+                  ...generalInboxResults,
+                  ...memResults,
+                ];
+              }
+            }
+          } catch (memErr) {
+            console.warn('[ely-smart] project_memory search failed:', memErr.message);
+          }
         }
       } catch (err) {
         console.warn('[ely-smart] general inbox search failed:', err.message);
