@@ -30,7 +30,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
     "docx": "^9.1.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
