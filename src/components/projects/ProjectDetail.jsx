@@ -3505,8 +3505,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const boAddr = project?.bo_premise_address || project?.address || '';
     const mergeData = {
       DATE: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-      NOTICE_DATE: longDate(ao?.notice_served_date || ao?.noticeServedDate || ''),
-      SECTION_10_NOTICE_DATE: longDate(s10ServedDate),
+      NOTICE_DATE: (ao?.notice_served_date || ao?.noticeServedDate) ? new Date((ao.notice_served_date || ao.noticeServedDate).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
+      SECTION_10_NOTICE_DATE: s10ServedDate ? new Date(s10ServedDate.slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       BO_NAME: project?.bo_1_name || project?.bo || '',
       BO_PREMISE: boAddr,
       BO_PREMISE_ADDRESS: boAddr,
@@ -3523,9 +3523,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       AO_SURVEYOR_PHONE: ao?.surv_phone || ao?.surveyorPhone || '',
       SURVEYOR_NAME: project?.surveyor_name || 'Itzik Darel',
       SURVEYOR_FIRM: project?.surveyor_firm || 'Square One Consulting',
-      NOTICE_RUN_1_DATE: longDate(ao?.notice_served_date || ao?.noticeServedDate || ''),
+      NOTICE_RUN_1_DATE: (ao?.notice_served_date || ao?.noticeServedDate) ? new Date((ao.notice_served_date || ao.noticeServedDate).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       NOTICE_RUN_1_SECTIONS: 'Section 2(2)',
-      NOTICE_RUN_2_DATE: longDate(s10ServedDate),
+      NOTICE_RUN_2_DATE: s10ServedDate ? new Date(s10ServedDate.slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       NOTICE_RUN_2_SECTIONS: 'Section 10',
     };
 
