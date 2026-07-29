@@ -3654,6 +3654,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const aoWorksItems = Object.entries(aoWorks).flatMap(([sec, items]) =>
         (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))
       ) || worksItems;
+      console.log('[batch notice] aoWorks for', ak, ':', JSON.stringify(aoWorks));
+      console.log('[batch notice] aoWorksItems for', ak, ':', JSON.stringify(aoWorksItems));
 
       // Generate documents — do NOT save workflow state yet
       if (!aoSections?.length) {
