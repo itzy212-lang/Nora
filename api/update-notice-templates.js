@@ -5,10 +5,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const TEMPLATES = [
-  { key: 'cover', id: 'f9c215c6-66db-4c6c-a8b2-0f67b2cd09e4', file: 'ORIGNAL_NOTICE_LETTER_TEMPLATE_fixed.docx' },
-  { key: 's1',    id: 'bbba8ff2-936b-46ab-94dd-cd56584f2fe3', file: 'Section_1_Notice_TEMPLATE_v2_fixed.docx' },
-  { key: 's3',    id: 'e9448404-3a90-429f-abb6-1be3eaf5146a', file: 'Section_3_Notice_TEMPLATE_V2_fixed.docx' },
-  { key: 's6',    id: '4d081357-23ab-42a8-ab98-54c351f5d8cd', file: 'Section_6_Notice_TEMPLATE_M_fixed.docx' },
+  { key: 'cover',            id: 'f9c215c6-66db-4c6c-a8b2-0f67b2cd09e4', file: 'ORIGNAL_NOTICE_LETTER_TEMPLATE_fixed.docx' },
+  { key: 's1',               id: 'bbba8ff2-936b-46ab-94dd-cd56584f2fe3', file: 'Section_1_Notice_TEMPLATE_v2_fixed.docx' },
+  { key: 's3',               id: 'e9448404-3a90-429f-abb6-1be3eaf5146a', file: 'Section_3_Notice_TEMPLATE_V2_fixed.docx' },
+  { key: 's6',               id: '4d081357-23ab-42a8-ab98-54c351f5d8cd', file: 'Section_6_Notice_TEMPLATE_M_fixed.docx' },
+  { key: 's10_4b_letter_ao', id: '12e1afb2-88f8-43dd-b4ba-77af8861126d', file: '10_4_b_letter_AO_fixed.docx' },
 ];
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
