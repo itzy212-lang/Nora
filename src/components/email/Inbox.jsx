@@ -17,6 +17,31 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
   });
 
   const [projects, setProjects] = useState([]);
+
+  // Server-side search — queries all emails in Supabase when search term is 3+ chars
+  useEffect(() => {
+    if (!search || search.trim().length < 3) {
+      setSearchResults(null);
+      return;
+    }
+    const term = search.trim();
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await sb
+          .from('emails')
+          .select('id, subject, sender_name, sender_email, received_at, body_preview, is_read, flagged, folder, project_id')
+          .or(`subject.ilike.%${term}%,body_preview.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%`)
+          .order('received_at', { ascending: false })
+          .limit(50);
+        setSearchResults(data || []);
+      } catch (err) {
+        console.error('[Inbox search]', err);
+        setSearchResults([]);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useEffect(() => {
     sb.from('projects').select('id,ref,bo_premise_address').order('ref', { ascending: true })
       .then(({ data }) => setProjects((data || []).sort((a,b) => {
@@ -1515,6 +1540,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
   const [folder, setFolder]              = useState('Inbox');
   const [folderOpen, setFolderOpen]      = useState(false);
   const [search, setSearch]              = useState('');
+  const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
   const [syncing, setSyncing]            = useState(false);
   const [checkedIds, setCheckedIds]      = useState(new Set());
   const [bulkProjects, setBulkProjects]  = useState([]);
@@ -1992,7 +2018,11 @@ if (syncErr) throw syncErr;
     } else if (folder === 'Flagged') {
       if (!e.flagged) return false;
     }
-    // Then apply search
+    // If server search is active, use those results instead of client filter
+    if (search && search.trim().length >= 3 && searchResults !== null) {
+      return searchResults.some(r => r.id === e.id);
+    }
+    // Then apply client-side search for short queries
     if (!search) return true;
     const q = search.toLowerCase();
     const rawName = e.raw_recipients?.from?.name || '';
