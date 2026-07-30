@@ -2000,7 +2000,10 @@ if (syncErr) throw syncErr;
   };
 
   const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const filtered = (state.emails || []).filter(e => {
+  // When server search is active (3+ chars), use Supabase results directly
+  const filtered = (search && search.trim().length >= 3 && searchResults !== null)
+    ? searchResults
+    : (state.emails || []).filter(e => {
     // Filter by active folder first
     if (folder === 'Inbox') {
       const f = (e.folder || '').toLowerCase();
