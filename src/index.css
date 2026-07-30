@@ -187,7 +187,6 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
      sidebar/burger menu is always reachable as a fallback way out on mobile,
      even when an overlay like the email composer is open on top of it. */
   .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); z-index: 500; transition: transform 0.3s; }
-  .email-composer-shell { left: 0; }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.open { display: block; }
   .burger { display: flex; }
@@ -215,8 +214,9 @@ input[type=checkbox], input[type=radio] { width: auto; cursor: pointer; }
 .mail-list-toolbar { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; background: var(--bg4); }
 .mail-reader-empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text3); padding: 30px; text-align: center; }
 .mail-reply-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
-.email-composer-shell { position: fixed; top: 54px; left: 216px; right: 0; bottom: 0; z-index: 390; background: var(--bg); display: none; flex-direction: column; }
+.email-composer-shell { position: fixed; top: 54px; left: 0; right: 0; bottom: 0; z-index: 390; background: var(--bg); display: none; flex-direction: column; }
 .email-composer-shell.open { display: flex; }
+@media (min-width: 769px) { .email-composer-shell { left: 216px; } }
 .email-body-editor p { margin: 0 0 10px 0; }
 .email-body-editor p:last-child { margin-bottom: 0; }
 .email-body-editor br + br { display: block; margin-top: 8px; }
