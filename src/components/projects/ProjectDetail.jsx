@@ -3519,6 +3519,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       NOTICE_DATE: (ao?.notice_served_date || ao?.noticeServedDate) ? new Date((ao.notice_served_date || ao.noticeServedDate).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       SECTION_10_NOTICE_DATE: s10ServedDate ? new Date(s10ServedDate.slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       BO_NAME: project?.bo_1_name || project?.bo || '',
+      BO_NAME_1: project?.bo_1_name || project?.bo || '',
+      BO_NAME_2: project?.bo_2_name || project?.bo2 || '',
+      BO_NAMES: (() => {
+        const n1 = project?.bo_1_name || project?.bo || '';
+        const n2 = project?.bo_2_name || project?.bo2 || '';
+        if (n1 && n2) return n1 + ' and ' + n2;
+        return n1 || n2 || '';
+      })(),
+      OWNERS_S: (() => {
+        const n1 = project?.bo_1_name || project?.bo || '';
+        const n2 = project?.bo_2_name || project?.bo2 || '';
+        const combined = n1 && n2 ? n1 + ' and ' + n2 : n1 || n2 || 'the Building Owner';
+        return combined.endsWith('s') ? combined + ''' : combined + ''s';
+      })(),
       BO_PREMISE: boAddr,
       BO_PREMISE_ADDRESS: boAddr,
       BO_SERVICE_ADDRESS: boAddr,
