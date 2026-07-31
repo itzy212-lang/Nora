@@ -3540,6 +3540,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       AO_SURVEYOR_PHONE: ao?.surv_phone || ao?.surveyorPhone || '',
       SURVEYOR_NAME: project?.surveyor_name || 'Itzik Darel',
       SURVEYOR_FIRM: project?.surveyor_firm || 'Square One Consulting',
+      SOC_DATE: (() => {
+        const socD = ao?.soc_agreed_date || ao?.soc_date || ao?.socDate || ao?.socAgreedDate || '';
+        if (!socD) return '';
+        try { return new Date(String(socD).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}); } catch(e) { return String(socD); }
+      })(),
       NOTICE_RUN_1_DATE: (ao?.notice_served_date || ao?.noticeServedDate) ? new Date((ao.notice_served_date || ao.noticeServedDate).slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
       NOTICE_RUN_1_SECTIONS: 'Section 2(2)',
       NOTICE_RUN_2_DATE: s10ServedDate ? new Date(s10ServedDate.slice(0,10)).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : '',
