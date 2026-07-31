@@ -3531,7 +3531,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         const n1 = project?.bo_1_name || project?.bo || '';
         const n2 = project?.bo_2_name || project?.bo2 || '';
         const combined = n1 && n2 ? n1 + ' and ' + n2 : n1 || n2 || 'the Building Owner';
-        return combined.endsWith('s') ? combined + ''' : combined + ''s';
+        return         return combined.endsWith('s') ? combined + "'" : combined + "'s";
       })(),
       BO_PREMISE: boAddr,
       BO_PREMISE_ADDRESS: boAddr,
