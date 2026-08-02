@@ -789,7 +789,8 @@ ${threadText}`;
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
-  const [to, setTo]           = useState(prefillTo || email?.sender_email || '');
+  const isForward = mode === 'forward';
+  const [to, setTo]           = useState(isForward ? (prefillTo || '') : (prefillTo || email?.sender_email || ''));
   const [cc, setCc]           = useState(mode === 'replyAll'
     ? (() => {
         // Build CC list from all recipients — exclude sender and own email only
