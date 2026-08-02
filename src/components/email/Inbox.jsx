@@ -2022,9 +2022,10 @@ if (syncErr) throw syncErr;
 
   const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // When server search is active (3+ chars), use Supabase results directly
-  const filtered = (search && search.trim().length >= 3 && searchResults !== null)
+  const emailsToFilter = searchResults !== null && search && search.trim().length >= 3
     ? searchResults
-    : (state.emails || []).filter(e => {
+    : (state?.emails || []);
+  const filtered = emailsToFilter.filter(e => {
     // Filter by active folder first
     if (folder === 'Inbox') {
       const f = (e.folder || '').toLowerCase();
