@@ -819,7 +819,13 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
       })()
     : '');
   const [subject, setSubject] = useState(prefillSubject || `${isForward ? 'Fwd' : 'Re'}: ${(email?.subject || '').replace(/^(Re|Fwd):\s*/i, '').trim()}`);
-  const forwardQuote = isForward ? `<br><br>---------- Forwarded message ----------<br>From: ${email?.sender_name || email?.sender_email || ''}<br>Date: ${email?.received_at ? new Date(email.received_at).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : ''}<br>Subject: ${email?.subject || ''}<br><br>${email?.body || email?.body_preview || ''}` : '';
+  const forwardQuote = isForward ? (
+    '<br><br>---------- Forwarded message ----------<br>' +
+    'From: ' + (email?.sender_name || email?.sender_email || '') + '<br>' +
+    'Date: ' + (email?.received_at ? new Date(email.received_at).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '') + '<br>' +
+    'Subject: ' + (email?.subject || '') + '<br><br>' +
+    (email?.body || email?.body_preview || '')
+  ) : '';
   const [body, setBody]       = useState(toHtml(prefillBody) || forwardQuote);
   const [showEly, setShowEly] = useState(false);
   const [sending, setSending] = useState(false);
