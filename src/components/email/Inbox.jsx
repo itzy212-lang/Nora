@@ -1149,7 +1149,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, paddingRight: 16 }}>
           <span style={{ fontSize: 13, fontWeight: unread ? 700 : 500, color: unread ? 'var(--text)' : 'var(--text2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
-            {email.(email?.is_sent || (email?.folder || '').toLowerCase() === 'sent')
+            {(email?.is_sent || (email?.folder || '').toLowerCase() === 'sent')
             ? (email?.to_name || email?.to_email || email?.sender_name || email?.sender_email || 'Unknown recipient')
             : (email?.sender_name || email?.sender_email)
           }
