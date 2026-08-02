@@ -1141,7 +1141,10 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, paddingRight: 16 }}>
           <span style={{ fontSize: 13, fontWeight: unread ? 700 : 500, color: unread ? 'var(--text)' : 'var(--text2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
-            {email.sender_name || email.sender_email}
+            {email.(email?.is_sent || (email?.folder || '').toLowerCase() === 'sent')
+            ? (email?.to_name || email?.to_email || email?.sender_name || email?.sender_email || 'Unknown recipient')
+            : (email?.sender_name || email?.sender_email)
+          }
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
             {/* Fix 1: Smart date — time if today, date if older */}
@@ -1457,7 +1460,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
               </button>
               {replyDropOpen && (
                 <div style={{ position: 'absolute', top: '110%', right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', zIndex: 100, minWidth: 150, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-                  {[{ label: '↩ Reply', mode: 'reply' }, { label: '↩↩ Reply All', mode: 'replyAll' }].map(({ label, mode }, i) => (
+                  {[{ label: '↩ Reply', mode: 'reply' }, { label: '↩↩ Reply All', mode: 'replyAll' }, { label: '→ Forward', mode: 'forward' }].map(({ label, mode }, i) => (
                     <div key={mode} onClick={() => { setReplyDropOpen(false); onOpenReply(mode); }}
                       style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
