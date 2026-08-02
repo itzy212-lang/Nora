@@ -818,8 +818,9 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
           .join(', ');
       })()
     : '');
-  const [subject, setSubject] = useState(prefillSubject || `Re: ${email?.subject || ''}`);
-  const [body, setBody]       = useState(toHtml(prefillBody) || '');
+  const [subject, setSubject] = useState(prefillSubject || `${isForward ? 'Fwd' : 'Re'}: ${(email?.subject || '').replace(/^(Re|Fwd):\s*/i, '').trim()}`);
+  const forwardQuote = isForward ? `<br><br>---------- Forwarded message ----------<br>From: ${email?.sender_name || email?.sender_email || ''}<br>Date: ${email?.received_at ? new Date(email.received_at).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : ''}<br>Subject: ${email?.subject || ''}<br><br>${email?.body || email?.body_preview || ''}` : '';
+  const [body, setBody]       = useState(toHtml(prefillBody) || forwardQuote);
   const [showEly, setShowEly] = useState(false);
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true);
@@ -912,7 +913,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{mode === 'replyAll' ? '↩↩ Reply All' : '↩ Reply'}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{mode === 'forward' ? '→ Forward' : mode === 'replyAll' ? '↩↩ Reply All' : '↩ Reply'}</div>
               {/* Format button */}
               <button
                 onClick={() => setShowFormatBar(f => !f)}
