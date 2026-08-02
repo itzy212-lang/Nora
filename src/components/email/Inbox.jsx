@@ -1422,9 +1422,19 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
       .eq('email_id', email.id)
       .or('is_inline.is.null,is_inline.eq.false')
       .not('attachment_external_id', 'is', null)
-      .then(({ data }) => setAttachments(data || []))
+      .then(({ data }) => {
+        // Normalise attachment fields and pre-select all for forward mode
+        const normalised = (data || []).map(a => ({
+          ...a,
+          name: a.filename || a.name || 'attachment',
+          size: a.size_bytes || a.size || 0,
+          forwarded: true, // flag so server knows to re-fetch via external ID
+        }));
+        if (isForward) setAttachments(normalised);
+        else setAttachments(normalised); // also show for reply reference
+      })
       .catch(() => setAttachments([]));
-  }, [email?.id]);
+  }, [email?.id, isForward]);
   const [replyDropOpen, setReplyDropOpen]   = useState(false);
   const [showSavePopup, setShowSavePopup]   = useState(false);
   const dropRef = useRef(null);
