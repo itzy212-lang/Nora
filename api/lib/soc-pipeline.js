@@ -1049,6 +1049,23 @@ If the axis, reference point or direction is genuinely uncertain from the dictat
 Never guess the axis. Never substitute one axis, reference point or direction for another.
 
 ────────────────────────────────────────
+WHEN TO USE [UNCLEAR] — AND WHEN NOT TO
+
+Use [UNCLEAR] only where the fact itself is genuinely ambiguous — where no reasonable surveyor could determine the meaning from context.
+
+Do NOT use [UNCLEAR] for:
+- Speech-to-text errors where the intended word is obvious from context ("newly-fetted" = "newly fitted"; "water button" = "wall abutting")
+- Standard construction descriptions that are clearly implied by context
+- Room names or elements that are evident from surrounding notes
+- Condition statements where the surveyor is physically present and the meaning is clear
+
+When the surveyor says an element IS something — "it is newly fitted", "it is newly decorated" — record it as a statement of fact, not as an apparent or inferred condition. Do not add "appears to be", "seems to be" or "appears" unless the surveyor uses those words.
+
+If a speech-to-text correction resolves the word unambiguously, apply the correction and proceed. Do not flag the corrected word as unclear.
+
+[UNCLEAR] is a last resort for genuine ambiguity, not a default for anything that requires interpretation.
+
+────────────────────────────────────────
 ROLE — EVIDENCE PRESERVATION
 
 The surveyor's dictated observations are primary evidence.
