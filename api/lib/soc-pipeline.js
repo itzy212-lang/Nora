@@ -115,7 +115,7 @@ CRITICAL: Store FACTS in structured fields. Do NOT write finished prose sentence
 SPEECH-TO-TEXT CORRECTIONS (apply automatically):
 "bugatti wall" → "party wall" | "plank wall"/"blank wall" → "flank wall" | "v-locks"/"velocks" → "VELUX"
 "sealing" (ceiling context) → "ceiling" | "real evasion wall" → "rear elevation wall"
-"kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC"
+"kitched roof" → "pitched roof" | "tarps floor" → "tiled floor" | "UPBC" → "UPVC" | "newly-fetted"/"newly fetted" → "newly fitted" | "water button"/"water butt in" → "wall abutting"
 
 SECTION NAMES — use exactly:
 Ground Floor Front Elevation Room | Ground Floor Rear Elevation Room | Ground Floor Rear Outrigger | Ground Floor Rear Outrigger Kitchen | Ground Floor Rear Bedroom | Ground Floor Hallway | Ground Floor Rear Extension | First Floor Rear Bedroom | First Floor Rear Bathroom | First Floor Front Elevation Room | External Areas
@@ -911,6 +911,9 @@ SPEECH-TO-TEXT CORRECTIONS — apply automatically
 "tarps floor" → "tiled floor"
 "UPBC" → "UPVC"
 "lentil" / "lentel" → "lintel"
+"newly-fetted" / "newly fetted" / "newly-feted" → "newly fitted"
+"water button" / "water butt in" → "wall abutting"
+"button" (abutment context) → "abutting"
 "soffet" / "sofia" → "soffit"
 "more tar" / "motor" → "mortar"
 "window still" → "window sill"
@@ -1733,7 +1736,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   const userPrompt = 'YOU ARE READING RAW VOICE DICTATION FROM A PARTY WALL SURVEYOR.\n' +
     'There is no pre-processed claim extraction. You must read the raw transcript directly and produce the complete Schedule of Conditions yourself.\n' +
     'You must handle: speech-to-text errors, false starts, self-corrections, amendments, room transitions and section changes — all from the raw transcript alone.\n' +
-    'Speech-to-text corrections to apply automatically: "bugatti wall" → "party wall" | "plank wall" → "flank wall" | "v-locks"/"velocks" → "VELUX" | "sealing" (ceiling context) → "ceiling" | "real evasion wall" → "rear elevation wall" | "kitched roof" → "pitched roof" | "UPBC" → "UPVC"\n' +
+    'Speech-to-text corrections to apply automatically: "bugatti wall" → "party wall" | "plank wall" → "flank wall" | "v-locks"/"velocks" → "VELUX" | "sealing" (ceiling context) → "ceiling" | "real evasion wall" → "rear elevation wall" | "kitched roof" → "pitched roof" | "UPBC" → "UPVC" | "newly-fetted"/"newly fetted" → "newly fitted" | "water button"/"water butt in" → "wall abutting"\n' +
     'Amendment signals: "actually", "scratch that", "sorry I mean", "just to note on that last one", "going back to", "correction" — when you detect these, the corrected version replaces the previous observation entirely.\n' +
     'False starts: when a surveyor starts a phrase and immediately corrects it, use only the corrected version.\n\n' +
     'PROPERTY: Adjoining Owner: ' + aoAddress + ' | Building Owner: ' + boAddress + ' | Date: ' + inspDate + '\n\n' +
