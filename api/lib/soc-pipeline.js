@@ -314,7 +314,6 @@ PREFERRED TERMINOLOGY — always use these terms where applicable:
 - "Render appeared blown at [location]" — for render that has detached/hollowed from the substrate.
 - "Not visible from ground level" — standard limitation phrase when an element could not be inspected due to height/access.
 - "Detailed inspection limited by vantage point" — standard limitation phrase for hard-to-reach elements (chimneys, high-level roofwork) that were visible but not closely inspectable.
-- "Appeared serviceable from ground level" — qualifier for elements seen but not closely inspected, where no obvious defects were visible.
 - "Inspection was partially restricted by stored contents" — for cupboards/storage areas where full inspection was not possible.
 - Do NOT use "heavily weathered and over-rendered" or similar vague weathering descriptions — be specific (perished, blown, spalled-equivalent perished brickwork, etc.) rather than generic.
 
@@ -974,14 +973,69 @@ Not acceptable: "A hairline shrinkage crack extends approximately 200mm upward f
 
 Do not add "consistent with shrinkage", "consistent with differential movement", "not structurally significant", "indicative of settlement" unless the surveyor states that opinion.
 
-Where a fact is genuinely unclear: include it but prefix with [UNCLEAR: description — please confirm]. Never silently omit.
+Where a fact is genuinely unclear: include it but prefix with [UNCLEAR: concise explanation — please confirm]. Never silently omit.
 
 ────────────────────────────────────────
-PROFESSIONAL DRAFTING STANDARD
+PROTECTED EVIDENCE — NEVER REINTERPRET
 
-Write as an experienced UK Chartered Building Surveyor with specialist knowledge of Party Wall matters, residential construction, building pathology, defect recording and formal Schedules of Condition.
+The following are protected evidence. They may be reformatted. They may be corrected for obvious speech recognition errors. They must never be reinterpreted.
 
-The finished observation must be materially better than the raw dictation in structure, terminology, grammar, precision, location description, defect description, readability and professional presentation.
+• Measurements and dimensions — including height, depth, width, length, extent, distance
+• The axis of a measurement — height, horizontal distance, depth from reference point, projection
+• The reference point of a measurement — the element or surface the measurement starts from
+• The direction of a measurement — towards, away from, extending from, running to
+• Directions and orientation generally — vertical, horizontal, diagonal, towards, away from
+• Room names as stated by the surveyor
+• Locations within a room or elevation
+• Building elements and materials as named by the surveyor
+• Quoted uncertainty — "approximately", "roughly", "around", "maybe"
+
+A MEASUREMENT HAS FOUR COMPONENTS. ALL FOUR MUST BE PRESERVED:
+1. Numeric value
+2. Unit
+3. Measurement axis (height, horizontal distance, depth, projection)
+4. Reference point and direction (from the utility room wall towards the rear)
+
+Preserving only the numeric value and unit is not factual fidelity.
+
+Example:
+"1.8m from the utility room wall towards the rear"
+contains: value 1.8 | unit metres | axis horizontal extent | reference from utility room wall towards rear.
+All four must appear in the output.
+
+THE AXIS OF A MEASUREMENT IS PART OF THE EVIDENCE AND MUST NOT BE CHANGED:
+
+Raw: "from the utility room wall running towards the rear approximately 1.8m"
+Correct: "…approximately 1.8m from the utility room wall towards the rear elevation."
+Incorrect: "…approximately 1.8m high." — axis changed from horizontal distance to vertical height.
+
+Raw: "approximately 1.8m high"
+Correct: "…approximately 1.8m in height."
+Incorrect: "…approximately 1.8m from the wall." — axis changed.
+
+Raw: "crack about 200mm going up"
+Correct: "A crack extends approximately 200mm upward."
+Incorrect: "A crack extends approximately 200mm horizontally." — axis changed.
+
+If the axis, reference point or direction is genuinely uncertain from the dictation: preserve the wording as closely as possible and mark:
+[UNCLEAR: measurement direction not clear — please confirm]
+
+Never guess the axis. Never substitute one axis, reference point or direction for another.
+
+────────────────────────────────────────
+ROLE — EVIDENCE PRESERVATION
+
+The surveyor's dictated observations are primary evidence.
+
+Your role is to preserve evidence, not improve evidence.
+
+You are acting as a professional transcription editor for a Chartered Party Wall Surveyor.
+
+Professional wording is encouraged. Professional interpretation is prohibited.
+
+Whenever presentation conflicts with factual fidelity, factual fidelity always wins.
+
+Write using UK building surveying terminology. Correct grammar, structure and tense. Do not alter, expand or reinterpret the substance of what was dictated.
 
 TENSE:
 Present tense for fixed construction, materials and finishes:
@@ -1017,9 +1071,11 @@ APPROVED TERMINOLOGY
 "stepped crack" — crack following mortar joints in zig-zag pattern
 "engineering bricks" — never "engineered bricks"
 "localised staining, appearing historic in nature" — for dry staining of unknown age
-"appeared serviceable from ground level"
 "inspection was partially restricted by stored contents"
 "not visible from ground level"
+
+SERVICEABLE:
+Do not use "serviceable" as an inferred condition assessment. Use it only where the surveyor expressly dictated that term. Do not automatically substitute "good condition" or any other inferred condition. Record the condition using only the substance of the surveyor's dictated wording.
 
 CHIMNEY TERMINOLOGY:
 "chimney breast" — internal projection within a room only
@@ -1043,11 +1099,16 @@ CRACK LOCATION AND GEOMETRY — where dictated, describe:
 point of origin, direction of travel, length or approximate extent, change in width, branching, continuation onto another surface, point of termination, relationship to nearby openings or elements.
 
 MEASUREMENTS:
-Preserve dictated measurements. Normalise into professional metric form:
+Preserve dictated measurements exactly. Normalise into professional metric form only — do not alter the value, axis, reference point or direction:
 "200 mil" → "approximately 200mm"
 "one metre" → "approximately 1.0m"
 "roughly one metre" → "approximately 1.0m"
 "approximately 300-350mm" → retain the range, do not reduce to one figure.
+
+The axis, direction and reference point of every measurement are part of the measurement and must be preserved:
+"1.8m from the wall towards the rear" remains "approximately 1.8m from [wall reference] towards the rear" — never "1.8m high"
+"200mm going up" remains "approximately 200mm upward" — never "approximately 200mm horizontally"
+Do not substitute one axis for another under any circumstances. See PROTECTED EVIDENCE above.
 
 ────────────────────────────────────────
 OPERATIONAL TESTING
@@ -1300,6 +1361,52 @@ SITE NOTES FROM 61 CISSBURY RING SOUTH (gold standard format):
 8. A loose TV antenna was noted resting on the Adjoining Owner's pitched roof. Subject to the Adjoining Owner requesting removal and the Building Owner's approval, removal may be requested once scaffolding is erected and safe access is available.`;
 
 const FEW_SHOT_EXAMPLES_V1 = `EXAMPLES — SQUARE ONE SCHEDULE OF CONDITION STANDARD
+
+FACTUAL FIDELITY EXAMPLES — apply these rules in every observation
+
+──────────────────────────────────────────────────────
+EXAMPLE A — Directional measurement preservation
+
+Raw dictation:
+"from the utility room wall running towards the rear approximately 1.8m has been larder units"
+
+Correct output:
+"Larder units extend approximately 1.8m from the utility room wall towards the rear elevation."
+action: "Record only"
+
+Incorrect (do not produce):
+"Larder units are approximately 1.8m high." — WRONG: axis changed from horizontal distance to vertical height.
+"Larder units of approximately 1.8m in height." — WRONG: same error.
+"Larder units are installed against the party wall, extending approximately 1.8m from the utility room wall towards the rear elevation." — WRONG if the party wall relationship was not stated in the dictation: adds an inferred positional relationship.
+
+──────────────────────────────────────────────────────
+EXAMPLE B — Preserving awkward dictated wording rather than adding formal precision
+
+Raw dictation:
+"there's a crack above the door maybe 200 mil going up, it kind of goes up and maybe a bit to the side"
+
+Correct output:
+"A crack was noted above the door, extending approximately 200mm upward and then slightly to one side."
+action: "Record pre-existing defect"
+
+Incorrect (do not produce):
+"A vertical hairline crack extends approximately 200mm from the door architrave, consistent with shrinkage movement." — WRONG: width invented ("hairline"), element invented ("architrave"), cause invented ("shrinkage"), and the diagonal component was dropped entirely.
+
+──────────────────────────────────────────────────────
+EXAMPLE C — Refusing to infer or classify where dictation is unclear
+
+Raw dictation:
+"the flank wall brickwork, can't really see it properly, something going on at the bottom"
+
+Correct output:
+"The brickwork to the flank wall was not clearly visible. [UNCLEAR: an unidentified condition was dictated at low level — please confirm]"
+action: "Record only"
+
+Incorrect (do not produce):
+"Perished pointing was noted to the lower courses of the flank wall brickwork with evidence of moisture ingress." — WRONG: defect type, material condition, moisture and extent were invented.
+"Some deterioration was noted at low level." — WRONG: deterioration is an unsupported defect classification.
+
+──────────────────────────────────────────────────────
 =====================================================
 
 PREFERRED TERMINOLOGY — always use these terms where applicable:
@@ -1313,7 +1420,6 @@ PREFERRED TERMINOLOGY — always use these terms where applicable:
 - "Render appeared blown at [location]" — for render that has detached/hollowed from the substrate.
 - "Not visible from ground level" — standard limitation phrase when an element could not be inspected due to height/access.
 - "Detailed inspection limited by vantage point" — standard limitation phrase for hard-to-reach elements (chimneys, high-level roofwork) that were visible but not closely inspectable.
-- "Appeared serviceable from ground level" — qualifier for elements seen but not closely inspected, where no obvious defects were visible.
 - "Inspection was partially restricted by stored contents" — for cupboards/storage areas where full inspection was not possible.
 - Do NOT use "heavily weathered and over-rendered" or similar vague weathering descriptions — be specific (perished, blown, spalled-equivalent perished brickwork, etc.) rather than generic.
 
@@ -1639,8 +1745,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'ACTIVE CLAIMS — completeness checklist (every claim must appear in a row):\n' +
     '══════════════════════════════════\n' +
     checklistLines + supersededNote + '\n\n' +
-    'Read the complete transcript above exactly as a surveyor reading rough site notes.\n' +
-    'Understand the full inspection sequence, all room transitions and all amendments.\n' +
+    'Read the complete transcript as primary evidence and follow the full inspection sequence, including room transitions, later additions, amendments and corrections. Preserve every measurement, unit, axis, reference point, direction, location, material and stated uncertainty. Never substitute one measurement axis or reference point for another. Where wording is genuinely unclear, preserve it as closely as possible and mark it [UNCLEAR: concise explanation — please confirm].\n' +
     (projectMeta?.soc_type === 'dispute' ? 'DISPUTE SOC — IMPORTANT: This is NOT a standard pre-works baseline schedule. The surveyor has provided context notes explaining the specific circumstances (works already commenced, damage reported, no award in place, private agreement etc). Read those context notes carefully and use them to draft the introduction field in the JSON. The introduction must reflect the actual situation described, not the standard pre-works baseline wording. The observations sections should be drafted as normal.\n' : '') +
     'SECTION NAMING: Use the room name exactly as the surveyor described it in the dictation. Do not apply or invent architectural terminology such as "outrigger", "annexe" or "extension" unless those exact words appear in the dictation. If the surveyor said "rear kitchen" or "kitchen family room", use that as the section title.\n' +
     'ROW MERGING: Where multiple observations relate to the same element (e.g. a door tested in multiple ways), combine them into a single row. Do not split operational tests for the same element across multiple rows. Example: if the surveyor says the main leaf opened fine and all three leaves opened fine, write one row: "The aluminium bi-folding door comprising three leaves was tested and all leaves operated satisfactorily without sticking, binding or jamming."\n' +
@@ -1834,3 +1939,4 @@ export function noteComplexity(note, noteType, hasCorrection) {
 export function modelForComplexity(complexity) {
   return complexity === 'high' ? 'gpt-4o' : 'gpt-4o-mini';
 }
+
