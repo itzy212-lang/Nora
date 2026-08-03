@@ -1723,9 +1723,9 @@ END OF COMPLETE REFERENCE DOCUMENT`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
-  const resolvedMode = 'gpt-4o'; // Primary drafting model
-  const model = 'gpt-4o';
-  const params = { temperature: 0.15, max_tokens: 16000 };
+  const resolvedMode = 'gpt-5.6-terra'; // Stage 2 hardcoded to Terra
+  const model = 'gpt-5.6-terra';
+  const params = { max_completion_tokens: 32000 };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
   const aoAddress     = projectMeta.ao_address    || 'Not provided';
