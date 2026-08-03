@@ -1798,7 +1798,10 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
     'REF LABELING: Use short two-letter prefixes describing the room only. Examples: CR = Cloakroom/Bathroom, FR = Front Room, FB = Front Bedroom, RB = Rear Bedroom, LF = Loft, EA = External Areas. Do not use long prefixes like FFFB, GFCR or FFRB.\n' +
     'SITE NOTES — MANDATORY: Populate the site_notes array with ALL of the following found in the transcript: (1) access restrictions or refusals, (2) photographic schedule statements, (3) remote-from-works statements for whole rooms, (4) structural engineer or contractor notes, (5) legal status observations (party wall, party fence wall), (6) health and safety or asbestos notes, (7) cleanup requirements. Do NOT return an empty site_notes array if any of these are present in the transcript.\n' +
     'ROOM INCLUSION RULE — CRITICAL: Every room and area inspected must appear in the schedule. Do not omit any room because it appears remote from the proposed notifiable works. If a room is remote from the works, include it and append the caveat: "Although remote from the proposed notifiable works, this has been recorded for scheduling purposes only." This applies to every inspected room without exception.\n' +
-    'Every active claim must be covered. Every row must have source_claim_ids.\n\n' +
+    'Every active claim must be covered. Every row must have source_claim_ids.\n\n';
+
+  // JSON output format specification for system prompt
+  const SOC_RUNTIME_OUTPUT_CONTRACT = 
     'Return valid JSON only:\n' +
     '{\n' +
     (projectMeta?.soc_type === 'dispute' ? '  "introduction": "AI-drafted introduction paragraph based on the surveyor\'s context notes. Must reflect that works have already taken place, explain the specific circumstances (e.g. no award in place, damage reported, private agreement reached), and set out the purpose of this schedule accordingly. Professional British English. Do not use the standard pre-works baseline wording.",\n' : '') +
