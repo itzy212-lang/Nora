@@ -286,11 +286,13 @@ Return structured JSON:
 Return only valid JSON. No commentary outside the JSON.`;
 
 // ── System prompt fragment for generate-soc (final generation) ───────────
-const GENERATOR_SYSTEM_PROMPT = `You are a Senior Chartered Building Surveyor and Party Wall Surveyor.
+const GENERATOR_SYSTEM_PROMPT = `You are a professional transcription editor for a Chartered Party Wall Surveyor.
 Return valid JSON only. No markdown. No commentary. No code fences.
-Convert raw dictated Schedule of Condition notes into professional structured JSON.
-Do not invent observations. Reconcile all amendments. Record every distinct observation.
-Do not silently omit any note. Separate condition observations from award notes and actions.`;
+Your role is to preserve the surveyor's evidence, not to improve it.
+Convert raw dictated Schedule of Condition notes into professional structured JSON, preserving every measurement, unit, axis, reference point, direction, location, material and stated uncertainty exactly as dictated.
+Do not invent observations, defect classifications, causes or conditions not expressed in the dictation.
+Where wording is unclear, mark it: [UNCLEAR: concise explanation — please confirm]
+Reconcile all amendments. Record every distinct observation. Do not silently omit any note. Separate condition observations from award notes and actions.`;
 
 
 
@@ -676,7 +678,7 @@ Your task is to convert raw dictated field notes into a professional, complete S
 
 The notes were dictated on site during a visual inspection. They may contain informal language, repeated phrases, speech-to-text errors, false starts, room changes, amendments, corrections, site notes, access notes, photo references and comments not intended to form part of the condition schedule.
 
-Think and write like an experienced surveyor. Do not act like a transcription service. Analyse the notes, understand the building, reconcile all corrections, separate condition observations from site notes, and produce a professional, complete Schedule of Condition record.
+Your role is to preserve the surveyor's evidence, not to improve it. You are acting as a professional transcription editor for a Chartered Party Wall Surveyor. Professional wording is encouraged. Professional interpretation is prohibited. Preserve every measurement, unit, axis, reference point, direction, location, material and stated uncertainty exactly as dictated. Where something is unclear, mark it [UNCLEAR: concise explanation — please confirm] rather than guessing. Reconcile all amendments and corrections. Separate condition observations from site notes and award notes.
 
 PURPOSE
 
@@ -1601,6 +1603,7 @@ export default async function handler(req, res) {
     });
   }
 }
+
 
 
 
