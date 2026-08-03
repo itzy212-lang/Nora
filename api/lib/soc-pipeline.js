@@ -1725,7 +1725,7 @@ END OF COMPLETE REFERENCE DOCUMENT`;
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
   const resolvedMode = 'gpt-5.6-terra'; // Stage 2 hardcoded to Terra
   const model = 'gpt-5.6-terra';
-  const params = { max_completion_tokens: 32000 };
+  const params = { max_completion_tokens: 128000 };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
   const aoAddress     = projectMeta.ao_address    || 'Not provided';
@@ -1851,21 +1851,9 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
   const raw = (d.choices?.[0]?.message?.content || '')
     .replace(/^[`]{3}(?:json)?[\s]*/m, '').replace(/[\s]*[`]{3}$/m, '').trim();
 
-  // DEBUG: Log response for inspection
-  console.log('[soc-pipeline] Terra response length:', raw.length);
-  if (raw.length > 1500) {
-    console.log('[soc-pipeline] Response start (first 1000):', raw.substring(0, 1000));
-    console.log('[soc-pipeline] Response end (last 500):', raw.substring(Math.max(0, raw.length - 500)));
-  } else {
-    console.log('[soc-pipeline] Full response:', raw);
-  }
-
   let result;
   try { result = JSON.parse(raw); }
-  catch (e) { 
-    console.error('[soc-pipeline] JSON parse error:', e.message);
-    throw new Error('Drafting returned invalid JSON: ' + e.message); 
-  }
+  catch { throw new Error('Drafting returned invalid JSON'); }
 
   if (!Array.isArray(result.sections) || !result.sections.length) {
     throw new Error('Drafting returned no sections');
