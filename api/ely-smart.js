@@ -3,6 +3,17 @@
 // Global behaviour: analyse first, draft only when clearly requested.
 
 import { createClient } from '@supabase/supabase-js';
+import { waitUntil } from '@vercel/functions';
+// PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
+import { buildStage1Context } from './lib/stage1-context.js';
+import { validateBriefShape } from './lib/stage1-schema.js';
+import { applyDependencyValidation } from './lib/stage1-dependency-graph.js';
+import { resolveStage1State, computeBriefForInjection, STAGE1_STATE } from './lib/stage1-state.js';
+// Note: computeBriefForInjection is imported but not currently called in
+// this file — retained per instruction for Phase 3 promotion wiring. Its
+// own correctness is already exhaustively covered by Phase 1's test suite
+// (stage1-state.test.js) and re-exercised directly in
+// phase2a-preflight-caller-flow.test.js in this change.
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -547,218 +558,384 @@ async function semanticSearchProject(projectId, userPrompt, limit = 20) {
 }
 
 
-// ── MILESTONE 1: Stage 1 Brief Generation ─────────────────────────────────
-// Reads all project context and produces a structured brief for inspection.
-// Feature-flagged via STAGE1_DRAFTING env var (default: false).
-// In Milestone 1: brief is logged only — does NOT affect live drafting.
+// ── PHASE 2A: Stage 1 Strategic Reasoning ─────────────────────────────────
+// Redesigned in place (Milestone 1/2's original Luna-based brief generator
+// is replaced entirely — this is the same function, not a second one).
+//
+// Produces a structured professional case assessment: real problem, user
+// objective, chronology, controlling facts, concessions, candidate
+// arguments, decisive issue (or correctly none), counterfactual test,
+// counterargument, residual issues, overstatement risks. Model: Terra only,
+// no temperature. Governing schema: IMPLEMENTATION_READY_STAGE1_SCHEMA.md.
+//
+// PHASE 2A SCOPE: retrievedAuthority is always the empty, labelled
+// "not_attempted" placeholder (CORRECTED_DOMAIN_KNOWLEDGE_CONTRACT_SPEC.md
+// §5) — no knowledge retrieval happens here. representationLock is fixed,
+// JavaScript-supplied input; the model never generates or restates it as
+// its own output field.
+//
+// This function does NOT decide whether its output reaches Stage 2 — that
+// decision belongs entirely to the caller (see the Phase 2A caller flow
+// below). This function returns a result describing what happened; the
+// caller is solely responsible for stage1BriefForPrompt, which is always
+// null during Phase 2A regardless of what this function returns.
 // ──────────────────────────────────────────────────────────────────────────
+
+const STAGE1_VALIDATION_RESULT = Object.freeze({
+  VALID: 'valid',
+  SHAPE_INVALID: 'shape_invalid',
+  DEPENDENCY_INVALID: 'dependency_invalid',
+  GENERATION_FAILED: 'generation_failed',
+  COMPLETION_TRUNCATED: 'completion_truncated',
+});
+
+function emptyRetrievedAuthority() {
+  return { retrieval_status: 'not_attempted', authorities: [], retrieval_outcome: null, retrieval_gaps: [] };
+}
+
+function buildStage1SystemPrompt() {
+  return `You are a professional case-assessment analyst working alongside an experienced party wall surveyor and their practice.
+
+Your job is NOT to draft correspondence, and NOT to decide what case law or statutory authority applies.
+
+Your job is to produce the internal professional case assessment an experienced colleague would form before saying anything out loud: what has actually happened, what the user is trying to achieve, what matters, what the evidence supports, what the strongest honest arguments are, and what strategy best advances the user's objective. A separate stage decides how this is communicated.
+
+MANDATORY REASONING SEQUENCE — follow this order. Do not begin by asking what case law applies.
+
+1. Understand the situation and reconstruct what has actually happened.
+2. Identify the user's actual objective — not only the objective reality of the dispute, but why the user is asking for help and what outcome they want (examples: winning or advancing an argument; protecting the appointing owner's position; drawing a line under a dispute; getting works or negotiations moving again; preserving a commercial or professional relationship; de-escalating unnecessary hostility; obtaining a practical concession; documenting the record without escalating; challenging fees; preserving legal or procedural rights; preparing for mediation or litigation; producing a short operational response rather than a complete argument — these are illustrative, not exhaustive). Do not substitute a different, stronger-sounding objective for the user's actual one. If the user's objective conflicts with the evidence, professional duty, the representation lock, or a material risk, say so explicitly rather than silently pursuing it.
+3. Reconstruct the relevant chronology, grounded in verbatim excerpts from the supplied, opaquely-labelled sources.
+4. Detect concessions, admissions, commitments, contradictions and changes of position — each grounded in a verbatim excerpt from a specific labelled source. An implied change of position requires two independent excerpts (an earlier and a later one), never inferred from a single ambiguous message.
+5. Identify controlling facts and classify each as established (grounded in at least one verified excerpt), disputed (grounded in supporting evidence, with opposing evidence recorded separately if present), or inferred (grounded in other findings already in this brief, never invented from nothing).
+6. Construct genuinely distinct candidate arguments. For each argument, separate its CORE substance — which must rest only on findings essential to the argument's existence — from any REINFORCEMENT — a separate, distinct point that strengthens the argument but which the argument would still exist without. Never embed a reinforcement-only claim (such as "the opposing side has expressly accepted this") inside the core argument text. State it as a separate reinforcement instead.
+7. Rank the candidate arguments by strategic force.
+8. Decide whether a single issue is genuinely decisive. Do not invent a decisive issue where none exists — where no single point is decisive, say so and rely on the ranked hierarchy instead. Where one exists: state why it is decisive, and apply a counterfactual test — state a test question of the form "if [the controlling fact] were not true, would this argument still matter?" together with the expected answer, so the decisive claim is auditable rather than asserted.
+9. State the strongest counterargument the other side could genuinely make, stated fairly, not as a strawman.
+10. Identify residual issues that remain live even after the decisive or strongest argument is applied — do not let one strong point silently absorb everything else.
+11. Flag specific overstatement risks — places where the user's own position, or the argument you have constructed, would become vulnerable if pushed further than the evidence supports.
+12. Recommend an argument order and an overall response strategy that reflects everything above and, critically, actually advances the user's identified objective — not merely the most rhetorically powerful case available in the abstract.
+
+EVIDENCE DISCIPLINE
+Every source you are given is labelled with an opaque identifier (e.g. email_0001, chat_0001, current_message). Every claim that depends on a specific source must cite that exact identifier and reproduce the supporting text verbatim, not paraphrased. A downstream system will mechanically verify every excerpt against the source it claims to come from — an excerpt that does not match exactly, or a claim with no citation, will be rejected. Do not invent, approximate, or paraphrase-and-present-as-verbatim.
+
+REPRESENTATION LOCK
+You will be given a fixed representation lock stating which party's side this analysis is being prepared for. Treat it as authoritative, fixed input. Do not restate it, alter it, or produce it as an output field — it is not part of your output.
+
+AUTHORITY
+You will be given a retrievedAuthority object. In this phase it will always show retrieval_status "not_attempted" with no authorities supplied. Do not reference, assume, or invent any specific case, statute, section, or citation — proceed on the supplied factual evidence alone. If you believe authority would materially strengthen a specific argument, you may note that generically (e.g. "a statutory or case-law point may reinforce this if available"), but you must never assert that a specific authority exists or supports the point.
+
+Return ONLY valid JSON matching this schema. No preamble, no explanation, no markdown.
+
+{
+  "user_objective": "string",
+  "real_problem_to_solve": "string",
+  "chronology": [ { "source_id": "string", "date": "string", "event": "string", "excerpt": "string" } ],
+  "original_factual_premise": "string",
+  "controlling_facts": [ { "fact_id": "fact_01", "fact": "string", "status": "established | disputed | inferred", "supporting_evidence": [ { "source_id": "string", "excerpt": "string" } ], "opposing_evidence": [ { "source_id": "string", "excerpt": "string" } ], "inference_basis_ids": ["string"] } ],
+  "material_changes": [ { "change_id": "change_01", "change": "string", "source_id": "string", "excerpt": "string", "strategic_effect": "string" } ],
+  "user_emphasised_points": [ { "point": "string", "source_id": "string", "excerpt": "string", "should_control_response": true } ],
+  "express_concessions_and_admissions": [ { "concession_id": "concession_01", "party": "string", "source_id": "string", "excerpt": "string", "classification": "concession | admission" } ],
+  "implied_changes_of_position": [ { "position_change_id": "position_change_01", "description": "string", "earlier_source_id": "string", "earlier_excerpt": "string", "later_source_id": "string", "later_excerpt": "string", "confidence": "high | medium | low" } ],
+  "prior_commitments": [ { "commitment_id": "commitment_01", "party": "string", "source_id": "string", "excerpt": "string", "status": "fulfilled | outstanding | withdrawn | unclear", "strategic_effect": "string" } ],
+  "contradictions": [ { "contradiction_id": "contradiction_01", "description": "string", "source_a_id": "string", "source_a_excerpt": "string", "source_b_id": "string", "source_b_excerpt": "string" } ],
+  "candidate_arguments": [ { "argument_id": "arg_01", "core_argument": "string", "required_finding_ids": ["string"], "reinforcements": [ { "reinforcement_id": "reinforcement_01", "finding_ids": ["string"], "statement": "string" } ], "strength": "strong | moderate | weak", "limitations": "string" } ],
+  "argument_ranking": ["string"],
+  "decisive_issue": { "exists": true, "argument_id": "string or null", "core_reason": "string or null", "reinforcements": [ { "reinforcement_id": "string", "finding_ids": ["string"], "statement": "string" } ], "counterfactual_test": "string or null", "counterfactual_expected_answer": "string or null", "required_dependency_ids": ["string"], "supporting_dependency_ids": ["string"], "confidence": "high | medium | low or null" },
+  "strongest_counterargument": "string",
+  "residual_issues": ["string"],
+  "overstatement_risks": ["string"],
+  "evidence_references": [ { "source_id": "string", "excerpt": "string", "used_for": "string" } ],
+  "recommended_argument_order": ["string"],
+  "recommended_response_strategy": "string",
+  "recommended_strategy_required_finding_ids": ["string"],
+  "requires_clarification": { "needed": false, "material_gaps": [], "clarification_question": "string or null" },
+  "tone_register": "formal | professional-conversational | warm | firm",
+  "user_terminology_to_preserve": {},
+  "must_include": [],
+  "do_not_include": [],
+  "analysis_confidence": "high | medium | low",
+  "analysis_gaps": []
+}
+
+When decisive_issue.exists is false, argument_id, core_reason, counterfactual_test and counterfactual_expected_answer must be null, and required_dependency_ids must be empty. When it is true, all of those fields are required and required_dependency_ids must be non-empty.`;
+}
+
+const STAGE1_COMPLETION_TOKEN_LIMIT = 8000; // raised from 4000 — see PHASE2A_PREFLIGHT_CORRECTION.md finding 2.1
+
 async function generateStage1Brief({
   projectId, userId, surface, modeHint,
   projectBundle, scopedEmailContext, selectedEmail, semanticResults,
-  chatHistory = [], userPrompt = '', brain,
+  chatHistory = [], userPrompt = '',
+  representationLock = null,
+  retrievedAuthority = emptyRetrievedAuthority(),
+  diagnosticsState = 'SHADOW', // 'SHADOW' | 'PROMOTED_CANDIDATE_BLOCKED' — caller-supplied, for diagnostics only
 }) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) return null;
-
   const t0 = Date.now();
 
-  // Build a concise context block for Stage 1
-  const projectFacts = projectBundle ? (() => {
-    const p = projectBundle.project || {};
-    const aos = (projectBundle.adjoining_owners || []).slice(0, 6).map(ao => {
-      const name = [ao.name, ao.name2].filter(Boolean).join(' and ') || ao.owner_name || 'Unknown AO';
-      const address = ao.premise || ao.address || '';
-      const status = ao.status || '';
-      return `${name}${address ? ' of ' + address : ''}${status ? ' (status: ' + status + ')' : ''}`;
-    }).join('; ');
-    const bo = p.bo || {};
-    return [
-      bo.name ? `Building Owner: ${[bo.name, bo.name2].filter(Boolean).join(' and ')}` : null,
-      bo.premise ? `BO premises: ${bo.premise}` : null,
-      aos ? `Adjoining Owners: ${aos}` : null,
-      p.ref ? `Project ref: ${p.ref}` : null,
-    ].filter(Boolean).join('\n');
-  })() : '';
+  const result = {
+    generationSucceeded: false,
+    validationResult: STAGE1_VALIDATION_RESULT.GENERATION_FAILED,
+    brief: null,
+    tokensUsed: null,
+    durationMs: 0,
+    errorMsg: null,
+    shapeErrors: null,
+    dependencyValidation: null,
+    retryAttempted: false,
+    retryOutcome: null, // 'succeeded' | 'failed' | null
+  };
 
-  // Selected email (reply target) — passed explicitly so Stage 1 finds the right one
-  // Falls back to scopedEmailContext if no explicit selection
-  const replyTarget = selectedEmail || (scopedEmailContext || [])[0] || null;
-  const emailBlock = replyTarget ? (() => {
-    const b = (replyTarget.body || replyTarget.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
-    const dir = replyTarget.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
-    const from = replyTarget.sender_name || replyTarget.sender_email || 'Unknown';
-    const date = new Date(replyTarget.received_at || replyTarget.sent_at || '').toLocaleDateString('en-GB');
-    return `[${date}] ${dir} -- From: ${from}\nSubject: ${replyTarget.subject || '(no subject)'}\n${b}`;
-  })() : (scopedEmailContext || []).slice(0, 2).map(e => {
-    const b = (e.body || e.body_preview || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
-    const dir = e.direction === 'outgoing' ? 'SENT' : 'RECEIVED';
-    const from = e.sender_name || e.sender_email || 'Unknown';
-    const date = new Date(e.received_at || e.sent_at || '').toLocaleDateString('en-GB');
-    return `[${date}] ${dir} -- From: ${from}\nSubject: ${e.subject || '(no subject)'}\n${b}`;
-  }).join('\n\n---\n\n');
+  if (!OPENAI_KEY) {
+    result.errorMsg = 'Missing OPENAI_API_KEY';
+    result.durationMs = Date.now() - t0;
+    await logStage1Diagnostics({ projectId, userId, surface, userPrompt, diagnosticsState, result, retrievedAuthority });
+    return result;
+  }
 
-  // Semantic results — pass as-is, Stage 1 will distil to 3-5 findings
-  const semanticBlock = (semanticResults || []).slice(0, 25).map(r => {
-    const date = new Date(r.metadata?.received_at || r.metadata?.created_at || '').toLocaleDateString('en-GB');
-    return `[${date}] ${r.content_type || 'note'}: ${(r.content || '').slice(0, 400)}`;
-  }).join('\n\n');
+  const { contextBlocks, sourceIdMap } = buildStage1Context({
+    userPrompt,
+    selectedEmail,
+    scopedEmailContext,
+    chatHistory,
+    projectBundle,
+    semanticResults,
+  });
 
-  // Recent chat history — last 6 turns
-  const historyBlock = (chatHistory || []).slice(-6).map(m =>
-    `${m.role === 'user' ? 'USER' : 'NORA'}: ${String(m.content || '').slice(0, 500)}`
-  ).join('\n\n');
-
-  const stage1System = `You are a retrieval and reasoning assistant for a party wall surveyor practice.
-
-Your job is NOT to draft correspondence.
-
-Your job is to read all supplied context and produce a structured brief that a separate drafting assistant will use.
-
-Read everything carefully. Extract only what is certain. Flag what is missing.
-
-ACTIVE RETRIEVAL — before completing the brief, explicitly search the supplied context for:
-- Exact quotes relevant to the user's objective (quote verbatim, do not paraphrase)
-- Previous promises, commitments or agreements made by either party
-- Previous concessions or positions taken by either party
-- Specific terminology the user has used for walls, areas, locations or conditions
-
-For each relevant quote: include it verbatim in exact_quotes_relevant.
-If nothing relevant exists: write "none found" — do not invent.
-
-CONFLICT DETECTION — this is mandatory. After extracting prior commitments and the user's current dictation, explicitly compare them:
-- Does the user's current instruction contradict or differ from a prior commitment, agreed position, or previously stated amount?
-- Has a fee, sum, deadline or scope changed from what was previously stated or agreed?
-- Is the user about to send something that conflicts with what they previously told the other party?
-
-For each conflict found: state what was previously committed and what the current dictation says. Be specific — include dates and amounts where available.
-If no conflicts exist: write "none" in the conflicts field — do not invent conflicts.
-
-Return ONLY valid JSON matching the schema below. No preamble. No explanation. No markdown.
-
-{
-  "parties": {
-    "building_owner": "",
-    "adjoining_owner": "",
-    "ao_surveyor": "",
-    "bo_surveyor": "",
-    "third_surveyor": "",
-    "other": []
-  },
-  "representation": "bo_surveyor | ao_surveyor | agreed_surveyor | commercial | unknown",
-  "role_in_this_correspondence": "",
-  "reply_target": {
-    "sender": "",
-    "email_date": "",
-    "subject": "",
-    "key_points_raised": [],
-    "exact_quotes_relevant": []
-  },
-  "user_objective": "",
-  "key_facts": [],
-  "prior_commitments": [],
-  "prior_concessions": [],
-  "previous_positions": [],
-  "constraints": [],
-  "user_terminology_to_preserve": {},
-  "missing_facts": [],
-  "mode": "draft | correction | briefing | discussion",
-  "if_correction": {
-    "what_was_wrong": "",
-    "corrected_position": "",
-    "previous_draft_to_amend": false
-  },
-  "reasoning": {
-    "what_the_user_is_actually_trying_to_achieve": "",
-    "why": "",
-    "what_the_email_should_do": ""
-  },
-  "recommended_drafting_strategy": "",
-  "tone_register": "formal | professional-conversational | warm | firm",
-  "do_not_include": [],
-  "must_include": [],
-  "conflicts": [
-    {
-      "description": "what conflicts",
-      "prior_commitment": "what was previously said or agreed",
-      "current_instruction": "what the user is now saying",
-      "date_of_prior": "date if known"
-    }
-  ]
-}`;
-
-  const stage1User = [
-    projectFacts ? `PROJECT FACTS:\n${projectFacts}` : null,
-    emailBlock ? `SELECTED EMAIL / REPLY TARGET:\n${emailBlock}` : null,
-    semanticBlock ? `SEMANTICALLY RELEVANT CONTEXT (distil to 3-5 key findings):\n${semanticBlock}` : null,
-    historyBlock ? `RECENT CONVERSATION:\n${historyBlock}` : null,
-    `USER DICTATION:\n${userPrompt}`,
+  const fixedInputBlock = [
+    representationLock ? `REPRESENTATION LOCK (fixed, authoritative — do not restate as output):\n${JSON.stringify(representationLock)}` : null,
+    `RETRIEVED AUTHORITY (fixed input for this phase):\n${JSON.stringify(retrievedAuthority)}`,
   ].filter(Boolean).join('\n\n---\n\n');
 
-  let brief = null;
-  let tokensUsed = null;
-  let errorMsg = null;
+  const stage1User = [
+    fixedInputBlock,
+    ...contextBlocks.map(b => `[${b.sourceId}] ${b.label}:\n${b.text}`),
+  ].filter(Boolean).join('\n\n---\n\n');
+
+  const stage1System = buildStage1SystemPrompt();
+
+  const stage1Payload = {
+    model: 'gpt-5.6-terra',
+    reasoning_effort: process.env.STAGE1_REASONING_EFFORT || process.env.DRAFTING_REASONING_EFFORT || 'medium',
+    max_completion_tokens: STAGE1_COMPLETION_TOKEN_LIMIT,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: stage1System },
+      { role: 'user', content: stage1User },
+    ],
+  };
+
+  // Applies the parsed OpenAI response (or a completion_truncated / other
+  // outcome) onto `result`. Shared between the initial attempt and the
+  // single permitted retry so both paths are validated identically.
+  function applyResponseToResult(data) {
+    const choice = data.choices?.[0];
+    const finishReason = choice?.finish_reason || null;
+    const raw = choice?.message?.content || '{}';
+    result.tokensUsed = data.usage?.total_tokens || null;
+
+    // Token-budget truncation is checked BEFORE attempting to parse, per
+    // the requirement not to classify a known token-budget truncation as
+    // generation_failed — even in the rare case the cut-off text happens
+    // to still be syntactically valid JSON, it may be incomplete relative
+    // to what the model intended to produce.
+    if (finishReason === 'length') {
+      result.generationSucceeded = false;
+      result.validationResult = STAGE1_VALIDATION_RESULT.COMPLETION_TRUNCATED;
+      result.errorMsg = `Completion truncated at max_completion_tokens (${STAGE1_COMPLETION_TOKEN_LIMIT})`;
+      return;
+    }
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      result.errorMsg = 'JSON parse failed: ' + parseErr.message;
+      return;
+    }
+
+    result.generationSucceeded = true;
+    const shapeResult = validateBriefShape(parsed);
+    if (!shapeResult.valid) {
+      result.validationResult = STAGE1_VALIDATION_RESULT.SHAPE_INVALID;
+      result.shapeErrors = shapeResult.errors;
+      result.errorMsg = `Shape validation failed: ${shapeResult.errors.length} error(s)`;
+      return;
+    }
+    const depResult = applyDependencyValidation(shapeResult.brief, sourceIdMap);
+    result.dependencyValidation = {
+      removedReinforcements: depResult.removedReinforcements,
+      removedFindings: depResult.removedFindings,
+      removedArguments: depResult.removedArguments,
+      invalidationReason: depResult.invalidationReason,
+    };
+    if (!depResult.valid) {
+      result.validationResult = STAGE1_VALIDATION_RESULT.DEPENDENCY_INVALID;
+      result.errorMsg = depResult.invalidationReason;
+    } else {
+      result.validationResult = STAGE1_VALIDATION_RESULT.VALID;
+      result.brief = depResult.brief;
+    }
+  }
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
-      body: JSON.stringify({
-        model: process.env.STAGE1_MODEL || 'gpt-5.6-luna',
-        temperature: 0.1,
-        max_completion_tokens: 1500,
-        messages: [
-          { role: 'system', content: stage1System },
-          { role: 'user', content: stage1User },
-        ],
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(stage1Payload),
     });
 
     if (res.ok) {
       const data = await res.json();
-      const raw = data.choices?.[0]?.message?.content || '{}';
-      tokensUsed = data.usage?.total_tokens || null;
-      try {
-        brief = JSON.parse(raw);
-      } catch (parseErr) {
-        errorMsg = 'JSON parse failed: ' + parseErr.message;
-        console.warn('[stage1] JSON parse failed:', parseErr.message);
-      }
+      applyResponseToResult(data);
     } else {
       const err = await res.json().catch(() => ({}));
-      errorMsg = err.error?.message || `HTTP ${res.status}`;
-      console.warn('[stage1] GPT call failed:', errorMsg);
+      const errMsg = err.error?.message || `HTTP ${res.status}`;
+
+      // Reuse the exact transient-error match and retry shape already
+      // verified working for the existing Stage 2 Terra call (same model,
+      // same reasoning configuration, no temperature, one retry maximum,
+      // no fallback to any other model). Only this specific known
+      // transient condition retries — ordinary schema/dependency/model
+      // errors do not.
+      if (errMsg.toLowerCase().includes('insufficient permissions')) {
+        result.retryAttempted = true;
+        console.log('[stage1] Terra permissions error — retrying once after 1s');
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const retryRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+            body: JSON.stringify(stage1Payload),
+          });
+          if (retryRes.ok) {
+            const retryData = await retryRes.json();
+            applyResponseToResult(retryData);
+            result.retryOutcome = result.generationSucceeded ? 'succeeded' : 'failed';
+            console.log('[stage1] Terra retry outcome:', result.retryOutcome);
+          } else {
+            const retryErr = await retryRes.json().catch(() => ({}));
+            result.errorMsg = retryErr.error?.message || errMsg;
+            result.retryOutcome = 'failed';
+          }
+        } catch (retryFetchErr) {
+          result.errorMsg = retryFetchErr.message;
+          result.retryOutcome = 'failed';
+        }
+        // No recursive or further retry regardless of this outcome — one
+        // retry maximum, per the explicit requirement.
+      } else {
+        result.errorMsg = errMsg;
+      }
     }
   } catch (err) {
-    errorMsg = err.message;
-    console.warn('[stage1] fetch error:', err.message);
+    result.errorMsg = err.message;
   }
 
-  const durationMs = Date.now() - t0;
+  result.durationMs = Date.now() - t0;
+  await logStage1Diagnostics({ projectId, userId, surface, userPrompt, diagnosticsState, result, retrievedAuthority });
+  console.log(`[stage1] ${diagnosticsState} outcome=${result.validationResult} in ${result.durationMs}ms, tokens=${result.tokensUsed}, retried=${result.retryAttempted}`);
+  return result;
+}
 
-  // Log to stage1_briefs table (fire and forget — never blocks drafting)
+// Diagnostics — reuses the existing stage1_briefs table exactly as it is
+// today. No new columns, no migration. The versioned envelope carries
+// everything Phase 2A needs inside the existing JSONB `brief` column; the
+// existing `error` column carries a concise failure summary where relevant.
+// Never stores raw chain-of-thought or duplicated full email bodies — only
+// the final, validated (or null) brief and the dependency-validation
+// summary, consistent with the existing table's own truncation pattern.
+async function logStage1Diagnostics({ projectId, userId, surface, userPrompt, diagnosticsState, result, retrievedAuthority }) {
   try {
     const sb = getSupabase();
-    if (sb) {
-      await sb.from('stage1_briefs').insert([{
-        project_id: projectId || null,
-        user_id: userId || null,
-        surface: surface || null,
-        model: process.env.STAGE1_MODEL || 'gpt-5.6-luna',
-        prompt_snippet: (userPrompt || '').slice(0, 200),
-        brief: brief || null,
-        stage1_tokens_used: tokensUsed,
-        stage1_duration_ms: durationMs,
-        error: errorMsg || null,
-      }]);
-    }
+    if (!sb) return;
+    const envelope = {
+      schema_version: 'phase2a_shadow_v2', // v2: completion_truncated + retry fields + recorded token limit
+      state: diagnosticsState,
+      validation_result: result.validationResult,
+      strategic_brief: result.brief || null,
+      dependency_validation: result.dependencyValidation || {
+        removedReinforcements: [], removedFindings: [], removedArguments: [], invalidationReason: null,
+      },
+      retrieved_authority_status: retrievedAuthority?.retrieval_status || 'not_attempted',
+      completion_token_limit: STAGE1_COMPLETION_TOKEN_LIMIT,
+      retry_attempted: result.retryAttempted || false,
+      retry_outcome: result.retryOutcome || null,
+    };
+    await sb.from('stage1_briefs').insert([{
+      project_id: projectId || null,
+      user_id: userId || null,
+      surface: surface || null,
+      model: 'gpt-5.6-terra',
+      prompt_snippet: (userPrompt || '').slice(0, 200),
+      brief: envelope,
+      stage1_tokens_used: result.tokensUsed,
+      stage1_duration_ms: result.durationMs,
+      error: result.errorMsg ? String(result.errorMsg).slice(0, 500) : null,
+    }]);
   } catch (logErr) {
-    console.warn('[stage1] logging failed (non-fatal):', logErr.message);
+    console.warn('[stage1] diagnostics logging failed (non-fatal):', logErr.message);
   }
-
-  console.log(`[stage1] brief generated in ${durationMs}ms, tokens=${tokensUsed}, error=${errorMsg || 'none'}`);
-  return brief;
 }
+
+
+// ── PHASE 2A PREFLIGHT CORRECTION: background shadow task ──────────────────
+// Wraps semantic search + generateStage1Brief() + diagnostics into a single
+// promise, registered via waitUntil() so the user-facing Stage 2 response
+// never awaits it. Receives an immutable snapshot of only the approved
+// inputs — no live/mutable request-local references — captured by the
+// caller before this task is scheduled, so nothing here depends on request
+// state that may no longer be valid by the time this actually runs.
+//
+// Semantic search lives here, not in the blocking request path: Stage 2's
+// own semantic search (inside buildSystemPrompt(), a separate call site)
+// already exists independently for Stage 2's own purposes — VERIFIED
+// REPOSITORY, confirmed by inspection before this change. The search
+// previously run in the blocking path here existed solely to feed this
+// discarded shadow analysis and has been moved inside this task.
+//
+// This whole function is wrapped so it can never produce an unhandled
+// promise rejection — every internal failure is caught, logged via the
+// normal diagnostics path (generateStage1Brief already logs on every
+// outcome), and swallowed.
+async function runStage1ShadowTask(snapshot) {
+  try {
+    let stage1SemanticResults = null;
+    try {
+      stage1SemanticResults = await semanticSearchProject(snapshot.projectId, snapshot.userPrompt, 20);
+    } catch (semErr) {
+      console.warn('[stage1] background semantic search failed (non-fatal):', semErr.message);
+    }
+
+    await generateStage1Brief({
+      projectId: snapshot.projectId,
+      userId: snapshot.userId,
+      surface: snapshot.surface,
+      modeHint: snapshot.modeHint,
+      projectBundle: snapshot.projectBundle,
+      scopedEmailContext: snapshot.scopedEmailContext,
+      selectedEmail: snapshot.selectedEmail,
+      semanticResults: stage1SemanticResults,
+      chatHistory: snapshot.chatHistory,
+      userPrompt: snapshot.userPrompt,
+      representationLock: snapshot.representationLock,
+      retrievedAuthority: snapshot.retrievedAuthority,
+      diagnosticsState: snapshot.diagnosticsState,
+    });
+
+    if (snapshot.diagnosticsState === 'PROMOTED_CANDIDATE_BLOCKED') {
+      console.warn('[stage1] STAGE1_PROMOTED is set but Phase 2A has no promotion path — treated as shadow only, blocked.');
+    }
+  } catch (err) {
+    // Defence in depth — generateStage1Brief() already catches its own
+    // internal failures and always logs a diagnostics row, so reaching
+    // this catch means something outside that function's own try/catch
+    // failed unexpectedly. Logged, never rethrown: this task must never
+    // produce an unhandled rejection regardless of what fails inside it.
+    console.warn('[stage1] background shadow task failed unexpectedly (non-fatal, no diagnostics row for this failure):', err?.message || err);
+  }
+}
+
 
 // ── Cross-project search — finds project by name then searches its content ──
 // Used from main chat when user says "look at the Sellafield project notes"
@@ -3503,43 +3680,84 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
 
-    // ── MILESTONE 2: Two-Stage Drafting Architecture ─────────────────────────
-    // STAGE1_DRAFTING=true enables Stage 1 brief generation.
-    // Stage 1 runs awaited — brief is passed to buildSystemPrompt for Stage 2.
-    // Stage 2 receives: brief + selected email + authoring standard (not 70k of context).
-    // Fallback: if Stage 1 fails, falls back to current single-pass architecture.
-    const stage1Enabled = process.env.STAGE1_DRAFTING === 'true';
-    let stage1Brief = null;
+    // ── PHASE 2A: Stage 1 shadow-only strategic reasoning ─────────────────────
+    // Single caller. Single generateStage1Brief() call site — exactly one
+    // generation per eligible request, never more, never a second pathway.
+    //
+    // PREFLIGHT CORRECTION: Stage 1 shadow generation is now scheduled via
+    // waitUntil() (from @vercel/functions) rather than awaited inline. The
+    // user-facing Stage 2 response below does not wait for Stage 1 to run
+    // or complete. See PHASE2A_PREFLIGHT_CORRECTION.md for the verified
+    // reasoning behind this change and its residual runtime dependency.
+    //
+    // stage1BriefForPrompt is assigned the literal value null directly in
+    // every branch below, synchronously, before any background task is even
+    // scheduled. It is NOT derived from a flag check, NOT derived from
+    // generateStage1Brief()'s or computeBriefForInjection()'s return value
+    // (neither is available synchronously any more — the task runs in the
+    // background), and NOT dependent on STAGE1_PROMOTED, STAGE1_DRAFTING,
+    // or any deployment configuration. This is the sole value passed into
+    // buildSystemPrompt() below — no other code path in this phase feeds
+    // that parameter, and nothing the background task later does can change
+    // it, because by the time that task runs, this value has already been
+    // used.
+    //
+    // PHASE 2A HARD SAFETY BOUNDARY: Phase 2A has no promotion behaviour.
+    // Every possible state from resolveStage1State() — OFF, SHADOW, and
+    // PROMOTED_CANDIDATE — is handled explicitly. PROMOTED_CANDIDATE is
+    // treated as shadow analysis only: generation may be scheduled for
+    // diagnostics and human review, but promotion is structurally blocked
+    // here, not by the flag being expected to be false.
+    const stage1RunState = resolveStage1State({
+      stage1DraftingEnv: process.env.STAGE1_DRAFTING,
+      stage1PromotedEnv: process.env.STAGE1_PROMOTED,
+    });
+    const stage1EligibleForThisRequest = modeHint === 'draft' && !!projectId;
 
-    if (stage1Enabled && modeHint === 'draft' && projectId) {
-      try {
-        // Pass selected email explicitly so Stage 1 finds the right reply target
-        const selectedEmail = scopedEmailContext?.[0] || null;
-        stage1Brief = await generateStage1Brief({
-          projectId,
-          userId,
-          surface: body.surface || '',
-          modeHint,
-          projectBundle,
-          scopedEmailContext,
-          selectedEmail,
-          semanticResults: null,
-          chatHistory: body.chatHistory || [],
-          userPrompt: prompt,
-          brain,
-        });
-        if (stage1Brief) {
-          console.log('[stage1] brief ready — using two-stage architecture');
-        } else {
-          console.warn('[stage1] brief null — falling back to single-pass');
-        }
-      } catch (err) {
-        console.warn('[stage1] failed — falling back to single-pass:', err.message);
-        stage1Brief = null;
-      }
+    let stage1BriefForPrompt = null; // PHASE 2A: always null. Never reassigned to anything else below.
+
+    if (stage1RunState.state === STAGE1_STATE.OFF || !stage1EligibleForThisRequest) {
+      // No task scheduled. stage1BriefForPrompt remains null.
+    } else if (
+      stage1RunState.state === STAGE1_STATE.SHADOW ||
+      stage1RunState.state === STAGE1_STATE.PROMOTED_CANDIDATE
+    ) {
+      const diagnosticsState = stage1RunState.state === STAGE1_STATE.PROMOTED_CANDIDATE
+        ? 'PROMOTED_CANDIDATE_BLOCKED'
+        : 'SHADOW';
+
+      // Immutable snapshot of only the approved inputs — captured now,
+      // synchronously, while this request-local state is known valid.
+      // Deliberately excludes anything not on the approved list (e.g. no
+      // live `req`/`res`, no service-role client, no raw `body` object) —
+      // the background task receives exactly this plain data object and
+      // nothing else.
+      const stage1Snapshot = {
+        projectId,
+        userId,
+        surface: body.surface || '',
+        modeHint,
+        projectBundle,
+        scopedEmailContext,
+        selectedEmail: scopedEmailContext?.[0] || null,
+        chatHistory: body.chatHistory || [],
+        userPrompt: prompt,
+        representationLock: representation,
+        retrievedAuthority: emptyRetrievedAuthority(),
+        diagnosticsState,
+      };
+
+      // Registered, not awaited. The promise is allowed to continue after
+      // this response is sent, up to this function's configured maxDuration
+      // (300s for this file — VERIFIED REPOSITORY, vercel.json — comfortably
+      // more than a single Terra call needs). runStage1ShadowTask() itself
+      // guarantees no unhandled rejection reaches this call.
+      waitUntil(runStage1ShadowTask(stage1Snapshot));
+      // PHASE 2A: stage1BriefForPrompt remains null — the task above has not
+      // run yet and never feeds this variable regardless of when it runs.
     }
 
-        const systemPrompt = await buildSystemPrompt({
+    const systemPrompt = await buildSystemPrompt({
       brain,
       projectId,
       resolvedProject,
@@ -3552,7 +3770,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
       representation,
-      stage1Brief,
+      stage1Brief: stage1BriefForPrompt, // PHASE 2A: always null.
       inboxSearchResults: generalInboxResults, // date/topic search results from emails + project_memory
     });
 
@@ -3895,37 +4113,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ── Test-only exports (Phase 2A) ────────────────────────────────────────────
+// Does not change production behaviour — the default export (the Vercel
+// handler) is unchanged. Exposed only so Phase 2A's Stage 1 logic can be
+// unit-tested without mocking the entire request pipeline.
+export { generateStage1Brief, emptyRetrievedAuthority, STAGE1_VALIDATION_RESULT, semanticSearchProject, runStage1ShadowTask, STAGE1_COMPLETION_TOKEN_LIMIT };
