@@ -159,16 +159,25 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
   const [userCopied, setUserCopied] = useState(false);
-  const longPressTimer = useRef(null);
+  const longPressStartTime = useRef(null);
 
+  // Fixed 2026-08-06: the clipboard write must happen synchronously within
+  // a direct user-gesture event handler. The previous version deferred it
+  // via setTimeout, which loses the "recent user activation" that both
+  // navigator.clipboard.writeText and the execCommand('copy') fallback
+  // require on mobile browsers — causing a silent failure with no error
+  // and nothing copied. This version only records the press start time
+  // in the timeout-equivalent window, then performs the actual copy
+  // directly inside the touchend/mouseup handler itself.
   const handleUserLongPressStart = () => {
-    longPressTimer.current = setTimeout(async () => {
-      const ok = await copyToClipboard(msg.content || '');
-      if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
-    }, 500);
+    longPressStartTime.current = Date.now();
   };
-  const handleUserLongPressEnd = () => {
-    clearTimeout(longPressTimer.current);
+  const handleUserLongPressEnd = async () => {
+    const start = longPressStartTime.current;
+    longPressStartTime.current = null;
+    if (!start || Date.now() - start < 500) return;
+    const ok = await copyToClipboard(msg.content || '');
+    if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
   };
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);

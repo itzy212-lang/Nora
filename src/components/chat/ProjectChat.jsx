@@ -732,7 +732,26 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     // Strip <invoice_data> JSON blocks from display text
     const cleanReply = (s) => String(s || '').replace(/<invoice_data>[\s\S]*?<\/invoice_data>/g, '').trim();
 
+    // Fixed 2026-08-06: a real draft must never be silently hidden behind
+    // the "Done." placeholder just because wantsDraft was false or the
+    // reply text came back empty (e.g. a pure-draft response with no
+    // separate commentary). If the backend sent a draft, show it as a
+    // real draft bubble regardless of which branch we're in.
     if (!wantsDraft) {
+      if (result.draft) {
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: 'ely',
+          content: result.draft,
+          draft: result.draft,
+          draftType: result.draftType || 'email',
+          messageType: 'draft',
+          suggestedActions: [],
+          projectId,
+          createdAt: new Date().toISOString(),
+        }]);
+        return;
+      }
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
@@ -794,6 +813,28 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         role: 'ely',
         content: after,
         messageType: 'brief',
+        suggestedActions: [],
+        projectId,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Fixed 2026-08-06: same safety net as the !wantsDraft branch above —
+    // if wantsDraft was true but this component's own extraction
+    // (splitAssistantResponse / extractSubjectFromDraft) still failed to
+    // find anything, fall back to result.draft directly before ever
+    // showing "Done.". This is the exact scenario traced on 2026-08-06:
+    // a real, complete draft was generated and saved correctly, but this
+    // extraction path produced nothing, and the user saw "Done." while
+    // the real draft sat unused in result.draft the whole time.
+    if (!newMessages.length && result.draft) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: result.draft,
+        draft: result.draft,
+        draftType: result.draftType || 'email',
+        messageType: 'draft',
         suggestedActions: [],
         projectId,
         createdAt: new Date().toISOString(),

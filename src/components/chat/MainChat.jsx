@@ -650,6 +650,23 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
     console.log('[MainChat] appendAssistantMessagesFromResult memory_save_proposal:', result.memory_save_proposal);
     if (!wantsDraft) {
+      if (result.draft) {
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: 'ely',
+          content: result.draft,
+          draft: result.draft,
+          draftType: result.draftType || (selectedEmailContext ? 'reply' : 'email'),
+          messageType: 'draft',
+          suggestedActions: [],
+          recipient: result.recipient,
+          selectedAO: result.selectedAO,
+          projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+          emailContext: selectedEmailContext,
+        }]);
+        setLastDraft(result.draft);
+        return;
+      }
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
@@ -703,6 +720,23 @@ export default function MainChat({ onOpenComposer, onClose }) {
         messageType: 'brief',
         suggestedActions: [],
       });
+    }
+
+    if (!newMessages.length && result.draft) {
+      newMessages.push({
+        id: uid(),
+        role: 'ely',
+        content: result.draft,
+        draft: result.draft,
+        draftType: result.draftType || (selectedEmailContext ? 'reply' : 'email'),
+        messageType: 'draft',
+        suggestedActions: [],
+        recipient: result.recipient,
+        selectedAO: result.selectedAO,
+        projectId: result.projectId || result.project_id || result.currentProject?.id || state.currentProject?.id || '',
+        emailContext: selectedEmailContext,
+      });
+      setLastDraft(result.draft);
     }
 
     if (!newMessages.length) {
