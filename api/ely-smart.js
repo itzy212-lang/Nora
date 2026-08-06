@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions';
 // import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState } from './lib/v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
 import { assembleV2Prompt } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
@@ -919,8 +919,8 @@ async function loadV2Sources({ userId }) {
 // retrieval functions — nothing is re-fetched, and nothing here judges
 // whether that context is sufficient (see v2-working-memory.js).
 async function runV2Pipeline({
-  userId, surface, modeHint, prompt, representation,
-  projectBundle, scopedEmailContext, semanticResults, chatHistory,
+  userId, surface, modeHint, prompt, representation, effectiveProjectId,
+  projectBundle, scopedEmailContext, chatHistory,
   draftingExamples, domainKnowledgeText,
 }) {
   const t0 = Date.now();
@@ -933,19 +933,42 @@ async function runV2Pipeline({
     ? buildGoldStandardBlock({ example: exampleForGoldStandard, userBrainV2 })
     : null;
 
+  // Context-wiring correction (2026-08-06): semanticSearchProject() is the
+  // existing, already-working V1 function — it calls the
+  // search_project_content RPC, which itself unions emails, ai_messages
+  // (chat, across every session on this project, not just the current
+  // one) and project_memory in a single embeddings-scored query, strictly
+  // scoped to p_project_id. This single call is the source for BOTH the
+  // semanticResults and projectMemory Working Memory categories below —
+  // project_memory is a sub-source of this same RPC, not a separate
+  // system, confirmed directly against the RPC definition before this
+  // was written.
+  const project = projectBundle?.project_raw || projectBundle?.project || null;
+  const requestText = [prompt, ...(scopedEmailContext || []).slice(0, 1).map((e) => e.body || e.body_preview || '')].join(' ');
+  let searchResults = [];
+  if (effectiveProjectId && prompt) {
+    try {
+      searchResults = (await semanticSearchProject(effectiveProjectId, prompt, 25)) || [];
+    } catch (searchErr) {
+      console.warn('[nora-v2] semantic search failed (non-fatal):', searchErr.message);
+      searchResults = [];
+    }
+  }
+  const alreadyIncludedIds = new Set([
+    ...(scopedEmailContext || []).map((e) => e.id).filter(Boolean),
+  ]);
+  const { emailChatResults, memoryResults } = splitSemanticResults(searchResults);
+  const semanticResultsFiltered = filterByMatchedAnchor(
+    excludeExistingIds(emailChatResults, alreadyIncludedIds),
+    { project, requestText }
+  );
+  const projectMemoryFiltered = filterByMatchedAnchor(
+    excludeExistingIds(memoryResults, alreadyIncludedIds),
+    { project, requestText }
+  );
+
   const rawSources = {
     currentInstruction: prompt ? [{ id: 'current_instruction', content: prompt, evidential_status: 'current_request' }] : [],
-    // Targeted correction (Temple Close test, 2026-08-06): mechanical
-    // extraction only — matches AO name/address substrings against the
-    // current request + selected email text, never infers which party is
-    // "relevant". See v2-working-memory.js for the extraction logic.
-    confirmedProjectAnchors: extractConfirmedProjectAnchors({
-      project: projectBundle?.project_raw || projectBundle?.project || null,
-      requestText: [prompt, ...(scopedEmailContext || []).slice(0, 1).map((e) => e.body || e.body_preview || '')].join(' '),
-    }),
-    // Protects the most recent accepted draft from the chatHistory
-    // per-category cap, so a minor-amendment request can never lose it.
-    currentDraftState: extractCurrentDraftState(chatHistory || []),
     selectedEmail: (scopedEmailContext || []).slice(0, 1).map((e) => ({
       id: e.id, content: (e.body || e.body_preview || '').slice(0, 4000),
       date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
@@ -954,9 +977,22 @@ async function runV2Pipeline({
       id: e.id, content: (e.body || e.body_preview || '').slice(0, 2000),
       date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
     })),
+    // Protects the most recent accepted draft from the chatHistory
+    // per-category cap, so a minor-amendment request can never lose it.
+    currentDraftState: extractCurrentDraftState(chatHistory || []),
+    // Mechanical extraction only — matches AO name/address substrings
+    // against the current request + selected email text, never infers
+    // which party is "relevant". See v2-working-memory.js.
+    confirmedProjectAnchors: extractConfirmedProjectAnchors({ project, requestText }),
     projectFacts: projectBundle ? [{ id: 'project_bundle', content: JSON.stringify(projectBundle).slice(0, 4000), evidential_status: 'project_record' }] : [],
-    projectMemory: [],
-    semanticResults: (semanticResults || []).map((r) => ({ id: r.content_id, content: r.content, date: r.metadata?.received_at })),
+    semanticResults: semanticResultsFiltered.map((r) => ({
+      id: r.content_id, content: r.content, date: r.metadata?.received_at || r.metadata?.created_at,
+      author: r.metadata?.sender_name || r.metadata?.role, evidential_status: `semantic_${r.content_type}`,
+    })),
+    projectMemory: projectMemoryFiltered.map((r) => ({
+      id: r.content_id, content: r.content, date: r.metadata?.created_at,
+      author: r.metadata?.source_type, evidential_status: 'project_memory',
+    })),
     chatHistory: (chatHistory || []).slice(-12).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
   };
   const workingMemory = assembleWorkingMemory(rawSources);
@@ -3868,9 +3904,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           modeHint,
           prompt,
           representation,
+          effectiveProjectId: projectBundle?.project?.id || projectId,
           projectBundle,
           scopedEmailContext,
-          semanticResults: null,
           chatHistory: body.chatHistory || [],
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,

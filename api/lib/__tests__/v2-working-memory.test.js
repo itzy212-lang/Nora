@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, CATEGORY_PRIORITY, PROTECTED_CATEGORIES } from '../v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor, CATEGORY_PRIORITY, PROTECTED_CATEGORIES } from '../v2-working-memory.js';
 
 describe('assembleWorkingMemory — structural guarantee: no sufficiency judgement exists', () => {
   it('the result never contains a field indicating whether context is "sufficient" or a gap is "answered"', () => {
@@ -18,16 +18,16 @@ describe('assembleWorkingMemory — structural guarantee: no sufficiency judgeme
 });
 
 describe('assembleWorkingMemory — priority order', () => {
-  it('processes categories in the fixed order, including the two protected categories added for the Temple Close correction', () => {
+  it('processes categories in the order required by the context-wiring correction (2026-08-06)', () => {
     expect(CATEGORY_PRIORITY).toEqual([
       'currentInstruction',
-      'confirmedProjectAnchors',
-      'currentDraftState',
       'selectedEmail',
       'thread',
+      'currentDraftState',
+      'confirmedProjectAnchors',
       'projectFacts',
-      'projectMemory',
       'semanticResults',
+      'projectMemory',
       'chatHistory',
     ]);
   });
@@ -181,5 +181,92 @@ describe('protected categories', () => {
   it('confirmedProjectAnchors and currentDraftState are both marked protected from the per-category cap', () => {
     expect(PROTECTED_CATEGORIES).toContain('confirmedProjectAnchors');
     expect(PROTECTED_CATEGORIES).toContain('currentDraftState');
+  });
+});
+
+// ── Context-wiring correction (2026-08-06) ──────────────────────────────
+// semanticResults and projectMemory were hardcoded to null/[] — this
+// correction connects them to the real search_project_content RPC
+// (via the existing semanticSearchProject()), which itself unions emails,
+// chat messages, and project_memory. project_memory is therefore a
+// sub-source of the same call, not a second retrieval system.
+
+describe('splitSemanticResults — mechanical split by content_type only (spec item 1, 2)', () => {
+  it('routes memory-type results to memoryResults and email/chat-type results to emailChatResults', () => {
+    const results = [
+      { content_type: 'email', content_id: 'e1', content: 'an email' },
+      { content_type: 'chat', content_id: 'c1', content: 'a chat message' },
+      { content_type: 'memory', content_id: 'm1', content: 'a memory fact' },
+    ];
+    const { emailChatResults, memoryResults } = splitSemanticResults(results);
+    expect(emailChatResults.map((r) => r.content_id)).toEqual(['e1', 'c1']);
+    expect(memoryResults.map((r) => r.content_id)).toEqual(['m1']);
+  });
+
+  it('handles an empty or null input without throwing', () => {
+    expect(splitSemanticResults(null)).toEqual({ emailChatResults: [], memoryResults: [] });
+    expect(splitSemanticResults([])).toEqual({ emailChatResults: [], memoryResults: [] });
+  });
+});
+
+describe('excludeExistingIds — mechanical de-duplication against already-included content (spec item 5)', () => {
+  it('excludes a semantic result whose id matches an already-included selected email', () => {
+    const results = [{ content_id: 'e1', content: 'duplicate' }, { content_id: 'e2', content: 'new' }];
+    const filtered = excludeExistingIds(
+      results.map((r) => ({ id: r.content_id, content: r.content })),
+      new Set(['e1'])
+    );
+    expect(filtered.map((r) => r.id)).toEqual(['e2']);
+  });
+
+  it('is a plain Set-membership check, not a content-similarity judgement', () => {
+    expect(excludeExistingIds.length).toBe(2);
+  });
+});
+
+describe('filterByMatchedAnchor — mechanical AO relevance filter (spec item 6)', () => {
+  const project = {
+    aos: [
+      { id: 'ao-9', name: 'Benjamin Power', address: '9 Temple Close, London N3 3SB' },
+      { id: 'ao-10', name: 'Sharanjit Gulati', address: '10 Temple Close, London N3 3SB' },
+    ],
+  };
+
+  it('excludes results mentioning a different adjoining owner when exactly one AO is matched in the request', () => {
+    const items = [
+      { content: 'notes about 10 Temple Close and the response deadline' },
+      { content: 'notes about 9 Temple Close, an unrelated matter' },
+    ];
+    const filtered = filterByMatchedAnchor(items, { project, requestText: 'Flat 10, 10 Temple Close' });
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].content).toContain('10 Temple Close');
+  });
+
+  it('does not filter anything when no AO is matched in the request (ambiguous — stays conservative)', () => {
+    const items = [{ content: 'about 9 Temple Close' }, { content: 'about 10 Temple Close' }];
+    const filtered = filterByMatchedAnchor(items, { project, requestText: 'general question about the Act' });
+    expect(filtered.length).toBe(2);
+  });
+
+  it('does not filter anything when the request matches more than one AO', () => {
+    const items = [{ content: 'about 9 Temple Close' }, { content: 'about 10 Temple Close' }];
+    const filtered = filterByMatchedAnchor(items, { project, requestText: '9 Temple Close and 10 Temple Close' });
+    expect(filtered.length).toBe(2);
+  });
+});
+
+describe('end-to-end Working Memory assembly with the new categories populated (spec items 3, 4, 7)', () => {
+  it('includes semanticResults and projectMemory items when supplied, correctly labelled', () => {
+    const result = assembleWorkingMemory({
+      semanticResults: [{ id: 's1', content: 'a semantically relevant email', evidential_status: 'semantic_email' }],
+      projectMemory: [{ id: 'm1', content: 'notice served 23 July, response period expired 5 August', evidential_status: 'project_memory' }],
+    });
+    const semantic = result.included.find((i) => i.category === 'semanticResults');
+    const memory = result.included.find((i) => i.category === 'projectMemory');
+    expect(semantic).toBeDefined();
+    expect(semantic.evidential_status).toBe('semantic_email');
+    expect(memory).toBeDefined();
+    expect(memory.content).toContain('response period expired 5 August');
+    expect(memory.evidential_status).toBe('project_memory');
   });
 });

@@ -35,20 +35,21 @@ const DEFAULT_MAX_ITEMS_PER_CATEGORY = 8;
 const DEFAULT_MAX_TOTAL_CHARS = 40000; // strict context budget, per the approved plan
 const DRAFT_LENGTH_THRESHOLD = 300; // matches src/hooks/useEly.js's own threshold
 
-// Fixed priority order, per NORA_V2_IMPLEMENTATION_PLAN_V2.md §1:
-// surface -> linked project -> selected email -> thread -> explicit user
-// instruction -> existing retrieval mechanisms.
-// confirmedProjectAnchors and currentDraftState are protected (see below)
-// and are not subject to the same per-category cap as the rest.
+// Fixed priority order. Updated per the context-wiring correction
+// (2026-08-06): current instruction; selected email/thread; current
+// draft state (immediate context); confirmed project anchors; project
+// facts/deadlines; semantic-search results; project memory; chat
+// history last. Domain knowledge is a separate top-level prompt section,
+// not part of Working Memory, so it is not listed here.
 const CATEGORY_PRIORITY = Object.freeze([
   'currentInstruction',
-  'confirmedProjectAnchors',
-  'currentDraftState',
   'selectedEmail',
   'thread',
+  'currentDraftState',
+  'confirmedProjectAnchors',
   'projectFacts',
-  'projectMemory',
   'semanticResults',
+  'projectMemory',
   'chatHistory',
 ]);
 
@@ -137,6 +138,63 @@ function extractCurrentDraftState(chatHistoryRaw) {
   }];
 }
 
+/**
+ * Mechanical split of search_project_content results by their own
+ * content_type field — never a relevance judgement. 'memory' rows (from
+ * project_memory, itself a source unioned inside search_project_content)
+ * go to one category; 'email'/'chat' rows go to the other.
+ */
+function splitSemanticResults(results) {
+  const memoryResults = [];
+  const emailChatResults = [];
+  for (const r of results || []) {
+    const target = r.content_type === 'memory' ? memoryResults : emailChatResults;
+    target.push(r);
+  }
+  return { emailChatResults, memoryResults };
+}
+
+/**
+ * Mechanical de-duplication against IDs already included elsewhere in
+ * Working Memory (selected email, thread, current draft) — a plain Set
+ * lookup, not a similarity or relevance judgement.
+ */
+function excludeExistingIds(items, existingIds) {
+  const seen = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
+  return (items || []).filter((it) => {
+    const id = it.id || it.content_id || it.source_id;
+    return !id || !seen.has(id);
+  });
+}
+
+/**
+ * Mechanical relevance filter, same technique as
+ * extractConfirmedProjectAnchors: if the request text substring-matches
+ * exactly one adjoining owner's name/address, exclude results whose
+ * content mentions a *different* adjoining owner's distinguishing
+ * address, so Flat 9 material doesn't surface for a Flat 10 request.
+ * If zero or more than one AO is matched, no filtering is applied —
+ * this function never guesses which party is relevant.
+ */
+function filterByMatchedAnchor(items, { project, requestText }) {
+  const anchors = extractConfirmedProjectAnchors({ project, requestText });
+  if (anchors.length !== 1) return items; // ambiguous or no match — do not filter
+  const aos = project?.aos || project?.project_raw?.aos || [];
+  const matchedId = anchors[0].id;
+  // Same fragment-based matching as extractConfirmedProjectAnchors, for
+  // consistency: a full "9 Temple Close, London N3 3SB" address is
+  // unlikely to appear verbatim in retrieved content either.
+  const otherFragments = aos
+    .filter((ao) => `anchor_${ao.id || ao.address}` !== matchedId)
+    .flatMap((ao) => [ao.address, ao.premise].filter(Boolean))
+    .flatMap((full) => full.toLowerCase().split(',').map((p) => p.trim()).filter((p) => p.length > 2));
+  if (!otherFragments.length) return items;
+  return (items || []).filter((it) => {
+    const content = (it.content || '').toLowerCase();
+    return !otherFragments.some((frag) => content.includes(frag));
+  });
+}
+
 // Pure assembly — no sufficiency judgement. Enforces limits, de-duplicates,
 // labels. Returns both what was included and what was excluded (and why),
 // for diagnostics — never a "gap answered" determination.
@@ -186,6 +244,9 @@ export {
   assembleWorkingMemory,
   extractConfirmedProjectAnchors,
   extractCurrentDraftState,
+  splitSemanticResults,
+  excludeExistingIds,
+  filterByMatchedAnchor,
   CATEGORY_PRIORITY,
   PROTECTED_CATEGORIES,
   DEFAULT_MAX_ITEMS_PER_CATEGORY,

@@ -60,4 +60,37 @@ describe('V1/V2 routing — structural guarantees', () => {
     expect(pipelineBody).toContain("model: 'gpt-5.6-terra'");
     expect(pipelineBody).not.toMatch(/temperature/);
   });
+
+  // Context-wiring correction (2026-08-06), spec items 8 and 9.
+  it('semanticResults is no longer hardcoded to null in the runV2Pipeline call site', () => {
+    const callSiteIdx = source.indexOf('const { replyText, diagnostics } = await runV2Pipeline({');
+    const callSiteEnd = source.indexOf('});', callSiteIdx);
+    const callSite = source.slice(callSiteIdx, callSiteEnd);
+    expect(callSite).not.toContain('semanticResults: null');
+  });
+
+  it('projectMemory is no longer hardcoded to [] inside runV2Pipeline', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).not.toContain('projectMemory: [],');
+  });
+
+  it('runV2Pipeline actually calls the existing semanticSearchProject function, scoped to effectiveProjectId', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).toContain('semanticSearchProject(effectiveProjectId, prompt');
+  });
+
+  it('V1 remains completely unmodified: buildSystemPrompt/buildMessages still have zero overlap with any V2 diff region (spec item 8)', () => {
+    // Re-asserts the same structural guarantee already proven above,
+    // specifically after the context-wiring correction's edits.
+    const bspIdx = source.indexOf('async function buildSystemPrompt(');
+    const bmIdx = source.indexOf('async function buildMessages(');
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    expect(bspIdx).toBeGreaterThan(pipelineEnd);
+    expect(bmIdx).toBeGreaterThan(pipelineEnd);
+  });
 });
