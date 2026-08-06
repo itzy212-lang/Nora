@@ -56,7 +56,7 @@ describe('buildSurfaceContract', () => {
   it('produces the discuss-mode Project Chat contract when surface is project_chat and mode is not draft', () => {
     const contract = buildSurfaceContract('project_chat', 'discuss');
     expect(contract).toMatch(/Project Chat, discuss mode/);
-    expect(contract).toMatch(/draft only when asked/);
+    expect(contract).toMatch(/Do not draft until asked/);
   });
 
   it('produces the Main Chat contract, including the representation-confusion safeguard', () => {

@@ -18,13 +18,13 @@
 function buildSurfaceContract(surface, modeHint) {
   const isDraft = modeHint === 'draft';
   if (surface === 'project_chat' && !isDraft) {
-    return 'SURFACE: Project Chat, discuss mode. Collaborate; understand the project; discuss before drafting where the user is still developing their position; identify options, gaps, contradictions, concessions and strategic issues; draft only when asked. Recognise "I want to discuss this before drafting" as a signal to stay in discussion.';
+    return 'SURFACE: Project Chat, discuss mode. Collaborate before drafting where the user is still working through the position. Treat the user\'s detailed dictation as the starting strategy, not a blank slate — refine and organise it rather than replacing it with a fresh generic analysis. Identify the controlling point quickly and state it plainly; do not bury it in procedure. Use relevant project facts proactively, including deadlines and expiry dates the moment delay or urgency is mentioned. Preserve confirmed project spellings, names and roles exactly. Do not draft until asked. Once asked to draft, use the complete agreed reasoning from the discussion — do not restart the analysis. Do not burden responses with generic professional qualifications or safeguards that do not materially change the advice. When the user says the discussion is complete and asks for a draft, stop discussing and produce the draft.';
   }
   if (surface === 'main_chat' && !isDraft) {
     return 'SURFACE: Main Chat. Provide general collaboration. Preserve representation. Do not confuse the authenticated user with email senders or represented parties. Do not automatically respond in email format merely because the user has pasted an email.';
   }
   if (isDraft) {
-    return 'SURFACE: Draft. Primarily draft correspondence from the incoming email, thread and the user\'s notes or dictation. Keep ordinary emails quick and proportionate. Use wider project history only for genuinely complex replies. Do not turn every draft into a discussion. Any unrequested strategic suggestion or materially stronger alternative argument must be kept separate from the draft body, never inserted into it.';
+    return 'SURFACE: Draft. Primarily draft correspondence from the incoming email, thread and the user\'s notes or dictation. Keep ordinary emails quick and proportionate. Use wider project history only for genuinely complex replies. Do not turn every draft into a discussion. Any unrequested strategic suggestion or materially stronger alternative argument must be kept separate from the draft body, never inserted into it. Do not omit the backstory a third-party recipient of the draft would need to understand it.';
   }
   return `SURFACE: ${surface || 'unknown'}, mode: ${modeHint || 'discuss'}.`;
 }

@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions';
 // import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
-import { assembleWorkingMemory } from './lib/v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState } from './lib/v2-working-memory.js';
 import { assembleV2Prompt } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
@@ -935,6 +935,17 @@ async function runV2Pipeline({
 
   const rawSources = {
     currentInstruction: prompt ? [{ id: 'current_instruction', content: prompt, evidential_status: 'current_request' }] : [],
+    // Targeted correction (Temple Close test, 2026-08-06): mechanical
+    // extraction only — matches AO name/address substrings against the
+    // current request + selected email text, never infers which party is
+    // "relevant". See v2-working-memory.js for the extraction logic.
+    confirmedProjectAnchors: extractConfirmedProjectAnchors({
+      project: projectBundle?.project_raw || projectBundle?.project || null,
+      requestText: [prompt, ...(scopedEmailContext || []).slice(0, 1).map((e) => e.body || e.body_preview || '')].join(' '),
+    }),
+    // Protects the most recent accepted draft from the chatHistory
+    // per-category cap, so a minor-amendment request can never lose it.
+    currentDraftState: extractCurrentDraftState(chatHistory || []),
     selectedEmail: (scopedEmailContext || []).slice(0, 1).map((e) => ({
       id: e.id, content: (e.body || e.body_preview || '').slice(0, 4000),
       date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,

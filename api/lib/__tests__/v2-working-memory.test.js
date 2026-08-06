@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleWorkingMemory, CATEGORY_PRIORITY } from '../v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, CATEGORY_PRIORITY, PROTECTED_CATEGORIES } from '../v2-working-memory.js';
 
 describe('assembleWorkingMemory — structural guarantee: no sufficiency judgement exists', () => {
   it('the result never contains a field indicating whether context is "sufficient" or a gap is "answered"', () => {
@@ -18,9 +18,11 @@ describe('assembleWorkingMemory — structural guarantee: no sufficiency judgeme
 });
 
 describe('assembleWorkingMemory — priority order', () => {
-  it('processes categories in the fixed order: instruction, email, thread, project facts, memory, semantic, chat history', () => {
+  it('processes categories in the fixed order, including the two protected categories added for the Temple Close correction', () => {
     expect(CATEGORY_PRIORITY).toEqual([
       'currentInstruction',
+      'confirmedProjectAnchors',
+      'currentDraftState',
       'selectedEmail',
       'thread',
       'projectFacts',
@@ -93,5 +95,91 @@ describe('assembleWorkingMemory — source metadata preservation', () => {
     const result = assembleWorkingMemory({});
     expect(result.included).toEqual([]);
     expect(result.totalChars).toBe(0);
+  });
+});
+
+// ── Temple Close Project Chat test corrections (2026-08-06) ────────────────
+// Regression tests required by the correction spec, §8.
+
+describe('extractConfirmedProjectAnchors — mechanical matching, not legal reasoning (spec §8 test 2, test 6)', () => {
+  const project = {
+    aos: [
+      {
+        id: 'ao-9', name: 'Benjamin Harry Power', address: '9 Temple Close, London N3 3SB',
+        premise: '9 Temple Close, London N3 3SB', status: 'notice_served',
+        notice_served_date: '2026-07-23', consent_deadline: '2026-08-05',
+      },
+      {
+        id: 'ao-10', name: 'Sharanjit Gulati', address: '10 Temple Close, London N3 3SB',
+        premise: '10 Temple Close, London N3 3SB', status: 'notice_served',
+        notice_served_date: '2026-07-23', consent_deadline: '2026-08-05',
+      },
+    ],
+  };
+
+  it('includes only the adjoining owner mentioned in the request text, excluding the unrelated neighbouring owner (spec §8 test 2)', () => {
+    const anchors = extractConfirmedProjectAnchors({ project, requestText: 'the leaseholder at 10 Temple Close has asked for drawings' });
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].content).toContain('10 Temple Close');
+    expect(anchors[0].content).not.toContain('9 Temple Close');
+  });
+
+  it('includes the confirmed expiry date for the matched party', () => {
+    const anchors = extractConfirmedProjectAnchors({ project, requestText: 'Flat 10, 10 Temple Close, response expiry' });
+    expect(anchors[0].content).toContain('2026-08-05');
+  });
+
+  it('returns nothing when no party is mentioned in the request text, rather than guessing', () => {
+    const anchors = extractConfirmedProjectAnchors({ project, requestText: 'general question about the Act' });
+    expect(anchors).toEqual([]);
+  });
+
+  it('performs plain substring matching only — no scoring, no inference about which party is "more relevant"', () => {
+    // Structural proxy: the function takes only project + requestText, no
+    // callback or weighting option that could encode a judgement.
+    expect(extractConfirmedProjectAnchors.length).toBe(1);
+  });
+});
+
+describe('extractCurrentDraftState — preserves the accepted draft across truncation (spec §8 test 4)', () => {
+  it('selects the most recent substantial assistant message as the protected current draft', () => {
+    const history = [
+      { role: 'assistant', content: '[earlier draft — superseded]' },
+      { role: 'user', content: 'short correction' },
+      { role: 'assistant', content: 'x'.repeat(400) },
+    ];
+    const result = extractCurrentDraftState(history);
+    expect(result.length).toBe(1);
+    expect(result[0].content).toContain('x'.repeat(400));
+    expect(result[0].evidential_status).toBe('current_draft_state');
+  });
+
+  it('never selects an already-superseded placeholder as the current draft', () => {
+    const history = [{ role: 'assistant', content: '[earlier draft — superseded]' }];
+    expect(extractCurrentDraftState(history)).toEqual([]);
+  });
+
+  it('ignores short assistant replies (below the draft-length threshold) as candidates', () => {
+    const history = [{ role: 'assistant', content: 'Kind regards,' }];
+    expect(extractCurrentDraftState(history)).toEqual([]);
+  });
+
+  it('is exempt from the per-category item cap once assembled, so it survives alongside a long chat history (spec §8 test 4, end-to-end)', () => {
+    const draft = extractCurrentDraftState([{ role: 'assistant', content: 'x'.repeat(400) }]);
+    const manyHistoryItems = Array.from({ length: 20 }, (_, i) => ({ id: `h${i}`, content: 'short turn' }));
+    const result = assembleWorkingMemory(
+      { currentDraftState: draft, chatHistory: manyHistoryItems },
+      { maxItemsPerCategory: 8 }
+    );
+    const draftIncluded = result.included.find((i) => i.category === 'currentDraftState');
+    expect(draftIncluded).toBeDefined();
+    expect(draftIncluded.content).toContain('x'.repeat(400));
+  });
+});
+
+describe('protected categories', () => {
+  it('confirmedProjectAnchors and currentDraftState are both marked protected from the per-category cap', () => {
+    expect(PROTECTED_CATEGORIES).toContain('confirmedProjectAnchors');
+    expect(PROTECTED_CATEGORIES).toContain('currentDraftState');
   });
 });
