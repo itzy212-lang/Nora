@@ -4,6 +4,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { waitUntil } from '@vercel/functions';
+// PHASE V2 — isolated architecture path. V1's brain-content rows and its
+// own buildSystemPrompt()/buildMessages() below are never modified by this
+// import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
+import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
+import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
+import { assembleWorkingMemory } from './lib/v2-working-memory.js';
+import { assembleV2Prompt } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
@@ -878,6 +885,156 @@ async function logStage1Diagnostics({ projectId, userId, surface, userPrompt, di
   }
 }
 
+
+// ── NORA V2: isolated runtime, reads user_brain_v2 + *_v2 rows only ────────
+// Per docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md. This never touches any V1
+// source (ely_master_v3, global_drafting, party_wall_drafting, the V1
+// user_brain table) and V1's buildSystemPrompt()/buildMessages() never call
+// anything in this section. Routing into this path happens exactly once,
+// at the single call site below, gated by resolveArchitectureVersion().
+async function loadV2Sources({ userId }) {
+  const sb = getSupabase();
+  if (!sb) return { universalBrain: null, defaultVoiceProfile: null, userBrainV2: null };
+
+  const [ubRes, dvpRes, ubv2Res] = await Promise.all([
+    sb.from('ai_instruction_sets').select('system_prompt').eq('name', 'universal_brain_v2').maybeSingle(),
+    sb.from('ai_instruction_sets').select('system_prompt').eq('name', 'default_voice_profile_v2').maybeSingle(),
+    userId
+      ? sb.from('user_brain_v2').select('*').eq('user_id', userId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    universalBrain: ubRes?.data?.system_prompt || null,
+    defaultVoiceProfile: dvpRes?.data?.system_prompt || null,
+    userBrainV2: ubv2Res?.data || null,
+  };
+}
+
+// Runs the complete V2 pipeline for one request and returns the response
+// payload. Exactly one Terra call is made here — no separate reasoning
+// call, no iterative retrieval loop. Progressive context assembly uses only
+// what the caller already gathered (project bundle, scoped email context,
+// semantic results, chat history) via the existing, already-working V1
+// retrieval functions — nothing is re-fetched, and nothing here judges
+// whether that context is sufficient (see v2-working-memory.js).
+async function runV2Pipeline({
+  userId, surface, modeHint, prompt, representation,
+  projectBundle, scopedEmailContext, semanticResults, chatHistory,
+  draftingExamples, domainKnowledgeText,
+}) {
+  const t0 = Date.now();
+  const { universalBrain, defaultVoiceProfile, userBrainV2 } = await loadV2Sources({ userId });
+
+  const effectiveVoice = resolveEffectiveVoice({ defaultVoiceProfile, userBrainV2 });
+
+  const exampleForGoldStandard = Array.isArray(draftingExamples) ? draftingExamples[0] : null;
+  const goldStandardBlock = modeHint === 'draft'
+    ? buildGoldStandardBlock({ example: exampleForGoldStandard, userBrainV2 })
+    : null;
+
+  const rawSources = {
+    currentInstruction: prompt ? [{ id: 'current_instruction', content: prompt, evidential_status: 'current_request' }] : [],
+    selectedEmail: (scopedEmailContext || []).slice(0, 1).map((e) => ({
+      id: e.id, content: (e.body || e.body_preview || '').slice(0, 4000),
+      date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
+    })),
+    thread: (scopedEmailContext || []).slice(1).map((e) => ({
+      id: e.id, content: (e.body || e.body_preview || '').slice(0, 2000),
+      date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
+    })),
+    projectFacts: projectBundle ? [{ id: 'project_bundle', content: JSON.stringify(projectBundle).slice(0, 4000), evidential_status: 'project_record' }] : [],
+    projectMemory: [],
+    semanticResults: (semanticResults || []).map((r) => ({ id: r.content_id, content: r.content, date: r.metadata?.received_at })),
+    chatHistory: (chatHistory || []).slice(-12).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
+  };
+  const workingMemory = assembleWorkingMemory(rawSources);
+
+  const { prompt: systemPrompt, sections } = assembleV2Prompt({
+    universalBrain,
+    effectiveVoice,
+    goldStandardBlock,
+    domainKnowledge: domainKnowledgeText || null,
+    workingMemory,
+    surface,
+    modeHint,
+    representationLock: representation ? JSON.stringify(representation) : null,
+  });
+
+  const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || 'medium';
+  let modelReturned = null;
+  let observedReasoningTokens = null;
+  let fallbackOccurred = false;
+  let replyText = '';
+
+  try {
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-5.6-terra',
+        reasoning_effort: requestedReasoningEffort,
+        max_completion_tokens: 3500,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      replyText = data.choices?.[0]?.message?.content || '';
+      modelReturned = data.model || 'gpt-5.6-terra';
+      observedReasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens ?? null;
+    } else {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error?.message || `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    console.warn('[nora-v2] Terra call failed, no fallback model used:', err.message);
+    fallbackOccurred = false; // explicitly: this codebase never silently falls back to another model for V2
+    throw err;
+  }
+
+  const diagnostics = buildDiagnosticsEnvelope({
+    architectureVersion: 'v2',
+    modelReturned,
+    requestedReasoningEffort,
+    observedReasoningTokens,
+    surface,
+    modeHint,
+    representation: representation?.role || null,
+    promptSections: sections,
+    effectiveVoiceProfileId: effectiveVoice.effectiveVoiceProfileId,
+    contextSelected: workingMemory.included,
+    contextExcluded: workingMemory.excluded,
+    goldStandardExampleId: goldStandardBlock?.exampleId || null,
+    fallbackOccurred,
+    validationResult: null,
+  });
+
+  try {
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('stage1_briefs').insert([{
+        project_id: projectBundle?.project?.id || null,
+        user_id: userId || null,
+        surface: surface || null,
+        model: modelReturned,
+        prompt_snippet: (prompt || '').slice(0, 200),
+        brief: diagnostics,
+        stage1_tokens_used: observedReasoningTokens,
+        stage1_duration_ms: Date.now() - t0,
+        error: null,
+      }]);
+    }
+  } catch (logErr) {
+    console.warn('[nora-v2] diagnostics logging failed (non-fatal):', logErr.message);
+  }
+
+  return { replyText, diagnostics };
+}
 
 // ── PHASE 2A PREFLIGHT CORRECTION: background shadow task ──────────────────
 // Wraps semantic search + generateStage1Brief() + diagnostics into a single
@@ -3679,6 +3836,43 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       console.warn('[ely-smart] drafting examples load failed:', err.message);
     }
 
+
+    // ── NORA V2: single routing decision point ──────────────────────────────
+    // resolveArchitectureVersion() is the ONLY place either version is chosen.
+    // Exactly one of V1 or V2 runs for this request — never both, never a
+    // merge. Absence of either the env flag or the allowlist match falls
+    // through to V1 with zero other code change required: everything below
+    // this block (Phase 2A, buildSystemPrompt, buildMessages, the V1 model
+    // call) is completely unmodified and runs exactly as it always has.
+    const v2ArchitectureVersion = resolveArchitectureVersion({
+      brainVersionEnv: process.env.NORA_BRAIN_VERSION,
+      userId,
+    });
+
+    if (v2ArchitectureVersion === 'v2') {
+      try {
+        const { replyText, diagnostics } = await runV2Pipeline({
+          userId,
+          surface: body.surface || '',
+          modeHint,
+          prompt,
+          representation,
+          projectBundle,
+          scopedEmailContext,
+          semanticResults: null,
+          chatHistory: body.chatHistory || [],
+          draftingExamples,
+          domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
+        });
+        console.log('[nora-v2] response served', {
+          surface: body.surface, mode: modeHint, model: diagnostics.model_returned,
+        });
+        return res.status(200).json({ reply: replyText, architecture_version: 'v2' });
+      } catch (v2Err) {
+        console.error('[nora-v2] pipeline failed:', v2Err.message);
+        return res.status(500).json({ error: 'Nora V2 request failed', detail: v2Err.message });
+      }
+    }
 
     // ── PHASE 2A: Stage 1 shadow-only strategic reasoning ─────────────────────
     // Single caller. Single generateStage1Brief() call site — exactly one
