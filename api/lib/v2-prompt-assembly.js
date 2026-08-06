@@ -24,9 +24,32 @@ function buildSurfaceContract(surface, modeHint) {
     return 'SURFACE: Main Chat. Provide general collaboration. Preserve representation. Do not confuse the authenticated user with email senders or represented parties. Do not automatically respond in email format merely because the user has pasted an email.';
   }
   if (isDraft) {
-    return 'SURFACE: Draft. Primarily draft correspondence from the incoming email, thread and the user\'s notes or dictation. Keep ordinary emails quick and proportionate. Use wider project history only for genuinely complex replies. Do not turn every draft into a discussion. Any unrequested strategic suggestion or materially stronger alternative argument must be kept separate from the draft body, never inserted into it. Do not omit the backstory a third-party recipient of the draft would need to understand it.';
+    return 'SURFACE: Draft. Primarily draft correspondence from the incoming email, thread and the user\'s notes or dictation. Keep ordinary emails quick and proportionate. Use wider project history only for genuinely complex replies. Do not turn every draft into a discussion. Any unrequested strategic suggestion or materially stronger alternative argument must be kept separate from the draft body, never inserted into it. Do not omit the backstory a third-party recipient of the draft would need to understand it.\n\nOUTPUT FORMAT — REQUIRED: wrap the clean, ready-to-send draft text — and nothing else — between the exact markers <<<DRAFT>>> and <<<END_DRAFT>>>, on their own lines. Any analysis, reasoning, or "possible additional point" content belongs entirely outside those markers, never inside them. The text between the markers must be sendable exactly as written, with no headers, labels, or commentary mixed in.';
   }
   return `SURFACE: ${surface || 'unknown'}, mode: ${modeHint || 'discuss'}.`;
+}
+
+const DRAFT_DELIMITER_START = '<<<DRAFT>>>';
+const DRAFT_DELIMITER_END = '<<<END_DRAFT>>>';
+
+/**
+ * Mechanical extraction only — a fixed-delimiter split, not a semantic
+ * judgement about what "counts" as a draft. If the markers aren't present
+ * (e.g. discuss mode, or the model didn't use them), the full text is
+ * treated as commentary and no draft is extracted — never guessed.
+ */
+function splitDraftFromCommentary(rawText) {
+  if (!rawText) return { reply: '', draft: null };
+  const startIdx = rawText.indexOf(DRAFT_DELIMITER_START);
+  const endIdx = rawText.indexOf(DRAFT_DELIMITER_END);
+  if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
+    return { reply: rawText.trim(), draft: null };
+  }
+  const draft = rawText.slice(startIdx + DRAFT_DELIMITER_START.length, endIdx).trim();
+  const before = rawText.slice(0, startIdx).trim();
+  const after = rawText.slice(endIdx + DRAFT_DELIMITER_END.length).trim();
+  const reply = [before, after].filter(Boolean).join('\n\n').trim();
+  return { reply, draft: draft || null };
 }
 
 const FINAL_VALIDATION_INSTRUCTION =
@@ -78,4 +101,4 @@ function assembleV2Prompt({
   return { prompt, sections };
 }
 
-export { assembleV2Prompt, buildSurfaceContract, FINAL_VALIDATION_INSTRUCTION };
+export { assembleV2Prompt, buildSurfaceContract, splitDraftFromCommentary, FINAL_VALIDATION_INSTRUCTION, DRAFT_DELIMITER_START, DRAFT_DELIMITER_END };

@@ -10,7 +10,7 @@ import { waitUntil } from '@vercel/functions';
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
 import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
-import { assembleV2Prompt } from './lib/v2-prompt-assembly.js';
+import { assembleV2Prompt, splitDraftFromCommentary } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
@@ -1044,6 +1044,10 @@ async function runV2Pipeline({
     throw err;
   }
 
+  // Mechanical split only — a fixed-delimiter extraction, not a judgement
+  // about what "counts" as a draft. See splitDraftFromCommentary().
+  const { reply: splitReply, draft: splitDraft } = splitDraftFromCommentary(replyText);
+
   const diagnostics = buildDiagnosticsEnvelope({
     architectureVersion: 'v2',
     modelReturned,
@@ -1080,7 +1084,7 @@ async function runV2Pipeline({
     console.warn('[nora-v2] diagnostics logging failed (non-fatal):', logErr.message);
   }
 
-  return { replyText, diagnostics };
+  return { replyText: splitReply, draft: splitDraft, diagnostics };
 }
 
 // ── PHASE 2A PREFLIGHT CORRECTION: background shadow task ──────────────────
@@ -3898,7 +3902,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     if (v2ArchitectureVersion === 'v2') {
       try {
-        const { replyText, diagnostics } = await runV2Pipeline({
+        const { replyText, draft, diagnostics } = await runV2Pipeline({
           userId,
           surface: body.surface || '',
           modeHint,
@@ -3912,9 +3916,9 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
         });
         console.log('[nora-v2] response served', {
-          surface: body.surface, mode: modeHint, model: diagnostics.model_returned,
+          surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
         });
-        return res.status(200).json({ reply: replyText, architecture_version: 'v2' });
+        return res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null, architecture_version: 'v2' });
       } catch (v2Err) {
         console.error('[nora-v2] pipeline failed:', v2Err.message);
         return res.status(500).json({ error: 'Nora V2 request failed', detail: v2Err.message });
