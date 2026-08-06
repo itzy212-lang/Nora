@@ -32,7 +32,12 @@
 //      own separate slicing too.
 
 const DEFAULT_MAX_ITEMS_PER_CATEGORY = 8;
-const DEFAULT_MAX_TOTAL_CHARS = 40000; // strict context budget, per the approved plan
+const DEFAULT_MAX_TOTAL_CHARS = 80000; // raised from 40000 (2026-08-06): a real session
+// hit this cap mid-conversation (peaked at 37,078 chars, 2 items dropped for budget
+// reasons). Doubled for headroom. Other prompt sections (Universal Brain ~15.7k,
+// voice ~7.4k, domain knowledge ~8.6k, gold standard ~2-4.6k) total roughly 35k on
+// top of this, so worst case the full system prompt lands around 115k chars
+// (~29k tokens) — comfortably inside gpt-5.6-terra's context window.
 const DRAFT_LENGTH_THRESHOLD = 300; // matches src/hooks/useEly.js's own threshold
 
 // Fixed priority order. Updated per the context-wiring correction
