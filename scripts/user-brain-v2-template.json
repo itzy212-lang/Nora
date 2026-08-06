@@ -1,0 +1,17 @@
+{
+  "_comment": "Template only. Copy to scripts/private/<name>.json (gitignored) and fill in real values there. Never commit real content — see docs/nora-v2/PRIVATE_SEED_PROVISIONING.md.",
+  "user_id": "<real authenticated UUID>",
+  "identity_content": "<who this user is, how to refer to them and their practice>",
+  "voice_content": "<this user's specific writing voice, in the same style as the Default Voice Profile but personalised>",
+  "banned_phrases": "<free-text banned-phrase list, kept as the original source alongside the structured form below>",
+  "banned_phrases_structured": {
+    "general": [],
+    "domain_specific": { "note": "", "phrases": [] },
+    "openers": [],
+    "closers": [],
+    "punctuation_and_formatting": []
+  },
+  "gold_standard_framing": "<how this user's Gold Standard examples should be framed to Terra; falls back to the Default Voice Profile's standard framing if left empty>",
+  "fee_structure_content": "<this user's fee schedule and quoting rules, if applicable>",
+  "sign_off": "<this user's standard sign-off, e.g. 'Kind regards,'>"
+}

@@ -3,3 +3,7 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# Nora V2 private per-user seed data — never committed. See
+# docs/nora-v2/PRIVATE_SEED_PROVISIONING.md for how this is populated.
+scripts/private/
