@@ -1499,6 +1499,42 @@ function looksLikeEmailDictation(prompt = '') {
 }
 
 
+/**
+ * Distinguishes "draft" as a live instruction ("draft this now") from
+ * "draft" describing something that already happened ("I drafted this",
+ * "Carly had agreed for me to draft an agreement" — narrating a past
+ * authorisation, not asking for one now). A bare word-boundary match on
+ * "draft" catches both; this checks for a retrospective marker in the
+ * immediate text before each occurrence and only counts the word as a
+ * live instruction if at least one occurrence has no such marker nearby.
+ * Confirmed against the real message that exposed this: "...Carly had
+ * agreed for me to draft an agreement..." — "had agreed" sits right
+ * before "draft" and correctly marks it as historical narrative, not an
+ * instruction, once this check is applied.
+ */
+function hasLiveDraftInstruction(p) {
+  const retrospectiveMarkers = /\b(had|has|have) (agreed|asked|confirmed|instructed|told|said)\b|\bwas (asked|instructed|told)\b|\boriginally\b|\bpreviously\b|\bback then\b|\bat that (time|point|stage)\b|\bthe original\b|\bwould have\b|\bwas intended\b|\bhad wanted\b/i;
+  const MAX_WINDOW = 60;
+  const regex = /\bdraft\b/gi;
+  let match;
+  while ((match = regex.exec(p)) !== null) {
+    // Stop the lookback at the nearest clause boundary (comma, period,
+    // or one of a few clear transition words), not just a fixed
+    // character count — otherwise a retrospective marker earlier in a
+    // long, comma-spliced dictated sentence can incorrectly suppress a
+    // genuine, unrelated live instruction later in the same sentence.
+    const searchStart = Math.max(0, match.index - MAX_WINDOW);
+    let before = p.slice(searchStart, match.index);
+    const boundaryMatch = before.match(/[,.;]|\bnow\b|\bso\b|\bthen\b/gi);
+    if (boundaryMatch) {
+      const lastBoundary = before.lastIndexOf(boundaryMatch[boundaryMatch.length - 1]);
+      before = before.slice(lastBoundary + boundaryMatch[boundaryMatch.length - 1].length);
+    }
+    if (!retrospectiveMarkers.test(before)) return true; // a genuine, non-historical occurrence found
+  }
+  return false; // every occurrence was retrospective, or the word never appeared
+}
+
 function hasExplicitDraftRequest(prompt = '') {
   const p = normalisePromptForIntent(prompt).toLowerCase();
 
@@ -1519,7 +1555,7 @@ function hasExplicitDraftRequest(prompt = '') {
   // content, or explicitly using a drafting verb) still triggers draft
   // mode regardless of length.
   const unambiguousDraft =
-    /\bdraft\b/i.test(p) ||
+    (hasLiveDraftInstruction(p)) ||
     /\bwrite (an?|the|a) (email|letter|reply|response)\b/i.test(p) ||
     /\bwrite to\b/i.test(p) ||
     /\bprepare (a|an) (response|reply|email|letter)\b/i.test(p) ||

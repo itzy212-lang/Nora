@@ -178,3 +178,29 @@ describe('backend intent classifier — ambiguous drafting phrases gated by leng
     expect(body).toMatch(/if \(unambiguousDraft\) return true;/);
   });
 });
+
+describe('hasLiveDraftInstruction — distinguishes a live drafting instruction from a historical mention (2026-08-07, real second occurrence of this bug)', () => {
+  it('does not treat "had agreed for me to draft" as a live instruction — narrating a past authorisation', () => {
+    const idx = source.indexOf('function hasLiveDraftInstruction(');
+    const end = source.indexOf('\nfunction hasExplicitDraftRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toContain('retrospectiveMarkers');
+    expect(body).toContain('the original');
+    expect(body).toMatch(/\(had\|has\|have\) \(agreed/);
+  });
+
+  it('unambiguousDraft now calls hasLiveDraftInstruction instead of a bare word-boundary match', () => {
+    const idx = source.indexOf('function hasExplicitDraftRequest(');
+    const end = source.indexOf('\nfunction hasExplicitReviewRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toContain('hasLiveDraftInstruction(p)');
+    expect(body).not.toMatch(/const unambiguousDraft =\s*\/\\bdraft\\b\/i\.test\(p\)/);
+  });
+
+  it('stops the retrospective-marker lookback at a clause boundary, not a fixed character count alone', () => {
+    const idx = source.indexOf('function hasLiveDraftInstruction(');
+    const end = source.indexOf('\nfunction hasExplicitDraftRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toMatch(/\[,\.;\]/);
+  });
+});
