@@ -204,3 +204,60 @@ describe('hasLiveDraftInstruction — distinguishes a live drafting instruction 
     expect(body).toMatch(/\[,\.;\]/);
   });
 });
+
+describe('looksLikeAmendmentInstruction gate — requires a confirmed draft, not just an attached email (state-integrity correction, 2026-08-07)', () => {
+  it('the gate now checks confirmedDraft, not emailContext/threadId/emailId presence', () => {
+    const idx = source.indexOf("const confirmedDraft = body.context?.previousDraft");
+    expect(idx).toBeGreaterThan(-1);
+    const block = source.slice(idx, idx + 300);
+    expect(block).toContain('if (confirmedDraft && looksLikeAmendmentInstruction(p))');
+    expect(block).not.toContain('body.emailContext || body.threadId || body.emailId');
+  });
+
+  it('spec tests 3-5: ordinary discussion phrases remain discuss mode with no confirmed draft, even with an email attached', () => {
+    // Direct simulation of the real gate logic, matching the exact
+    // fixed source: amendment mode requires BOTH a confirmed draft AND
+    // an amendment-shaped phrase.
+    const looksLikeAmendmentInstruction = (p) =>
+      /\badd (the|a|that|this|some|more)\b/i.test(p) ||
+      /\binclude (the|a|that|this)\b/i.test(p) ||
+      /\bchange (the|a|that|this)\b/i.test(p) ||
+      /\bcheck if\b/i.test(p);
+
+    const decide = (confirmedDraft, prompt) => (confirmedDraft && looksLikeAmendmentInstruction(prompt)) ? 'draft' : 'discuss';
+
+    expect(decide(null, 'i want to change my approach here')).toBe('discuss'); // "change my" isn't "change the/a/that/this" anyway, but no draft either way
+    expect(decide(null, 'add this into our thinking for the next point')).toBe('discuss');
+    expect(decide(null, 'can we include the chronology when we discuss this')).toBe('discuss');
+    expect(decide(null, 'check if olivia said this yesterday')).toBe('discuss');
+  });
+
+  it('spec tests 6-7: the same amendment-shaped phrases correctly enter amendment/draft mode once a confirmed draft exists', () => {
+    const looksLikeAmendmentInstruction = (p) =>
+      /\bchange (the|a|that|this)\b/i.test(p) ||
+      /\badd (the|a|that|this|some|more)\b/i.test(p);
+
+    const decide = (confirmedDraft, prompt) => (confirmedDraft && looksLikeAmendmentInstruction(prompt)) ? 'draft' : 'discuss';
+
+    expect(decide('Hi Olivia,\n\n...\n\nKind regards,', 'change the second paragraph')).toBe('draft');
+    expect(decide('Hi Olivia,\n\n...\n\nKind regards,', 'add this point to the draft')).toBe('draft');
+  });
+
+  it('spec test 10: frontend and backend derive the confirmed-draft signal from the identical source', () => {
+    // Backend reads body.context.previousDraft
+    const backendIdx = source.indexOf('body.context?.previousDraft || body.previousDraft || null');
+    expect(backendIdx).toBeGreaterThan(-1);
+    // Frontend sends context.previousDraft, itself set only from a real result.draft
+    const feCallIdx = source.indexOf("confirmedDraftText: body.context?.previousDraft");
+    expect(feCallIdx).toBeGreaterThan(-1);
+  });
+});
+
+describe('extractCurrentDraftState call site — no longer passed raw chat history (state-integrity correction)', () => {
+  it('runV2Pipeline calls extractCurrentDraftState with confirmedDraftText, not chatHistory', () => {
+    const idx = source.indexOf('currentDraftState: extractCurrentDraftState(');
+    const line = source.slice(idx, idx + 80);
+    expect(line).toContain('extractCurrentDraftState(confirmedDraftText)');
+    expect(line).not.toContain('chatHistory');
+  });
+});

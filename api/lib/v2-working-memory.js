@@ -296,19 +296,28 @@ function identifyDiscussedEmail(requestText, candidateEmails) {
   return null;
 }
 
-function extractCurrentDraftState(chatHistoryRaw) {
-  if (!Array.isArray(chatHistoryRaw)) return [];
-  let last = null;
-  for (const m of chatHistoryRaw) {
-    if (m.role === 'assistant' && m.content && m.content.length > DRAFT_LENGTH_THRESHOLD
-        && m.content !== '[earlier draft — superseded]') {
-      last = m;
-    }
-  }
-  if (!last) return [];
+/**
+ * Fixed 2026-08-07 (state-integrity correction): previously inferred a
+ * "current draft" from the last assistant message over
+ * DRAFT_LENGTH_THRESHOLD (300) characters in raw chat history — a real,
+ * confirmed bug, independent of the mode classifier: a long collaborative
+ * discussion reply routinely exceeds 300 characters and is not a draft.
+ * That could cause Working Memory to tell Terra "there is already an
+ * accepted draft, preserve it" during ordinary discussion, which is a
+ * model-level bias no mode-classifier fix could ever catch.
+ *
+ * Now takes the confirmed draft text directly — sourced exclusively from
+ * a prior backend response's own `draft` field (populated only when
+ * <<<DRAFT>>> delimiters were actually found and split), passed through
+ * by the frontend as body.context.previousDraft and forwarded here by
+ * the caller. No inference from length, keywords, or formatting. If no
+ * confirmed draft was supplied, this returns empty — never guesses.
+ */
+function extractCurrentDraftState(confirmedDraftText) {
+  if (!confirmedDraftText || typeof confirmedDraftText !== 'string' || !confirmedDraftText.trim()) return [];
   return [{
     id: 'current_draft_state',
-    content: `Current accepted draft (preserve unless the user requests a substantive change):\n${last.content}`,
+    content: `Current accepted draft (preserve unless the user requests a substantive change):\n${confirmedDraftText}`,
     evidential_status: 'current_draft_state',
   }];
 }

@@ -921,7 +921,7 @@ async function loadV2Sources({ userId }) {
 async function runV2Pipeline({
   userId, surface, modeHint, prompt, representation, effectiveProjectId,
   projectBundle, scopedEmailContext, chatHistory, hasExplicitEmailSelection,
-  draftingExamples, domainKnowledgeText,
+  confirmedDraftText, draftingExamples, domainKnowledgeText,
 }) {
   const t0 = Date.now();
   const { universalBrain, defaultVoiceProfile, userBrainV2 } = await loadV2Sources({ userId });
@@ -1071,7 +1071,7 @@ async function runV2Pipeline({
     })),
     // Protects the most recent accepted draft from the chatHistory
     // per-category cap, so a minor-amendment request can never lose it.
-    currentDraftState: extractCurrentDraftState(chatHistory || []),
+    currentDraftState: extractCurrentDraftState(confirmedDraftText),
     // Mechanical extraction only — matches AO name/address substrings
     // against the current request + selected email text, never infers
     // which party is "relevant". See v2-working-memory.js.
@@ -1691,10 +1691,18 @@ function inferIntent({ surface = '', prompt = '', body = {} } = {}) {
 
   if (hasDiscussionIntent(p)) return 'discuss';
 
-  // If an email thread is selected and the prompt looks like an amendment instruction
-  // (add this, include that, change this) — stay in draft mode
-  // This catches the case where a draft has been produced and the user is refining it
-  if ((body.emailContext || body.threadId || body.emailId) && looksLikeAmendmentInstruction(p)) {
+  // Fixed 2026-08-07 (state-integrity correction): this previously
+  // triggered on nothing more than "an email/thread is attached" —
+  // true almost constantly in Project Chat — combined with ordinary
+  // words like "change", "add", "shorter". Confirmed as a real, separate
+  // over-eager mechanism, independent of the mode classifier fixes made
+  // earlier today. Now requires a genuinely confirmed draft
+  // (body.context.previousDraft, sourced exclusively from a prior
+  // backend response's own `draft` field — never inferred from length,
+  // email presence, or keyword content) before an amendment-shaped
+  // phrase is treated as amendment mode at all.
+  const confirmedDraft = body.context?.previousDraft || body.previousDraft || null;
+  if (confirmedDraft && looksLikeAmendmentInstruction(p)) {
     return 'draft';
   }
 
@@ -4075,6 +4083,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           scopedEmailContext,
           hasExplicitEmailSelection: !!(suppliedEmailContext || body.threadId || body.emailId || body.emailContext?.threadId || body.emailContext?.id),
           chatHistory: body.chatHistory || [],
+          confirmedDraftText: body.context?.previousDraft || body.previousDraft || null,
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
         });

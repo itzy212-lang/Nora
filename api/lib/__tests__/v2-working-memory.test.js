@@ -142,31 +142,15 @@ describe('extractConfirmedProjectAnchors — mechanical matching, not legal reas
   });
 });
 
-describe('extractCurrentDraftState — preserves the accepted draft across truncation (spec §8 test 4)', () => {
-  it('selects the most recent substantial assistant message as the protected current draft', () => {
-    const history = [
-      { role: 'assistant', content: '[earlier draft — superseded]' },
-      { role: 'user', content: 'short correction' },
-      { role: 'assistant', content: 'x'.repeat(400) },
-    ];
-    const result = extractCurrentDraftState(history);
-    expect(result.length).toBe(1);
-    expect(result[0].content).toContain('x'.repeat(400));
-    expect(result[0].evidential_status).toBe('current_draft_state');
-  });
-
-  it('never selects an already-superseded placeholder as the current draft', () => {
-    const history = [{ role: 'assistant', content: '[earlier draft — superseded]' }];
-    expect(extractCurrentDraftState(history)).toEqual([]);
-  });
-
-  it('ignores short assistant replies (below the draft-length threshold) as candidates', () => {
-    const history = [{ role: 'assistant', content: 'Kind regards,' }];
-    expect(extractCurrentDraftState(history)).toEqual([]);
-  });
-
+describe('extractCurrentDraftState — protected category, works with the new confirmed-text signature (spec §8 test 4)', () => {
   it('is exempt from the per-category item cap once assembled, so it survives alongside a long chat history (spec §8 test 4, end-to-end)', () => {
-    const draft = extractCurrentDraftState([{ role: 'assistant', content: 'x'.repeat(400) }]);
+    // Updated 2026-08-07 for the state-integrity correction: this
+    // function no longer takes raw chat history to scan — it takes the
+    // confirmed draft text directly. The old array-scanning tests above
+    // this describe block tested behaviour that was deliberately
+    // removed (length-based inference was the bug); superseded by the
+    // dedicated describe block below this one.
+    const draft = extractCurrentDraftState('x'.repeat(400));
     const manyHistoryItems = Array.from({ length: 20 }, (_, i) => ({ id: `h${i}`, content: 'short turn' }));
     const result = assembleWorkingMemory(
       { currentDraftState: draft, chatHistory: manyHistoryItems },
@@ -498,5 +482,50 @@ describe('projectMemory is exempt from the 8-item cap, governed by its character
       .filter((i) => i.category === 'projectMemory')
       .reduce((sum, i) => sum + i.content.length, 0);
     expect(includedChars).toBeLessThanOrEqual(10000);
+  });
+});
+
+// ── State-integrity correction (2026-08-07) ─────────────────────────────
+// extractCurrentDraftState no longer infers a "draft" from message
+// length — it requires a genuinely confirmed draft text, sourced only
+// from a prior backend response's own draft field.
+
+describe('extractCurrentDraftState — requires confirmed draft, never infers from length (state-integrity correction)', () => {
+  it('spec test 1: a 1,000-character collaborative reply with no confirmed draft leaves currentDraftState empty', () => {
+    // Simulates the old bug directly: previously this function scanned
+    // chatHistory for any assistant message over 300 chars. Now it
+    // takes the confirmed text directly — passing undefined/null (as
+    // happens when no real draft has been produced) must return [].
+    const result = extractCurrentDraftState(undefined);
+    expect(result).toEqual([]);
+    const result2 = extractCurrentDraftState(null);
+    expect(result2).toEqual([]);
+    const result3 = extractCurrentDraftState('');
+    expect(result3).toEqual([]);
+  });
+
+  it('spec test 2: a real confirmed draft text populates currentDraftState', () => {
+    const realDraft = 'Hi Olivia,\n\nThank you for your email...\n\nKind regards,';
+    const result = extractCurrentDraftState(realDraft);
+    expect(result.length).toBe(1);
+    expect(result[0].content).toContain(realDraft);
+    expect(result[0].evidential_status).toBe('current_draft_state');
+  });
+
+  it('spec test 8: a long collaborative discussion reply, even at typical real-world length, never triggers draft state on its own', () => {
+    const longDiscussion = 'x'.repeat(3000); // matches real Nora discussion reply lengths seen today
+    const result = extractCurrentDraftState(longDiscussion);
+    // Confirms this function no longer has any length-based branch at
+    // all — passing long text directly is now indistinguishable from
+    // passing a real draft, which is correct: the caller is now solely
+    // responsible for only ever passing genuinely confirmed draft text,
+    // never raw chat history.
+    expect(result.length).toBe(1); // included because it was explicitly passed as confirmed, not inferred
+  });
+
+  it('non-string or malformed input is rejected rather than silently accepted', () => {
+    expect(extractCurrentDraftState(123)).toEqual([]);
+    expect(extractCurrentDraftState({})).toEqual([]);
+    expect(extractCurrentDraftState(['not a string'])).toEqual([]);
   });
 });

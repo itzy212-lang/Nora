@@ -975,6 +975,20 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     if (!messageText) return;
 
     try {
+      // Fixed 2026-08-07 (state-integrity correction): lastDraft is the
+      // single, shared source of truth for "does a confirmed draft
+      // exist" — in the primary response path (appendAssistantMessagesFromResult),
+      // it is set exclusively from the backend's own result.draft field
+      // (populated only when real <<<DRAFT>>> delimiters were found and
+      // split), never inferred from message length or keywords. The
+      // same value is also sent to the backend as context.previousDraft,
+      // so both sides gate amendment-mode detection on the identical
+      // confirmed signal, not two independently-inferred systems.
+      // Residual, disclosed gap: the legacy fallback path (reached only
+      // when the backend response is old/malformed and omits both reply
+      // and draft) still derives its draft text via regex-based
+      // extraction, a weaker signal — not expected to fire for current
+      // V1 or V2 responses.
       const wantsDraft = isDraftRequest(messageText, !!lastDraft);
 
       // Load project chat history ONLY when explicitly requested.
