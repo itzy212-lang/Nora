@@ -506,16 +506,34 @@ ${threadText}`;
       // Clear case review pending state after confirmed
       if (pendingCaseReview) setPendingCaseReview(false);
 
-      const reply = data.reply || data.replyText || 'Could not generate a draft.';
-      const draft = data.documentText || extractDraft(reply);
-      const explanation = draft
-        ? (data.replyText && data.replyText !== reply
-          ? data.replyText
-          : reply
-              .replace(/---[\s\S]*?---/, '')
-              .replace(/(?:^|\n)\s*(?:DRAFT REPLY|SUGGESTED DRAFT|SUGGESTED REPLY|DRAFT)\s*:?\s*[\s\S]*$/i, '')
-              .trim())
-        : reply;
+      // Fixed 2026-08-07: same root cause as the earlier 'Done.' bugs in
+      // ProjectChat.jsx and MainChat.jsx, found in a third file that had
+      // never been checked for it. V2 already returns a clean, pre-split
+      // draft directly in data.draft — when a request produces a pure
+      // draft with no separate commentary, data.reply is correctly empty,
+      // but empty string is falsy in JS, so the old `data.reply ||
+      // data.replyText || 'Could not generate a draft.'` fallback fired
+      // even though a complete, correct draft was sitting in data.draft
+      // the whole time. Confirmed live: every failed attempt completed
+      // cleanly on the backend (fallback_occurred: false, mode: draft,
+      // architecture_version: v2) — this was never a generation failure.
+      let reply, draft, explanation;
+      if (data.draft) {
+        draft = data.draft;
+        reply = data.reply || '';
+        explanation = reply || draft;
+      } else {
+        reply = data.reply || data.replyText || 'Could not generate a draft.';
+        draft = data.documentText || extractDraft(reply);
+        explanation = draft
+          ? (data.replyText && data.replyText !== reply
+            ? data.replyText
+            : reply
+                .replace(/---[\s\S]*?---/, '')
+                .replace(/(?:^|\n)\s*(?:DRAFT REPLY|SUGGESTED DRAFT|SUGGESTED REPLY|DRAFT)\s*:?\s*[\s\S]*$/i, '')
+                .trim())
+          : reply;
+      }
 
       // Extract missing points from structured response
       const missingPoints = Array.isArray(data.missing_points) && data.missing_points.length > 0
