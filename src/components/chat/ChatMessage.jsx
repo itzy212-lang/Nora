@@ -337,7 +337,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
             onMouseLeave={handleUserLongPressEnd}
             onTouchStart={handleUserLongPressStart}
             onTouchEnd={handleUserLongPressEnd}
-            style={{ display: 'block', userSelect: 'none' }}
+            style={{ display: 'block', userSelect: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
           >
             {msg.content}
             {userCopied && <span style={{ marginLeft: 8, fontSize: 10, opacity: 0.7 }}>✓ Copied</span>}
