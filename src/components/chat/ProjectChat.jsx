@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
+import { splitAssistantResponse, extractSubjectFromDraft, computeAssistantMessagesFromResult } from './projectChatMessageLogic.js';
 import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
@@ -264,70 +265,6 @@ function normaliseProjectDraftText(raw = '') {
     .trim();
 }
 
-function splitAssistantResponse(raw = '') {
-  const text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-
-  if (!text) return { brief: '', draft: '', after: '' };
-
-  const draftStart = findDraftStart(text);
-
-  if (draftStart === -1) {
-    return { brief: cleanBrief(text), draft: '', after: '' };
-  }
-
-  const before = text.slice(0, draftStart).trim();
-  let draftAndAfter = text.slice(draftStart).trim();
-  let after = '';
-
-  const afterPatterns = [
-    /\n-{3,}\s*\n\s*(I included[\s\S]*)$/i,
-    /\n-{3,}\s*\n\s*(I've included[\s\S]*)$/i,
-    /\n-{3,}\s*\n\s*(This draft[\s\S]*)$/i,
-    /\n-{3,}\s*\n\s*(Let me know[\s\S]*)$/i,
-    /\n\s*(I included the[\s\S]*)$/i,
-    /\n\s*(I've included the[\s\S]*)$/i,
-    /\n\s*(Let me know if this tone[\s\S]*)$/i,
-    /\n\s*(Let me know if this suits[\s\S]*)$/i,
-    /\n\s*(Let me know if (you'd like|you would like|this works|there's anything)[\s\S]*)$/i,
-    /\n\s*(Please let me know if (you'd like|you would like|there are any|any)[\s\S]*)$/i,
-    /\n\s*(Happy to (amend|adjust|revise|tweak|change)[\s\S]*)$/i,
-    /\n\s*(I can (amend|adjust|revise|tweak|change|also)[\s\S]*)$/i,
-    /\n\s*(Feel free to (adjust|amend|change|let me know)[\s\S]*)$/i,
-    /\n\s*(This (keeps|version|draft|should|aims)[\s\S]*)$/i,
-    /\n\s*(That should[\s\S]*)$/i,
-    /\n\s*(If you (want|need|would like|prefer)[\s\S]*)$/i,
-    /\n\s*(Shall I[\s\S]*)$/i,
-    /\n\s*(Would you like[\s\S]*)$/i,
-    /\n\s*(Do you want[\s\S]*)$/i,
-  ];
-
-  for (const rx of afterPatterns) {
-    const match = draftAndAfter.match(rx);
-    if (match?.[1]) {
-      after = cleanBrief(match[1]);
-      draftAndAfter = draftAndAfter.replace(rx, '').trim();
-      break;
-    }
-  }
-
-  return {
-    brief: cleanBrief(before),
-    draft: normaliseProjectDraftText(draftAndAfter),
-    after,
-  };
-}
-
-function extractSubjectFromDraft(draftText = '') {
-  // If draft starts with Subject: line, pull it out
-  const match = draftText.match(/^Subject:\s*(.+)\n+/i);
-  if (match) {
-    return {
-      subject: match[1].trim(),
-      draft: draftText.replace(/^Subject:\s*.+\n+/i, '').trim(),
-    };
-  }
-  return { subject: '', draft: draftText };
-}
 
 // ── Invoice Preview Card ──────────────────────────────────────────────────
 function InvoicePreviewCard({ msg, projectId, boEmail, onSent }) {
@@ -780,166 +717,16 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   }, []);
 
   const appendAssistantMessagesFromResult = useCallback((result, wantsDraft) => {
-    // Skip appending if this is an invoice_generated result — handled separately
-    if (result.invoice_generated) return;
-    // Strip <invoice_data> JSON blocks from display text
-    const cleanReply = (s) => String(s || '').replace(/<invoice_data>[\s\S]*?<\/invoice_data>/g, '').trim();
-
-    // Fixed 2026-08-06: a real draft must never be silently hidden behind
-    // the "Done." placeholder just because wantsDraft was false or the
-    // reply text came back empty (e.g. a pure-draft response with no
-    // separate commentary). If the backend sent a draft, show it as a
-    // real draft bubble regardless of which branch we're in.
-    if (!wantsDraft) {
-      if (result.draft) {
-        setMessages(prev => [...prev, {
-          id: uid(),
-          role: 'ely',
-          content: result.draft,
-          draft: result.draft,
-          draftType: result.draftType || 'email',
-          messageType: 'draft',
-          suggestedActions: [],
-          projectId,
-          createdAt: new Date().toISOString(),
-        }]);
-        return;
-      }
-      console.warn('[ProjectChat] Done. fallback reached (!wantsDraft branch, no result.draft) — result at this point:', {
-        reply: result?.reply, draft: result?.draft, resultKeys: result ? Object.keys(result) : null,
-      });
-      setMessages(prev => [...prev, {
-        id: uid(),
-        role: 'ely',
-        content: cleanReply(result.reply || 'Done.'),
-        suggestedActions: result.suggestedActions,
-        createdAt: new Date().toISOString(),
-      }]);
-      return;
-    }
-
-    // Fixed 2026-08-06 (root-cause correction, not the earlier safety net):
-    // trust the backend's own reply/draft split directly instead of
-    // re-deriving draft boundaries from raw text with local regex-based
-    // parsing (splitAssistantResponse). Both V1 and V2 already return
-    // reply and draft as separate, correctly-split fields — re-parsing an
-    // already-split response was redundant and, per live investigation
-    // (NORA_V2_RUNTIME_FAILURE_INVESTIGATION.md), was the source of the
-    // "Done." bubble appearing over a real, correctly-generated draft.
-    // extractSubjectFromDraft is kept — it only looks for a leading
-    // "Subject: ..." line, which is a narrow, safe transformation, not
-    // draft-boundary guessing — but it is applied directly to
-    // result.draft now, not to a re-parsed fragment of it.
-    const newMessages = [];
-
-    if (result.reply && result.reply.trim()) {
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: cleanReply(result.reply),
-        messageType: 'brief',
-        suggestedActions: [],
-        projectId,
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    if (result.draft) {
-      const { subject, draft } = extractSubjectFromDraft(result.draft);
-
-      if (subject) {
-        newMessages.push({
-          id: uid(),
-          role: 'ely',
-          content: `Subject: ${subject}`,
-          messageType: 'subject',
-          suggestedActions: [],
-          projectId,
-          createdAt: new Date().toISOString(),
-        });
-      }
-
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: draft || result.draft,
-        draft: draft || result.draft,
-        draftType: result.draftType || 'email',
-        messageType: 'draft',
-        suggestedActions: [],
-        projectId,
-        createdAt: new Date().toISOString(),
-      });
-
-      setLastDraft(draft || result.draft);
-    } else if (result.documentText || result.replyText) {
-      // Legacy fallback path only reached when neither reply nor draft
-      // was set by the backend at all — kept for safety, not expected
-      // to fire for current V1 or V2 responses.
-      const raw = result.documentText || result.replyText || '';
-      const { brief, draft: rawDraft, after } = splitAssistantResponse(raw);
-      const { subject, draft } = extractSubjectFromDraft(rawDraft);
-
-      if (brief) {
-        newMessages.push({ id: uid(), role: 'ely', content: brief, messageType: 'brief', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
-      }
-      if (subject) {
-        newMessages.push({ id: uid(), role: 'ely', content: `Subject: ${subject}`, messageType: 'subject', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
-      }
-      if (draft) {
-        newMessages.push({ id: uid(), role: 'ely', content: draft, draft, draftType: result.draftType || 'email', messageType: 'draft', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
-        setLastDraft(draft);
-      }
-      if (after) {
-        newMessages.push({ id: uid(), role: 'ely', content: after, messageType: 'brief', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
-      }
-    }
-
-    // Fixed 2026-08-06: same safety net as the !wantsDraft branch above —
-    // if wantsDraft was true but this component's own extraction
-    // (splitAssistantResponse / extractSubjectFromDraft) still failed to
-    // find anything, fall back to result.draft directly before ever
-    // showing "Done.". This is the exact scenario traced on 2026-08-06:
-    // a real, complete draft was generated and saved correctly, but this
-    // extraction path produced nothing, and the user saw "Done." while
-    // the real draft sat unused in result.draft the whole time.
-    if (!newMessages.length && result.draft) {
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: result.draft,
-        draft: result.draft,
-        draftType: result.draftType || 'email',
-        messageType: 'draft',
-        suggestedActions: [],
-        projectId,
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    if (!newMessages.length) {
-      // Diagnostic instrumentation added 2026-08-07: if this fallback
-      // fires, log exactly what result actually contained at this point
-      // — real evidence for the next live occurrence, since static
-      // tracing has repeatedly failed to explain how this branch could
-      // be reached when the backend genuinely returned a populated
-      // result.draft (confirmed against real saved database content on
-      // more than one occasion).
-      console.warn('[ProjectChat] Done. fallback reached — result at this point:', {
+    const { newMessages, updatedLastDraft, doneCause } = computeAssistantMessagesFromResult(result, wantsDraft, projectId);
+    if (doneCause) {
+      console.warn('[ProjectChat] Done. fallback reached —', doneCause, {
         wantsDraft, reply: result?.reply, draft: result?.draft,
         replyType: typeof result?.reply, draftType: typeof result?.draft,
         resultKeys: result ? Object.keys(result) : null,
       });
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: result.reply || 'Done.',
-        suggestedActions: result.suggestedActions,
-        createdAt: new Date().toISOString(),
-      });
     }
-
-    setMessages(prev => [...prev, ...newMessages]);
+    if (newMessages.length) setMessages(prev => [...prev, ...newMessages]);
+    if (updatedLastDraft !== undefined) setLastDraft(updatedLastDraft);
   }, [projectId]);
 
   const handleSend = useCallback(async (text) => {
