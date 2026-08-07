@@ -762,16 +762,25 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       return;
     }
 
-    const raw = result.draft || result.documentText || result.reply || result.replyText || '';
-    const { brief, draft: rawDraft, after } = splitAssistantResponse(raw);
-    const { subject, draft } = extractSubjectFromDraft(rawDraft);
+    // Fixed 2026-08-06 (root-cause correction, not the earlier safety net):
+    // trust the backend's own reply/draft split directly instead of
+    // re-deriving draft boundaries from raw text with local regex-based
+    // parsing (splitAssistantResponse). Both V1 and V2 already return
+    // reply and draft as separate, correctly-split fields — re-parsing an
+    // already-split response was redundant and, per live investigation
+    // (NORA_V2_RUNTIME_FAILURE_INVESTIGATION.md), was the source of the
+    // "Done." bubble appearing over a real, correctly-generated draft.
+    // extractSubjectFromDraft is kept — it only looks for a leading
+    // "Subject: ..." line, which is a narrow, safe transformation, not
+    // draft-boundary guessing — but it is applied directly to
+    // result.draft now, not to a re-parsed fragment of it.
     const newMessages = [];
 
-    if (brief) {
+    if (result.reply && result.reply.trim()) {
       newMessages.push({
         id: uid(),
         role: 'ely',
-        content: brief,
+        content: cleanReply(result.reply),
         messageType: 'brief',
         suggestedActions: [],
         projectId,
@@ -779,24 +788,26 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       });
     }
 
-    if (subject) {
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: `Subject: ${subject}`,
-        messageType: 'subject',
-        suggestedActions: [],
-        projectId,
-        createdAt: new Date().toISOString(),
-      });
-    }
+    if (result.draft) {
+      const { subject, draft } = extractSubjectFromDraft(result.draft);
 
-    if (draft) {
+      if (subject) {
+        newMessages.push({
+          id: uid(),
+          role: 'ely',
+          content: `Subject: ${subject}`,
+          messageType: 'subject',
+          suggestedActions: [],
+          projectId,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       newMessages.push({
         id: uid(),
         role: 'ely',
-        content: draft,
-        draft,
+        content: draft || result.draft,
+        draft: draft || result.draft,
         draftType: result.draftType || 'email',
         messageType: 'draft',
         suggestedActions: [],
@@ -804,19 +815,28 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         createdAt: new Date().toISOString(),
       });
 
-      setLastDraft(draft);
-    }
+      setLastDraft(draft || result.draft);
+    } else if (result.documentText || result.replyText) {
+      // Legacy fallback path only reached when neither reply nor draft
+      // was set by the backend at all — kept for safety, not expected
+      // to fire for current V1 or V2 responses.
+      const raw = result.documentText || result.replyText || '';
+      const { brief, draft: rawDraft, after } = splitAssistantResponse(raw);
+      const { subject, draft } = extractSubjectFromDraft(rawDraft);
 
-    if (after) {
-      newMessages.push({
-        id: uid(),
-        role: 'ely',
-        content: after,
-        messageType: 'brief',
-        suggestedActions: [],
-        projectId,
-        createdAt: new Date().toISOString(),
-      });
+      if (brief) {
+        newMessages.push({ id: uid(), role: 'ely', content: brief, messageType: 'brief', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
+      }
+      if (subject) {
+        newMessages.push({ id: uid(), role: 'ely', content: `Subject: ${subject}`, messageType: 'subject', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
+      }
+      if (draft) {
+        newMessages.push({ id: uid(), role: 'ely', content: draft, draft, draftType: result.draftType || 'email', messageType: 'draft', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
+        setLastDraft(draft);
+      }
+      if (after) {
+        newMessages.push({ id: uid(), role: 'ely', content: after, messageType: 'brief', suggestedActions: [], projectId, createdAt: new Date().toISOString() });
+      }
     }
 
     // Fixed 2026-08-06: same safety net as the !wantsDraft branch above —
