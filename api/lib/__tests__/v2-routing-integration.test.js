@@ -93,4 +93,35 @@ describe('V1/V2 routing — structural guarantees', () => {
     expect(bspIdx).toBeGreaterThan(pipelineEnd);
     expect(bmIdx).toBeGreaterThan(pipelineEnd);
   });
+
+  // Project-context correction (2026-08-06), spec tests 6 and 7.
+  it('the newest email is selected by default (scopedEmailContext reversed) when no explicit selection was made', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).toContain('hasExplicitEmailSelection');
+    expect(pipelineBody).toMatch(/\[\.\.\.\(scopedEmailContext \|\| \[\]\)\]\.reverse\(\)/);
+  });
+
+  it('an explicit email/thread selection remains authoritative — the reversal is conditional, not unconditional', () => {
+    const callSiteIdx = source.indexOf('const { replyText, draft, diagnostics } = await runV2Pipeline({');
+    const callSiteEnd = source.indexOf('});', callSiteIdx);
+    const callSite = source.slice(callSiteIdx, callSiteEnd);
+    expect(callSite).toContain('hasExplicitEmailSelection: !!(body.threadId || body.emailId');
+  });
+
+  it('projectFacts no longer uses the crude JSON.stringify(projectBundle).slice(0,4000) dump', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).not.toContain('JSON.stringify(projectBundle).slice(0, 4000)');
+    expect(pipelineBody).toContain('buildStructuredProjectFacts(projectBundle)');
+  });
+
+  it('projectMemory is populated directly from projectBundle.project_memory, not only from semantic search', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).toContain('extractProjectMemory(projectBundle)');
+  });
 });

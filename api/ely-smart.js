@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions';
 // import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
 import { assembleV2Prompt, splitDraftFromCommentary } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
@@ -920,7 +920,7 @@ async function loadV2Sources({ userId }) {
 // whether that context is sufficient (see v2-working-memory.js).
 async function runV2Pipeline({
   userId, surface, modeHint, prompt, representation, effectiveProjectId,
-  projectBundle, scopedEmailContext, chatHistory,
+  projectBundle, scopedEmailContext, chatHistory, hasExplicitEmailSelection,
   draftingExamples, domainKnowledgeText,
 }) {
   const t0 = Date.now();
@@ -933,18 +933,32 @@ async function runV2Pipeline({
     ? buildGoldStandardBlock({ example: exampleForGoldStandard, userBrainV2 })
     : null;
 
+  // Project-context correction (2026-08-06), per NORA_V2_PROJECT_CONTEXT_COMPARISON.md
+  // item 4: buildScopedEmailContext() returns its 30-most-recent-emails
+  // result in oldest-first order (reversed there for readability). Taking
+  // .slice(0,1) / the first 8 of that array therefore picked the OLDEST
+  // items, not the newest — confirmed live against this exact code.
+  // Corrected here: when the user has NOT explicitly selected a specific
+  // email/thread in the UI, use the array in newest-first order so
+  // "the current/most recent email" is deterministic, not accidental.
+  // When an explicit selection WAS made, buildScopedEmailContext takes a
+  // different branch (thread-anchored) where the existing order is
+  // already meaningful — left untouched, per the explicit instruction
+  // that explicit selection must remain authoritative.
+  const orderedEmailContext = hasExplicitEmailSelection
+    ? (scopedEmailContext || [])
+    : [...(scopedEmailContext || [])].reverse();
+
   // Context-wiring correction (2026-08-06): semanticSearchProject() is the
   // existing, already-working V1 function — it calls the
   // search_project_content RPC, which itself unions emails, ai_messages
   // (chat, across every session on this project, not just the current
   // one) and project_memory in a single embeddings-scored query, strictly
   // scoped to p_project_id. This single call is the source for BOTH the
-  // semanticResults and projectMemory Working Memory categories below —
-  // project_memory is a sub-source of this same RPC, not a separate
-  // system, confirmed directly against the RPC definition before this
-  // was written.
+  // semanticResults and (as a supplement, see below) projectMemory
+  // Working Memory categories.
   const project = projectBundle?.project_raw || projectBundle?.project || null;
-  const requestText = [prompt, ...(scopedEmailContext || []).slice(0, 1).map((e) => e.body || e.body_preview || '')].join(' ');
+  const requestText = [prompt, ...orderedEmailContext.slice(0, 1).map((e) => e.body || e.body_preview || '')].join(' ');
   let searchResults = [];
   if (effectiveProjectId && prompt) {
     try {
@@ -955,25 +969,81 @@ async function runV2Pipeline({
     }
   }
   const alreadyIncludedIds = new Set([
-    ...(scopedEmailContext || []).map((e) => e.id).filter(Boolean),
+    ...orderedEmailContext.map((e) => e.id).filter(Boolean),
   ]);
   const { emailChatResults, memoryResults } = splitSemanticResults(searchResults);
   const semanticResultsFiltered = filterByMatchedAnchor(
     excludeExistingIds(emailChatResults, alreadyIncludedIds),
     { project, requestText }
   );
-  const projectMemoryFiltered = filterByMatchedAnchor(
-    excludeExistingIds(memoryResults, alreadyIncludedIds),
+
+  // Direct project memory (2026-08-06 correction): populated straight from
+  // projectBundle.project_memory — already fetched by loadProjectFacts()
+  // for every project_chat request, previously unused. Cleaned the same
+  // way V1 cleans it (exclude raw-email/UI-noise entries, strip the
+  // embedding). This does NOT depend on semantic ranking. Semantic search
+  // may still surface additional memory rows not already covered — those
+  // are merged in as a supplement, deduped against the direct set by ID,
+  // never replacing it.
+  const directProjectMemory = extractProjectMemory(projectBundle);
+  const directMemoryIds = new Set(directProjectMemory.map((m) => m.id).filter(Boolean));
+  const supplementalMemoryFromSearch = filterByMatchedAnchor(
+    excludeExistingIds(memoryResults, new Set([...alreadyIncludedIds, ...directMemoryIds])),
     { project, requestText }
-  );
+  ).map((r) => ({
+    id: r.content_id, content: r.content, date: r.metadata?.created_at,
+    author: r.metadata?.source_type, evidential_status: 'project_memory_semantic_supplement',
+  }));
+
+  // Cross-session Project Chat history (2026-08-06 correction): direct,
+  // bounded, not semantic-search-dependent. loadProjectFacts() (used for
+  // this surface) hardcodes project_chat_notes to [] — confirmed in code
+  // — so this was never populated for Project Chat requests under either
+  // V1 or V2. Fetched here directly. The backend does not track a stable
+  // session ID for the current request (session persistence is frontend-
+  // only, confirmed by grep — there is no request-scoped sessionId field
+  // anywhere in this file), so "exclude the current session" is enforced
+  // by content-matching against the chatHistory already supplied for this
+  // request, not by a session_id filter that doesn't reliably exist here.
+  let projectChatHistoryRaw = [];
+  if (effectiveProjectId) {
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        const { data, error } = await sb.from('ai_messages')
+          .select('id, role, content, created_at, session_id')
+          .eq('project_id', effectiveProjectId)
+          .eq('surface', 'project_chat')
+          .order('created_at', { ascending: false })
+          .limit(40);
+        if (error) console.warn('[nora-v2] project chat history load failed:', error.message);
+        projectChatHistoryRaw = data || [];
+      }
+    } catch (chatHistErr) {
+      console.warn('[nora-v2] project chat history load failed (non-fatal):', chatHistErr.message);
+    }
+  }
+  const currentSessionContentSet = new Set((chatHistory || []).map((m) => (m.content || '').trim()));
+  const projectChatHistory = projectChatHistoryRaw
+    .filter((m) => {
+      const text = (m.content || '').trim();
+      if (!text) return false;
+      // Excludes the current session's own turns by content match, since
+      // no reliable session_id is available at this layer to filter by.
+      return !currentSessionContentSet.has(text);
+    })
+    .map((m) => ({
+      id: m.id, content: `${m.role}: ${m.content}`.slice(0, 1500),
+      date: m.created_at, evidential_status: 'prior_project_chat',
+    }));
 
   const rawSources = {
     currentInstruction: prompt ? [{ id: 'current_instruction', content: prompt, evidential_status: 'current_request' }] : [],
-    selectedEmail: (scopedEmailContext || []).slice(0, 1).map((e) => ({
+    selectedEmail: orderedEmailContext.slice(0, 1).map((e) => ({
       id: e.id, content: (e.body || e.body_preview || '').slice(0, 4000),
       date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
     })),
-    thread: (scopedEmailContext || []).slice(1).map((e) => ({
+    thread: orderedEmailContext.slice(1).map((e) => ({
       id: e.id, content: (e.body || e.body_preview || '').slice(0, 2000),
       date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
     })),
@@ -984,15 +1054,17 @@ async function runV2Pipeline({
     // against the current request + selected email text, never infers
     // which party is "relevant". See v2-working-memory.js.
     confirmedProjectAnchors: extractConfirmedProjectAnchors({ project, requestText }),
-    projectFacts: projectBundle ? [{ id: 'project_bundle', content: JSON.stringify(projectBundle).slice(0, 4000), evidential_status: 'project_record' }] : [],
+    // Structured, labelled project facts (2026-08-06 correction) —
+    // replaces JSON.stringify(projectBundle).slice(0,4000). Never
+    // includes embedding vectors or raw project_memory/email content;
+    // those have their own categories.
+    projectFacts: buildStructuredProjectFacts(projectBundle),
     semanticResults: semanticResultsFiltered.map((r) => ({
       id: r.content_id, content: r.content, date: r.metadata?.received_at || r.metadata?.created_at,
       author: r.metadata?.sender_name || r.metadata?.role, evidential_status: `semantic_${r.content_type}`,
     })),
-    projectMemory: projectMemoryFiltered.map((r) => ({
-      id: r.content_id, content: r.content, date: r.metadata?.created_at,
-      author: r.metadata?.source_type, evidential_status: 'project_memory',
-    })),
+    projectMemory: [...directProjectMemory, ...supplementalMemoryFromSearch],
+    projectChatHistory,
     chatHistory: (chatHistory || []).slice(-12).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
   };
   const workingMemory = assembleWorkingMemory(rawSources);
@@ -3911,6 +3983,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           effectiveProjectId: projectBundle?.project?.id || projectId,
           projectBundle,
           scopedEmailContext,
+          hasExplicitEmailSelection: !!(body.threadId || body.emailId || body.emailContext?.threadId || body.emailContext?.id),
           chatHistory: body.chatHistory || [],
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,

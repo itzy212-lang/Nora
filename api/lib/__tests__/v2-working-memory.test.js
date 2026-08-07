@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor, CATEGORY_PRIORITY, PROTECTED_CATEGORIES } from '../v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor, CATEGORY_PRIORITY, PROTECTED_CATEGORIES, CATEGORY_BUDGETS } from '../v2-working-memory.js';
 
 describe('assembleWorkingMemory — structural guarantee: no sufficiency judgement exists', () => {
   it('the result never contains a field indicating whether context is "sufficient" or a gap is "answered"', () => {
@@ -18,7 +18,7 @@ describe('assembleWorkingMemory — structural guarantee: no sufficiency judgeme
 });
 
 describe('assembleWorkingMemory — priority order', () => {
-  it('processes categories in the order required by the context-wiring correction (2026-08-06)', () => {
+  it('processes categories in the order required by the project-context correction (2026-08-06): direct/deterministic sources before semantic', () => {
     expect(CATEGORY_PRIORITY).toEqual([
       'currentInstruction',
       'selectedEmail',
@@ -26,8 +26,9 @@ describe('assembleWorkingMemory — priority order', () => {
       'currentDraftState',
       'confirmedProjectAnchors',
       'projectFacts',
-      'semanticResults',
       'projectMemory',
+      'projectChatHistory',
+      'semanticResults',
       'chatHistory',
     ]);
   });
@@ -268,5 +269,163 @@ describe('end-to-end Working Memory assembly with the new categories populated (
     expect(memory).toBeDefined();
     expect(memory.content).toContain('response period expired 5 August');
     expect(memory.evidential_status).toBe('project_memory');
+  });
+});
+
+// ── Project-context correction (2026-08-06) ─────────────────────────────
+// Per NORA_V2_PROJECT_CONTEXT_COMPARISON.md: V2 was compressing the whole
+// project bundle into JSON.stringify(projectBundle).slice(0,4000), which
+// wasted most of its budget on project_raw and raw embedding vectors and
+// left project_memory and cross-session chat history effectively
+// unreachable. These tests cover the direct, structured replacements.
+
+describe('extractProjectMemory — direct, cleaned, embedding-free (spec test 1, 2)', () => {
+  it('includes cleaned memory content even with no semantic search involved at all', () => {
+    const projectBundle = {
+      project_memory: [
+        // source_type: 'email_received' matches real project_memory data
+        // (confirmed against the live database) — a legitimate extracted
+        // fact, not a raw email copy, despite the name.
+        { id: 'm1', content: 'Caroline conceded responsibility rests with her contractor.', source_type: 'email_received', created_at: '2026-07-01', embedding: [0.1, 0.2, 0.3] },
+      ],
+    };
+    const result = extractProjectMemory(projectBundle);
+    expect(result.length).toBe(1);
+    expect(result[0].content).toContain('Caroline conceded');
+  });
+
+  it('never includes the embedding vector as text anywhere in the output (spec test 2)', () => {
+    const projectBundle = {
+      project_memory: [
+        { id: 'm1', content: 'Some fact.', source_type: 'extracted_fact', embedding: Array(1536).fill(0.123456) },
+      ],
+    };
+    const result = extractProjectMemory(projectBundle);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('0.123456');
+    expect(result[0]).not.toHaveProperty('embedding');
+  });
+
+  it('excludes raw-email-sourced and known UI-noise entries, same principle as V1', () => {
+    const projectBundle = {
+      project_memory: [
+        { id: 'm1', content: 'Real extracted fact.', source_type: 'email_received' },
+        { id: 'm2', content: 'Raw email dump.', source_type: 'email' },
+        { id: 'm3', content: 'Noise.', source_type: 'other', metadata: { source: 'manual_preview_banner' } },
+      ],
+    };
+    const result = extractProjectMemory(projectBundle);
+    expect(result.length).toBe(1);
+    expect(result[0].content).toBe('Real extracted fact.');
+  });
+
+  it('handles missing or empty project_memory without throwing', () => {
+    expect(extractProjectMemory({})).toEqual([]);
+    expect(extractProjectMemory(null)).toEqual([]);
+  });
+});
+
+describe('buildStructuredProjectFacts — replaces the crude JSON dump (spec test 3)', () => {
+  const projectBundle = {
+    project: { name: '41 Patrick Road', bo_premise_address: '41 Patrick Road, Reading, RG4 8DD', ref: 'SQ1-2026-013' },
+    adjoining_owners: [
+      { name: 'Caroline Smith', address: '43 Patrick Road', status: 'dissenting', notice_served_date: '2026-06-01', consent_deadline: '2026-06-15' },
+    ],
+    notices: [{ type: 'Section 3', served_date: '2026-06-01', status: 'served' }],
+    soc_reports: [],
+  };
+
+  it('preserves AO names, addresses, notice dates and expiry dates as readable text', () => {
+    const result = buildStructuredProjectFacts(projectBundle);
+    expect(result.length).toBe(1);
+    const text = result[0].content;
+    expect(text).toContain('Caroline Smith');
+    expect(text).toContain('43 Patrick Road');
+    expect(text).toContain('notice served 2026-06-01');
+    expect(text).toContain('response due 2026-06-15');
+  });
+
+  it('never includes an embedding vector or raw JSON dump structure', () => {
+    const withEmbedding = {
+      ...projectBundle,
+      project_memory: [{ id: 'm1', content: 'x', embedding: [0.1, 0.2] }],
+    };
+    const result = buildStructuredProjectFacts(withEmbedding);
+    const text = result[0].content;
+    expect(text).not.toContain('0.1');
+    expect(text).not.toContain('"embedding"');
+  });
+
+  it('does not duplicate project_memory content — that has its own category', () => {
+    const bundleWithMemory = { ...projectBundle, project_memory: [{ id: 'm1', content: 'A distinctive memory fact XYZ123.' }] };
+    const result = buildStructuredProjectFacts(bundleWithMemory);
+    expect(result[0].content).not.toContain('XYZ123');
+  });
+
+  it('handles an empty project bundle without throwing', () => {
+    expect(buildStructuredProjectFacts(null)).toEqual([]);
+    expect(buildStructuredProjectFacts({})).toEqual([]);
+  });
+});
+
+describe('per-category budgets — one category cannot crowd out another (spec item 7)', () => {
+  it('caps projectFacts at its own budget independent of the shared total cap', () => {
+    const hugeFacts = [{ id: 'pf1', content: 'x'.repeat(20000), evidential_status: 'project_record' }];
+    const result = assembleWorkingMemory({ projectFacts: hugeFacts });
+    const included = result.included.find((i) => i.category === 'projectFacts');
+    expect(included).toBeUndefined(); // exceeds CATEGORY_BUDGETS.projectFacts (14000), excluded
+    const excludedEntry = result.excluded.find((e) => e.category === 'projectFacts');
+    expect(excludedEntry.reason).toBe('category_budget_exceeded');
+  });
+
+  it('a capped category does not consume budget that starves a later category', () => {
+    const facts = [{ id: 'pf1', content: 'x'.repeat(13000), evidential_status: 'project_record' }];
+    const memory = [{ id: 'pm1', content: 'y'.repeat(500), evidential_status: 'project_memory' }];
+    const result = assembleWorkingMemory({ projectFacts: facts, projectMemory: memory });
+    expect(result.included.find((i) => i.category === 'projectFacts')).toBeDefined();
+    expect(result.included.find((i) => i.category === 'projectMemory')).toBeDefined();
+  });
+
+  it('CATEGORY_BUDGETS matches the documented values (14000 facts, 10000 memory, 8000 chat history)', () => {
+    expect(CATEGORY_BUDGETS.projectFacts).toBe(14000);
+    expect(CATEGORY_BUDGETS.projectMemory).toBe(10000);
+    expect(CATEGORY_BUDGETS.projectChatHistory).toBe(8000);
+  });
+});
+
+describe('projectChatHistory — direct route, not semantic-dependent (spec test 4, 5)', () => {
+  it('a projectChatHistory item is included in Working Memory when supplied directly, with no semantic search involved', () => {
+    const result = assembleWorkingMemory({
+      projectChatHistory: [{ id: 'c1', content: 'user: earlier agreed position on fees.', evidential_status: 'prior_project_chat' }],
+    });
+    const included = result.included.find((i) => i.category === 'projectChatHistory');
+    expect(included).toBeDefined();
+    expect(included.content).toContain('earlier agreed position');
+  });
+});
+
+describe('Working Memory total budget with real Patrick-Road-sized data (spec test 9)', () => {
+  it('stays within the 80,000-char cap even with a full set of realistic-sized categories populated', () => {
+    const bigProjectMemory = Array.from({ length: 8 }, (_, i) => ({
+      id: `m${i}`, content: 'x'.repeat(1200), evidential_status: 'project_memory',
+    }));
+    const bigChatHistory = Array.from({ length: 40 }, (_, i) => ({
+      id: `c${i}`, content: 'y'.repeat(400), evidential_status: 'prior_project_chat',
+    }));
+    const bigSemantic = Array.from({ length: 25 }, (_, i) => ({
+      id: `s${i}`, content: 'z'.repeat(1500), evidential_status: 'semantic_email',
+    }));
+    const rawSources = {
+      currentInstruction: [{ id: 'ci', content: 'a'.repeat(500) }],
+      selectedEmail: [{ id: 'se', content: 'b'.repeat(4000) }],
+      thread: Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, content: 'c'.repeat(2000) })),
+      projectFacts: [{ id: 'pf', content: 'd'.repeat(13000) }],
+      projectMemory: bigProjectMemory,
+      projectChatHistory: bigChatHistory,
+      semanticResults: bigSemantic,
+      chatHistory: Array.from({ length: 12 }, (_, i) => ({ id: `ch${i}`, content: 'e'.repeat(300) })),
+    };
+    const result = assembleWorkingMemory(rawSources);
+    expect(result.totalChars).toBeLessThanOrEqual(80000);
   });
 });

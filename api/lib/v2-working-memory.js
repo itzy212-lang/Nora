@@ -40,12 +40,28 @@ const DEFAULT_MAX_TOTAL_CHARS = 80000; // raised from 40000 (2026-08-06): a real
 // (~29k tokens) — comfortably inside gpt-5.6-terra's context window.
 const DRAFT_LENGTH_THRESHOLD = 300; // matches src/hooks/useEly.js's own threshold
 
-// Fixed priority order. Updated per the context-wiring correction
-// (2026-08-06): current instruction; selected email/thread; current
-// draft state (immediate context); confirmed project anchors; project
-// facts/deadlines; semantic-search results; project memory; chat
-// history last. Domain knowledge is a separate top-level prompt section,
-// not part of Working Memory, so it is not listed here.
+// Per-category character budgets (2026-08-06 project-context correction).
+// Direct/deterministic categories get a dedicated ceiling so one category
+// can never crowd out another before the shared total cap is even reached —
+// per NORA_V2_PROJECT_CONTEXT_COMPARISON.md, V1 gave project memory an
+// uncapped section and the project bundle 14,000 chars; this restores
+// comparable dedicated budgets without reproducing V1's uncapped behaviour.
+// Categories not listed here fall back to the shared DEFAULT_MAX_TOTAL_CHARS
+// pool only.
+const CATEGORY_BUDGETS = Object.freeze({
+  projectFacts: 14000,      // matches V1's compactJson(bundleWithoutNotes, 14000)
+  projectMemory: 10000,     // deliberately capped, unlike V1's uncapped section
+  projectChatHistory: 8000, // matches V1's ALL PROJECT NOTES & CHAT cap
+});
+
+// Fixed priority order. Updated per the project-context correction
+// (2026-08-06): direct/deterministic sources are ordered before
+// semantically-retrieved supporting material, per the "current working
+// file" principle — immediate context must not compete with, or be
+// crowded out by, older supporting evidence. projectMemory moved before
+// semanticResults now that it is populated directly rather than only via
+// semantic ranking. projectChatHistory is new — direct, bounded,
+// cross-session prior discussion, not dependent on semantic ranking.
 const CATEGORY_PRIORITY = Object.freeze([
   'currentInstruction',
   'selectedEmail',
@@ -53,8 +69,9 @@ const CATEGORY_PRIORITY = Object.freeze([
   'currentDraftState',
   'confirmedProjectAnchors',
   'projectFacts',
-  'semanticResults',
   'projectMemory',
+  'projectChatHistory',
+  'semanticResults',
   'chatHistory',
 ]);
 
@@ -91,6 +108,112 @@ function withSourceMetadata(item, category) {
  * anchors are returned — this function never guesses which party "must be"
  * relevant.
  */
+/**
+ * Cleans and formats project_memory rows for direct inclusion in Working
+ * Memory — mechanical filtering only, not a relevance judgement. Mirrors
+ * V1's proven cleaning principle (buildSystemPrompt, "Layer 6: Project
+ * memory facts"): excludes raw-email-sourced copies and known UI-noise
+ * entries, strips the embedding vector and other DB-only metadata, keeps
+ * content/summary/source/date. Unlike V1, this is deliberately capped
+ * (CATEGORY_BUDGETS.projectMemory), not unbounded.
+ */
+function extractProjectMemory(projectBundle) {
+  const rawMemory = projectBundle?.project_memory || [];
+  const cleaned = [];
+  for (const rec of rawMemory) {
+    const sourceType = rec.source_type || '';
+    const metaSource = rec.metadata?.source || '';
+    // Matches V1's exact exclusion rule (buildSystemPrompt, "Layer 6"),
+    // confirmed against real project data before finalizing this: only
+    // literal 'email' (a raw full-body copy) is excluded by source_type.
+    // 'email_received' is a distinct, legitimate extracted-fact category
+    // (e.g. "Olivia requested the Section A weathering detail on 21 May
+    // 2026.") — excluding it was a real bug caught before commit, not
+    // present in V1's own logic, which this function is required to
+    // mirror.
+    const isRawEmailOrNoise = sourceType === 'email'
+      || metaSource === 'manual_preview_banner' || metaSource === 'manual_attachment_popup';
+    if (isRawEmailOrNoise) continue;
+    const text = String(rec.content || rec.summary || '').trim();
+    if (!text) continue;
+    cleaned.push({
+      id: rec.id,
+      content: text,
+      date: rec.created_at || null,
+      author: rec.source_type || null,
+      evidential_status: 'project_memory',
+    });
+  }
+  return cleaned;
+}
+
+/**
+ * Replaces the crude JSON.stringify(projectBundle).slice(0,4000) dump
+ * with structured, labelled, readable project-fact text — mechanical
+ * field selection, not a relevance judgement about which facts matter.
+ * Never includes embedding vectors or opaque DB metadata. Never
+ * duplicates project_memory or full email bodies — those have their own
+ * categories.
+ */
+function buildStructuredProjectFacts(projectBundle) {
+  if (!projectBundle) return [];
+  const parts = [];
+  const p = projectBundle.project || projectBundle.project_raw || {};
+
+  const identityLines = [
+    p.name ? `Project: ${p.name}` : null,
+    p.bo_premise_address || p.address ? `Address: ${p.bo_premise_address || p.address}` : null,
+    p.ref ? `Reference: ${p.ref}` : null,
+    p.status ? `Status: ${p.status}` : null,
+  ].filter(Boolean);
+  if (identityLines.length) parts.push(identityLines.join('\n'));
+
+  const aos = projectBundle.adjoining_owners || [];
+  if (aos.length) {
+    const aoLines = aos.map((ao) => {
+      const bits = [
+        ao.name || 'unnamed adjoining owner',
+        ao.address || ao.premise || null,
+        ao.status || null,
+        ao.notice_served_date ? `notice served ${ao.notice_served_date}` : null,
+        ao.consent_deadline ? `response due ${ao.consent_deadline}` : null,
+      ].filter(Boolean);
+      return `- ${bits.join(' | ')}`;
+    });
+    parts.push(`Adjoining owners:\n${aoLines.join('\n')}`);
+  }
+
+  const notices = projectBundle.notices || [];
+  if (notices.length) {
+    const noticeLines = notices.map((n) => {
+      const bits = [
+        n.type || n.notice_type || 'notice',
+        n.served_date ? `served ${n.served_date}` : null,
+        n.status || null,
+      ].filter(Boolean);
+      return `- ${bits.join(' | ')}`;
+    });
+    parts.push(`Notices:\n${noticeLines.join('\n')}`);
+  }
+
+  const socReports = projectBundle.soc_reports || [];
+  if (socReports.length) {
+    const socLines = socReports.map((s) => {
+      const bits = [
+        s.ao_names || s.ao_address || 'SOC report',
+        s.status || null,
+        s.inspection_date ? `inspected ${s.inspection_date}` : null,
+      ].filter(Boolean);
+      return `- ${bits.join(' | ')}`;
+    });
+    parts.push(`SOC reports:\n${socLines.join('\n')}`);
+  }
+
+  const text = parts.join('\n\n').trim();
+  if (!text) return [];
+  return [{ id: 'structured_project_facts', content: text, evidential_status: 'project_record' }];
+}
+
 function extractConfirmedProjectAnchors({ project, requestText }) {
   if (!project || !requestText) return [];
   const haystack = requestText.toLowerCase();
@@ -206,10 +329,12 @@ function filterByMatchedAnchor(items, { project, requestText }) {
 function assembleWorkingMemory(rawSources, opts = {}) {
   const maxPerCategory = opts.maxItemsPerCategory ?? DEFAULT_MAX_ITEMS_PER_CATEGORY;
   const maxTotalChars = opts.maxTotalChars ?? DEFAULT_MAX_TOTAL_CHARS;
+  const categoryBudgets = opts.categoryBudgets ?? CATEGORY_BUDGETS;
 
   const included = [];
   const excluded = [];
   let runningChars = 0;
+  const categoryChars = {};
 
   for (const category of CATEGORY_PRIORITY) {
     const items = Array.isArray(rawSources[category]) ? rawSources[category] : [];
@@ -224,14 +349,22 @@ function assembleWorkingMemory(rawSources, opts = {}) {
       }
     }
 
+    const categoryBudget = categoryBudgets[category];
+    categoryChars[category] = 0;
+
     for (const raw of limited) {
       const withMeta = withSourceMetadata(raw, category);
+      if (categoryBudget != null && categoryChars[category] + withMeta.content.length > categoryBudget) {
+        excluded.push({ category, reason: 'category_budget_exceeded', source_id: withMeta.source_id });
+        continue;
+      }
       if (runningChars + withMeta.content.length > maxTotalChars) {
         excluded.push({ category, reason: 'total_budget_exceeded', source_id: withMeta.source_id });
         continue;
       }
       included.push(withMeta);
       runningChars += withMeta.content.length;
+      categoryChars[category] += withMeta.content.length;
     }
   }
 
@@ -239,6 +372,7 @@ function assembleWorkingMemory(rawSources, opts = {}) {
     included,
     excluded,
     totalChars: runningChars,
+    categoryChars,
     // Deliberately NOT included: any field indicating whether the assembled
     // memory is "sufficient" — that determination does not exist in this
     // module, per the corrected design.
@@ -249,11 +383,14 @@ export {
   assembleWorkingMemory,
   extractConfirmedProjectAnchors,
   extractCurrentDraftState,
+  extractProjectMemory,
+  buildStructuredProjectFacts,
   splitSemanticResults,
   excludeExistingIds,
   filterByMatchedAnchor,
   CATEGORY_PRIORITY,
   PROTECTED_CATEGORIES,
+  CATEGORY_BUDGETS,
   DEFAULT_MAX_ITEMS_PER_CATEGORY,
   DEFAULT_MAX_TOTAL_CHARS,
   DRAFT_LENGTH_THRESHOLD,
