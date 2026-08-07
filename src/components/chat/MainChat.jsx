@@ -1089,7 +1089,13 @@ export default function MainChat({ onOpenComposer, onClose }) {
         } catch {}
       }
 
-      appendAssistantMessagesFromResult(result, wantsDraft);
+      // Fixed 2026-08-07: same correction as ProjectChat.jsx — trust the
+      // backend's actual result.mode over the frontend's own separate,
+      // independently-computed wantsDraft guess. See ProjectChat.jsx for
+      // the full explanation; this is the same underlying bug in the
+      // same shared rendering pattern.
+      const actualWantsDraft = typeof result?.mode === 'string' ? result.mode === 'draft' : wantsDraft;
+      appendAssistantMessagesFromResult(result, actualWantsDraft);
 
       // ── Booking confirmation flow ────────────────────────────────────────
       if (result.awaiting_booking_confirm && result.pending_booking) {

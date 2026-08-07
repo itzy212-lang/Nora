@@ -151,3 +151,12 @@ describe('email resolution hierarchy — mechanical tier 3, per final verificati
     expect(callSite).toContain('hasExplicitEmailSelection: !!(suppliedEmailContext ||');
   });
 });
+
+describe('mode field in the response, and frontend trusting it (2026-08-07, real user-reported mismatch)', () => {
+  it('the V2 response includes mode: modeHint, not just architecture_version', () => {
+    const callSiteIdx = source.indexOf("res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null");
+    const callSiteEnd = source.indexOf('});', callSiteIdx);
+    const callSite = source.slice(callSiteIdx, callSiteEnd);
+    expect(callSite).toContain('mode: modeHint');
+  });
+});

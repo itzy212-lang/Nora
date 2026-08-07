@@ -4013,7 +4013,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         console.log('[nora-v2] response served', {
           surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
         });
-        return res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null, architecture_version: 'v2' });
+        return res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null, mode: modeHint, architecture_version: 'v2' });
       } catch (v2Err) {
         console.error('[nora-v2] pipeline failed:', v2Err.message);
         return res.status(500).json({ error: 'Nora V2 request failed', detail: v2Err.message });
@@ -4436,6 +4436,12 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     return res.status(200).json({
       reply: cleanReply,
+      // Added 2026-08-07: exposes the mode V1 actually used internally
+      // (already computed via inferModeHint earlier in this handler) so
+      // the frontend can render based on what actually happened, instead
+      // of independently re-guessing via its own separate keyword check.
+      // Purely additive — no change to V1's own reasoning or output.
+      mode: modeHint,
       ...(missingPoints.length > 0 ? { missing_points: missingPoints } : {}),
       model: modelUsed,
       resolvedProject,

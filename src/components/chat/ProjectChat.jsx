@@ -983,7 +983,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         },
       });
 
-      appendAssistantMessagesFromResult(result, wantsDraft);
+      // Fixed 2026-08-07: trust what the backend actually decided
+      // (result.mode, now returned by both V1 and V2) rather than
+      // re-render based on the frontend's own separate, independently-
+      // computed wantsDraft guess. Confirmed live: the frontend's
+      // isDraftRequest() and the backend's own inferIntent()/inferModeHint()
+      // are two separate classifiers that can and do disagree on the same
+      // message — when they did, the response was correctly generated as
+      // a draft, but was rendered using the frontend's mismatched local
+      // guess. Falls back to the local guess only if the backend response
+      // is old/malformed and doesn't include mode at all.
+      const actualWantsDraft = typeof result?.mode === 'string' ? result.mode === 'draft' : wantsDraft;
+      appendAssistantMessagesFromResult(result, actualWantsDraft);
 
       // Handle case review flow
       if (result.case_review_prompt) {
