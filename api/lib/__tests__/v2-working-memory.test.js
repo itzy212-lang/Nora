@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor, CATEGORY_PRIORITY, PROTECTED_CATEGORIES, CATEGORY_BUDGETS } from '../v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, identifyDiscussedEmail, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor, CATEGORY_PRIORITY, PROTECTED_CATEGORIES, CATEGORY_BUDGETS } from '../v2-working-memory.js';
 
 describe('assembleWorkingMemory — structural guarantee: no sufficiency judgement exists', () => {
   it('the result never contains a field indicating whether context is "sufficient" or a gap is "answered"', () => {
@@ -427,5 +427,58 @@ describe('Working Memory total budget with real Patrick-Road-sized data (spec te
     };
     const result = assembleWorkingMemory(rawSources);
     expect(result.totalChars).toBeLessThanOrEqual(80000);
+  });
+});
+
+// ── Final verification corrections (2026-08-06, before push) ───────────
+
+describe('identifyDiscussedEmail — mechanical verbatim-chunk matching, tier 3 of the email resolution hierarchy', () => {
+  const candidates = [
+    { id: 'e1', subject: 'RE: 41 Patrick Road', body: 'Good Morning Itzik,\n\nFurther to my previous email, I have now taken instructions and considered the matter further.\n\nKind regards,\nOlivia' },
+    { id: 'e2', subject: 'Fee query', body: 'Hi Itzik, did we get any reply from Nick about the draft?' },
+  ];
+
+  it('identifies the email the user quoted or pasted back, by verbatim overlap', () => {
+    const prompt = "You don't seem to be reading from the most recent email. -- Good Morning Itzik, Further to my previous email, I have now taken instructions and considered the matter further.";
+    const result = identifyDiscussedEmail(prompt, candidates);
+    expect(result?.id).toBe('e1');
+  });
+
+  it('returns null when no verbatim overlap exists — never guesses', () => {
+    const result = identifyDiscussedEmail('What do you think about the roof works?', candidates);
+    expect(result).toBeNull();
+  });
+
+  it('ignores short, generic overlaps below the chunk-length threshold', () => {
+    const result = identifyDiscussedEmail('Hi Itzik, how are things?', candidates);
+    expect(result).toBeNull();
+  });
+
+  it('handles empty inputs without throwing', () => {
+    expect(identifyDiscussedEmail('', candidates)).toBeNull();
+    expect(identifyDiscussedEmail('text', [])).toBeNull();
+    expect(identifyDiscussedEmail('text', null)).toBeNull();
+  });
+});
+
+describe('projectMemory is exempt from the 8-item cap, governed by its character budget only (final verification fix)', () => {
+  it('includes a 9th valid memory item when there is still character budget available', () => {
+    const nineItems = Array.from({ length: 9 }, (_, i) => ({
+      id: `m${i}`, content: `Fact number ${i}.`, evidential_status: 'project_memory',
+    }));
+    const result = assembleWorkingMemory({ projectMemory: nineItems });
+    const included = result.included.filter((i) => i.category === 'projectMemory');
+    expect(included.length).toBe(9);
+  });
+
+  it('is still governed by its own character budget (10,000) once content is large enough', () => {
+    const hugeItems = Array.from({ length: 3 }, (_, i) => ({
+      id: `m${i}`, content: 'x'.repeat(4000), evidential_status: 'project_memory',
+    }));
+    const result = assembleWorkingMemory({ projectMemory: hugeItems });
+    const includedChars = result.included
+      .filter((i) => i.category === 'projectMemory')
+      .reduce((sum, i) => sum + i.content.length, 0);
+    expect(includedChars).toBeLessThanOrEqual(10000);
   });
 });

@@ -75,7 +75,11 @@ const CATEGORY_PRIORITY = Object.freeze([
   'chatHistory',
 ]);
 
-const PROTECTED_CATEGORIES = Object.freeze(['confirmedProjectAnchors', 'currentDraftState']);
+const PROTECTED_CATEGORIES = Object.freeze(['confirmedProjectAnchors', 'currentDraftState', 'projectMemory']);
+// projectMemory added (2026-08-06 verification): must be governed by its
+// character budget alone, not the general 8-item cap — otherwise a 9th+
+// valid standing fact would be silently dropped even with budget to
+// spare. Confirmed this was a real gap before the fix.
 
 function dedupeByKey(items, keyFn) {
   const seen = new Set();
@@ -249,6 +253,31 @@ function extractConfirmedProjectAnchors({ project, requestText }) {
  * frontend: the most recent assistant message over the draft-length
  * threshold is the current draft state. Returns at most one item.
  */
+/**
+ * Mechanical identification of which candidate email the current request
+ * is discussing, by verbatim-chunk matching — never a relevance or intent
+ * judgement. Splits each candidate's subject/body into chunks (sentences/
+ * lines) of at least MIN_CHUNK_LENGTH characters, and checks whether any
+ * chunk appears verbatim (case-insensitive) inside the request text. This
+ * catches the common real pattern of a user pasting or quoting back part
+ * of an email they're discussing, without requiring an explicit UI
+ * selection. Returns the first matching candidate, or null if none match
+ * — never guesses when there's no verbatim overlap.
+ */
+const MIN_CHUNK_LENGTH = 40;
+function identifyDiscussedEmail(requestText, candidateEmails) {
+  if (!requestText || !Array.isArray(candidateEmails) || !candidateEmails.length) return null;
+  const haystack = requestText.toLowerCase();
+  for (const email of candidateEmails) {
+    const source = [email.subject, email.body, email.body_preview].filter(Boolean).join('\n');
+    const chunks = source.split(/[\r\n.]+/).map((c) => c.trim()).filter((c) => c.length >= MIN_CHUNK_LENGTH);
+    for (const chunk of chunks) {
+      if (haystack.includes(chunk.toLowerCase())) return email;
+    }
+  }
+  return null;
+}
+
 function extractCurrentDraftState(chatHistoryRaw) {
   if (!Array.isArray(chatHistoryRaw)) return [];
   let last = null;
@@ -385,6 +414,7 @@ export {
   extractCurrentDraftState,
   extractProjectMemory,
   buildStructuredProjectFacts,
+  identifyDiscussedEmail,
   splitSemanticResults,
   excludeExistingIds,
   filterByMatchedAnchor,

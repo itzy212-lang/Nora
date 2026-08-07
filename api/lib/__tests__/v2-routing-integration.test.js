@@ -107,7 +107,7 @@ describe('V1/V2 routing — structural guarantees', () => {
     const callSiteIdx = source.indexOf('const { replyText, draft, diagnostics } = await runV2Pipeline({');
     const callSiteEnd = source.indexOf('});', callSiteIdx);
     const callSite = source.slice(callSiteIdx, callSiteEnd);
-    expect(callSite).toContain('hasExplicitEmailSelection: !!(body.threadId || body.emailId');
+    expect(callSite).toContain('hasExplicitEmailSelection: !!(suppliedEmailContext || body.threadId || body.emailId');
   });
 
   it('projectFacts no longer uses the crude JSON.stringify(projectBundle).slice(0,4000) dump', () => {
@@ -123,5 +123,31 @@ describe('V1/V2 routing — structural guarantees', () => {
     const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
     const pipelineBody = source.slice(pipelineStart, pipelineEnd);
     expect(pipelineBody).toContain('extractProjectMemory(projectBundle)');
+  });
+});
+
+describe('projectChatHistory dedup does not exclude distinct short messages (final verification fix)', () => {
+  it('short generic replies ("Agreed", "Okay") are kept even if the current session has an identical short reply', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).toContain('DEDUP_MIN_LENGTH');
+    expect(pipelineBody).toMatch(/if \(text\.length < DEDUP_MIN_LENGTH\) return true;/);
+  });
+});
+
+describe('email resolution hierarchy — mechanical tier 3, per final verification (2026-08-06)', () => {
+  it('runV2Pipeline calls identifyDiscussedEmail when no explicit selection was made', () => {
+    const pipelineStart = source.indexOf('async function runV2Pipeline(');
+    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
+    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
+    expect(pipelineBody).toContain('identifyDiscussedEmail(prompt, newestFirst)');
+  });
+
+  it('hasExplicitEmailSelection includes suppliedEmailContext (tier 2: pasted/attached), not only threadId/emailId', () => {
+    const callSiteIdx = source.indexOf('const { replyText, draft, diagnostics } = await runV2Pipeline({');
+    const callSiteEnd = source.indexOf('});', callSiteIdx);
+    const callSite = source.slice(callSiteIdx, callSiteEnd);
+    expect(callSite).toContain('hasExplicitEmailSelection: !!(suppliedEmailContext ||');
   });
 });

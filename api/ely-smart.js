@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions';
 // import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
+import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, identifyDiscussedEmail, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
 import { assembleV2Prompt, splitDraftFromCommentary } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { buildStage1Context } from './lib/stage1-context.js';
@@ -933,21 +933,33 @@ async function runV2Pipeline({
     ? buildGoldStandardBlock({ example: exampleForGoldStandard, userBrainV2 })
     : null;
 
-  // Project-context correction (2026-08-06), per NORA_V2_PROJECT_CONTEXT_COMPARISON.md
-  // item 4: buildScopedEmailContext() returns its 30-most-recent-emails
-  // result in oldest-first order (reversed there for readability). Taking
-  // .slice(0,1) / the first 8 of that array therefore picked the OLDEST
-  // items, not the newest — confirmed live against this exact code.
-  // Corrected here: when the user has NOT explicitly selected a specific
-  // email/thread in the UI, use the array in newest-first order so
-  // "the current/most recent email" is deterministic, not accidental.
-  // When an explicit selection WAS made, buildScopedEmailContext takes a
-  // different branch (thread-anchored) where the existing order is
-  // already meaningful — left untouched, per the explicit instruction
-  // that explicit selection must remain authoritative.
-  const orderedEmailContext = hasExplicitEmailSelection
-    ? (scopedEmailContext || [])
-    : [...(scopedEmailContext || [])].reverse();
+  // Current email resolution hierarchy (2026-08-06 final verification,
+  // per explicit requirement): mechanical, deterministic, four tiers —
+  //   1+2. Explicit UI selection (threadId/emailId) or supplied/pasted/
+  //        attached context (suppliedEmailContext, e.g. Inbox.jsx passing
+  //        a selected email body) — both authoritative, array order left
+  //        exactly as buildScopedEmailContext returns it (thread-anchored
+  //        branch), never reordered.
+  //   3. Mechanical verbatim-chunk match: if the user has pasted or
+  //      quoted part of a specific email back into the current prompt,
+  //      identifyDiscussedEmail() finds it by plain substring matching
+  //      (see v2-working-memory.js) — never a relevance judgement — and
+  //      that email is moved to the front.
+  //   4. Otherwise, newest project email first (scopedEmailContext is
+  //      returned oldest-first by buildScopedEmailContext — reversed here
+  //      so "the current email" defaults to the most recent, not the
+  //      oldest of the 30 fetched, confirmed as a real regression
+  //      previously).
+  let orderedEmailContext;
+  if (hasExplicitEmailSelection) {
+    orderedEmailContext = scopedEmailContext || [];
+  } else {
+    const newestFirst = [...(scopedEmailContext || [])].reverse();
+    const mechanicalMatch = identifyDiscussedEmail(prompt, newestFirst);
+    orderedEmailContext = mechanicalMatch
+      ? [mechanicalMatch, ...newestFirst.filter((e) => e.id !== mechanicalMatch.id)]
+      : newestFirst;
+  }
 
   // Context-wiring correction (2026-08-06): semanticSearchProject() is the
   // existing, already-working V1 function — it calls the
@@ -1024,17 +1036,27 @@ async function runV2Pipeline({
     }
   }
   const currentSessionContentSet = new Set((chatHistory || []).map((m) => (m.content || '').trim()));
+  // Fixed 2026-08-06 (final verification, before push): only exclude by
+  // content match when the text is long enough to be genuinely
+  // distinctive. Short, common replies ("Agreed", "Okay", "Give me the
+  // draft") could otherwise wrongly exclude a real, distinct historical
+  // message purely because it happens to share the same short text as
+  // something in the live session — a real gap identified before this
+  // was pushed. Below this length, a message is always kept; the cost of
+  // an occasional harmless duplicate short reply is far lower than the
+  // cost of silently dropping a distinct prior message.
+  const DEDUP_MIN_LENGTH = 40;
   const projectChatHistory = projectChatHistoryRaw
     .filter((m) => {
       const text = (m.content || '').trim();
       if (!text) return false;
-      // Excludes the current session's own turns by content match, since
-      // no reliable session_id is available at this layer to filter by.
+      if (text.length < DEDUP_MIN_LENGTH) return true;
       return !currentSessionContentSet.has(text);
     })
     .map((m) => ({
       id: m.id, content: `${m.role}: ${m.content}`.slice(0, 1500),
-      date: m.created_at, evidential_status: 'prior_project_chat',
+      date: m.created_at, author: m.session_id ? `session:${m.session_id.slice(0, 8)}` : null,
+      evidential_status: 'prior_project_chat_recency_based', // interim mechanism — recency-based, not relevance-ranked; stated explicitly rather than implied
     }));
 
   const rawSources = {
@@ -3983,7 +4005,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           effectiveProjectId: projectBundle?.project?.id || projectId,
           projectBundle,
           scopedEmailContext,
-          hasExplicitEmailSelection: !!(body.threadId || body.emailId || body.emailContext?.threadId || body.emailContext?.id),
+          hasExplicitEmailSelection: !!(suppliedEmailContext || body.threadId || body.emailId || body.emailContext?.threadId || body.emailContext?.id),
           chatHistory: body.chatHistory || [],
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
