@@ -1504,8 +1504,21 @@ function hasExplicitDraftRequest(prompt = '') {
 
   if (!p) return false;
 
-  // Explicit draft/write/prepare/compose patterns
-  const expressDraft =
+  // Fixed 2026-08-07: real, confirmed bug. A message opening "Let's
+  // respond to X's email..." immediately matched the soft patterns below
+  // and forced draft mode, regardless of how much of the actual message
+  // was detailed analysis and argument-building — genuine collaboration
+  // content, not ready-to-send text. Mode is decided here, before Terra
+  // ever runs, so this single early match was silencing the Universal
+  // Brain's own "understand before drafting" instructions entirely; they
+  // never got a chance to apply. Confirmed against the real message that
+  // triggered this: "Lets respond to Carly's email... [2000+ words of
+  // detailed argument]".
+  //
+  // Unambiguous drafting language (the user is handing over ready
+  // content, or explicitly using a drafting verb) still triggers draft
+  // mode regardless of length.
+  const unambiguousDraft =
     /\bdraft\b/i.test(p) ||
     /\bwrite (an?|the|a) (email|letter|reply|response)\b/i.test(p) ||
     /\bwrite to\b/i.test(p) ||
@@ -1519,17 +1532,36 @@ function hasExplicitDraftRequest(prompt = '') {
     /\bi want to draft\b/i.test(p) ||
     /\bcan (you|we) draft\b/i.test(p) ||
     /\blet'?s (draft|write|prepare|compose)\b/i.test(p) ||
+    /\bjust (draft|write|give me a draft)\b/i.test(p) ||
+    /\bgive me (a |the )?(draft|email)\b/i.test(p) ||
+    /\bproduce (a |the )?(draft|email|letter)\b/i.test(p);
+
+  if (unambiguousDraft) return true;
+
+  // Ambiguous framing — "let's respond to X" / "reply to them" — can mean
+  // either "here is the final text, send it" (short, direct) or "let's
+  // work out how to respond" (long, substantive — genuine collaboration).
+  // Only treat these as a draft trigger for short, direct messages,
+  // matching the same 40-word threshold already used for the
+  // draft_with_ely surface elsewhere in this file. A long, detailed
+  // dictation opening with this phrasing falls through to discussion
+  // intent / default discuss instead, so collaboration actually happens.
+  const ambiguousDraftFraming =
     /\blet'?s (respond|reply)\b/i.test(p) ||
     /\blet'?s (respond|reply) to\b/i.test(p) ||
     /\brespond to (lewis|him|her|them|this|the email)\b/i.test(p) ||
     /\breply to (lewis|him|her|them|this|the email)\b/i.test(p) ||
     /\b(can|could) (you|we) (respond|reply)\b/i.test(p) ||
-    /\b(respond|reply) (to|saying|with)\b/i.test(p) ||
-    /\bjust (draft|write|give me a draft)\b/i.test(p) ||
-    /\bgive me (a |the )?(draft|email)\b/i.test(p) ||
-    /\bproduce (a |the )?(draft|email|letter)\b/i.test(p);
+    /\b(respond|reply) (to|saying|with)\b/i.test(p);
 
-  if (expressDraft) return true;
+  if (ambiguousDraftFraming) {
+    const wordCount = p.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 40) return true;
+    // Long, substantive message — do not force draft mode here. Falls
+    // through to the rest of inferIntent (hasDiscussionIntent, default
+    // 'discuss'), letting the Universal Brain's own collaboration-first
+    // instructions actually apply.
+  }
 
   // Recipient-change patterns — treat as draft amendment when user redirects an existing draft
   // "address it to", "send it to", "rewrite it for" etc

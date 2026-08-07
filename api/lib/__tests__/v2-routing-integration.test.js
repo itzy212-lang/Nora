@@ -160,3 +160,21 @@ describe('mode field in the response, and frontend trusting it (2026-08-07, real
     expect(callSite).toContain('mode: modeHint');
   });
 });
+
+describe('backend intent classifier — ambiguous drafting phrases gated by length (2026-08-07, real user-reported failure)', () => {
+  it('hasExplicitDraftRequest no longer force-drafts a long message that only opens with ambiguous framing', () => {
+    const idx = source.indexOf('function hasExplicitDraftRequest(');
+    const end = source.indexOf('\nfunction hasExplicitReviewRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toContain('ambiguousDraftFraming');
+    expect(body).toMatch(/wordCount < 40/);
+  });
+
+  it('unambiguous drafting language (the literal word "draft", "write an email", etc.) still triggers regardless of length', () => {
+    const idx = source.indexOf('function hasExplicitDraftRequest(');
+    const end = source.indexOf('\nfunction hasExplicitReviewRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toContain('unambiguousDraft');
+    expect(body).toMatch(/if \(unambiguousDraft\) return true;/);
+  });
+});
