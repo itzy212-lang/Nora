@@ -434,8 +434,8 @@ describe('Working Memory total budget with real Patrick-Road-sized data (spec te
 
 describe('identifyDiscussedEmail — mechanical verbatim-chunk matching, tier 3 of the email resolution hierarchy', () => {
   const candidates = [
-    { id: 'e1', subject: 'RE: 41 Patrick Road', body: 'Good Morning Itzik,\n\nFurther to my previous email, I have now taken instructions and considered the matter further.\n\nKind regards,\nOlivia' },
-    { id: 'e2', subject: 'Fee query', body: 'Hi Itzik, did we get any reply from Nick about the draft?' },
+    { id: 'e1', subject: 'RE: 41 Patrick Road', sender_name: 'Olivia Porter', body: 'Good Morning Itzik,\n\nFurther to my previous email, I have now taken instructions and considered the matter further.\n\nKind regards,\nOlivia' },
+    { id: 'e2', subject: 'Fee query', sender_name: 'Nick Someone', body: 'Hi Itzik, did we get any reply from Nick about the draft?' },
   ];
 
   it('identifies the email the user quoted or pasted back, by verbatim overlap', () => {
@@ -444,7 +444,7 @@ describe('identifyDiscussedEmail — mechanical verbatim-chunk matching, tier 3 
     expect(result?.id).toBe('e1');
   });
 
-  it('returns null when no verbatim overlap exists — never guesses', () => {
+  it('returns null when no verbatim overlap or sender name exists — never guesses', () => {
     const result = identifyDiscussedEmail('What do you think about the roof works?', candidates);
     expect(result).toBeNull();
   });
@@ -458,6 +458,24 @@ describe('identifyDiscussedEmail — mechanical verbatim-chunk matching, tier 3 
     expect(identifyDiscussedEmail('', candidates)).toBeNull();
     expect(identifyDiscussedEmail('text', [])).toBeNull();
     expect(identifyDiscussedEmail('text', null)).toBeNull();
+  });
+
+  it('matches by sender name when the request names a specific party without quoting them (real gap found during dry run)', () => {
+    // Real scenario found 2026-08-06: "the most recent email from Olivia"
+    // must not resolve to the absolute-newest email overall if that email
+    // is actually from someone else (Arpit) — the named sender is the
+    // deciding signal here, mechanically, not a quote.
+    const multiSender = [
+      { id: 'newest', subject: 'Re: contact', sender_name: 'Arpit Malani', body: 'Hi Itzik, how should we proceed?', received_at: '2026-08-06 16:32' },
+      { id: 'olivia-latest', subject: 'RE: 41 Patrick Road', sender_name: 'Olivia Porter', body: 'Good Morning Itzik, further to my previous email.', received_at: '2026-08-06 08:02' },
+    ];
+    const result = identifyDiscussedEmail('I want to find the most recent email from Olivia today', multiSender);
+    expect(result?.id).toBe('olivia-latest');
+  });
+
+  it('prefers verbatim-quote matches over sender-name matches when both are present', () => {
+    const result = identifyDiscussedEmail('Nick said: Hi Itzik, did we get any reply from Nick about the draft?', candidates);
+    expect(result?.id).toBe('e2');
   });
 });
 

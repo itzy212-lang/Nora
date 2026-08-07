@@ -268,6 +268,9 @@ const MIN_CHUNK_LENGTH = 40;
 function identifyDiscussedEmail(requestText, candidateEmails) {
   if (!requestText || !Array.isArray(candidateEmails) || !candidateEmails.length) return null;
   const haystack = requestText.toLowerCase();
+
+  // Verbatim-quote match first (strongest signal: the user pasted or
+  // quoted the email back).
   for (const email of candidateEmails) {
     const source = [email.subject, email.body, email.body_preview].filter(Boolean).join('\n');
     const chunks = source.split(/[\r\n.]+/).map((c) => c.trim()).filter((c) => c.length >= MIN_CHUNK_LENGTH);
@@ -275,6 +278,21 @@ function identifyDiscussedEmail(requestText, candidateEmails) {
       if (haystack.includes(chunk.toLowerCase())) return email;
     }
   }
+
+  // Sender/party name match: if the request mentions a specific sender's
+  // name (a plain substring check on sender_name, at least 3 characters
+  // to avoid matching on initials or noise), prefer the newest email FROM
+  // that named sender over the newest email overall. Mechanical matching
+  // only — never infers who "must" be relevant when no name is mentioned.
+  const namedCandidates = candidateEmails.filter((e) => {
+    const name = (e.sender_name || '').trim();
+    if (name.length < 3) return false;
+    // match on the first token of the name (e.g. "Olivia" out of "Olivia Porter")
+    const firstName = name.split(/\s+/)[0].toLowerCase();
+    return firstName.length >= 3 && haystack.includes(firstName);
+  });
+  if (namedCandidates.length) return namedCandidates[0]; // candidates are already newest-first
+
   return null;
 }
 
