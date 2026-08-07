@@ -805,6 +805,9 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
         }]);
         return;
       }
+      console.warn('[ProjectChat] Done. fallback reached (!wantsDraft branch, no result.draft) — result at this point:', {
+        reply: result?.reply, draft: result?.draft, resultKeys: result ? Object.keys(result) : null,
+      });
       setMessages(prev => [...prev, {
         id: uid(),
         role: 'ely',
@@ -915,6 +918,18 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     }
 
     if (!newMessages.length) {
+      // Diagnostic instrumentation added 2026-08-07: if this fallback
+      // fires, log exactly what result actually contained at this point
+      // — real evidence for the next live occurrence, since static
+      // tracing has repeatedly failed to explain how this branch could
+      // be reached when the backend genuinely returned a populated
+      // result.draft (confirmed against real saved database content on
+      // more than one occasion).
+      console.warn('[ProjectChat] Done. fallback reached — result at this point:', {
+        wantsDraft, reply: result?.reply, draft: result?.draft,
+        replyType: typeof result?.reply, draftType: typeof result?.draft,
+        resultKeys: result ? Object.keys(result) : null,
+      });
       newMessages.push({
         id: uid(),
         role: 'ely',
@@ -1061,6 +1076,25 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
       // guess. Falls back to the local guess only if the backend response
       // is old/malformed and doesn't include mode at all.
       const actualWantsDraft = typeof result?.mode === 'string' ? result.mode === 'draft' : wantsDraft;
+      // Diagnostic instrumentation added 2026-08-07: this exact rendering
+      // path has produced 'Done.' on real, confirmed occasions where the
+      // backend genuinely returned mode:'draft' and a populated
+      // result.draft — behaviour that should be structurally impossible
+      // given the logic below, per repeated static tracing that could
+      // not find the discrepancy. Logging the actual shape of `result`
+      // at the exact decision point, so the next live occurrence can be
+      // diagnosed from real evidence (the browser console at the time of
+      // failure) instead of re-deriving hypotheses after the fact.
+      console.log('[ProjectChat] rendering decision', {
+        backendMode: result?.mode,
+        wantsDraftLocal: wantsDraft,
+        actualWantsDraft,
+        hasReply: !!result?.reply,
+        replyLength: result?.reply?.length || 0,
+        hasDraft: !!result?.draft,
+        draftLength: result?.draft?.length || 0,
+        resultKeys: result ? Object.keys(result) : null,
+      });
       appendAssistantMessagesFromResult(result, actualWantsDraft);
 
       // Handle case review flow
