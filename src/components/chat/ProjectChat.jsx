@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
-import { splitAssistantResponse, extractSubjectFromDraft, computeAssistantMessagesFromResult } from './projectChatMessageLogic.js';
+import { splitAssistantResponse, extractSubjectFromDraft, computeAssistantMessagesFromResult, isDraftRequest } from './projectChatMessageLogic.js';
 import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
@@ -147,40 +147,6 @@ function getUserId(state = {}) {
 }
 
 
-function isDraftRequest(text = '', hasPreviousDraft = false) {
-  const s = String(text || '').toLowerCase();
-
-  // Only force draft mode when there is a clearly explicit drafting instruction.
-  // Words like "email", "reply", "respond" appear naturally in discussion messages
-  // ("what do you think about this email?", "how should we respond?") and must NOT
-  // trigger draft mode. Only trigger on unambiguous drafting commands.
-  const explicitDraft =
-    /\bdraft\b/i.test(s) ||
-    /\bwrite (an?|the|a) (email|letter|reply|response)\b/i.test(s) ||
-    /\bwrite to\b/i.test(s) ||
-    /\bcompose (an?|the) (email|letter)\b/i.test(s) ||
-    /\breply saying\b/i.test(s) ||
-    /\brespond saying\b/i.test(s) ||
-    /\bcan (you|we) draft\b/i.test(s) ||
-    /\blet'?s (draft|write|prepare|compose)\b/i.test(s) ||
-    /\bgive me (a |the )?(draft|email)\b/i.test(s) ||
-    /\bprepare (a|an) (response|reply|email|letter)\b/i.test(s) ||
-    /\bpoint by point\b/i.test(s) ||
-    /\bline by line\b/i.test(s) ||
-    /\binline response\b/i.test(s);
-
-  if (explicitDraft) return true;
-
-  // If a draft already exists and the user gives an amendment instruction, stay in draft mode
-  const editWords = [
-    'change', 'amend', 'revise', 'rewrite', 'update',
-    'make it', 'add', 'remove', 'replace',
-    'shorter', 'firmer', 'softer', 'more formal', 'less formal',
-  ];
-  if (hasPreviousDraft && editWords.some(word => s.includes(word))) return true;
-
-  return false;
-}
 
 function findDraftStart(text = '') {
   const markers = [
