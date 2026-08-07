@@ -261,3 +261,14 @@ describe('extractCurrentDraftState call site — no longer passed raw chat histo
     expect(line).not.toContain('chatHistory');
   });
 });
+
+describe('hasLiveDraftInstruction — "while I draft" narrative pattern (2026-08-07, second real occurrence)', () => {
+  it('recognizes "while I draft" / "as I draft" / "when I draft" as historical narrative, not a live instruction', () => {
+    const idx = source.indexOf('function hasLiveDraftInstruction(');
+    const end = source.indexOf('\nfunction hasExplicitDraftRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toMatch(/\\bwhile i\\b/);
+    expect(body).toMatch(/\\bas i\\b/);
+    expect(body).toMatch(/\\bwhen i\\b/);
+  });
+});

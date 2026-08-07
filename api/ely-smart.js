@@ -1513,7 +1513,7 @@ function looksLikeEmailDictation(prompt = '') {
  * instruction, once this check is applied.
  */
 function hasLiveDraftInstruction(p) {
-  const retrospectiveMarkers = /\b(had|has|have) (agreed|asked|confirmed|instructed|told|said)\b|\bwas (asked|instructed|told)\b|\boriginally\b|\bpreviously\b|\bback then\b|\bat that (time|point|stage)\b|\bthe original\b|\bwould have\b|\bwas intended\b|\bhad wanted\b/i;
+  const retrospectiveMarkers = /\b(had|has|have) (agreed|asked|confirmed|instructed|told|said)\b|\bwas (asked|instructed|told)\b|\boriginally\b|\bpreviously\b|\bback then\b|\bat that (time|point|stage)\b|\bthe original\b|\bwould have\b|\bwas intended\b|\bhad wanted\b|\bwhile i\b|\bas i\b|\bwhen i\b|\bwhile we\b|\bas we\b/i;
   const MAX_WINDOW = 60;
   const regex = /\bdraft\b/gi;
   let match;
