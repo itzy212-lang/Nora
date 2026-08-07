@@ -437,6 +437,16 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
   const [messages, setMessages] = useState([]);
+  // Multi-select delete (added 2026-08-07, on request): lets the user
+  // remove specific messages themselves instead of asking for a manual
+  // database deletion each time.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Session-level multi-select (added 2026-08-07, per formal spec):
+  // separate select mode for the session history list, distinct from
+  // the message-level select above.
+  const [sessionSelectMode, setSessionSelectMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState(() => new Set());
   const [input, setInput] = useState('');
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(() => uid());
@@ -613,17 +623,60 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     resetSession();
   }, [resetSession, stopVoice]);
 
-  const deleteSession = useCallback((sessionId, e) => {
+  // Fixed 2026-08-07: the previous version of this function never
+  // actually deleted anything from ai_sessions/ai_messages — it deleted
+  // from an unrelated table (project_brain) and only removed the
+  // session from local frontend state, giving the appearance of
+  // deletion without it ever happening in the database. Confirmed by
+  // reading the code directly, not assumed. Now calls the real, secure,
+  // ownership-validated backend route.
+  const deleteSession = useCallback(async (sessionId, e) => {
     e?.stopPropagation?.();
-    setSessions(prev => (prev || []).filter(s => s.id !== sessionId));
-    // Also remove from project brain in Supabase
-    supabase.from('project_brain')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('session_id', sessionId)
-      .then(() => {})
-      .catch(() => {});
-  }, [projectId]);
+    await deleteProjectChatSessions([sessionId]);
+  }, []);
+
+  // Real backend deletion path for one or more Project Chat sessions —
+  // shared by both the single-session delete button and multi-select
+  // batch delete. Never deletes directly from the client; calls the
+  // secure /api/delete-project-chat-sessions endpoint, which verifies
+  // identity via a real bearer token and validates ownership + surface
+  // inside delete_project_chat_sessions() before removing anything.
+  const deleteProjectChatSessions = useCallback(async (sessionIds) => {
+    if (!sessionIds?.length) return { deleted: [], failed: [] };
+    try {
+      const { data: { session } } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+      if (!session?.access_token) {
+        console.error('[ProjectChat] delete sessions: no auth token available');
+        return { deleted: [], failed: sessionIds.map(id => ({ session_id: id, reason: 'no_auth_token' })) };
+      }
+      const res = await fetch('/api/delete-project-chat-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ session_ids: sessionIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+      const deletedSet = new Set(data.deleted || []);
+      setSessions(prev => (prev || []).filter(s => !deletedSet.has(s.id)));
+
+      // If the currently open session was deleted, clear active state
+      // and return to a clean new-chat state rather than leave stale
+      // messages visible.
+      if (deletedSet.has(activeSessionId)) {
+        setMessages([]);
+        setActiveSessionId(uid());
+      }
+
+      if (data.failed?.length) {
+        console.warn('[ProjectChat] some sessions failed to delete:', data.failed);
+      }
+      return data;
+    } catch (err) {
+      console.error('[ProjectChat] delete sessions failed:', err.message);
+      return { deleted: [], failed: sessionIds.map(id => ({ session_id: id, reason: err.message })) };
+    }
+  }, [activeSessionId]);
 
   const handleFilesSelected = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
@@ -1177,6 +1230,44 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
 
         <button className="btn btn-xs" onClick={startNew}>+ New</button>
 
+        {selectMode ? (
+          <>
+            <button
+              className="btn btn-xs"
+              disabled={selectedIds.size === 0}
+              onClick={async () => {
+                if (selectedIds.size === 0) return;
+                if (!window.confirm(`Delete ${selectedIds.size} selected message${selectedIds.size > 1 ? 's' : ''}? This can't be undone.`)) return;
+                const ids = Array.from(selectedIds);
+                try {
+                  await supabase.from('ai_messages')
+                    .delete()
+                    .in('id', ids)
+                    .eq('session_id', activeSessionId);
+                } catch (err) {
+                  console.error('[ProjectChat] delete selected messages failed:', err.message);
+                }
+                setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
+                setSelectedIds(new Set());
+                setSelectMode(false);
+              }}
+              style={{
+                color: selectedIds.size === 0 ? undefined : 'var(--red, #ef4444)',
+                borderColor: selectedIds.size === 0 ? undefined : 'var(--red, #ef4444)',
+              }}
+            >
+              Delete{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+            </button>
+            <button className="btn btn-ghost btn-xs" onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-ghost btn-xs" title="Select messages to delete" onClick={() => setSelectMode(true)}>
+            Select
+          </button>
+        )}
+
         <button
           className="btn btn-ghost btn-sm"
           onClick={handleClose}
@@ -1219,7 +1310,56 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               flexShrink: 0,
             }}>
               <span>Project chat history</span>
-              <button className="btn btn-xs btn-ghost" onClick={startNew}>+ New</button>
+              {sessionSelectMode ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--text3)' }}>
+                    {selectedSessionIds.size} selected
+                  </span>
+                  <button
+                    className="btn btn-xs btn-ghost"
+                    onClick={() => {
+                      setSelectedSessionIds(prev =>
+                        prev.size === sessions.length ? new Set() : new Set(sessions.map(s => s.id))
+                      );
+                    }}
+                  >
+                    {selectedSessionIds.size === sessions.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                  <button
+                    className="btn btn-xs"
+                    disabled={selectedSessionIds.size === 0}
+                    style={{
+                      color: selectedSessionIds.size === 0 ? undefined : 'var(--red, #ef4444)',
+                      borderColor: selectedSessionIds.size === 0 ? undefined : 'var(--red, #ef4444)',
+                    }}
+                    onClick={async () => {
+                      if (selectedSessionIds.size === 0) return;
+                      const n = selectedSessionIds.size;
+                      if (!window.confirm(`Delete ${n} chat${n > 1 ? 's' : ''}? This can't be undone.`)) return;
+                      await deleteProjectChatSessions(Array.from(selectedSessionIds));
+                      setSelectedSessionIds(new Set());
+                      setSessionSelectMode(false);
+                    }}
+                  >
+                    Delete{selectedSessionIds.size > 0 ? ` (${selectedSessionIds.size})` : ''}
+                  </button>
+                  <button
+                    className="btn btn-xs btn-ghost"
+                    onClick={() => { setSessionSelectMode(false); setSelectedSessionIds(new Set()); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {sessions.length > 0 && (
+                    <button className="btn btn-xs btn-ghost" onClick={() => setSessionSelectMode(true)}>
+                      Select
+                    </button>
+                  )}
+                  <button className="btn btn-xs btn-ghost" onClick={startNew}>+ New</button>
+                </div>
+              )}
             </div>
 
             {sessions.length === 0 ? (
@@ -1231,7 +1371,17 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                 key={s.id}
                 type="button"
                 className="pch-session-item"
-                onClick={() => loadSession(s)}
+                onClick={() => {
+                  if (sessionSelectMode) {
+                    setSelectedSessionIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                      return next;
+                    });
+                  } else {
+                    loadSession(s);
+                  }
+                }}
                 style={{
                   textAlign: 'left',
                   border: 0,
@@ -1240,13 +1390,26 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   color: 'var(--text)',
                   padding: '10px 12px',
                   cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
                 }}
               >
+                {sessionSelectMode && (
+                  <input
+                    type="checkbox"
+                    checked={selectedSessionIds.has(s.id)}
+                    onChange={() => {}}
+                    style={{ marginTop: 3, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="pch-session-name" style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
                   {s.name || s.title || 'Session'}
                 </div>
                 <div className="pch-session-date" style={{ fontSize: 10.5, color: 'var(--text3)', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span>{formatSessionDate(s.updatedAt || s.createdAt) || s.date}</span>
+                  {!sessionSelectMode && (
                   <span
                     role="button"
                     tabIndex={0}
@@ -1258,6 +1421,8 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   >
                     ×
                   </span>
+                  )}
+                </div>
                 </div>
               </button>
             ))}
@@ -1265,14 +1430,14 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!window.confirm('Clear all chat history for this project? This also removes saved brain entries.')) return;
-                    setSessions([]);
-                    supabase.from('project_brain')
-                      .delete()
-                      .eq('project_id', projectId)
-                      .then(() => {})
-                      .catch(() => {});
+                  onClick={async () => {
+                    if (!window.confirm('Clear all chat history for this project? This can\'t be undone.')) return;
+                    // Fixed 2026-08-07: same bug as the single-session
+                    // delete — previously only deleted from the unrelated
+                    // project_brain table and hid sessions locally,
+                    // never touching ai_sessions/ai_messages. Now uses
+                    // the same real, secure batch-delete path.
+                    await deleteProjectChatSessions(sessions.map(s => s.id));
                     try { localStorage.removeItem(sessionStorageKey(projectId)); } catch {}
                   }}
                   style={{
@@ -1308,7 +1473,25 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
             )}
 
             {messages.map(msg => (
-              <div key={msg.id}>
+              <div
+                key={msg.id}
+                style={selectMode ? { display: 'flex', alignItems: 'flex-start', gap: 8 } : undefined}
+                onClick={selectMode ? () => {
+                  setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(msg.id)) next.delete(msg.id); else next.add(msg.id);
+                    return next;
+                  });
+                } : undefined}
+              >
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(msg.id)}
+                    onChange={() => {}}
+                    style={{ marginTop: 10, flexShrink: 0, width: 18, height: 18 }}
+                  />
+                )}
                 {msg.messageType === 'invoice_preview' ? (
                   <InvoicePreviewCard
                     msg={msg}
