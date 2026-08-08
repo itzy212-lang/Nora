@@ -106,7 +106,15 @@ export function computeAssistantMessagesFromResult(result, wantsDraft, projectId
           draftType: result.draftType || 'email', messageType: 'draft',
           suggestedActions: [], projectId, createdAt: new Date().toISOString(),
         }],
-        updatedLastDraft: undefined,
+        // Fixed 2026-08-08: a real, confirmed gap — this branch displayed
+        // the draft correctly but never updated the app's record of the
+        // confirmed Working Draft, since updatedLastDraft was left
+        // undefined here. That meant a subsequent revision request would
+        // be built from a stale, earlier draft, silently making whatever
+        // was just shown invisible to the next turn's 'preserve the
+        // Working Draft' instruction — a code-level cause of lost
+        // content, independent of anything in the Universal Brain.
+        updatedLastDraft: result.draft,
         doneCause: null,
       };
     }

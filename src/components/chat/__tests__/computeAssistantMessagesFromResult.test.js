@@ -87,9 +87,15 @@ describe('computeAssistantMessagesFromResult — real simulation using actual tu
     const result = { reply: '', draft: 'Hi Olivia,\n\n...\n\nKind regards,', mode: 'draft' };
     // Deliberately pass wantsDraft=false to simulate the exact
     // frontend/backend mismatch bug found earlier today
-    const { newMessages, doneCause } = computeAssistantMessagesFromResult(result, false, 'moy1t4ziomb');
+    const { newMessages, doneCause, updatedLastDraft } = computeAssistantMessagesFromResult(result, false, 'moy1t4ziomb');
     expect(doneCause).toBeNull();
     expect(newMessages[0].messageType).toBe('draft');
+    // Fixed 2026-08-08: this branch previously left updatedLastDraft
+    // undefined, silently leaving the app's confirmed Working Draft
+    // stale even though the real new draft was correctly displayed —
+    // a real, code-level cause of lost content on the next revision,
+    // independent of anything in the Universal Brain.
+    expect(updatedLastDraft).toBe(result.draft);
   });
 });
 
