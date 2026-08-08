@@ -522,23 +522,19 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
             !history.includes(m)
           ).slice(-5); // up to 5 earlier long notes
 
-          const combined = [...longUserNotes, ...history];
-
-          // Find the index of the last assistant message with a substantial draft
-          let lastDraftIdx = -1;
-          combined.forEach((msg, i) => {
-            if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
-              lastDraftIdx = i;
-            }
-          });
-          return combined.map((msg, i) => {
-            // Keep the most recent draft in full so Ely knows exactly what's on screen
-            if (msg.role === 'assistant' && msg.content && msg.content.length > 300) {
-              if (i === lastDraftIdx) return msg; // keep latest draft intact
-              return { ...msg, content: '[earlier draft — superseded]' }; // strip older ones
-            }
-            return msg;
-          });
+          // Fixed 2026-08-08: this previously used the same flawed
+          // length-based inference already found and fixed once today in
+          // extractCurrentDraftState (v2-working-memory.js) — any
+          // assistant message over 300 characters was treated as "a
+          // draft" and, if not the single most recent one, silently
+          // replaced with '[earlier draft — superseded]'. That corrupted
+          // genuine long discussion replies (not drafts at all) in the
+          // chat history sent to the backend, and was redundant besides:
+          // context.previousDraft (sent separately, see below) is now
+          // the single, confirmed source of truth for the accepted
+          // Working Draft, populated only from a real backend draft
+          // field — never inferred from length. No stripping needed.
+          return [...longUserNotes, ...history];
         })(),
         projectsContext,
         currentProject,
