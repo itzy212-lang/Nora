@@ -1511,10 +1511,22 @@ function looksLikeEmailDictation(prompt = '') {
  * agreed for me to draft an agreement..." — "had agreed" sits right
  * before "draft" and correctly marks it as historical narrative, not an
  * instruction, once this check is applied.
+ *
+ * Fixed 2026-08-08 (third real occurrence): a real message pasted an
+ * email containing "the draft agreement was met with silence" — a noun
+ * phrase referring to an already-existing document, with nothing useful
+ * in the text before "draft" at all. Added a second, "after" check:
+ * "draft [agreement/document/letter/...]" immediately followed by a
+ * past-tense state verb ("was", "has been", "remains") is treated as
+ * historical too, since a live instruction would never be phrased that
+ * way ("draft the agreement was..." is not a sentence anyone gives as
+ * an instruction).
  */
 function hasLiveDraftInstruction(p) {
-  const retrospectiveMarkers = /\b(had|has|have) (agreed|asked|confirmed|instructed|told|said)\b|\bwas (asked|instructed|told)\b|\boriginally\b|\bpreviously\b|\bback then\b|\bat that (time|point|stage)\b|\bthe original\b|\bwould have\b|\bwas intended\b|\bhad wanted\b|\bwhile i\b|\bas i\b|\bwhen i\b|\bwhile we\b|\bas we\b/i;
+  const retrospectiveMarkersBefore = /\b(had|has|have) (agreed|asked|confirmed|instructed|told|said)\b|\bwas (asked|instructed|told)\b|\boriginally\b|\bpreviously\b|\bback then\b|\bat that (time|point|stage)\b|\bthe original\b|\bwould have\b|\bwas intended\b|\bhad wanted\b|\bwhile i\b|\bas i\b|\bwhen i\b|\bwhile we\b|\bas we\b/i;
+  const retrospectiveMarkersAfter = /^\s*(agreement|document|letter|email|reply|response|notice|award)?\s*(was|were|has been|had been|remains|is now|became|had|has)\b/i;
   const MAX_WINDOW = 60;
+  const AFTER_WINDOW = 40;
   const regex = /\bdraft\b/gi;
   let match;
   while ((match = regex.exec(p)) !== null) {
@@ -1530,7 +1542,12 @@ function hasLiveDraftInstruction(p) {
       const lastBoundary = before.lastIndexOf(boundaryMatch[boundaryMatch.length - 1]);
       before = before.slice(lastBoundary + boundaryMatch[boundaryMatch.length - 1].length);
     }
-    if (!retrospectiveMarkers.test(before)) return true; // a genuine, non-historical occurrence found
+    if (retrospectiveMarkersBefore.test(before)) continue; // historical via preceding text
+
+    const after = p.slice(match.index + match[0].length, match.index + match[0].length + AFTER_WINDOW);
+    if (retrospectiveMarkersAfter.test(after)) continue; // historical via following text — new
+
+    return true; // a genuine, non-historical occurrence found
   }
   return false; // every occurrence was retrospective, or the word never appeared
 }

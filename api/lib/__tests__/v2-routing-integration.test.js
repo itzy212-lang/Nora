@@ -272,3 +272,13 @@ describe('hasLiveDraftInstruction — "while I draft" narrative pattern (2026-08
     expect(body).toMatch(/\\bwhen i\\b/);
   });
 });
+
+describe('hasLiveDraftInstruction — "draft" inside pasted correspondence, third real occurrence (2026-08-08)', () => {
+  it('recognizes "the draft agreement was met with silence" (pasted email content) as historical, not a live instruction', () => {
+    const idx = source.indexOf('function hasLiveDraftInstruction(');
+    const end = source.indexOf('\nfunction hasExplicitDraftRequest', idx);
+    const body = source.slice(idx, end);
+    expect(body).toContain('retrospectiveMarkersAfter');
+    expect(body).toMatch(/agreement\|document\|letter\|email\|reply\|response\|notice\|award/);
+  });
+});
