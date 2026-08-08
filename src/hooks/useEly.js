@@ -565,31 +565,26 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           content: assistantText,
           model: result.model || null,
         });
-        // Embed + extract assistant reply for semantic search and project memory (project chat only)
+        // Embed assistant reply for semantic search (project chat only) —
+        // deliberately no longer also auto-extracts into project_memory,
+        // see the comment below.
         if (effectiveProjectId && savedAssistantMsg?.id) {
           fetch('/api/embed', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'embed_record', record_id: savedAssistantMsg.id, table: 'ai_messages' }),
           }).catch(() => {});
-          // Extract key facts from substantive assistant responses into project memory
-          if (assistantText.length > 200) {
-            const { data: { session: authSession5 } } = await sb.auth.getSession();
-            fetch('/api/extract-email-memory', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(authSession5?.access_token ? { 'Authorization': `Bearer ${authSession5.access_token}` } : {}),
-              },
-              body: JSON.stringify({
-                project_id: effectiveProjectId,
-                subject: 'Project chat',
-                body: assistantText,
-                direction: 'chat',
-                received_at: new Date().toISOString(),
-              }),
-            }).catch(() => {});
-          }
+          // Fixed 2026-08-08, on request: this used to fire chat-derived
+          // extraction automatically on any assistant reply over 200
+          // characters — a blanket, length-based trigger with no regard
+          // for whether the content was actually worth remembering.
+          // Explicitly turned off — the user wants extraction to happen
+          // only when deliberately requested (via the existing
+          // onSaveToMemory action, and the future intent-based "note
+          // this for the record" detection), not automatically on every
+          // substantial reply. Confirmed isolated before removing: this
+          // was the only thing this block did — the /api/embed call
+          // just above (semantic search indexing) is untouched.
         }
       }
 
