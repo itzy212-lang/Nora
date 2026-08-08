@@ -1323,67 +1323,174 @@ function ProjectLinkBanner({ email, onLinked }) {
   );
 }
 
-// ── Save attachment popup ─────────────────────────────────────────────────────
-function SaveAttachmentPopup({ email, onDismiss }) {
-  const [projects, setProjects] = useState([]);
-  const [selected, setSelected] = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [done, setDone]         = useState(false);
+// ── Save / summarize attachment popup ───────────────────────────────────────
+// Rebuilt 2026-08-08: the previous version's only real action was
+// project-linking, despite being titled "Save attachment?" — confirmed
+// directly against the code and a real screenshot. This version actually
+// does what the title says: save selected attachments to the project's
+// OneDrive folder, summarize them into project memory, or both.
+function SaveAttachmentPopup({ email, attachments, onDismiss }) {
+  const [selected, setSelected] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const [confirmedIds, setConfirmedIds] = useState(() => new Set()); // green-tick "summarized" markers
+  const [error, setError] = useState('');
+  const [projectFolderId, setProjectFolderId] = useState(null);
+
+  const realAttachments = (attachments || []).filter(a => a.attachment_external_id);
 
   useEffect(() => {
-    sb.from('projects').select('id,ref,bo_premise_address,bo')
-      .neq('status', 'closed').order('created_at', { ascending: false }).limit(50)
-      .then(({ data }) => setProjects(data || []));
-  }, []);
+    if (!email?.project_id) { setProjectFolderId(null); return; }
+    sb.from('projects').select('onedrive_folder_id')
+      .eq('id', email.project_id).maybeSingle()
+      .then(({ data }) => setProjectFolderId(data?.onedrive_folder_id || null));
+  }, [email?.project_id]);
 
-  if (done) return null;
+  if (!realAttachments.length) return null;
+
+  const toggle = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const saveSelected = async () => {
+    if (!projectFolderId) { setError('This project has no OneDrive folder configured yet.'); return; }
+    setError('');
+    for (const id of selected) {
+      const att = realAttachments.find(a => a.id === id);
+      if (!att) continue;
+      const baseRes = await fetch('/api/attachment-base64', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachment_id: id }),
+      });
+      const base = await baseRes.json();
+      if (!baseRes.ok) throw new Error(base.error || 'Could not fetch attachment');
+      const upRes = await fetch('/api/onedrive-upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 'help@sq1consulting.co.uk',
+          folder_id: projectFolderId,
+          filename: base.filename || att.filename,
+          content_base64: base.content_base64,
+          content_type: base.content_type || att.content_type,
+        }),
+      });
+      if (!upRes.ok) throw new Error((await upRes.json()).error || 'OneDrive upload failed');
+    }
+  };
+
+  const summarizeSelected = async () => {
+    if (!email?.project_id) { setError('Link this email to a project first.'); return; }
+    setError('');
+    const newlyConfirmed = new Set();
+    for (const id of selected) {
+      const res = await fetch('/api/summarize-attachment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachment_id: id, project_id: email.project_id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Summarisation failed');
+      newlyConfirmed.add(id);
+    }
+    setConfirmedIds(prev => new Set([...prev, ...newlyConfirmed]));
+  };
 
   const handleSave = async () => {
-    if (!selected) return;
-    setSaving(true);
+    if (!selected.size) return;
+    setBusy(true);
     try {
-      await linkEmailToProject(email, selected, 'manual_attachment_popup');
-      setDone(true);
-      onDismiss?.();
+      await saveSelected();
+      onDismiss?.(); // Save closes the popup, per spec
     } catch (err) {
-      console.warn('Attachment project link failed:', err?.message || err);
-      alert('Could not link this email to the project. Please try again.');
+      setError(err.message);
     }
-    setSaving(false);
+    setBusy(false);
+  };
+
+  const handleSummarize = async () => {
+    if (!selected.size) return;
+    setBusy(true);
+    try {
+      await summarizeSelected();
+      // Summarize alone stays open, per spec — lets the user reselect
+      // and save afterward if they choose to.
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
+  };
+
+  const handleSaveAndSummarize = async () => {
+    if (!selected.size) return;
+    setBusy(true);
+    try {
+      await summarizeSelected();
+      await saveSelected();
+      onDismiss?.(); // closes, since it includes Save
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
   };
 
   return (
     <div style={{
       position: 'absolute', right: 16, top: 60, zIndex: 200,
       background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 14, padding: '16px 18px', width: 300,
+      borderRadius: 14, padding: '16px 18px', width: 320,
       boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 16 }}>📎</span>
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>Save attachment?</span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>Save or summarise attachments</span>
       </div>
-      <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.6 }}>
-        This email has attachments. Link it to a project to keep them organised.
-      </div>
-      <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text3)', marginBottom: 6 }}>Save to project:</div>
-      <select value={selected} onChange={e => setSelected(e.target.value)}
-        style={{ width: '100%', padding: '6px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', marginBottom: 12, cursor: 'pointer' }}>
-        <option value="">— Select project —</option>
-        {projects.map(p => (
-          <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
+
+      {!email?.project_id && (
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>
+          Link this email to a project to enable summarising. Saving to OneDrive also needs a linked project.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 180, overflowY: 'auto' }}>
+        {realAttachments.map(att => (
+          <label key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={selected.has(att.id)} onChange={() => toggle(att.id)} />
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+              {att.filename}
+            </span>
+            {confirmedIds.has(att.id) && (
+              <span title="Summarised" style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 16, height: 16, borderRadius: '50%', background: '#22c55e',
+                color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0,
+              }}>✓</span>
+            )}
+          </label>
         ))}
-      </select>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={handleSave} disabled={!selected || saving}
-          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: selected ? 'pointer' : 'not-allowed', opacity: selected ? 1 : 0.5 }}>
-          {saving ? 'Saving…' : 'Link to project'}
+      </div>
+
+      {error && <div style={{ fontSize: 11.5, color: 'var(--red, #ef4444)', marginBottom: 10 }}>{error}</div>}
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <button onClick={handleSave} disabled={!selected.size || busy || !email?.project_id}
+          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--text)', opacity: (!selected.size || !email?.project_id) ? 0.5 : 1 }}>
+          Save
         </button>
-        <button onClick={() => { setDone(true); onDismiss?.(); }}
-          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
-          Dismiss
+        <button onClick={handleSummarize} disabled={!selected.size || busy || !email?.project_id}
+          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--text)', opacity: (!selected.size || !email?.project_id) ? 0.5 : 1 }}>
+          Summarise
+        </button>
+        <button onClick={handleSaveAndSummarize} disabled={!selected.size || busy || !email?.project_id}
+          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!selected.size || !email?.project_id) ? 0.5 : 1 }}>
+          {busy ? '…' : 'Both'}
         </button>
       </div>
+      <button onClick={() => onDismiss?.()}
+        style={{ width: '100%', padding: '6px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', fontSize: 12, cursor: 'pointer', color: 'var(--text3)' }}>
+        Dismiss
+      </button>
     </div>
   );
 }
@@ -1447,9 +1554,13 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [showSavePopup, setShowSavePopup]   = useState(false);
   const dropRef = useRef(null);
 
-  // Show save popup automatically when email has attachments and is unlinked
+  // Fixed 2026-08-08: previously only shown for unlinked emails, since
+  // its only real action was project-linking. Now shows for any email
+  // with attachments regardless of link status, since save/summarize
+  // are now real actions that make sense whether or not the email is
+  // already linked (linking is still offered inline if it isn't).
   useEffect(() => {
-    if (email?.has_attachments && email?.link_status === 'unlinked') {
+    if (email?.has_attachments) {
       setShowSavePopup(true);
     } else {
       setShowSavePopup(false);
@@ -1468,7 +1579,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
-      {showSavePopup && <SaveAttachmentPopup email={email} onDismiss={() => setShowSavePopup(false)} />}
+      {showSavePopup && <SaveAttachmentPopup email={email} attachments={attachments} onDismiss={() => setShowSavePopup(false)} />}
       <ProjectLinkBanner email={email} onLinked={(projectId) => onEmailLinked?.(email, projectId)} />
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
