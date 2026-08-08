@@ -1087,7 +1087,7 @@ async function runV2Pipeline({
     })),
     projectMemory: [...directProjectMemory, ...supplementalMemoryFromSearch],
     projectChatHistory,
-    chatHistory: (chatHistory || []).slice(-20).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
+    chatHistory: (chatHistory || []).slice(-40).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
   };
   const workingMemory = assembleWorkingMemory(rawSources);
 

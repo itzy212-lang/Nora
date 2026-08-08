@@ -540,23 +540,23 @@ describe('chatHistory per-category cap keeps the most recent turns, not the olde
     expect(includedIds).toEqual(twelveInOrder.map(h => h.id));
   });
 
-  it('reproduces the exact real session pattern at its actual raised cap (20): the most recent turns survive, not the oldest of the window', () => {
+  it('reproduces the exact real session pattern at its actual raised cap (40): the most recent turns survive, not the oldest of the window', () => {
     // Matches the real conversation exactly: a longer chronological
     // chatHistory array than the cap. Confirmed against a real session
     // where the old slice(0, N) kept the oldest N and dropped the most
     // recent — this silently dropped a trespass/context argument and
     // half of a fees argument, both near the end of a long collaboration.
-    const twentyFiveInOrder = Array.from({ length: 25 }, (_, i) => ({
+    const fiftyInOrder = Array.from({ length: 50 }, (_, i) => ({
       id: `h${i}`, content: `turn ${i}`, evidential_status: 'chat',
     }));
-    const result = assembleWorkingMemory({ chatHistory: twentyFiveInOrder });
+    const result = assembleWorkingMemory({ chatHistory: fiftyInOrder });
     const includedIds = result.included.filter(i => i.category === 'chatHistory').map(i => i.source_id);
-    expect(includedIds.length).toBe(20);
-    expect(includedIds).toEqual(twentyFiveInOrder.slice(-20).map(h => h.id)); // last 20, not first 20
+    expect(includedIds.length).toBe(40);
+    expect(includedIds).toEqual(fiftyInOrder.slice(-40).map(h => h.id)); // last 40, not first 40
   });
 
   it('the chatHistory item cap is specifically raised to 20 (2026-08-08, on request) — a real, deliberate override, not the shared default of 8', () => {
-    expect(CATEGORY_MAX_ITEMS.chatHistory).toBe(20);
+    expect(CATEGORY_MAX_ITEMS.chatHistory).toBe(40);
   });
 
   it('semanticResults (relevance-ranked, not chronological) is unaffected — still keeps the first N, since "first" means "most relevant" there', () => {

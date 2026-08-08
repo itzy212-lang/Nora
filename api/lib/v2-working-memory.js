@@ -44,7 +44,13 @@ const DEFAULT_MAX_ITEMS_PER_CATEGORY = 8;
 // produces few items regardless of this ceiling; this only matters once
 // a conversation is long enough to hit it.
 const CATEGORY_MAX_ITEMS = Object.freeze({
-  chatHistory: 20,
+  chatHistory: 40, // raised 2026-08-08: temporary diagnostic increase, to
+  // isolate whether a real content-quality problem is a context-window
+  // issue or a Universal Brain issue, by removing the window as a
+  // variable entirely for one real test. 40 matches the true ceiling —
+  // src/hooks/useEly.js already caps the raw chatHistory array at 40
+  // messages for project_chat before this file ever sees it, so this is
+  // the maximum meaningfully available without also raising that cap.
 });
 const DEFAULT_MAX_TOTAL_CHARS = 80000; // raised from 40000 (2026-08-06): a real session
 // hit this cap mid-conversation (peaked at 37,078 chars, 2 items dropped for budget
