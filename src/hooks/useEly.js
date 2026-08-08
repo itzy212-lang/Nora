@@ -574,9 +574,13 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
           }).catch(() => {});
           // Extract key facts from substantive assistant responses into project memory
           if (assistantText.length > 200) {
+            const { data: { session: authSession5 } } = await sb.auth.getSession();
             fetch('/api/extract-email-memory', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...(authSession5?.access_token ? { 'Authorization': `Bearer ${authSession5.access_token}` } : {}),
+              },
               body: JSON.stringify({
                 project_id: effectiveProjectId,
                 subject: 'Project chat',

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -7,17 +8,55 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+function constantTimeEquals(a, b) {
+  const bufA = Buffer.from(String(a || ''), 'utf8');
+  const bufB = Buffer.from(String(b || ''), 'utf8');
+  const padded = Buffer.alloc(128);
+  bufA.copy(padded);
+  const paddedB = Buffer.alloc(128);
+  bufB.copy(paddedB);
+  return crypto.timingSafeEqual(padded, paddedB) && bufA.length === bufB.length;
+}
+
+// Fixed 2026-08-08: this endpoint had no authentication at all, in a
+// public repository — same class of gap already found and fixed twice
+// today (backfill-email-embeddings.js, api/embed.js). Closing it now
+// specifically because it's about to also be called automatically from
+// a database trigger, not just the frontend — leaving it open would
+// mean anyone who found it could run up OpenAI costs at will.
+//
+// Dual auth, since this endpoint has two legitimate caller types:
+// (1) the frontend, via a real user's Supabase auth session — checked
+//     the same way as every other user-facing endpoint in this app;
+// (2) the new automatic-extraction database trigger, which has no user
+//     session at all — authenticated via a separate secret stored in
+//     Supabase Vault, sent as a bearer token, compared in constant time.
+async function isAuthorised(req) {
+  const authHeader = req.headers?.authorization || req.headers?.Authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) return false;
+
+  const triggerSecret = process.env.EXTRACT_EMAIL_MEMORY_TRIGGER_SECRET;
+  if (triggerSecret && constantTimeEquals(token, triggerSecret)) return true;
+
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  return !error && !!user?.id;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!(await isAuthorised(req))) return res.status(401).json({ error: 'Unauthorized' });
 
   const { project_id, email_id, subject, body, direction, from_address, to_address, received_at } = req.body;
 
   if (!project_id || !body) {
     return res.status(400).json({ error: 'project_id and body required' });
+
   }
 
   try {

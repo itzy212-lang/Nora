@@ -1331,9 +1331,13 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   }}
                   onSaveToMemory={async (content) => {
                     if (!content || !projectId) return;
+                    const { data: { session: authSession } } = await supabase.auth.getSession();
                     fetch('/api/extract-email-memory', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(authSession?.access_token ? { 'Authorization': `Bearer ${authSession.access_token}` } : {}),
+                      },
                       body: JSON.stringify({
                         project_id: projectId,
                         subject: 'Project chat',

@@ -1985,9 +1985,13 @@ if (syncErr) throw syncErr;
     const replyEmail = replyToId ? state.emails?.find(e => e.id === replyToId) : null;
     const linkedProjectId = replyEmail?.project_id || selectedEmail?.project_id || state.selectedProjectId;
     if (linkedProjectId && emailBody) {
+      const { data: { session: authSession1 } } = await sb.auth.getSession();
       fetch('/api/extract-email-memory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authSession1?.access_token ? { 'Authorization': `Bearer ${authSession1.access_token}` } : {}),
+        },
         body: JSON.stringify({
           project_id: linkedProjectId,
           subject,
@@ -2021,7 +2025,7 @@ if (syncErr) throw syncErr;
   };
 
 
-  const handleEmailLinked = (email, projectId) => {
+  const handleEmailLinked = async (email, projectId) => {
     dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => {
       const sameEmail = e.id === email.id;
       const sameThread = email.thread_id && e.thread_id === email.thread_id;
@@ -2057,9 +2061,13 @@ if (syncErr) throw syncErr;
     // Fire GPT-4o extraction for the linked email (fire and forget)
     const emailBody = email.body || email.body_preview || '';
     if (projectId && emailBody) {
+      const { data: { session: authSession2 } } = await sb.auth.getSession();
       fetch('/api/extract-email-memory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authSession2?.access_token ? { 'Authorization': `Bearer ${authSession2.access_token}` } : {}),
+        },
         body: JSON.stringify({
           project_id: projectId,
           email_id: email.id,

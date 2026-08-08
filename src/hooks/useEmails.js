@@ -117,6 +117,7 @@ export function useEmails() {
             payload: [...newRows.map(normalizeEmail), ...(state.emails || [])],
           });
           // Extract facts from new project-linked emails (fire and forget)
+          const { data: { session: authSession3 } } = await sb.auth.getSession();
           newRows.forEach(email => {
             // Embed every new email (fire and forget) — enables semantic search
             fetch('/api/embed', {
@@ -128,7 +129,10 @@ export function useEmails() {
             if (email.project_id && (email.body || email.body_preview)) {
               fetch('/api/extract-email-memory', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(authSession3?.access_token ? { 'Authorization': `Bearer ${authSession3.access_token}` } : {}),
+                },
                 body: JSON.stringify({
                   project_id: email.project_id,
                   email_id: email.id,
@@ -302,9 +306,13 @@ export function useEmails() {
 
     // Extract key facts into project memory in the background (fire and forget)
     if (projectId) {
+      const { data: { session: authSession4 } } = await sb.auth.getSession();
       fetch('/api/extract-email-memory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authSession4?.access_token ? { 'Authorization': `Bearer ${authSession4.access_token}` } : {}),
+        },
         body: JSON.stringify({
           project_id: projectId,
           email_id: savedEmailId,
