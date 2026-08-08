@@ -392,12 +392,31 @@ function assembleWorkingMemory(rawSources, opts = {}) {
   let runningChars = 0;
   const categoryChars = {};
 
+  // Fixed 2026-08-08 (real, confirmed loss): chatHistory is chronological
+  // (oldest-first), unlike relevance-ranked categories such as
+  // semanticResults where "first" correctly means "most relevant". Taking
+  // the first N items of a chronological array silently drops the most
+  // RECENT turns once a conversation exceeds the per-category cap —
+  // confirmed against a real session where this dropped the two most
+  // recent, substantively developed arguments (a trespass/context
+  // argument and half of a fees argument) from what Terra actually saw
+  // for the final draft request, while an equal number of older,
+  // already-superseded turns were kept instead.
+  const CHRONOLOGICAL_KEEP_MOST_RECENT = new Set(['chatHistory']);
+
   for (const category of CATEGORY_PRIORITY) {
     const items = Array.isArray(rawSources[category]) ? rawSources[category] : [];
     const deduped = dedupeByKey(items, (it) => it.id || it.source_id || null);
     // Protected categories are never capped by item count — only by the
     // shared character budget below, same as everything else.
-    const limited = PROTECTED_CATEGORIES.includes(category) ? deduped : deduped.slice(0, maxPerCategory);
+    let limited;
+    if (PROTECTED_CATEGORIES.includes(category)) {
+      limited = deduped;
+    } else if (CHRONOLOGICAL_KEEP_MOST_RECENT.has(category)) {
+      limited = deduped.slice(-maxPerCategory);
+    } else {
+      limited = deduped.slice(0, maxPerCategory);
+    }
 
     for (const raw of deduped) {
       if (!limited.includes(raw)) {

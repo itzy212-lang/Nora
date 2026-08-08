@@ -529,3 +529,28 @@ describe('extractCurrentDraftState — requires confirmed draft, never infers fr
     expect(extractCurrentDraftState(['not a string'])).toEqual([]);
   });
 });
+
+describe('chatHistory per-category cap keeps the most recent turns, not the oldest (2026-08-08, real confirmed loss)', () => {
+  it('reproduces the exact real session pattern: the two most recent exchanges must survive, not the two oldest of the window', () => {
+    // Matches the real conversation exactly: 12 chronological chatHistory
+    // items, cap of 8. Before the fix, slice(0,8) kept items 1-8 (oldest)
+    // and dropped 9-12 (most recent) — confirmed against a real session
+    // where this silently dropped a trespass/context argument and half
+    // of a fees argument, both from the end of a long collaboration.
+    const twelveInOrder = Array.from({ length: 12 }, (_, i) => ({
+      id: `h${i}`, content: `turn ${i}`, evidential_status: 'chat',
+    }));
+    const result = assembleWorkingMemory({ chatHistory: twelveInOrder }, { maxItemsPerCategory: 8 });
+    const includedIds = result.included.filter(i => i.category === 'chatHistory').map(i => i.source_id);
+    expect(includedIds).toEqual(['h4', 'h5', 'h6', 'h7', 'h8', 'h9', 'h10', 'h11']); // last 8, not first 8
+  });
+
+  it('semanticResults (relevance-ranked, not chronological) is unaffected — still keeps the first N, since "first" means "most relevant" there', () => {
+    const tenRanked = Array.from({ length: 10 }, (_, i) => ({
+      id: `s${i}`, content: `result ${i}`, evidential_status: 'semantic_email',
+    }));
+    const result = assembleWorkingMemory({ semanticResults: tenRanked }, { maxItemsPerCategory: 8 });
+    const includedIds = result.included.filter(i => i.category === 'semanticResults').map(i => i.source_id);
+    expect(includedIds).toEqual(['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7']); // first 8, unchanged behaviour
+  });
+});
