@@ -32,6 +32,20 @@
 //      own separate slicing too.
 
 const DEFAULT_MAX_ITEMS_PER_CATEGORY = 8;
+
+// Per-category item-count overrides (2026-08-08, on request): most
+// categories are fine at the default 8, but chatHistory needs headroom
+// for genuinely complex, long collaborations — confirmed against a real
+// 31-message session where the default cap, even after fixing which end
+// of the window it kept (see the ordering fix above), still only
+// surfaced 8 of the conversation's turns. Raised specifically for
+// chatHistory rather than the global default, so simple conversations
+// don't pay any extra token cost — a short conversation naturally
+// produces few items regardless of this ceiling; this only matters once
+// a conversation is long enough to hit it.
+const CATEGORY_MAX_ITEMS = Object.freeze({
+  chatHistory: 20,
+});
 const DEFAULT_MAX_TOTAL_CHARS = 80000; // raised from 40000 (2026-08-06): a real session
 // hit this cap mid-conversation (peaked at 37,078 chars, 2 items dropped for budget
 // reasons). Doubled for headroom. Other prompt sections (Universal Brain ~15.7k,
@@ -407,15 +421,16 @@ function assembleWorkingMemory(rawSources, opts = {}) {
   for (const category of CATEGORY_PRIORITY) {
     const items = Array.isArray(rawSources[category]) ? rawSources[category] : [];
     const deduped = dedupeByKey(items, (it) => it.id || it.source_id || null);
+    const categoryMax = opts.categoryMaxItems?.[category] ?? CATEGORY_MAX_ITEMS[category] ?? maxPerCategory;
     // Protected categories are never capped by item count — only by the
     // shared character budget below, same as everything else.
     let limited;
     if (PROTECTED_CATEGORIES.includes(category)) {
       limited = deduped;
     } else if (CHRONOLOGICAL_KEEP_MOST_RECENT.has(category)) {
-      limited = deduped.slice(-maxPerCategory);
+      limited = deduped.slice(-categoryMax);
     } else {
-      limited = deduped.slice(0, maxPerCategory);
+      limited = deduped.slice(0, categoryMax);
     }
 
     for (const raw of deduped) {
@@ -467,6 +482,7 @@ export {
   CATEGORY_PRIORITY,
   PROTECTED_CATEGORIES,
   CATEGORY_BUDGETS,
+  CATEGORY_MAX_ITEMS,
   DEFAULT_MAX_ITEMS_PER_CATEGORY,
   DEFAULT_MAX_TOTAL_CHARS,
   DRAFT_LENGTH_THRESHOLD,
