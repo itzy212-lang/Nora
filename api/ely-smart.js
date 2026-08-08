@@ -1673,10 +1673,11 @@ function looksLikeAmendmentInstruction(prompt = '') {
   // Catches instructions to modify/add/change a draft that's already been produced
   return (
     /\badd (the|a|that|this|some|more)\b/i.test(p) ||
-    /\binclude (the|a|that|this)\b/i.test(p) ||
+    /\binclude (the|a|that|this|it)\b/i.test(p) ||
     /\btake out\b/i.test(p) ||
     /\bremove (the|a|that)\b/i.test(p) ||
-    /\bchange (the|a|that|this)\b/i.test(p) ||
+    /\bchange (the|a|that|this|anything)\b/i.test(p) ||
+    /\bdon'?t change\b/i.test(p) ||
     /\bmake it\b/i.test(p) ||
     /\bkeep it\b/i.test(p) ||
     /\bshorter\b/i.test(p) ||
@@ -1688,7 +1689,16 @@ function looksLikeAmendmentInstruction(prompt = '') {
     /\bsay that\b/i.test(p) ||
     /\bcheck if\b/i.test(p) ||
     /\bseems (too|quite|very)\b/i.test(p) ||
-    /\bthat('?s| is) (too|quite|very|not|wrong|correct|right|accurate|small|large|big)\b/i.test(p)
+    /\bthat('?s| is) (too|quite|very|not|wrong|correct|right|accurate|small|large|big)\b/i.test(p) ||
+    // Fixed 2026-08-08 (real, confirmed miss): these three patterns
+    // specifically cover the exact real message that exposed this gap
+    // — "1 minor change I need to make is...", "just that one",
+    // "don't change anything else" — none of the existing patterns
+    // matched any of them, so mode came back as 'discuss' for a
+    // message that was unmistakably a targeted amendment instruction.
+    /\b(one|1|a|single) (minor|small|quick) (change|amendment|tweak|edit)\b/i.test(p) ||
+    /\bjust (that one|this one|that|this)\b/i.test(p) ||
+    /\bonly (change|amend) (that|this|the)\b/i.test(p)
   );
 }
 

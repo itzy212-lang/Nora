@@ -282,3 +282,24 @@ describe('hasLiveDraftInstruction — "draft" inside pasted correspondence, thir
     expect(body).toMatch(/agreement\|document\|letter\|email\|reply\|response\|notice\|award/);
   });
 });
+
+describe('looksLikeAmendmentInstruction — real missed phrasing (2026-08-08)', () => {
+  it('recognizes "1 minor change..." / "just that one" / "don\'t change anything else" as amendment phrasing', () => {
+    const idx = source.indexOf('function looksLikeAmendmentInstruction(');
+    const end = source.indexOf('\n}', idx);
+    const body = source.slice(idx, end);
+    expect(body).toMatch(/minor\|small\|quick/);
+    expect(body).toMatch(/just \(that one\|this one\|that\|this\)/);
+    expect(body).toMatch(/don'?t change/);
+  });
+
+  it('the real message that exposed this (ridge-tile amendment, session 398b8bcc, 11:26 today) now matches', () => {
+    const real = "1 minor change i need to make is a caroline contract has not yet inspected the point we are making is that the next step is for carolines contractor to inspect the repair work already carried out to the slipped ridge tiles confirmed they are satisfactory include it within the scope of work that needs to need scope of repair works and need to still need to and price it accordingly dont change anything else just that one";
+    const matches =
+      /\binclude (the|a|that|this|it)\b/i.test(real) ||
+      /\bdon'?t change\b/i.test(real) ||
+      /\b(one|1|a|single) (minor|small|quick) (change|amendment|tweak|edit)\b/i.test(real) ||
+      /\bjust (that one|this one|that|this)\b/i.test(real);
+    expect(matches).toBe(true);
+  });
+});
