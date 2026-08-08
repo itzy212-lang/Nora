@@ -106,6 +106,18 @@ ${body.slice(0, 6000)}`;
       }),
     });
     const openaiData = await openaiRes.json();
+    // Fixed 2026-08-08: a genuine OpenAI API failure (bad key, no
+    // credits, rate limit) previously produced openaiData.choices being
+    // undefined, which silently fell through to '[]' — indistinguishable
+    // from a real 'nothing worth extracting' result. Found while testing
+    // the new automatic-extraction trigger live: two real test emails
+    // with clear, extractable facts both returned 'No facts extracted',
+    // with no way to tell whether that was genuinely true or an API
+    // failure being swallowed. Now surfaced explicitly.
+    if (!openaiRes.ok) {
+      console.error('[extract-email-memory] OpenAI call failed:', openaiData?.error?.message || JSON.stringify(openaiData));
+      return res.status(502).json({ error: 'Extraction model call failed', detail: openaiData?.error?.message || 'unknown' });
+    }
     const raw = openaiData.choices?.[0]?.message?.content?.trim() || '[]';
     
     let facts = [];
