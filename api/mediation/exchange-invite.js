@@ -52,18 +52,20 @@ export default async function handler(req, res) {
 
     if (sessionError) throw sessionError;
 
-    const { error: updateError } = await sb
+    const { data: claimedParticipant, error: updateError } = await sb
       .from('mediation_participants')
       .update({
         invitation_accepted_at: nowIso,
         invitation_used_at: nowIso,
       })
       .eq('id', participant.id)
-      .is('invitation_used_at', null);
+      .is('invitation_used_at', null)
+      .select('id')
+      .maybeSingle();
 
-    if (updateError) {
+    if (updateError || !claimedParticipant) {
       await sb.from('mediation_access_sessions').delete().eq('id', session.id);
-      throw updateError;
+      return res.status(401).json({ error: 'Invitation has already been used' });
     }
 
     const [{ data: party }, { data: mediation }, { data: room }] = await Promise.all([
