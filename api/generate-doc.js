@@ -3,6 +3,7 @@ import Docxtemplater from 'docxtemplater';
 import { createClient } from '@supabase/supabase-js';
 import { uploadToOneDrive } from './onedrive-helper.js';
 
+// Award notice history is reconstructed server-side so all notice runs are available to templates.
 function getServerClient(){const url=process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)return null;return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false,detectSessionInUrl:false}});}
 function serialiseError(error){if(!error)return null;return{message:error.message||null,name:error.name||null,stack:error.stack||null,properties:error.properties||null,errors:error.properties?.errors||null};}
 function serialiseDocxtemplaterErrors(error){const main=serialiseError(error);const nested=Array.isArray(error?.properties?.errors)?error.properties.errors.map(item=>serialiseError(item)):[];return{...main,nested_errors:nested};}
