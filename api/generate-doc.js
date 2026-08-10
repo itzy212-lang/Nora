@@ -3,175 +3,41 @@ import Docxtemplater from 'docxtemplater';
 import { createClient } from '@supabase/supabase-js';
 import { uploadToOneDrive } from './onedrive-helper.js';
 
-function getServerClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } });
+function getServerClient(){const url=process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)return null;return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false,detectSessionInUrl:false}});}
+function serialiseError(error){if(!error)return null;return{message:error.message||null,name:error.name||null,stack:error.stack||null,properties:error.properties||null,errors:error.properties?.errors||null};}
+function serialiseDocxtemplaterErrors(error){const main=serialiseError(error);const nested=Array.isArray(error?.properties?.errors)?error.properties.errors.map(item=>serialiseError(item)):[];return{...main,nested_errors:nested};}
+function clean(value){return value===undefined||value===null?'':String(value).trim();}
+function ordinalSuffix(day){const n=Number(day);if([11,12,13].includes(n%100))return'th';if(n%10===1)return'st';if(n%10===2)return'nd';if(n%10===3)return'rd';return'th';}
+function longDate(value){if(!value)return'';const[y,m,d]=String(value).slice(0,10).split('-').map(Number);if(!y||!m||!d)return clean(value);const dt=new Date(y,m-1,d);return`${d}${ordinalSuffix(d)} ${dt.toLocaleString('en-GB',{month:'long'})} ${y}`;}
+function section2Subs(raw){if(!raw)return'';return String(raw).split(',').map(v=>v.trim()).filter(Boolean).map(v=>`(${v})`).join('');}
+function sectionsForRun(run={}){const parts=[];if(run.section_6)parts.push('6(1)');if(run.section_1)parts.push('1(5)');if(run.section_2)parts.push(`2(2)${section2Subs(run.section_2_subsections)}`);if(run.section_3&&!run.section_2)parts.push('3');if(!parts.length)return'';if(parts.length===1)return`Section ${parts[0]}`;const last=parts.pop();return`Sections ${parts.join(', ')} and ${last}`;}
+function joinHuman(items){const a=items.filter(Boolean);if(!a.length)return'';if(a.length===1)return a[0];if(a.length===2)return`${a[0]} and ${a[1]}`;return`${a.slice(0,-1).join(', ')} and ${a[a.length-1]}`;}
+function normaliseNoticeRow(row={}){const sections=Array.isArray(row.sections)?row.sections:[];return{...row,section_1:Boolean(row.section_1||sections.includes('s1')),section_2:Boolean(row.section_2||sections.includes('s2')),section_3:Boolean(row.section_3||sections.includes('s3')),section_6:Boolean(row.section_6||sections.includes('s6')),section_10:Boolean(row.section_10||sections.includes('s10'))};}
+function noticeKey(row){const r=normaliseNoticeRow(row);return[clean(r.notice_date),r.section_1?'1':'',r.section_2?'2':'',r.section_3?'3':'',r.section_6?'6':'',clean(r.section_2_subsections)].join('|');}
+function buildNoticeMerge(runs=[]){const ordered=[...runs].map(normaliseNoticeRow).filter(r=>r.notice_date&&!r.section_10).sort((a,b)=>String(a.notice_date).localeCompare(String(b.notice_date))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const out={};ordered.forEach((r,i)=>{const n=i+1;out[`NOTICE_RUN_${n}_SECTIONS`]=sectionsForRun(r);out[`NOTICE_RUN_${n}_DATE`]=longDate(r.notice_date);out[`notice_run_${n}_sections`]=out[`NOTICE_RUN_${n}_SECTIONS`];out[`notice_run_${n}_date`]=out[`NOTICE_RUN_${n}_DATE`];});
+  const phrases=ordered.map(sectionsForRun).filter(Boolean);let fullRuns='';if(phrases.length){fullRuns=phrases[0];for(let i=1;i<phrases.length;i++)fullRuns+=` and a further Notice under ${phrases[i]}`;}
+  const dates=ordered.map(r=>longDate(r.notice_date)).filter(Boolean);const fullDates=dates.length>1?`${joinHuman(dates)} respectively`:(dates[0]||'');
+  out.FULL_NOTICE_RUNS=fullRuns;out.full_notice_runs=fullRuns;out.FULL_NOTICE_DATES=fullDates;out.full_notice_dates=fullDates;
+  if(ordered[0]){out.NOTICE_SECTION_FULL=sectionsForRun(ordered[0]);out.notice_section_full=out.NOTICE_SECTION_FULL;out.NOTICE_DATE=longDate(ordered[0].notice_date);out.notice_date=out.NOTICE_DATE;}
+  return out;
 }
+async function enrichAwardNoticeHistory(mergeData={}){const projectId=clean(mergeData.project_id||mergeData.PROJECT_ID);const aoId=clean(mergeData.AO_ID||mergeData.ao_id);if(!projectId||!aoId)return mergeData;const sb=getServerClient();if(!sb)return mergeData;
+  try{const[{data:rows,error:noticeError},{data:project,error:projectError}]=await Promise.all([
+    sb.from('notices').select('id,project_id,ao_id,run_number,notice_date,status,section_1,section_2,section_3,section_6,section_10,section_2_subsections,created_at').eq('project_id',projectId).eq('ao_id',aoId).eq('status','served'),
+    sb.from('projects').select('notices').eq('id',projectId).maybeSingle()
+  ]);
+    if(noticeError)throw noticeError;if(projectError)throw projectError;
+    const legacy=(Array.isArray(project?.notices)?project.notices:[]).filter(n=>clean(n.ao_id)===aoId&&clean(n.status).toLowerCase()==='served');
+    const dedup=new Map();for(const row of [...(rows||[]),...legacy]){const key=noticeKey(row);if(!dedup.has(key))dedup.set(key,row);}
+    const merged=buildNoticeMerge([...dedup.values()]);
+    console.log('[generate-doc] canonical award notice history',{projectId,aoId,dbRows:(rows||[]).length,legacyRows:legacy.length,dedupedRuns:dedup.size,FULL_NOTICE_RUNS:merged.FULL_NOTICE_RUNS||'',FULL_NOTICE_DATES:merged.FULL_NOTICE_DATES||''});
+    return{...mergeData,...merged};
+  }catch(error){console.warn('[generate-doc] Could not enrich award notice history:',error?.message||error);return mergeData;}}
+function ensureFullNoticePlaceholders(tdata){let fullRuns=clean(tdata.FULL_NOTICE_RUNS||tdata.full_notice_runs);let fullDates=clean(tdata.FULL_NOTICE_DATES||tdata.full_notice_dates);const runSections=[];const runDates=[];for(let i=1;i<=10;i++){const s=clean(tdata[`NOTICE_RUN_${i}_SECTIONS`]||tdata[`notice_run_${i}_sections`]);const d=clean(tdata[`NOTICE_RUN_${i}_DATE`]||tdata[`notice_run_${i}_date`]);if(s)runSections.push(s);if(d)runDates.push(d);}if(!fullRuns&&runSections.length){fullRuns=runSections[0];for(let i=1;i<runSections.length;i++)fullRuns+=` and a further Notice under ${runSections[i]}`;}if(!fullDates&&runDates.length){fullDates=joinHuman(runDates)+(runDates.length>1?' respectively':'');}if(!fullRuns)fullRuns=clean(tdata.NOTICE_SECTION_FULL||tdata.NOTICE_SECTION||tdata.notice_section_full||tdata.notice_section);if(!fullDates)fullDates=clean(tdata.NOTICE_DATE||tdata.notice_date);tdata.FULL_NOTICE_RUNS=fullRuns;tdata.full_notice_runs=fullRuns;tdata.FULL_NOTICE_DATES=fullDates;tdata.full_notice_dates=fullDates;return tdata;}
+function normaliseMergeData(mergeData={}){const tdata={};Object.keys(mergeData||{}).forEach(key=>{const cleanKey=String(key).replace(/^\{\{/,'').replace(/\}\}$/,'').trim();const value=mergeData[key];tdata[cleanKey]=value===undefined||value===null?'':value;});return ensureFullNoticePlaceholders(tdata);}
+function renderDocx(templateB64,mergeData={}){const zip=new PizZip(Buffer.from(templateB64,'base64'));const doc=new Docxtemplater(zip,{paragraphLoop:true,linebreaks:true,delimiters:{start:'{{',end:'}}'},nullGetter:()=>''});const tdata=normaliseMergeData(mergeData);console.log('[generate-doc] award notice merge',{FULL_NOTICE_RUNS:tdata.FULL_NOTICE_RUNS||'',FULL_NOTICE_DATES:tdata.FULL_NOTICE_DATES||'',NOTICE_RUN_1_SECTIONS:tdata.NOTICE_RUN_1_SECTIONS||'',NOTICE_RUN_1_DATE:tdata.NOTICE_RUN_1_DATE||'',NOTICE_RUN_2_SECTIONS:tdata.NOTICE_RUN_2_SECTIONS||'',NOTICE_RUN_2_DATE:tdata.NOTICE_RUN_2_DATE||''});doc.render(tdata);const buffer=doc.getZip().generate({type:'nodebuffer',compression:'DEFLATE'});return{buffer,tdata};}
+async function convertDocxToPdf(docxBuffer,fileName='document.docx'){const apiKey=process.env.API2PDF_API_KEY;if(!apiKey){console.error('[generate-doc] API2PDF_API_KEY is not set.');return null;}const supabase=getServerClient();if(!supabase){console.error('[generate-doc] Supabase admin client is not available.');return null;}const safeFileName=String(fileName||'document.docx').replace(/[^a-zA-Z0-9._-]/g,'_').replace(/_+/g,'_');const tempPath=`temp/pdf-conversion/${Date.now()}-${safeFileName.toLowerCase().endsWith('.docx')?safeFileName:`${safeFileName}.docx`}`;const pdfFileName=safeFileName.replace(/\.docx$/i,'.pdf');try{const{error:uploadError}=await supabase.storage.from('documents').upload(tempPath,docxBuffer,{contentType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',upsert:true});if(uploadError){console.error('[generate-doc] Temporary DOCX upload failed:',uploadError.message);return null;}const{data:signedData,error:signedError}=await supabase.storage.from('documents').createSignedUrl(tempPath,300);if(signedError||!signedData?.signedUrl){console.error('[generate-doc] Temporary signed URL failed:',signedError?.message||'No signed URL returned');return null;}const pdfResponse=await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf',{method:'POST',headers:{Authorization:apiKey,'Content-Type':'application/json'},body:JSON.stringify({url:signedData.signedUrl,fileName:pdfFileName})});const pdfJson=await pdfResponse.json().catch(()=>({}));if(!pdfResponse.ok||!pdfJson?.FileUrl){console.error('[generate-doc] API2PDF conversion failed:',pdfResponse.status,JSON.stringify(pdfJson));return null;}const converted=await fetch(pdfJson.FileUrl);if(!converted.ok){console.error('[generate-doc] API2PDF PDF download failed:',converted.status);return null;}return Buffer.from(await converted.arrayBuffer()).toString('base64');}catch(error){console.error('[generate-doc] PDF conversion error:',error?.message||error);return null;}finally{try{await supabase.storage.from('documents').remove([tempPath]);}catch{}}}
+async function uploadRenderedDocx({rendered,mergeData,fileName,projectId}){if(!projectId)return null;try{const sb=getServerClient();if(!sb)return null;const{data:proj}=await sb.from('projects').select('onedrive_folder_id').eq('id',projectId).maybeSingle();const folderId=proj?.onedrive_folder_id;if(!folderId)return null;const result=await uploadToOneDrive({userId:mergeData?.user_id||'help@sq1consulting.co.uk',folderId,fileName,buffer:rendered.buffer,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});return result?.web_url||null;}catch(error){console.warn('[generate-doc] OneDrive upload failed (non-fatal):',error?.message||error);return null;}}
 
-function serialiseError(error) {
-  if (!error) return null;
-  return { message: error.message || null, name: error.name || null, stack: error.stack || null, properties: error.properties || null, errors: error.properties?.errors || null };
-}
-
-function serialiseDocxtemplaterErrors(error) {
-  const main = serialiseError(error);
-  const nested = Array.isArray(error?.properties?.errors) ? error.properties.errors.map(item => serialiseError(item)) : [];
-  return { ...main, nested_errors: nested };
-}
-
-function clean(value) {
-  return value === undefined || value === null ? '' : String(value).trim();
-}
-
-function joinHuman(values) {
-  const items = values.map(clean).filter(Boolean);
-  if (!items.length) return '';
-  if (items.length === 1) return items[0];
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
-
-function ensureFullNoticePlaceholders(tdata) {
-  let fullRuns = clean(tdata.FULL_NOTICE_RUNS || tdata.full_notice_runs);
-  let fullDates = clean(tdata.FULL_NOTICE_DATES || tdata.full_notice_dates);
-
-  const runSections = [];
-  const runDates = [];
-  for (let i = 1; i <= 10; i += 1) {
-    const sections = clean(tdata[`NOTICE_RUN_${i}_SECTIONS`] || tdata[`notice_run_${i}_sections`]);
-    const date = clean(tdata[`NOTICE_RUN_${i}_DATE`] || tdata[`notice_run_${i}_date`]);
-    if (sections) runSections.push(sections);
-    if (date) runDates.push(date);
-  }
-
-  if (!fullRuns && runSections.length) {
-    fullRuns = runSections[0];
-    for (let i = 1; i < runSections.length; i += 1) {
-      fullRuns += ` and a further Notice under ${runSections[i]}`;
-    }
-  }
-
-  if (!fullDates && runDates.length) {
-    fullDates = joinHuman(runDates);
-    if (runDates.length > 1) fullDates += ' respectively';
-  }
-
-  // Last-resort compatibility for older award calls which only supplied the legacy single-notice fields.
-  if (!fullRuns) fullRuns = clean(tdata.NOTICE_SECTION_FULL || tdata.NOTICE_SECTION || tdata.notice_section_full || tdata.notice_section);
-  if (!fullDates) fullDates = clean(tdata.NOTICE_DATE || tdata.notice_date);
-
-  tdata.FULL_NOTICE_RUNS = fullRuns;
-  tdata.full_notice_runs = fullRuns;
-  tdata.FULL_NOTICE_DATES = fullDates;
-  tdata.full_notice_dates = fullDates;
-
-  return tdata;
-}
-
-function normaliseMergeData(mergeData = {}) {
-  const tdata = {};
-  Object.keys(mergeData || {}).forEach(key => {
-    const cleanKey = String(key).replace(/^\{\{/, '').replace(/\}\}$/, '').trim();
-    const value = mergeData[key];
-    tdata[cleanKey] = value === undefined || value === null ? '' : value;
-  });
-  return ensureFullNoticePlaceholders(tdata);
-}
-
-function renderDocx(templateB64, mergeData = {}) {
-  const zip = new PizZip(Buffer.from(templateB64, 'base64'));
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, delimiters: { start: '{{', end: '}}' }, nullGetter: () => '' });
-  const tdata = normaliseMergeData(mergeData);
-  console.log('[generate-doc] award notice merge', {
-    FULL_NOTICE_RUNS: tdata.FULL_NOTICE_RUNS || '',
-    FULL_NOTICE_DATES: tdata.FULL_NOTICE_DATES || '',
-    NOTICE_RUN_1_SECTIONS: tdata.NOTICE_RUN_1_SECTIONS || '',
-    NOTICE_RUN_1_DATE: tdata.NOTICE_RUN_1_DATE || '',
-    NOTICE_RUN_2_SECTIONS: tdata.NOTICE_RUN_2_SECTIONS || '',
-    NOTICE_RUN_2_DATE: tdata.NOTICE_RUN_2_DATE || '',
-  });
-  doc.render(tdata);
-  const buffer = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-  return { buffer, tdata };
-}
-
-async function convertDocxToPdf(docxBuffer, fileName = 'document.docx') {
-  const apiKey = process.env.API2PDF_API_KEY;
-  if (!apiKey) { console.error('[generate-doc] API2PDF_API_KEY is not set.'); return null; }
-  const supabase = getServerClient();
-  if (!supabase) { console.error('[generate-doc] Supabase admin client is not available.'); return null; }
-  const safeFileName = String(fileName || 'document.docx').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
-  const tempPath = `temp/pdf-conversion/${Date.now()}-${safeFileName.toLowerCase().endsWith('.docx') ? safeFileName : `${safeFileName}.docx`}`;
-  const pdfFileName = safeFileName.replace(/\.docx$/i, '.pdf');
-  try {
-    const { error: uploadError } = await supabase.storage.from('documents').upload(tempPath, docxBuffer, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', upsert: true });
-    if (uploadError) { console.error('[generate-doc] Temporary DOCX upload failed:', uploadError.message); return null; }
-    const { data: signedData, error: signedError } = await supabase.storage.from('documents').createSignedUrl(tempPath, 300);
-    if (signedError || !signedData?.signedUrl) { console.error('[generate-doc] Temporary signed URL failed:', signedError?.message || 'No signed URL returned'); return null; }
-    const pdfResponse = await fetch('https://v2.api2pdf.com/libreoffice/any-to-pdf', { method: 'POST', headers: { Authorization: apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ url: signedData.signedUrl, fileName: pdfFileName }) });
-    const pdfJson = await pdfResponse.json().catch(() => ({}));
-    if (!pdfResponse.ok || !pdfJson?.FileUrl) { console.error('[generate-doc] API2PDF conversion failed:', pdfResponse.status, JSON.stringify(pdfJson)); return null; }
-    const converted = await fetch(pdfJson.FileUrl);
-    if (!converted.ok) { console.error('[generate-doc] API2PDF PDF download failed:', converted.status); return null; }
-    return Buffer.from(await converted.arrayBuffer()).toString('base64');
-  } catch (error) {
-    console.error('[generate-doc] PDF conversion error:', error?.message || error);
-    return null;
-  } finally {
-    try { await supabase.storage.from('documents').remove([tempPath]); } catch {}
-  }
-}
-
-async function uploadRenderedDocx({ rendered, mergeData, fileName, projectId }) {
-  if (!projectId) return null;
-  try {
-    const sb = getServerClient();
-    if (!sb) return null;
-    const { data: proj } = await sb.from('projects').select('onedrive_folder_id').eq('id', projectId).maybeSingle();
-    const folderId = proj?.onedrive_folder_id;
-    if (!folderId) return null;
-    const result = await uploadToOneDrive({ userId: mergeData?.user_id || 'help@sq1consulting.co.uk', folderId, fileName, buffer: rendered.buffer, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    return result?.web_url || null;
-  } catch (error) {
-    console.warn('[generate-doc] OneDrive upload failed (non-fatal):', error?.message || error);
-    return null;
-  }
-}
-
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
-
-  try {
-    const { template_b64, merge_data = {}, output_format = 'docx', save_to_onedrive = true } = req.body || {};
-    if (!template_b64) return res.status(400).json({ success: false, error: 'No template_b64 provided' });
-
-    let rendered;
-    try {
-      rendered = renderDocx(template_b64, merge_data);
-    } catch (renderError) {
-      const details = serialiseDocxtemplaterErrors(renderError);
-      console.error('[generate-doc] TEMPLATE RENDER ERROR:', JSON.stringify(details, null, 2));
-      return res.status(500).json({ success: false, error: renderError?.message || 'Template render failed', details });
-    }
-
-    const fileName = merge_data?.file_name || merge_data?.FILE_NAME || rendered?.tdata?.file_name || rendered?.tdata?.FILE_NAME || 'document.docx';
-    const wantsPdf = String(output_format).toLowerCase() === 'pdf';
-    const pdfB64 = wantsPdf ? await convertDocxToPdf(rendered.buffer, fileName) : null;
-    if (wantsPdf && !pdfB64) return res.status(502).json({ success: false, error: 'PDF conversion failed' });
-
-    const projectId = merge_data?.project_id || req.body?.project_id || null;
-    const oneDriveUrl = save_to_onedrive ? await uploadRenderedDocx({ rendered, mergeData: merge_data, fileName, projectId }) : null;
-
-    return res.status(200).json({ success: true, docx_b64: rendered.buffer.toString('base64'), pdf_b64: pdfB64, storage_path: null, doc_id: null, onedrive_url: oneDriveUrl });
-  } catch (error) {
-    const details = serialiseError(error);
-    console.error('[generate-doc] FATAL ERROR:', JSON.stringify(details, null, 2));
-    return res.status(500).json({ success: false, error: error?.message || 'Document generation failed', details });
-  }
-}
+export default async function handler(req,res){res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');if(req.method==='OPTIONS')return res.status(200).end();if(req.method!=='POST')return res.status(405).json({success:false,error:'Method not allowed'});try{const{template_b64,merge_data={},output_format='docx',save_to_onedrive=true}=req.body||{};if(!template_b64)return res.status(400).json({success:false,error:'No template_b64 provided'});const enrichedMergeData=await enrichAwardNoticeHistory(merge_data);let rendered;try{rendered=renderDocx(template_b64,enrichedMergeData);}catch(renderError){const details=serialiseDocxtemplaterErrors(renderError);console.error('[generate-doc] TEMPLATE RENDER ERROR:',JSON.stringify(details,null,2));return res.status(500).json({success:false,error:renderError?.message||'Template render failed',details});}const fileName=enrichedMergeData?.file_name||enrichedMergeData?.FILE_NAME||rendered?.tdata?.file_name||rendered?.tdata?.FILE_NAME||'document.docx';const wantsPdf=String(output_format).toLowerCase()==='pdf';const pdfB64=wantsPdf?await convertDocxToPdf(rendered.buffer,fileName):null;if(wantsPdf&&!pdfB64)return res.status(502).json({success:false,error:'PDF conversion failed'});const projectId=enrichedMergeData?.project_id||req.body?.project_id||null;const oneDriveUrl=save_to_onedrive?await uploadRenderedDocx({rendered,mergeData:enrichedMergeData,fileName,projectId}):null;return res.status(200).json({success:true,docx_b64:rendered.buffer.toString('base64'),pdf_b64:pdfB64,storage_path:null,doc_id:null,onedrive_url:oneDriveUrl});}catch(error){const details=serialiseError(error);console.error('[generate-doc] FATAL ERROR:',JSON.stringify(details,null,2));return res.status(500).json({success:false,error:error?.message||'Document generation failed',details});}}
