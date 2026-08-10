@@ -23,14 +23,11 @@ function ordinalSuffix(day) {
 
 function longDate(value) {
   if (!value) return '';
-
   try {
     const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
     if (!year || !month || !day) return clean(value);
-
     const date = new Date(year, month - 1, day);
     const monthName = date.toLocaleString('en-GB', { month: 'long' });
-
     return `${day}${ordinalSuffix(day)} ${monthName} ${year}`;
   } catch {
     return clean(value);
@@ -38,11 +35,7 @@ function longDate(value) {
 }
 
 function safeFilePart(value) {
-  return clean(value)
-    .replace(/[^\w\s.-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 90);
+  return clean(value).replace(/[^\w\s.-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90);
 }
 
 function aoAddress(ao = {}) {
@@ -70,43 +63,21 @@ function section104bDate(ao = {}, project = {}) {
 }
 
 function hasAgreedSurveyor(project = {}, ao = {}, options = {}) {
-  return Boolean(
-    options.agreedSurveyor ||
-    options.agreed_surveyor ||
-    ao.agreed_surveyor ||
-    ao.agreedSurveyor ||
-    ao.is_agreed_surveyor ||
-    project.agreed_surveyor ||
-    project.bo_agreed_surveyor
-  );
+  return Boolean(options.agreedSurveyor || options.agreed_surveyor || ao.agreed_surveyor || ao.agreedSurveyor || ao.is_agreed_surveyor || project.agreed_surveyor || project.bo_agreed_surveyor);
 }
 
 function hasSection104b(project = {}, ao = {}) {
   const status = clean(ao.status).toLowerCase();
-
-  return Boolean(
-    section104bDate(ao, project) ||
-    ao.s104b ||
-    ao.s10_4_b ||
-    ao.section_10_4_b ||
-    ao.appointed_under_s104b ||
-    status.includes('104b') ||
-    status.includes('10(4)(b)') ||
-    status.includes('10_4_b') ||
-    status === 's104b'
-  );
+  return Boolean(section104bDate(ao, project) || ao.s104b || ao.s10_4_b || ao.section_10_4_b || ao.appointed_under_s104b || status.includes('104b') || status.includes('10(4)(b)') || status.includes('10_4_b') || status === 's104b');
 }
 
 function detectAwardType(project = {}, ao = {}, options = {}) {
   const supplied = clean(options.awardType || options.award_type).toLowerCase();
-
   if (['agreed', 'agreed_surveyor', 'award_agreed_surveyor'].includes(supplied)) return 'agreed_surveyor';
   if (['s104b', '10_4_b', 'section_10_4_b', 'award_s104b'].includes(supplied)) return 's104b';
   if (['two_surveyor', 'standard', 'award_two_surveyor'].includes(supplied)) return 'two_surveyor';
-
   if (hasAgreedSurveyor(project, ao, options)) return 'agreed_surveyor';
   if (hasSection104b(project, ao)) return 's104b';
-
   return 'two_surveyor';
 }
 
@@ -123,49 +94,15 @@ function awardTypeLabel(type) {
 }
 
 function getSOCDate(project = {}, ao = {}, options = {}) {
-  return first(
-    options.socDate,
-    options.soc_date,
-    ao.soc_agreed_date,
-    ao.soc_date,
-    ao.schedule_of_condition_date,
-    ao.scheduleOfConditionDate,
-    project.soc_agreed_date,
-    project.soc_date,
-    project.schedule_of_condition_date,
-    project.scheduleOfConditionDate
-  );
+  return first(options.socDate, options.soc_date, ao.soc_agreed_date, ao.soc_date, ao.schedule_of_condition_date, ao.scheduleOfConditionDate, project.soc_agreed_date, project.soc_date, project.schedule_of_condition_date, project.scheduleOfConditionDate);
 }
 
 function getWorks(project = {}, ao = {}, options = {}) {
-  return first(
-    options.awardDealingWith,
-    options.award_dealing_with,
-    options.allNotifiableWorks,
-    options.all_notifiable_works,
-    options.notifiableWorks,
-    options.notifiable_works,
-    project.award_dealing_with,
-    project.all_notifiable_works,
-    project.notifiable_works,
-    project.works,
-    ao.notifiable_works,
-    ao.works
-  );
+  return first(options.awardDealingWith, options.award_dealing_with, options.allNotifiableWorks, options.all_notifiable_works, options.notifiableWorks, options.notifiable_works, project.award_dealing_with, project.all_notifiable_works, project.notifiable_works, project.works, ao.notifiable_works, ao.works);
 }
 
 function getThirdSurveyor(project = {}, ao = {}, options = {}) {
-  return first(
-    options.thirdSurveyor,
-    options.third_surveyor,
-    ao.third_surveyor,
-    ao.thirdSurveyor,
-    ao.third_surveyor_name,
-    project.third_surveyor,
-    project.thirdSurveyor,
-    project.selected_third_surveyor,
-    project.third_surveyor_name
-  );
+  return first(options.thirdSurveyor, options.third_surveyor, ao.third_surveyor, ao.thirdSurveyor, ao.third_surveyor_name, project.third_surveyor, project.thirdSurveyor, project.selected_third_surveyor, project.third_surveyor_name);
 }
 
 function getMoneyValue(...values) {
@@ -178,7 +115,6 @@ function getNotice2(project = {}, ao = {}, options = {}) {
   const section = first(options.notice2Section, options.notice_2_section, ao.notice_2_section, project.notice_2_section);
   const date = first(options.notice2Date, options.notice_2_date, ao.notice_2_date, project.notice_2_date);
   const hasNotice2 = Boolean(section || date);
-
   return {
     NOTICE_2_SECTION: section,
     NOTICE_2_DATE: longDate(date),
@@ -190,22 +126,73 @@ function getNotice2(project = {}, ao = {}, options = {}) {
   };
 }
 
+function formatSection2Subsections(raw) {
+  if (!raw) return '';
+  return String(raw).split(',').map(v => v.trim()).filter(Boolean).map(v => `(${v})`).join('');
+}
+
+function sectionsForRun(run = {}) {
+  const parts = [];
+  if (run.section_6) parts.push('6(1)');
+  if (run.section_1) parts.push('1(5)');
+  if (run.section_2) parts.push(`2(2)${formatSection2Subsections(run.section_2_subsections)}`);
+  if (run.section_3 && !run.section_2) parts.push('3');
+
+  if (!parts.length) return '';
+  if (parts.length === 1) return `Section ${parts[0]}`;
+  const last = parts.pop();
+  return `Sections ${parts.join(', ')} and ${last}`;
+}
+
+function buildFullNoticePlaceholders(noticeRuns = []) {
+  const runs = [...(noticeRuns || [])]
+    .filter(Boolean)
+    .sort((a, b) => (a.run_number || 1) - (b.run_number || 1));
+
+  if (!runs.length) {
+    return {
+      FULL_NOTICE_RUNS: '',
+      FULL_NOTICE_DATES: '',
+      full_notice_runs: '',
+      full_notice_dates: '',
+    };
+  }
+
+  const sectionPhrases = runs.map(sectionsForRun).filter(Boolean);
+  let fullRuns = '';
+  if (sectionPhrases.length) {
+    fullRuns = sectionPhrases[0];
+    for (let i = 1; i < sectionPhrases.length; i += 1) {
+      fullRuns += ` and a further Notice under ${sectionPhrases[i]}`;
+    }
+  }
+
+  const dates = runs.map(run => longDate(run.notice_date)).filter(Boolean);
+  let fullDates = '';
+  if (dates.length === 1) fullDates = dates[0];
+  if (dates.length > 1) fullDates = `${dates.slice(0, -1).join(', ')} and ${dates[dates.length - 1]} respectively`;
+
+  return {
+    FULL_NOTICE_RUNS: fullRuns,
+    FULL_NOTICE_DATES: fullDates,
+    full_notice_runs: fullRuns,
+    full_notice_dates: fullDates,
+  };
+}
+
 function addAliasFields(base) {
   const out = { ...base };
-
   Object.entries(base).forEach(([key, value]) => {
     out[key.toLowerCase()] = value;
     out[key.toUpperCase()] = value;
     out[`{{${key}}}`] = value;
     out[`{{${key.toUpperCase()}}}`] = value;
   });
-
   return out;
 }
 
 function validateAwardData({ awardType, placeholders }) {
   const missing = [];
-
   if (!placeholders.BO_NAME) missing.push('Building Owner name');
   if (!placeholders.BO_PREMISE) missing.push('Building Owner property address');
   if (!placeholders.BO_SERVICE_ADDRESS) missing.push('Building Owner service address');
@@ -226,7 +213,6 @@ function validateAwardData({ awardType, placeholders }) {
     if (!placeholders.SECTION_10_NOTICE_DATE) missing.push('Section 10 notice date');
     if (!placeholders.SECTION_10_4_B_DATE) missing.push('Section 10(4)(b) date');
   }
-
   return missing;
 }
 
@@ -238,21 +224,14 @@ function buildAwardFileName(ao = {}, awardType = 'two_surveyor') {
 export function buildAwardPlaceholders(project = {}, ao = {}, options = {}) {
   const awardType = detectAwardType(project, ao, options);
   const templateKey = templateKeyForAwardType(awardType);
-
   const noticeDate = noticeServedDate(ao, project) || first(options.noticeDate, options.notice_date) || todayIso();
   const section10Date = section10NoticeDate(ao, project);
   const section104bServedDate = section104bDate(ao, project);
   const socDate = getSOCDate(project, ao, options);
   const works = getWorks(project, ao, options);
+  const noticeRuns = options.noticeRuns || [];
 
-  const noticeSection = first(
-    options.noticeSection,
-    options.notice_section,
-    ao.notice_section,
-    project.notice_section,
-    project.notice_section_full,
-    'Section 1, Section 3 and/or Section 6'
-  );
+  const noticeSection = first(options.noticeSection, options.notice_section, ao.notice_section, project.notice_section, project.notice_section_full, 'Section 1, Section 3 and/or Section 6');
 
   const base = buildNoticePlaceholders(project, ao, {
     noticeType: awardType === 's104b' ? 's10' : 'award',
@@ -267,50 +246,35 @@ export function buildAwardPlaceholders(project = {}, ao = {}, options = {}) {
     AWARD_TYPE: awardType,
     AWARD_TYPE_LABEL: awardTypeLabel(awardType),
     AWARD_TEMPLATE_KEY: templateKey,
-
     AWARD_DATE: longDate(first(options.awardDate, options.award_date, todayIso())),
     AWARD_DATE_SHORT: first(options.awardDate, options.award_date, todayIso()),
-
     AO_SURVEYOR_NAME: awardType === 'agreed_surveyor' ? '' : aoSurveyorName(ao),
     AO_SURVEYOR_FIRM: awardType === 'agreed_surveyor' ? '' : aoSurveyorFirm(ao),
-
     THIRD_SURVEYOR: awardType === 'agreed_surveyor' ? '' : getThirdSurveyor(project, ao, options),
-
     SOC_AGREED_DATE: longDate(socDate),
     SOC_AGREED_DATE_SHORT: socDate,
-
     SECTION_10_NOTICE_DATE: longDate(section10Date),
     SECTION_10_NOTICE_DATE_SHORT: section10Date,
-
     SECTION_10_4_B_DATE: longDate(section104bServedDate),
     SECTION_10_4_B_DATE_SHORT: section104bServedDate,
     S104B_DATE: longDate(section104bServedDate),
     S104B_DATE_SHORT: section104bServedDate,
-
     SECTION_11_AMOUNT: getMoneyValue(options.section11Amount, options.section_11_amount, ao.section_11_amount, project.section_11_amount),
     SECURITY_AMOUNT: getMoneyValue(options.securityAmount, options.security_amount, ao.security_amount, project.security_amount),
-
     ALL_NOTIFIABLE_WORKS: works,
     AWARD_DEALING_WITH: works,
     NOTIFIABLE_WORKS: works,
     WORKS: works,
+    works_items: options.worksItems && options.worksItems.length ? options.worksItems : (works ? [{ item: works }] : []),
 
-    // Loop placeholder for bulleted works list — {#works_items}{item}{/works_items}
-    works_items: options.worksItems && options.worksItems.length
-      ? options.worksItems
-      : (works ? [{ item: works }] : []),
-
-    // Multi-run notice placeholders (NOTICE_RUN_1_SECTIONS, SECTION_2_SUBSECTIONS_RUN_1 etc.)
-    ...buildNoticeRunPlaceholders(options.noticeRuns || []),
+    // Individual run placeholders and the consolidated placeholders used by the current Award template.
+    ...buildNoticeRunPlaceholders(noticeRuns),
+    ...buildFullNoticePlaceholders(noticeRuns),
 
     ...getNotice2(project, ao, options),
   };
 
-  const placeholders = addAliasFields({
-    ...base,
-    ...extra,
-  });
-
+  const placeholders = addAliasFields({ ...base, ...extra });
   const missing = validateAwardData({ awardType, placeholders });
 
   return {
