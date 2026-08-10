@@ -6,6 +6,8 @@ if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !=
 }
 if (missing.length) throw new Error(`[phoenix-regression] missing env: ${missing.join(', ')}`);
 const { runStressSimulation } = await import('../api/mediation/run-stress-simulation.js');
-console.log('[phoenix-regression] starting 10-turn Terra simulation');
+console.log('[phoenix-regression] starting Hazelwood two-party Terra simulation with Phoenix dynamic conversation engine');
 const result = await runStressSimulation({ force: true });
-console.log(`[phoenix-regression] complete: ${result.transcript?.length || 0} turns stored; tokens=${result.usage?.total_tokens || 0}`);
+const a = result.partyA?.transcript?.length || 0;
+const b = result.partyB?.transcript?.length || 0;
+console.log(`[phoenix-regression] complete: Party A=${a} turns, Party B=${b} turns stored`);
