@@ -2,9 +2,22 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-// build: force rebuild 2026-05-29
+// Build-time integration keeps the large App.jsx stable while routing PM projects
+// through the enhanced responsive shell.
+const pmEnhancedShell = {
+  name: 'pm-enhanced-shell',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!id.endsWith('/src/App.jsx') && !id.endsWith('\\src\\App.jsx')) return null;
+    const from = "import PMProjectDetail from './components/projects/PMProjectDetail';";
+    const to = "import PMProjectDetail from './components/projects/PMProjectDetailEnhanced';";
+    if (!code.includes(from)) return null;
+    return { code: code.replace(from, to), map: null };
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [pmEnhancedShell, react()],
   build: {
     outDir: 'dist',
     sourcemap: 'inline',
