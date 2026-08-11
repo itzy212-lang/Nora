@@ -15,7 +15,6 @@ export async function callEly({
   userId = null,
   mode = null,
   workflowStage = null,
-  // Rich context — passed in by useEly automatically from app state
   chatHistory = [],
   projectsContext = [],
   currentProject = null,
@@ -42,14 +41,18 @@ export async function callEly({
     ...extra,
   };
 
-  // Obtain current Supabase session and extract access token.
-  // Fail clearly if no authenticated session exists — do not fall back to email.
   const { data: { session } } = sb ? await sb.auth.getSession() : { data: { session: null } };
   if (!session?.access_token) {
     throw new Error('Not authenticated — no Supabase session found');
   }
 
-  const res = await fetch(ROUTER_URL, {
+  // Dispute preparation requires guaranteed structured JSON. Keep it out of the
+  // general conversational router so a valid analysis cannot be lost to prose,
+  // markdown fences or a truncated JSON response.
+  const isDisputeSynopsis = !!context?.dispute_case_id && !!context?.dispute_intake;
+  const endpoint = isDisputeSynopsis ? '/api/dispute-synopsis' : ROUTER_URL;
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -68,8 +71,6 @@ export async function callEly({
   console.log('[Ely] model used:', data.model || 'unknown');
   return {
     reply,
-    // Compatibility aliases for specialist workspaces which consume Ely output
-    // as an analysis/document response rather than a chat message.
     response: reply,
     content: reply,
     text: reply,
