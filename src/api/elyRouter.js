@@ -64,9 +64,15 @@ export async function callEly({
   }
 
   const data = await res.json();
+  const reply = data.reply || data.replyText || '';
   console.log('[Ely] model used:', data.model || 'unknown');
   return {
-    reply: data.reply || data.replyText || '',
+    reply,
+    // Compatibility aliases for specialist workspaces which consume Ely output
+    // as an analysis/document response rather than a chat message.
+    response: reply,
+    content: reply,
+    text: reply,
     draft: data.draft || data.documentText || null,
     sessionId: data.sessionId || null,
     action: data.action || 'general_answer',
@@ -78,4 +84,3 @@ export async function callEly({
     model: data.model || null,
   };
 }
-
