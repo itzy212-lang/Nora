@@ -3179,7 +3179,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const award = buildAwardPlaceholders(project, ao, {
         ...(noticeSection ? { noticeSection } : {}),
         ...(noticeServedDate ? { noticeDate: noticeServedDate } : {}),
-        ...(boAgreedSurveyorMode ? { agreedSurveyor: true } : {}),
+        // Fixed 2026-08-13: real, confirmed bug — this used
+        // boAgreedSurveyorMode, a separate, project-wide leftover state
+        // variable, completely disconnected from ao.agreed_surveyor
+        // (the actual per-adjoining-owner flag the visible toggle on
+        // each AO's card reads and writes via handleToggleAgreedSurveyor).
+        // Confirmed live on a real two-AO project where one AO had the
+        // flag set and the other didn't: the award generator used
+        // whichever value this stale shared variable happened to hold,
+        // regardless of which AO was actually being generated for —
+        // producing an Agreed Surveyor Award for an AO whose own
+        // correctly-set toggle was off. Now reads directly from the ao
+        // parameter this function already receives, which is the
+        // specific, correct adjoining owner being generated for.
+        ...((ao.agreed_surveyor || ao.agreedSurveyor) ? { agreedSurveyor: true } : {}),
         ...(worksItems.length ? { worksItems } : {}),
         noticeRuns: noticeRows || [],
       });
