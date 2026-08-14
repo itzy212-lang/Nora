@@ -370,6 +370,8 @@ function PlaceholdersTab() {
         { key: 'AGREEMENT_DAY', desc: "Day of the agreement date, e.g. '14th'" },
         { key: 'AGREEMENT_MONTH', desc: "Month of the agreement date, e.g. 'August'" },
         { key: 'AGREEMENT_YEAR', desc: "Year of the agreement date, e.g. '2026'" },
+        { key: 'PARTY_A_FEE', desc: "Party A's fee for the mediation (numeric, no £ sign)" },
+        { key: 'PARTY_B_FEE', desc: "Party B's fee for the mediation (numeric, no £ sign)" },
       ],
     },
   ];
