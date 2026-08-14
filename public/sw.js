@@ -1,10 +1,11 @@
 // Nora Service Worker — PWA offline support
-// Bumped 2026-08-14 (third time today): manifest.json itself changed
-// this time (removed the 'maskable' purpose that was causing Android
-// to re-theme the icon with the system accent color, turning it
-// green) — manifest.json is one of the cached STATIC_ASSETS below, so
-// this needs a fresh cache to actually be picked up.
-const CACHE_NAME = 'nora-v8';
+// Bumped 2026-08-14 (fourth time today): icon files changed again —
+// 'nora' + dots restored, redrawn to genuinely match the real
+// splash's composition (vertically centered, same dot styling) —
+// and SplashScreen.jsx's earlier flash-to-black-first delay was
+// removed, since the two are now meant to look continuous, not
+// covered up.
+const CACHE_NAME = 'nora-v9';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
