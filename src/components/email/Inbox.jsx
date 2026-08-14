@@ -1726,6 +1726,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     return () => clearTimeout(timer);
   }, [search]);
   const [syncing, setSyncing]            = useState(false);
+  const [checkingForUpdates, setCheckingForUpdates] = useState(false);
   const [checkedIds, setCheckedIds]      = useState(new Set());
   const [bulkProjects, setBulkProjects]  = useState([]);
   const [bulkProjectId, setBulkProjectId]= useState('');
@@ -1784,6 +1785,13 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       : null;
 
     if (!doIncremental) setLoading(true);
+    // Added 2026-08-14, on request: a visible signal specifically for
+    // an incremental 'check for what's new since last time' pass —
+    // covers every path that calls loadEmails({ incremental: true }),
+    // not just the manual refresh button: the check that runs
+    // automatically right after reopening the app, and the 3-minute
+    // background auto-sync, both light this up the same way.
+    if (doIncremental) setCheckingForUpdates(true);
     try {
       let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
       if (folder === 'Unread')  q = q.eq('is_read', false);
@@ -1827,6 +1835,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       dispatch({ type: 'SET_EMAILS_LOADED_AT', payload: Date.now() });
     } catch (err) { console.error('loadEmails:', err); }
     if (!doIncremental) setLoading(false);
+    if (doIncremental) setCheckingForUpdates(false);
   }, [folder, state.emails, state.emailsLoadedAt]);
 
   // Fixed 2026-08-14, on request: this is the actual end-goal piece —
@@ -2290,20 +2299,10 @@ if (syncErr) throw syncErr;
         background: 'var(--bg)',
       }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0, background: 'var(--bg2)' }}>
-          {isMobile && onNavigate && (
-            <button
-              onClick={() => onNavigate('dashboard')}
-              title="Back to Dashboard"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '6px 10px', borderRadius: 99,
-                border: '1px solid var(--border)', background: 'var(--bg3)',
-                fontSize: 13, cursor: 'pointer', color: 'var(--text2)', flexShrink: 0,
-              }}
-            >
-              ← Dashboard
-            </button>
-          )}
+          {/* Fixed 2026-08-14, on request: removed — the top-level
+              hamburger menu already provides navigation back to the
+              dashboard, and this button was crowding the folder
+              dropdown next to it, causing it to squash. */}
           <button onClick={() => onOpenComposer?.({ mode: 'compose' })} className="btn btn-primary btn-sm" style={{ cursor: 'pointer', borderRadius: 99 }}>✎ Compose</button>
           <div style={{ position: 'relative', flex: 1 }} ref={folderRef}>
             <button onClick={() => setFolderOpen(v => !v)} style={{ width: '100%', padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
@@ -2325,8 +2324,29 @@ if (syncErr) throw syncErr;
             )}
           </div>
           {/* Fix 2: Refresh now calls sync_outlook edge function */}
-          <button onClick={handleSync} disabled={syncing} style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99, background: 'none', color: 'var(--text2)', fontSize: 14, cursor: syncing ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-            {syncing ? '…' : '↻'}
+          {/* Fixed 2026-08-14, on request: real visible feedback — a
+              spinning, blue icon whenever a 'check for what's new'
+              pass is genuinely happening, whether that's this manual
+              button, the automatic check right after reopening the
+              app, or the background 3-minute auto-sync. Previously
+              gave no visual signal at all during those, so there was
+              no way to tell it was actually working. */}
+          <style>{`@keyframes nora-refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            title={checkingForUpdates || syncing ? 'Checking for new emails…' : 'Check for new emails'}
+            style={{
+              padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99,
+              background: 'none', fontSize: 14, flexShrink: 0,
+              color: (checkingForUpdates || syncing) ? 'var(--blue)' : 'var(--text2)',
+              cursor: syncing ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <span style={{
+              display: 'inline-block',
+              animation: (checkingForUpdates || syncing) ? 'nora-refresh-spin 0.8s linear infinite' : 'none',
+            }}>↻</span>
           </button>
         </div>
 
