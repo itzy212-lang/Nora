@@ -24,6 +24,7 @@ const TEMPLATE_LABELS = {
   cover: 'Covering Letter',
   soc: 'Schedule of Condition',
   invoice: 'Invoice',
+  mediation_agreement: 'Mediation Agreement',
 };
 
 function fmtSize(bytes) {
@@ -352,6 +353,23 @@ function PlaceholdersTab() {
         { key: 'AO_PREMISE', desc: 'AO property address' },
         { key: 'AO_SERVICE_ADDRESS', desc: 'AO service address' },
         { key: 'BO_PREMISE', desc: 'BO property address' },
+      ],
+    },
+    {
+      title: 'Mediation Agreement',
+      items: [
+        { key: 'PARTY_A_1_NAME', desc: 'First named person, Party A' },
+        { key: 'PARTY_A_1_ADDRESS', desc: 'Address of first named person, Party A' },
+        { key: 'PARTY_A_2_NAME', desc: 'Second named person, Party A (if any)' },
+        { key: 'PARTY_A_2_ADDRESS', desc: 'Address of second named person, Party A (if any)' },
+        { key: 'PARTY_B_1_NAME', desc: 'First named person, Party B' },
+        { key: 'PARTY_B_1_ADDRESS', desc: 'Address of first named person, Party B' },
+        { key: 'PARTY_B_2_NAME', desc: 'Second named person, Party B (if any)' },
+        { key: 'PARTY_B_2_ADDRESS', desc: 'Address of second named person, Party B (if any)' },
+        { key: 'DISPUTE_DESCRIPTION', desc: "Summary of the dispute — from each party's case notes" },
+        { key: 'AGREEMENT_DAY', desc: "Day of the agreement date, e.g. '14th'" },
+        { key: 'AGREEMENT_MONTH', desc: "Month of the agreement date, e.g. 'August'" },
+        { key: 'AGREEMENT_YEAR', desc: "Year of the agreement date, e.g. '2026'" },
       ],
     },
   ];

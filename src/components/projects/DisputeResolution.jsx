@@ -102,7 +102,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   };
 
   const patchPerson=(pid,id,k,v)=>setParties(ps=>ps.map(p=>p.id===pid?{...p,dispute_party_people:(p.dispute_party_people||[]).map(x=>x.id===id?{...x,[k]:v}:x)}:p));
-  const savePerson=async x=>{const {error}=await sb.from('dispute_party_people').update({name:x.name,role:x.role||null,email:x.email||null,phone:x.phone||null}).eq('id',x.id);if(error)setError(error.message);};
+  const savePerson=async x=>{const {error}=await sb.from('dispute_party_people').update({name:x.name,role:x.role||null,email:x.email||null,phone:x.phone||null,address:x.address||null}).eq('id',x.id);if(error)setError(error.message);};
   const removePerson=async(pid,id)=>{const {error}=await sb.from('dispute_party_people').delete().eq('id',id);if(error)return setError(error.message);setParties(ps=>ps.map(p=>p.id===pid?{...p,dispute_party_people:p.dispute_party_people.filter(x=>x.id!==id)}:p));};
 
   const addEvidence=async()=>{
@@ -202,6 +202,63 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     }
   };
 
+  // Added 2026-08-14, on request: generates the mediation agreement PDF
+  // from whatever template's been uploaded in Settings > Templates,
+  // filling in the placeholders documented in Settings > Placeholders.
+  // Reuses /api/generate-doc entirely as-is — it's already a fully
+  // generic merge+PDF endpoint, no new backend needed. No e-signature
+  // yet, deliberately, per instruction — just a downloadable PDF to
+  // email manually for now.
+  const [generatingAgreement,setGeneratingAgreement]=useState(false);
+  const generateMediationAgreement=async()=>{
+    setGeneratingAgreement(true);
+    setError('');
+    try{
+      const {data:tpl,error:tplErr}=await sb.from('document_templates')
+        .select('file_b64').eq('template_key','mediation_agreement').maybeSingle();
+      if(tplErr)throw tplErr;
+      if(!tpl?.file_b64){setError("No mediation agreement template uploaded yet — add one in Settings > Templates first.");return;}
+
+      const partyA=parties[0]||{};
+      const partyB=parties[1]||{};
+      const peopleA=partyA.dispute_party_people||[];
+      const peopleB=partyB.dispute_party_people||[];
+      const today=new Date();
+
+      const merge_data={
+        PARTY_A_1_NAME:peopleA[0]?.name||partyA.party_name||'',
+        PARTY_A_1_ADDRESS:peopleA[0]?.address||'',
+        PARTY_A_2_NAME:peopleA[1]?.name||'',
+        PARTY_A_2_ADDRESS:peopleA[1]?.address||'',
+        PARTY_B_1_NAME:peopleB[0]?.name||partyB.party_name||'',
+        PARTY_B_1_ADDRESS:peopleB[0]?.address||'',
+        PARTY_B_2_NAME:peopleB[1]?.name||'',
+        PARTY_B_2_ADDRESS:peopleB[1]?.address||'',
+        DISPUTE_DESCRIPTION:partyA.position_statement||partyB.position_statement||'',
+        AGREEMENT_DAY:String(today.getDate()),
+        AGREEMENT_MONTH:today.toLocaleDateString('en-GB',{month:'long'}),
+        AGREEMENT_YEAR:String(today.getFullYear()),
+        file_name:'Mediation Agreement.docx',
+      };
+
+      const res=await fetch('/api/generate-doc',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({template_b64:tpl.file_b64,merge_data,output_format:'pdf',save_to_onedrive:false}),
+      });
+      const json=await res.json();
+      if(!json.success||!json.pdf_b64){setError(json.error||'Could not generate the mediation agreement.');return;}
+
+      const link=document.createElement('a');
+      link.href=`data:application/pdf;base64,${json.pdf_b64}`;
+      link.download='Mediation Agreement.pdf';
+      link.click();
+    }catch(e){
+      setError(e.message||'Could not generate the mediation agreement.');
+    }finally{
+      setGeneratingAgreement(false);
+    }
+  };
+
   if(loading)return <div style={box}>Loading dispute workspace…</div>;
 
   // Added 2026-08-14, on request: party-selectable invoicing — a
@@ -217,6 +274,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       bo_premise_address:project.bo_premise_address||'',
       bill_to_name:p.party_name||person?.name||p.label,
       bill_to_email:person?.email||'',
+      bill_to_address:person?.address||'',
       project_id:project.id,
     });
   };
@@ -224,16 +282,23 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   return <div style={{maxWidth:1050,margin:'0 auto'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
       {onBack?<button style={btn} onClick={onBack}>← Back</button>:<div/>}
-      {parties.length>0&&(
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span style={{fontSize:12,color:'var(--text3)'}}>Raise invoice to:</span>
-          {parties.map(p=>(
-            <button key={p.id} style={primary} onClick={()=>raiseInvoiceFor(p)}>
-              {p.label}{p.party_name?` (${p.party_name})`:''}
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+        {parties.length>=2&&(
+          <button style={primary} onClick={generateMediationAgreement} disabled={generatingAgreement}>
+            {generatingAgreement?'Generating…':'📄 Generate mediation agreement'}
+          </button>
+        )}
+        {parties.length>0&&(
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:12,color:'var(--text3)'}}>Raise invoice to:</span>
+            {parties.map(p=>(
+              <button key={p.id} style={primary} onClick={()=>raiseInvoiceFor(p)}>
+                {p.label}{p.party_name?` (${p.party_name})`:''}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
     <div style={box}>
       <div style={{fontSize:18,fontWeight:800,color:'var(--text)'}}>Dispute Resolution</div>
@@ -272,6 +337,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         <input style={input} value={x.name||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'name',e.target.value)} placeholder="Name"/>
         <input style={input} value={x.role||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'role',e.target.value)} placeholder="Role"/>
         <input style={input} value={x.email||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'email',e.target.value)} placeholder="Email"/>
+        <input style={{...input,gridColumn:'1 / -2'}} value={x.address||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'address',e.target.value)} placeholder="Address — needed for the mediation agreement"/>
         <button style={btn} onClick={()=>removePerson(p.id,x.id)}>×</button>
       </div>)}
       <div style={{display:'flex',justifyContent:'flex-end',marginTop:10}}><button style={primary} onClick={()=>saveParty(p)}>{saving?'Saving…':'Save party'}</button></div>
