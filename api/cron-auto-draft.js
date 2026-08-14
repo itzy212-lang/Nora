@@ -29,9 +29,15 @@ function shouldSkip(email) {
 }
 
 export default async function handler(req, res) {
-  // Allow Vercel cron (GET) and manual triggers (POST)
-  // Also allow any GET from vercel-cron user agent
-  const isCron = req.headers['x-vercel-cron'] === '1' || (req.method === 'GET' && req.headers['user-agent']?.includes('vercel-cron'));
+  // Fixed 2026-08-14: the x-vercel-cron header this checked for doesn't
+  // exist in real Vercel invocations (confirmed against current Vercel
+  // docs and a real production log). This endpoint only ever survived
+  // via its user-agent fallback below — real, but spoofable, since
+  // anyone can set a custom user-agent. Added the actual documented
+  // mechanism (Authorization: Bearer CRON_SECRET) as the primary check;
+  // kept the user-agent fallback for defense-in-depth, same as before.
+  const authHeader = req.headers['authorization'] || '';
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}` || (req.method === 'GET' && req.headers['user-agent']?.includes('vercel-cron'));
   const isManual = req.method === 'POST' && req.headers['x-nora-manual'] === 'true';
   if (!isCron && !isManual) return res.status(401).json({ error: 'Unauthorized' });
 

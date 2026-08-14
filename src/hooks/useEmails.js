@@ -217,23 +217,15 @@ export function useEmails() {
           // Trigger auto-linking on new emails
           sb.functions.invoke('auto-link-emails', { body: {} }).catch(() => {});
 
-          // Push notification for each new inbound email
-          if ('serviceWorker' in navigator && 'PushManager' in window) {
-            const inbound = newRows.filter(e =>
-              e.direction === 'incoming' || (!e.direction && !e.is_sent)
-            );
-            inbound.forEach(email => {
-              navigator.serviceWorker.ready.then(reg => {
-                reg.showNotification(`📧 ${email.sender_name || email.sender_email || 'New email'}`, {
-                  body: email.subject || '(no subject)',
-                  icon: '/icons/icon-192.png',
-                  badge: '/icons/icon-192.png',
-                  tag: `email-${email.id}`,
-                  data: { url: `/?email=${email.id}` },
-                });
-              }).catch(() => {});
-            });
-          }
+          // Fixed 2026-08-14: removed the old local-only notification
+          // that lived here — it only ever fired while this code was
+          // actively running, which requires the app to already be
+          // open, exactly the gap reported. Replaced with a real
+          // database trigger (send_push_on_new_email) that fires the
+          // moment a new email is inserted, server-side, regardless of
+          // whether the app is open at all. Keeping both would have
+          // caused duplicate notifications whenever the app happened
+          // to be open at the same moment.
         }
         return data;
       }

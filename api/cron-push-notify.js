@@ -24,7 +24,18 @@ function dateStr(val) {
 }
 
 export default async function handler(req, res) {
-  const isCron = req.headers['x-vercel-cron'] === '1';
+  // Fixed 2026-08-14: real, confirmed bug present since this endpoint
+  // was first built. Checked for a header (x-vercel-cron: '1') that
+  // Vercel's real cron invocations never actually send — confirmed
+  // directly against Vercel's current documentation and against a real
+  // production log line: the scheduled 9am cron was hitting this route
+  // exactly on time, every day, and getting an immediate 401 every
+  // single time, meaning this endpoint's actual logic — every deadline
+  // check, every reminder — had never once run since it was deployed.
+  // Vercel's real mechanism is Authorization: Bearer <CRON_SECRET>,
+  // using an environment variable of that exact name.
+  const authHeader = req.headers['authorization'] || '';
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
   const isManual = req.method === 'POST' && req.headers['x-nora-manual'] === 'true';
   if (!isCron && !isManual) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -154,7 +165,12 @@ export default async function handler(req, res) {
       for (const sub of subscriptions) {
         try {
           await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth } },
+            // Fixed 2026-08-14: real, confirmed second bug — the real
+            // columns on push_subscriptions are p256dh and auth, not
+            // keys_p256dh/keys_auth. Even with the auth check fixed,
+            // sending would have continued failing (malformed/missing
+            // keys) on every subscription, every time.
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
             payload,
           );
           sent++;

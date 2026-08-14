@@ -26,11 +26,17 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // Fixed 2026-08-14: real, confirmed bug — wrote to keys_p256dh/
+    // keys_auth, columns that don't exist on push_subscriptions (the
+    // real columns are p256dh/auth). The two existing subscription
+    // rows have correct data from before this drifted; any new
+    // subscription attempt from here would have failed outright.
     const { error } = await sb.from('push_subscriptions').upsert({
       user_id: user_id || 'help@sq1consulting.co.uk',
       endpoint: subscription.endpoint,
-      keys_p256dh: subscription.keys?.p256dh || '',
-      keys_auth: subscription.keys?.auth || '',
+      p256dh: subscription.keys?.p256dh || '',
+      auth: subscription.keys?.auth || '',
+      is_active: true,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'endpoint' });
 
