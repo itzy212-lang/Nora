@@ -69,14 +69,14 @@ export function useEmails() {
         .from('emails')
         .select('*')
         .order('received_at', { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (res.error) {
         res = await sb
           .from('emails')
           .select('*')
           .order('received_at', { ascending: false })
-          .limit(200);
+          .limit(300);
       }
 
       const rows = (res.data || []).map(normalizeEmail);
@@ -89,6 +89,48 @@ export function useEmails() {
       setLoading(false);
     }
   }, [dispatch, state.emails]);
+
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreEmails, setHasMoreEmails] = useState(true);
+
+  // Added 2026-08-13, on request: real "load more" for infinite scroll.
+  // Fetches the next 300 emails older than whatever's currently the
+  // oldest loaded email, and appends them — this is the actual
+  // mechanism that lets scrolling reach real history instead of hard-
+  // stopping at the first 300 loaded on open. Never re-fetches anything
+  // already loaded; never loads thousands at once.
+  const loadMoreEmails = useCallback(async () => {
+    if (!sb || loadingMore || !hasMoreEmails) return;
+    const currentEmails = state.emails || [];
+    if (!currentEmails.length) return;
+
+    const oldestLoaded = currentEmails.reduce((oldest, e) => {
+      const t = new Date(e.received_at || e.sent_at || 0).getTime();
+      return t < oldest ? t : oldest;
+    }, Date.now());
+
+    setLoadingMore(true);
+    try {
+      const { data, error } = await sb
+        .from('emails')
+        .select('*')
+        .lt('received_at', new Date(oldestLoaded).toISOString())
+        .order('received_at', { ascending: false })
+        .limit(300);
+
+      if (error) throw error;
+
+      const rows = (data || []).map(normalizeEmail);
+      if (rows.length < 300) setHasMoreEmails(false);
+      if (rows.length) dispatch({ type: 'APPEND_EMAILS', payload: rows });
+      return rows;
+    } catch (err) {
+      console.error('[useEmails] loadMore failed:', err);
+      return [];
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [dispatch, state.emails, loadingMore, hasMoreEmails]);
 
   const syncOutlook = useCallback(async () => {
     if (!sb) return;
@@ -351,6 +393,9 @@ export function useEmails() {
     emails: state.emails,
     loading,
     loadEmails,
+    loadMoreEmails,
+    loadingMore,
+    hasMoreEmails,
     syncOutlook,
     ensureTokenFresh,
     markRead,

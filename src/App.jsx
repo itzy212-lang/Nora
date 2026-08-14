@@ -64,7 +64,7 @@ export default function App() {
   const { state, dispatch } = useApp();
   const { currentUser, settings } = state;
   const { loadProjects, setCurrentProject, clearCurrentProject } = useProjects();
-  const { loadEmails } = useEmails();
+  const { loadEmails, loadMoreEmails, loadingMore, hasMoreEmails } = useEmails();
   const { invoices, createInvoice } = useInvoices();
 
   const [authChecked, setAuthChecked]       = useState(false);
@@ -489,7 +489,7 @@ export default function App() {
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
-        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} />;
+        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} onLoadMore={loadMoreEmails} loadingMore={loadingMore} hasMore={hasMoreEmails} />;
       case 'chat':
         return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':

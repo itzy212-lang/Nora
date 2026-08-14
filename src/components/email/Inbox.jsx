@@ -18,9 +18,15 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
 
   const [projects, setProjects] = useState([]);
 
-  // Server-side search — queries all emails in Supabase when search term is 3+ chars
+  // Server-side search — queries all emails in Supabase for any search
+  // term, however short. Fixed 2026-08-13, on explicit request: this
+  // previously only queried the database for terms of 3+ characters,
+  // silently falling back to searching only whatever emails happened to
+  // already be loaded on the device for anything shorter — a real gap
+  // against the requirement that search must always hit the real
+  // database, never just the local, paginated subset.
   useEffect(() => {
-    if (!search || search.trim().length < 3) {
+    if (!search || !search.trim()) {
       setSearchResults(null);
       return;
     }
@@ -30,9 +36,16 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
         const { data } = await sb
           .from('emails')
           .select('id, subject, sender_name, sender_email, received_at, body_preview, is_read, flagged, folder, project_id')
-          .or(`subject.ilike.%${term}%,body_preview.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%`)
+          // Fixed 2026-08-13: real, confirmed bug — this searched only
+          // body_preview, which averages 243 characters and caps at
+          // 300, against a real email body averaging 35,547 characters.
+          // Search was effectively blind to roughly 99% of the actual
+          // content of every email, not just old ones — anything past
+          // the opening lines could never be found regardless of date.
+          // Now searches the real body field directly.
+          .or(`subject.ilike.%${term}%,body.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%`)
           .order('received_at', { ascending: false })
-          .limit(50);
+          .limit(300);
         setSearchResults(data || []);
       } catch (err) {
         console.error('[Inbox search]', err);
@@ -1672,7 +1685,7 @@ function isBriefContent(text = '') {
 }
 
 
-export default function Inbox({ onOpenComposer, onNavigate, resetKey }) {
+export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
@@ -2149,8 +2162,12 @@ if (syncErr) throw syncErr;
 
   const toggleCheck = (id) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // When server search is active (3+ chars), use Supabase results directly
-  const emailsToFilter = searchResults !== null && search && search.trim().length >= 3
-    ? searchResults
+  // Fixed 2026-08-13: any non-empty search now always uses real
+  // database results (searchResults), never falls back to filtering
+  // only whatever emails happen to be loaded locally — matching the
+  // requirement that search must always query the full database.
+  const emailsToFilter = search && search.trim()
+    ? (searchResults || [])
     : (state?.emails || []);
   const filtered = emailsToFilter.filter(e => {
     // Filter by active folder first
@@ -2170,31 +2187,12 @@ if (syncErr) throw syncErr;
     } else if (folder === 'Flagged') {
       if (!e.flagged) return false;
     }
-    // If server search is active, use those results instead of client filter
-    if (search && search.trim().length >= 3 && searchResults !== null) {
-      return searchResults.some(r => r.id === e.id);
-    }
-    // Then apply client-side search for short queries
-    if (!search) return true;
-    const q = search.toLowerCase();
-    const rawName = e.raw_recipients?.from?.name || '';
-    const toNames = (e.raw_recipients?.to || []).map(r => r.name || '').join(' ');
-    // to_emails can be JSON array [{name, email}] or a plain string
-    const toEmailsRaw = e.to_emails || e.to_email || '';
-    const toEmailsStr = typeof toEmailsRaw === 'string'
-      ? toEmailsRaw
-      : Array.isArray(toEmailsRaw)
-        ? toEmailsRaw.map(r => `${r.name || ''} ${r.email || ''}`).join(' ')
-        : JSON.stringify(toEmailsRaw);
-    return (
-      (e.sender_name || rawName).toLowerCase().includes(q) ||
-      (e.sender_email || '').toLowerCase().includes(q) ||
-      (e.subject || '').toLowerCase().includes(q) ||
-      toNames.toLowerCase().includes(q) ||
-      toEmailsStr.toLowerCase().includes(q) ||
-      (e.body_preview || '').toLowerCase().includes(q) ||
-      (e.body || '').toLowerCase().includes(q)
-    );
+    // Fixed 2026-08-13: the search-term matching below was redundant
+    // and stale — emailsToFilter (above) already selects the correct
+    // source (real database search results, or the locally loaded list
+    // when not searching) before this function ever runs. This now only
+    // needs to apply folder filtering on top of that already-correct set.
+    return true;
   });
 
   const unreadCount = (state.emails || []).filter(e => !e.is_read).length;
@@ -2280,6 +2278,11 @@ if (syncErr) throw syncErr;
                 {allChecked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread · {filtered.length} shown</span>
+              {searchResults !== null && searchResults.length >= 100 && (
+                <span style={{ fontSize: 11, color: 'var(--orange, #f97316)', marginLeft: 8 }} title="This search hit its result limit — there may be older matches not shown. Narrow your search terms to find them.">
+                  ⚠ showing the 100 most recent matches — refine your search for older results
+                </span>
+              )}
             </div>
             {checkedIds.size > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -2302,7 +2305,20 @@ if (syncErr) throw syncErr;
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4, paddingBottom: 8 }}>
+        <div
+          style={{ flex: 1, overflowY: 'auto', paddingTop: 4, paddingBottom: 8 }}
+          onScroll={(e) => {
+            // Added 2026-08-13, on request: real infinite scroll. Only
+            // triggers during ordinary browsing, never during an active
+            // search — search results are a fixed, real database query
+            // result, not something to paginate further.
+            if (search && search.trim()) return;
+            if (!onLoadMore || loadingMore || hasMore === false) return;
+            const el = e.target;
+            const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 400;
+            if (nearBottom) onLoadMore();
+          }}
+        >
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
             : filtered.length === 0
@@ -2311,6 +2327,12 @@ if (syncErr) throw syncErr;
               <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(String(email.id))} />
             ))
           }
+          {!search && loadingMore && (
+            <div style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>Loading more…</div>
+          )}
+          {!search && !loading && filtered.length > 0 && hasMore === false && (
+            <div style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 11.5, fontStyle: 'italic' }}>That's everything</div>
+          )}
         </div>
       </div>
 

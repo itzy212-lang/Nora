@@ -120,6 +120,17 @@ function reducer(state, action) {
 
     case 'SET_EMAILS':
       return { ...state, emails: action.payload, emailsLoadedAt: Date.now() };
+    // Added 2026-08-13, on request: real infinite-scroll pagination.
+    // Appends the next batch to the existing list, deduping by id in
+    // case of any overlap between pages, rather than replacing the
+    // whole list (which is what the app was doing on every load before
+    // this — refetching and discarding the same 200 most recent emails
+    // repeatedly, with no way to see anything older).
+    case 'APPEND_EMAILS': {
+      const existingIds = new Set(state.emails.map(e => e.id));
+      const newOnes = action.payload.filter(e => !existingIds.has(e.id));
+      return { ...state, emails: [...state.emails, ...newOnes], emailsLoadedAt: Date.now() };
+    }
     case 'SET_LEADS':
       return { ...state, leads: action.payload };
 
