@@ -19,7 +19,7 @@ function cleanJson(text=''){
 function textValue(v){return typeof v==='string'?v:JSON.stringify(v);}
 function arr(v){return Array.isArray(v)?v:[];}
 
-export default function DisputeResolution({project}){
+export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   const {send,loading:aiLoading}=useEly({surface:'project_chat',projectId:project.id});
   const fileInputRef=useRef(null);
   const [caseRow,setCaseRow]=useState(null);
@@ -204,7 +204,37 @@ export default function DisputeResolution({project}){
 
   if(loading)return <div style={box}>Loading dispute workspace…</div>;
 
+  // Added 2026-08-14, on request: party-selectable invoicing — a
+  // dispute isn't tied to one ongoing project client, so billing needs
+  // to pick a side explicitly. Reuses the existing, already-working
+  // invoice modal untouched — just pre-fills bill_to_name/email from
+  // whichever party is selected here, plus the person's email if the
+  // party itself has none. No new invoice UI or PDF logic needed.
+  const raiseInvoiceFor=(p)=>{
+    const person=(p.dispute_party_people||[])[0];
+    onRaiseInvoice?.({
+      id:project.id,
+      bo_premise_address:project.bo_premise_address||'',
+      bill_to_name:p.party_name||person?.name||p.label,
+      bill_to_email:person?.email||'',
+      project_id:project.id,
+    });
+  };
+
   return <div style={{maxWidth:1050,margin:'0 auto'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      {onBack?<button style={btn} onClick={onBack}>← Back</button>:<div/>}
+      {parties.length>0&&(
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:12,color:'var(--text3)'}}>Raise invoice to:</span>
+          {parties.map(p=>(
+            <button key={p.id} style={primary} onClick={()=>raiseInvoiceFor(p)}>
+              {p.label}{p.party_name?` (${p.party_name})`:''}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
     <div style={box}>
       <div style={{fontSize:18,fontWeight:800,color:'var(--text)'}}>Dispute Resolution</div>
       <div style={{fontSize:13,color:'var(--text3)',marginTop:5}}>Private case preparation. Add each party's case and any supporting documents, then generate Nora's mediator synopsis.</div>

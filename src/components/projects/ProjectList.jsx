@@ -330,7 +330,14 @@ export default function ProjectList({ onOpenProject }) {
     loadProjects().finally(() => setLoading(false));
   }, [loadProjects]);
 
+  // Fixed 2026-08-14, on request: standalone Dispute records are kept
+  // out of the main Party Wall / Construction list entirely — shown
+  // separately below instead, so the list doesn't get cluttered with
+  // something that isn't really 'a project' in the normal sense.
+  const disputeProjects = projects.filter(p => p.project_type === 'dispute');
+
   const filtered = projects.filter(p => {
+    if (p.project_type === 'dispute') return false;
     const matchesFilter = filter === 'all' || p.status === filter;
     const q = search.toLowerCase();
 
@@ -604,6 +611,32 @@ export default function ProjectList({ onOpenProject }) {
           {filtered.map(p => (
             <ProjectCard key={p.id} project={p} onClick={onOpenProject} />
           ))}
+        </div>
+      )}
+
+      {/* Added 2026-08-14, on request: standalone Disputes shown in
+          their own distinct section, kept separate from the main
+          Party Wall / Construction list above. */}
+      {disputeProjects.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            🤝 Disputes
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: 12,
+          }}>
+            {disputeProjects.map(p => (
+              <div key={p.id} onClick={() => onOpenProject(p)} style={{
+                cursor: 'pointer', padding: 14, borderRadius: 12,
+                border: '1px solid var(--border)', background: 'var(--bg2)',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.bo || 'Dispute'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{p.ref}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

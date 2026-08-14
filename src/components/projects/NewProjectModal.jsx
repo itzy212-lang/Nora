@@ -251,6 +251,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
   const isAO = form.role === 'AO';
   const isConstruction = form.project_type === 'construction';
+  const isDispute = form.project_type === 'dispute';
   const [uploadMode, setUploadMode] = useState(false); // true = upload docs, false = manual
   const [uploadFiles, setUploadFiles] = useState([]);
   const [extracting, setExtracting] = useState(false);
@@ -328,7 +329,13 @@ export default function NewProjectModal({ onClose, onCreated }) {
     setError('');
 
     // Construction projects — skip all party wall validation
-    if (!isConstruction) {
+    // Fixed 2026-08-14, on request: standalone Dispute — deliberately
+    // minimal, none of the party wall/construction validation applies.
+    // Party A/B details and case notes are entered on the next screen
+    // (the dispute-resolution workspace itself), not in this modal.
+    if (isDispute) {
+      // no validation — nothing required here
+    } else if (!isConstruction) {
       if (isAO) {
         if (!form.aoPremise.trim()) {
           setError('Adjoining owner premise address is required.');
@@ -367,6 +374,42 @@ export default function NewProjectModal({ onClose, onCreated }) {
       const { data: { user } } = await sb.auth.getUser();
 
       const newId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+      // Fixed 2026-08-14, on request: standalone Dispute — a genuinely
+      // minimal record, not styled as a party wall or construction
+      // project. Real Party A/B details and case notes get entered on
+      // the next screen (the dispute-resolution workspace), not here.
+      // A lightweight project row still gets created underneath (kept
+      // out of the main project list — see ProjectList.jsx), so the
+      // proven, already-built dispute workspace and invoicing can be
+      // reused without any risky rework, while the actual setup
+      // experience is deliberately just this one screen with nothing
+      // to fill in.
+      if (isDispute) {
+        const disputePayload = {
+          id: newId,
+          user_id: user?.id || null,
+          ref,
+          project_type: 'dispute',
+          status: 'active',
+          bo: form.bo1.name.trim() || 'New dispute',
+        };
+        const { data: disputeProject, error: disputeErr } = await sb
+          .from('projects')
+          .insert([disputePayload])
+          .select('*')
+          .single();
+        if (disputeErr) throw disputeErr;
+
+        const { error: caseErr } = await sb
+          .from('dispute_cases')
+          .insert([{ project_id: disputeProject.id, status: 'intake' }]);
+        if (caseErr) throw caseErr;
+
+        onCreated?.(disputeProject);
+        onClose();
+        return;
+      }
 
       const boPremise = form.boPremise.trim();
       const boService = (boSameAddr ? form.boPremise : form.boService).trim();
@@ -569,6 +612,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
               {[
                 { value: 'party_wall', label: '⚖️ Party Wall', desc: 'Notices, awards, SOC' },
                 { value: 'construction', label: '🏗️ Construction / PM', desc: 'Projects, programme, financials' },
+                { value: 'dispute', label: '🤝 Dispute', desc: 'Standalone mediation, not tied to a project' },
               ].map(opt => (
                 <button key={opt.value} type="button"
                   onClick={() => setForm(f => ({ ...f, project_type: opt.value }))}
@@ -582,6 +626,13 @@ export default function NewProjectModal({ onClose, onCreated }) {
               ))}
             </div>
           </div>
+
+          {/* Dispute — deliberately minimal, nothing to fill in here */}
+          {isDispute && (
+            <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--bg2)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>
+              Nothing to fill in here — Party A, Party B, and the initial case notes get entered on the next screen. This creates a standalone dispute record, not a party wall or construction project.
+            </div>
+          )}
 
           {/* Construction / PM form */}
           {isConstruction && (
@@ -689,7 +740,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
           )}
 
           {/* Party wall form — only show when not construction */}
-          {!isConstruction && <div>
+          {!isConstruction && !isDispute && <div>
             <div style={{
               fontSize: 11,
               fontWeight: 700,
@@ -731,7 +782,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
             </div>
           </div>}
 
-          {!isConstruction && (isAO ? (
+          {!isConstruction && !isDispute && (isAO ? (
             <>
               <AddressBlock
                 title="Adjoining owner property"
@@ -829,7 +880,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
             </>
           ))}
 
-          {!isConstruction && <div style={mSection}>
+          {!isConstruction && !isDispute && <div style={mSection}>
             <div style={{
               fontSize: 12,
               fontWeight: 700,

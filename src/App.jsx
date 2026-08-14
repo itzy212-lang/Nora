@@ -30,6 +30,7 @@ import Contacts from './components/shared/Contacts';
 import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
 import DisputeAgreement from './components/dispute/DisputeAgreement';
+import DisputeResolution from './components/projects/DisputeResolution';
 import NotepadOverlay from './components/shared/NotepadOverlay';
 import DebugPayloadViewer from './components/shared/DebugPayloadViewer';
 import QuickRefOverlay from './components/shared/QuickRefOverlay';
@@ -456,6 +457,21 @@ export default function App() {
             onBack={onBack}
             onOpenComposer={openComposer}
           />
+        );
+      }
+
+      // Fixed 2026-08-14, on request: standalone Dispute projects
+      // render the dispute-resolution workspace directly, not the
+      // normal party wall/construction ProjectDetail — this is the
+      // one and only place DisputeResolution.jsx now gets rendered
+      // from; previously it was only ever imported by
+      // PMProjectDetailEnhanced.jsx, which itself was never rendered
+      // anywhere, making the whole workspace unreachable.
+      if (projectView?.project_type === 'dispute') {
+        return (
+          <ErrorBoundary key={projectView?.id}>
+            <DisputeResolution project={projectView} onBack={onBack} onRaiseInvoice={handleRaiseInvoice} />
+          </ErrorBoundary>
         );
       }
 
