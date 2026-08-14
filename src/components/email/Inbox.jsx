@@ -18,42 +18,6 @@ function BookingOverlay({ booking, onConfirm, onClose }) {
 
   const [projects, setProjects] = useState([]);
 
-  // Server-side search — queries all emails in Supabase for any search
-  // term, however short. Fixed 2026-08-13, on explicit request: this
-  // previously only queried the database for terms of 3+ characters,
-  // silently falling back to searching only whatever emails happened to
-  // already be loaded on the device for anything shorter — a real gap
-  // against the requirement that search must always hit the real
-  // database, never just the local, paginated subset.
-  useEffect(() => {
-    if (!search || !search.trim()) {
-      setSearchResults(null);
-      return;
-    }
-    const term = search.trim();
-    const timer = setTimeout(async () => {
-      try {
-        const { data } = await sb
-          .from('emails')
-          .select('id, subject, sender_name, sender_email, received_at, body_preview, is_read, flagged, folder, project_id')
-          // Fixed 2026-08-13: real, confirmed bug — this searched only
-          // body_preview, which averages 243 characters and caps at
-          // 300, against a real email body averaging 35,547 characters.
-          // Search was effectively blind to roughly 99% of the actual
-          // content of every email, not just old ones — anything past
-          // the opening lines could never be found regardless of date.
-          // Now searches the real body field directly.
-          .or(`subject.ilike.%${term}%,body.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%`)
-          .order('received_at', { ascending: false })
-          .limit(300);
-        setSearchResults(data || []);
-      } catch (err) {
-        console.error('[Inbox search]', err);
-        setSearchResults([]);
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     sb.from('projects').select('id,ref,bo_premise_address').order('ref', { ascending: true })
@@ -1694,6 +1658,42 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [folderOpen, setFolderOpen]      = useState(false);
   const [search, setSearch]              = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
+
+  // Fixed 2026-08-13, on request: search was, in fact, entirely non-
+  // functional. Found and confirmed precisely: this query-triggering
+  // effect was physically misplaced inside BookingOverlay — an
+  // unrelated component — referencing search/setSearchResults that
+  // don't exist in that scope at all. The real Inbox component
+  // declared search/searchResults state and read from it, but nothing
+  // inside Inbox itself ever actually queried the database. Moved to
+  // the correct component, and expanded per the actual request:
+  // searches sender AND recipient fields (to, cc), not just sender —
+  // previously only checked who an email was from, never who it was
+  // sent to, so a name only appearing as a recipient could never be
+  // found. to_emails/raw_recipients are JSONB, cast to text to search
+  // them; to_email/cc_emails are already plain text.
+  useEffect(() => {
+    if (!search || !search.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    const term = search.trim();
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await sb
+          .from('emails')
+          .select('id, subject, sender_name, sender_email, received_at, body_preview, is_read, flagged, folder, project_id')
+          .or(`subject.ilike.%${term}%,body.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%,to_email.ilike.%${term}%,cc_emails.ilike.%${term}%,to_emails::text.ilike.%${term}%,raw_recipients::text.ilike.%${term}%`)
+          .order('received_at', { ascending: false })
+          .limit(300);
+        setSearchResults(data || []);
+      } catch (err) {
+        console.error('[Inbox search]', err);
+        setSearchResults([]);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [syncing, setSyncing]            = useState(false);
   const [checkedIds, setCheckedIds]      = useState(new Set());
   const [bulkProjects, setBulkProjects]  = useState([]);
