@@ -4,6 +4,7 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
+import { loadCachedEmails, saveCachedEmails } from '../../utils/emailCache';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
@@ -1817,23 +1818,49 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         const truly_new = newEmails.filter(e => !existingIds.has(e.id));
         if (truly_new.length > 0) {
           dispatch({ type: 'SET_EMAILS', payload: [...truly_new, ...existing] });
+          saveCachedEmails(truly_new); // persist just the new ones — added 2026-08-14
         }
       } else {
         dispatch({ type: 'SET_EMAILS', payload: newEmails });
+        saveCachedEmails(newEmails); // persist the full load — added 2026-08-14
       }
       dispatch({ type: 'SET_EMAILS_LOADED_AT', payload: Date.now() });
     } catch (err) { console.error('loadEmails:', err); }
     if (!doIncremental) setLoading(false);
   }, [folder, state.emails, state.emailsLoadedAt]);
 
-  // Initial load — only force if no emails cached or switching folder
+  // Fixed 2026-08-14, on request: this is the actual end-goal piece —
+  // a full app close wipes state.emails entirely (it's just React
+  // state, nothing persisted), so this effect previously always saw
+  // existing.length === 0 on a fresh app start and did a full,
+  // 500-email reload every single time, no matter how recently the
+  // app had last been used. Now checks the real, persistent IndexedDB
+  // cache first: if it has data, show it instantly (no wait at all),
+  // then do an incremental fetch for anything new since the newest
+  // cached email — not a full reload. Only a genuinely first-ever
+  // load (empty cache) does the full fetch.
   useEffect(() => {
-    const existing = state.emails || [];
-    const lastLoaded = state.emailsLoadedAt || 0;
-    const isStale = Date.now() - lastLoaded > 5 * 60 * 1000;
-    if (existing.length === 0 || isStale) {
-      loadEmails({ force: true });
-    }
+    let cancelled = false;
+    (async () => {
+      const existing = state.emails || [];
+      if (existing.length > 0) {
+        // Already have in-memory state this session — just check for
+        // anything new, same as before, no need to touch the cache.
+        const lastLoaded = state.emailsLoadedAt || 0;
+        const isStale = Date.now() - lastLoaded > 5 * 60 * 1000;
+        if (isStale) loadEmails({ incremental: true });
+        return;
+      }
+      const cached = await loadCachedEmails();
+      if (cancelled) return;
+      if (cached.length > 0) {
+        dispatch({ type: 'SET_EMAILS', payload: cached });
+        loadEmails({ incremental: true }); // check for anything new since the cache was last saved
+      } else {
+        loadEmails({ force: true }); // genuinely first-ever load — nothing cached yet
+      }
+    })();
+    return () => { cancelled = true; };
   }, [folder]);
 
   // Auto-sync every 3 minutes — only if not already syncing
@@ -1951,13 +1978,20 @@ if (syncErr) throw syncErr;
       try { await sb.rpc('match_emails_to_projects') } catch(_) {}
       // Chain auto-draft immediately after sync — eliminates up to 15 min delay
       fetch('/api/cron-auto-draft', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' }, body: '{}' }).catch(() => {});
-      // Only reload if new emails came in
+      // Fixed 2026-08-14, on request: this previously called loadEmails()
+      // with no arguments — once data was more than 5 minutes stale,
+      // that silently fell through to a full reload of up to 500
+      // emails, replacing the whole list, contradicting the actual goal
+      // ('refresh should just check for what's new'). The incremental
+      // path already existed and was already proven working elsewhere
+      // (the 3-minute auto-sync interval) — the manual button just
+      // wasn't using it.
       if (!result?.data || result?.data?.newEmails > 0) {
-        await loadEmails();
+        await loadEmails({ incremental: true });
       }
     } catch (err) {
       console.warn('Sync error:', err);
-      await loadEmails();
+      await loadEmails({ incremental: true });
     } finally {
       setSyncing(false);
       syncingRef.current = false;

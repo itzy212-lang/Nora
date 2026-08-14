@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
+import { saveCachedEmails } from '../utils/emailCache';
 
 // ── Brain helpers ──────────────────────────────────────────────────────────
 
@@ -122,7 +123,10 @@ export function useEmails() {
 
       const rows = (data || []).map(normalizeEmail);
       if (rows.length < 300) setHasMoreEmails(false);
-      if (rows.length) dispatch({ type: 'APPEND_EMAILS', payload: rows });
+      if (rows.length) {
+        dispatch({ type: 'APPEND_EMAILS', payload: rows });
+        saveCachedEmails(rows); // added 2026-08-14 — persist scrolled-back history too
+      }
       return rows;
     } catch (err) {
       console.error('[useEmails] loadMore failed:', err);
