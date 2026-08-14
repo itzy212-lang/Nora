@@ -1765,9 +1765,19 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
 
   const syncingRef = useRef(false);
 
-  const loadEmails = useCallback(async ({ force = false, incremental = false } = {}) => {
+  const loadEmails = useCallback(async ({ force = false, incremental = false, existingOverride = null } = {}) => {
     if (!sb) return;
-    const existing = state.emails || [];
+    // Fixed 2026-08-14, real confirmed bug: existingOverride lets a
+    // caller pass a just-loaded list directly (e.g. from the local
+    // cache) instead of relying on state.emails — React state isn't
+    // updated synchronously, so a dispatch immediately followed by
+    // calling this function in the same effect would otherwise read
+    // the OLD, stale (often empty) state.emails, silently turning an
+    // intended incremental check into a full reload, and — since it
+    // then correctly wasn't running as incremental — never showing the
+    // 'checking for updates' spinner either. Same root cause, both
+    // symptoms reported together.
+    const existing = existingOverride || state.emails || [];
     const lastLoaded = state.emailsLoadedAt || 0;
     const staleAfterMs = 5 * 60 * 1000; // 5 minutes
     const isStale = Date.now() - lastLoaded > staleAfterMs;
@@ -1864,7 +1874,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (cancelled) return;
       if (cached.length > 0) {
         dispatch({ type: 'SET_EMAILS', payload: cached });
-        loadEmails({ incremental: true }); // check for anything new since the cache was last saved
+        loadEmails({ incremental: true, existingOverride: cached }); // check for anything new since the cache was last saved
       } else {
         loadEmails({ force: true }); // genuinely first-ever load — nothing cached yet
       }
