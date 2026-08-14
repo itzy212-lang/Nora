@@ -1658,6 +1658,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [folderOpen, setFolderOpen]      = useState(false);
   const [search, setSearch]              = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
+  const [searchError, setSearchError]    = useState(null);
 
   // Fixed 2026-08-14, on confirmed live failure: the PostgREST .or()
   // filter-string approach (even after removing the JSONB casts that
@@ -1668,9 +1669,16 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // correctly finds matches in subject/body/sender AND in recipients
   // buried inside the JSONB fields (verified against a real email where
   // the only match was a name inside to_emails, not the sender).
+  //
+  // Added 2026-08-14: real, visible error surfacing. Two fixes in a
+  // row failed to actually resolve this live, and a silent
+  // console.error gives no way to diagnose further from outside the
+  // browser. If this RPC call fails for any reason, the real error
+  // message now shows directly in the UI instead of just the console.
   useEffect(() => {
     if (!search || !search.trim()) {
       setSearchResults(null);
+      setSearchError(null);
       return;
     }
     const term = search.trim();
@@ -1679,9 +1687,11 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         const { data, error } = await sb.rpc('search_emails', { search_term: term, result_limit: 300 });
         if (error) throw error;
         setSearchResults(data || []);
+        setSearchError(null);
       } catch (err) {
         console.error('[Inbox search]', err);
         setSearchResults([]);
+        setSearchError(err?.message || err?.details || err?.hint || JSON.stringify(err) || 'Unknown search error');
       }
     }, 350);
     return () => clearTimeout(timer);
@@ -2264,15 +2274,20 @@ if (syncErr) throw syncErr;
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail…"
               style={{ width: '100%', padding: '7px 10px 7px 30px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 99, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' }} />
           </div>
+          {searchError && (
+            <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: 'var(--red-bg, #fef2f2)', border: '1px solid var(--red, #ef4444)', color: 'var(--red, #ef4444)', fontSize: 11.5, wordBreak: 'break-word' }}>
+              Search error: {searchError}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div onClick={() => setCheckedIds(allChecked ? new Set() : new Set(filtered.map(e => e.id)))} style={{ width: 16, height: 16, borderRadius: 4, cursor: 'pointer', border: `1.5px solid ${allChecked ? 'var(--blue)' : 'var(--border2)'}`, background: allChecked ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {allChecked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text3)' }}>{unreadCount} unread · {filtered.length} shown</span>
-              {searchResults !== null && searchResults.length >= 100 && (
+              {searchResults !== null && searchResults.length >= 300 && (
                 <span style={{ fontSize: 11, color: 'var(--orange, #f97316)', marginLeft: 8 }} title="This search hit its result limit — there may be older matches not shown. Narrow your search terms to find them.">
-                  ⚠ showing the 100 most recent matches — refine your search for older results
+                  ⚠ showing the 300 most recent matches — refine your search for older results
                 </span>
               )}
             </div>
