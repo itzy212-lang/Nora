@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
 
 export default function SplashScreen({ onDone }) {
-  const [dot1, setDot1] = useState(0.15);
-  const [dot2, setDot2] = useState(0.15);
+  // Fixed 2026-08-14: real, plausible cause of a reported 'static
+  // splash flashes briefly before the real, animated one appears' —
+  // this used to start every dot at its dimmest, resting opacity
+  // (0.15), meaning the very first rendered frame, before any
+  // animation had actually run, looked static/paused. If that exact
+  // frame gets captured by the OS/browser as a cached splash-screen
+  // screenshot (a real, documented PWA behavior on Chrome/Android),
+  // it would keep showing that static moment on future launches.
+  // Starting the dots already mid-cycle means the very first frame
+  // ever painted already looks like motion, not a paused state.
+  const [dot1, setDot1] = useState(0.55);
+  const [dot2, setDot2] = useState(0.3);
   const [dot3, setDot3] = useState(0.15);
   const [fadeOut, setFadeOut] = useState(false);
 

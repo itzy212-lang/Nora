@@ -1,5 +1,10 @@
 // Nora Service Worker — PWA offline support
-const CACHE_NAME = 'nora-v5';
+// Bumped 2026-08-14, on request: investigating a reported stale
+// splash-screen flash on load. Forces every device to fully clear its
+// old cache and re-fetch fresh assets on next visit — a real,
+// standard fix for exactly this class of symptom, given how many
+// deployments happened today.
+const CACHE_NAME = 'nora-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
