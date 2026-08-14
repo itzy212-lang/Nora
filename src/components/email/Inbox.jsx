@@ -1659,6 +1659,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [search, setSearch]              = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
   const [searchError, setSearchError]    = useState(null);
+  const [isSearching, setIsSearching]    = useState(false);
   const searchRequestIdRef = useRef(0);
 
   // Fixed 2026-08-14, on confirmed live failure: the PostgREST .or()
@@ -1694,8 +1695,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       searchRequestIdRef.current += 1;
       setSearchResults(null);
       setSearchError(null);
+      setIsSearching(false);
       return;
     }
+    // Added 2026-08-14, on request: distinguishes 'a search is actively
+    // in flight' from 'this search genuinely found nothing' — the empty
+    // state was previously showing 'No emails in Inbox' during the
+    // debounce/request window too, which reads as though the inbox is
+    // empty rather than that a search just hasn't resolved yet.
+    setIsSearching(true);
     const term = search.trim();
     const timer = setTimeout(async () => {
       const requestId = ++searchRequestIdRef.current;
@@ -1705,11 +1713,13 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         if (error) throw error;
         setSearchResults(data || []);
         setSearchError(null);
+        setIsSearching(false);
       } catch (err) {
         if (requestId !== searchRequestIdRef.current) return;
         console.error('[Inbox search]', err);
         setSearchResults([]);
         setSearchError(err?.message || err?.details || err?.hint || JSON.stringify(err) || 'Unknown search error');
+        setIsSearching(false);
       }
     }, 350);
     return () => clearTimeout(timer);
@@ -2346,8 +2356,10 @@ if (syncErr) throw syncErr;
         >
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+            : isSearching
+            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>Searching…</div>
             : filtered.length === 0
-            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>No emails in {folder}</div>
+            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>{search && search.trim() ? 'No matching emails' : `No emails in ${folder}`}</div>
             : filtered.map(email => (
               <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(String(email.id))} />
             ))
