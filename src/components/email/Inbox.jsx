@@ -1659,19 +1659,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [search, setSearch]              = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
 
-  // Fixed 2026-08-13, on request: search was, in fact, entirely non-
-  // functional. Found and confirmed precisely: this query-triggering
-  // effect was physically misplaced inside BookingOverlay — an
-  // unrelated component — referencing search/setSearchResults that
-  // don't exist in that scope at all. The real Inbox component
-  // declared search/searchResults state and read from it, but nothing
-  // inside Inbox itself ever actually queried the database. Moved to
-  // the correct component, and expanded per the actual request:
-  // searches sender AND recipient fields (to, cc), not just sender —
-  // previously only checked who an email was from, never who it was
-  // sent to, so a name only appearing as a recipient could never be
-  // found. to_emails/raw_recipients are JSONB, cast to text to search
-  // them; to_email/cc_emails are already plain text.
+  // Fixed 2026-08-14, on confirmed live failure: the PostgREST .or()
+  // filter-string approach (even after removing the JSONB casts that
+  // caused the previous failure) is the wrong tool for this — filtering
+  // JSONB recipient fields properly needs real SQL, not the URL-based
+  // filter DSL. Moved to a real Postgres function (search_emails),
+  // tested directly against live data before wiring in: confirmed it
+  // correctly finds matches in subject/body/sender AND in recipients
+  // buried inside the JSONB fields (verified against a real email where
+  // the only match was a name inside to_emails, not the sender).
   useEffect(() => {
     if (!search || !search.trim()) {
       setSearchResults(null);
@@ -1680,12 +1676,8 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     const term = search.trim();
     const timer = setTimeout(async () => {
       try {
-        const { data } = await sb
-          .from('emails')
-          .select('id, subject, sender_name, sender_email, received_at, body_preview, is_read, flagged, folder, project_id')
-          .or(`subject.ilike.%${term}%,body.ilike.%${term}%,sender_name.ilike.%${term}%,sender_email.ilike.%${term}%,to_email.ilike.%${term}%,cc_emails.ilike.%${term}%,to_emails::text.ilike.%${term}%,raw_recipients::text.ilike.%${term}%`)
-          .order('received_at', { ascending: false })
-          .limit(300);
+        const { data, error } = await sb.rpc('search_emails', { search_term: term, result_limit: 300 });
+        if (error) throw error;
         setSearchResults(data || []);
       } catch (err) {
         console.error('[Inbox search]', err);
