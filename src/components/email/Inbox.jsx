@@ -1659,6 +1659,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [search, setSearch]              = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no results
   const [searchError, setSearchError]    = useState(null);
+  const searchRequestIdRef = useRef(0);
 
   // Fixed 2026-08-14, on confirmed live failure: the PostgREST .or()
   // filter-string approach (even after removing the JSONB casts that
@@ -1675,20 +1676,37 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // console.error gives no way to diagnose further from outside the
   // browser. If this RPC call fails for any reason, the real error
   // message now shows directly in the UI instead of just the console.
+  //
+  // Fixed 2026-08-14: real, confirmed race condition — reported live
+  // as results 'rearranging' and being inconsistent while typing.
+  // Typing a word letter by letter fires a new search on each pause;
+  // the debounce timer correctly prevents a NEW request from starting
+  // too eagerly, but does nothing to stop an EARLIER, already-in-
+  // flight request (e.g. for a partial word typed a moment ago) from
+  // resolving after a later one and overwriting its correct results
+  // with stale, incomplete-term matches — exactly what was seen: two
+  // different, inconsistent result sets landing out of order. Each
+  // request now carries its own id; a result is only applied if it's
+  // still the most recent request issued, and any older, now-stale
+  // response is silently discarded.
   useEffect(() => {
     if (!search || !search.trim()) {
+      searchRequestIdRef.current += 1;
       setSearchResults(null);
       setSearchError(null);
       return;
     }
     const term = search.trim();
     const timer = setTimeout(async () => {
+      const requestId = ++searchRequestIdRef.current;
       try {
         const { data, error } = await sb.rpc('search_emails', { search_term: term, result_limit: 300 });
+        if (requestId !== searchRequestIdRef.current) return; // a newer search has since started — discard
         if (error) throw error;
         setSearchResults(data || []);
         setSearchError(null);
       } catch (err) {
+        if (requestId !== searchRequestIdRef.current) return;
         console.error('[Inbox search]', err);
         setSearchResults([]);
         setSearchError(err?.message || err?.details || err?.hint || JSON.stringify(err) || 'Unknown search error');
