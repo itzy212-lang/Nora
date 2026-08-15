@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../../state/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from './NewProjectModal';
+import sb from '../../supabaseClient';
 
 function getProjectColour(project) {
   const aos = project.aos || [];
@@ -313,7 +314,7 @@ function ProjectCard({ project, onClick }) {
 }
 
 export default function ProjectList({ onOpenProject }) {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { loadProjects } = useProjects();
   const { projects = [] } = state;
 
@@ -628,12 +629,39 @@ export default function ProjectList({ onOpenProject }) {
             gap: 12,
           }}>
             {disputeProjects.map(p => (
-              <div key={p.id} onClick={() => onOpenProject(p)} style={{
-                cursor: 'pointer', padding: 14, borderRadius: 12,
+              <div key={p.id} style={{
+                padding: 14, borderRadius: 12,
                 border: '1px solid var(--border)', background: 'var(--bg2)',
+                position: 'relative',
               }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.bo || 'Dispute'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{p.ref}</div>
+                <div onClick={() => onOpenProject(p)} style={{ cursor: 'pointer' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.bo || 'Dispute'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{p.bo_premise_address || p.ref}</div>
+                </div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    // Added 2026-08-14, on request: real delete, to
+                    // clean up old/test disputes — confirmed the
+                    // underlying tables (dispute_cases, dispute_
+                    // parties, dispute_party_people, dispute_evidence)
+                    // all cascade-delete correctly from the projects
+                    // row already, so removing that row alone is
+                    // genuinely sufficient, not a partial cleanup.
+                    if (!confirm(`Delete this dispute permanently? This can't be undone.\n\n${p.bo || p.ref}`)) return;
+                    const { error } = await sb.from('projects').delete().eq('id', p.id);
+                    if (error) { alert(error.message); return; }
+                    dispatch({ type: 'REMOVE_PROJECT', payload: p.id });
+                  }}
+                  style={{
+                    position: 'absolute', top: 10, right: 10,
+                    background: 'none', border: 'none', color: 'var(--text3)',
+                    cursor: 'pointer', fontSize: 13, padding: 4,
+                  }}
+                  title="Delete this dispute"
+                >
+                  🗑
+                </button>
               </div>
             ))}
           </div>

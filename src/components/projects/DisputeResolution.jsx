@@ -27,6 +27,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   const [evidence,setEvidence]=useState([]);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
+  const [projectAddress,setProjectAddress]=useState(project.bo_premise_address||'');
   const [justSavedIds,setJustSavedIds]=useState(new Set());
   const [uploading,setUploading]=useState(false);
   const [brief,setBrief]=useState(null);
@@ -299,6 +300,24 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     if(error)setError(error.message);
   };
 
+  // Added 2026-08-14, on request: real, reported confusion — every
+  // dropdown used to link an email, attachment etc. to a project
+  // already correctly prefers bo_premise_address over the cryptic
+  // reference number, it's just always been empty for disputes. This
+  // saves whichever address the mediator picks directly into that
+  // same field — no changes needed to any of those other dropdowns,
+  // they'll just start showing the right thing automatically.
+  const saveProjectAddress=async(addr)=>{
+    setProjectAddress(addr);
+    const {error}=await sb.from('projects').update({bo_premise_address:addr||null}).eq('id',project.id);
+    if(error)setError(error.message);
+  };
+
+  const allAddresses=parties.flatMap(p=>[
+    p.address?{label:`${p.label}${p.party_name?` — ${p.party_name}`:''}`,address:p.address}:null,
+    ...(p.dispute_party_people||[]).filter(x=>x.address).map(x=>({label:`${p.label} — ${x.name||'additional person'}`,address:x.address})),
+  ]).filter(Boolean);
+
   const raiseInvoiceFor=(p)=>{
     const person=(p.dispute_party_people||[])[0];
     onRaiseInvoice?.({
@@ -315,7 +334,15 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
       {onBack?<button style={btn} onClick={onBack}>← Back</button>:<div/>}
       <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
-        {parties.length>=2&&(
+        {allAddresses.length>0&&(
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:12,color:'var(--text3)'}}>Shown as:</span>
+            <select style={{...input,width:220}} value={projectAddress} onChange={e=>saveProjectAddress(e.target.value)}>
+              <option value="">Reference number (default)</option>
+              {allAddresses.map((a,i)=><option key={i} value={a.address}>{a.label} — {a.address}</option>)}
+            </select>
+          </div>
+        )}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:12,color:'var(--text3)'}}>Mediation date:</span>
             <input type="date" style={{...input,width:150}} value={caseRow?.mediation_date||''} onChange={e=>saveMediationDateTime('mediation_date',e.target.value)}/>
