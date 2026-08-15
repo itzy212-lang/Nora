@@ -226,14 +226,14 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       const today=new Date();
 
       const merge_data={
-        PARTY_A_1_NAME:peopleA[0]?.name||partyA.party_name||'',
-        PARTY_A_1_ADDRESS:peopleA[0]?.address||'',
-        PARTY_A_2_NAME:peopleA[1]?.name||'',
-        PARTY_A_2_ADDRESS:peopleA[1]?.address||'',
-        PARTY_B_1_NAME:peopleB[0]?.name||partyB.party_name||'',
-        PARTY_B_1_ADDRESS:peopleB[0]?.address||'',
-        PARTY_B_2_NAME:peopleB[1]?.name||'',
-        PARTY_B_2_ADDRESS:peopleB[1]?.address||'',
+        PARTY_A_NAME_1:peopleA[0]?.name||partyA.party_name||'',
+        PARTY_A_ADDRESS_1:peopleA[0]?.address||'',
+        PARTY_A_NAME_2:peopleA[1]?.name||'',
+        PARTY_A_ADDRESS_2:peopleA[1]?.address||'',
+        PARTY_B_NAME_1:peopleB[0]?.name||partyB.party_name||'',
+        PARTY_B_ADDRESS_1:peopleB[0]?.address||'',
+        PARTY_B_NAME_2:peopleB[1]?.name||'',
+        PARTY_B_ADDRESS_2:peopleB[1]?.address||'',
         DISPUTE_DESCRIPTION:partyA.position_statement||partyB.position_statement||'',
         AGREEMENT_DAY:String(today.getDate()),
         AGREEMENT_MONTH:today.toLocaleDateString('en-GB',{month:'long'}),
