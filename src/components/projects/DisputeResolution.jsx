@@ -217,12 +217,12 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     }
   };
 
-  // Added 2026-08-14, on request: generates the mediation agreement PDF
+  // Added 2026-08-14, on request: generates the mediation agreement
   // from whatever template's been uploaded in Settings > Templates,
   // filling in the placeholders documented in Settings > Placeholders.
   // Reuses /api/generate-doc entirely as-is — it's already a fully
-  // generic merge+PDF endpoint, no new backend needed. No e-signature
-  // yet, deliberately, per instruction — just a downloadable PDF to
+  // generic merge endpoint, no new backend needed. No e-signature
+  // yet, deliberately, per instruction — a downloadable docx to
   // email manually for now.
   const [generatingAgreement,setGeneratingAgreement]=useState(false);
   const generateMediationAgreement=async()=>{
@@ -260,16 +260,20 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         file_name:'Mediation Agreement.docx',
       };
 
+      // Fixed 2026-08-14, on request: switched from PDF to docx —
+      // the raw docx is always in this endpoint's response regardless
+      // of output_format, so this also skips the PDF conversion step
+      // entirely, which is faster too.
       const res=await fetch('/api/generate-doc',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({template_b64:tpl.file_b64,merge_data,output_format:'pdf',save_to_onedrive:false}),
+        body:JSON.stringify({template_b64:tpl.file_b64,merge_data,output_format:'docx',save_to_onedrive:false}),
       });
       const json=await res.json();
-      if(!json.success||!json.pdf_b64){setError(json.error||'Could not generate the mediation agreement.');return;}
+      if(!json.success||!json.docx_b64){setError(json.error||'Could not generate the mediation agreement.');return;}
 
       const link=document.createElement('a');
-      link.href=`data:application/pdf;base64,${json.pdf_b64}`;
-      link.download='Mediation Agreement.pdf';
+      link.href=`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${json.docx_b64}`;
+      link.download='Mediation Agreement.docx';
       link.click();
     }catch(e){
       setError(e.message||'Could not generate the mediation agreement.');
