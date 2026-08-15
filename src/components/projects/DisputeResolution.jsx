@@ -71,15 +71,13 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     const i=parties.length;
     const {data,error}=await sb.from('dispute_parties').insert({case_id:caseRow.id,label:partyLabel(i),sort_order:i}).select('*').single();
     if(error)return setError(error.message);
-    // Fixed 2026-08-14, real reported confusion: a party used to start
-    // with zero people, so there was nowhere to enter an address at
-    // all unless you separately clicked '+ Add person' — not obvious
-    // for the ordinary case of one person/company per side. Now
-    // creates that first person row automatically, so a name and
-    // address field are visible immediately.
-    const {data:person,error:personErr}=await sb.from('dispute_party_people').insert({party_id:data.id,name:'',sort_order:0}).select('*').single();
-    if(personErr)return setError(personErr.message);
-    setParties(x=>[...x,{...data,dispute_party_people:[person]}]);
+    // Fixed 2026-08-14, reverted per direct feedback: auto-creating a
+    // person row here was confusing, not helpful — it looked like a
+    // contradictory 'different person' from the party itself. Party A
+    // now has its own plain address field directly (see saveParty
+    // below); 'People in Party A' starts genuinely empty, only used
+    // when there's an actual additional named individual to add.
+    setParties(x=>[...x,{...data,dispute_party_people:[]}]);
   };
 
   const patchParty=(id,k,v)=>setParties(ps=>ps.map(p=>p.id===id?{...p,[k]:v}:p));
@@ -89,6 +87,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     const {error}=await sb.from('dispute_parties').update({
       party_name:p.party_name||null,
       party_type:p.party_type||null,
+      address:p.address||null,
       position_statement:p.position_statement||null,
       desired_outcome:p.desired_outcome||null,
       fee:p.fee===''||p.fee==null?null:Number(p.fee),
@@ -118,7 +117,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   };
 
   const patchPerson=(pid,id,k,v)=>setParties(ps=>ps.map(p=>p.id===pid?{...p,dispute_party_people:(p.dispute_party_people||[]).map(x=>x.id===id?{...x,[k]:v}:x)}:p));
-  const savePerson=async x=>{const {error}=await sb.from('dispute_party_people').update({name:x.name,role:x.role||null,email:x.email||null,phone:x.phone||null,address:x.address||null}).eq('id',x.id);if(error)setError(error.message);};
+  const savePerson=async x=>{const {error}=await sb.from('dispute_party_people').update({name:x.name,email:x.email||null,phone:x.phone||null,address:x.address||null}).eq('id',x.id);if(error)setError(error.message);};
   const removePerson=async(pid,id)=>{const {error}=await sb.from('dispute_party_people').delete().eq('id',id);if(error)return setError(error.message);setParties(ps=>ps.map(p=>p.id===pid?{...p,dispute_party_people:p.dispute_party_people.filter(x=>x.id!==id)}:p));};
 
   const addEvidence=async()=>{
@@ -242,14 +241,14 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       const today=new Date();
 
       const merge_data={
-        PARTY_A_NAME_1:peopleA[0]?.name||partyA.party_name||'',
-        PARTY_A_ADDRESS_1:peopleA[0]?.address||'',
-        PARTY_A_NAME_2:peopleA[1]?.name||'',
-        PARTY_A_ADDRESS_2:peopleA[1]?.address||'',
-        PARTY_B_NAME_1:peopleB[0]?.name||partyB.party_name||'',
-        PARTY_B_ADDRESS_1:peopleB[0]?.address||'',
-        PARTY_B_NAME_2:peopleB[1]?.name||'',
-        PARTY_B_ADDRESS_2:peopleB[1]?.address||'',
+        PARTY_A_NAME_1:partyA.party_name||peopleA[0]?.name||'',
+        PARTY_A_ADDRESS_1:partyA.address||peopleA[0]?.address||'',
+        PARTY_A_NAME_2:peopleA[0]?.name||'',
+        PARTY_A_ADDRESS_2:peopleA[0]?.address||'',
+        PARTY_B_NAME_1:partyB.party_name||peopleB[0]?.name||'',
+        PARTY_B_ADDRESS_1:partyB.address||peopleB[0]?.address||'',
+        PARTY_B_NAME_2:peopleB[0]?.name||'',
+        PARTY_B_ADDRESS_2:peopleB[0]?.address||'',
         PARTY_A_FEE:partyA.fee!=null?String(partyA.fee):'',
         PARTY_B_FEE:partyB.fee!=null?String(partyB.fee):'',
         MEDIATION_DATE:caseRow?.mediation_date?new Date(caseRow.mediation_date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'',
@@ -303,7 +302,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       bo_premise_address:project.bo_premise_address||'',
       bill_to_name:p.party_name||person?.name||p.label,
       bill_to_email:person?.email||'',
-      bill_to_address:person?.address||'',
+      bill_to_address:p.address||person?.address||'',
       project_id:project.id,
     });
   };
@@ -363,18 +362,18 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         <input style={input} value={p.party_name||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'party_name',e.target.value)} placeholder="Party / company name"/>
         <input style={input} value={p.party_type||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'party_type',e.target.value)} placeholder="Role e.g. Homeowner / Contractor"/>
         <input style={input} type="number" value={p.fee??''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'fee',e.target.value)} placeholder="Mediation fee (£) for this party"/>
+        <input style={{...input,gridColumn:'1 / -1'}} value={p.address||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'address',e.target.value)} placeholder="Address — needed for the mediation agreement"/>
       </div>
       <textarea style={{...input,minHeight:220,resize:'vertical',marginBottom:10}} value={p.position_statement||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'position_statement',e.target.value)} placeholder="Paste this party's complete initial case brief, claim, response or position here"/>
       <textarea style={{...input,minHeight:72,resize:'vertical'}} value={p.desired_outcome||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'desired_outcome',e.target.value)} placeholder="What this party is asking for / outcome sought"/>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,marginBottom:8}}>
-        <div style={{fontSize:12,fontWeight:700,color:'var(--text2)'}}>People in {p.label}</div>
+        <div style={{fontSize:12,fontWeight:700,color:'var(--text2)'}}>Additional named individuals in {p.label} <span style={{fontWeight:400,color:'var(--text3)'}}>— only if there's more than one person (e.g. a couple)</span></div>
         <button style={btn} onClick={()=>addPerson(p)}>+ Add person</button>
       </div>
       {(p.dispute_party_people||[]).map(x=><div key={x.id} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr)) auto',gap:7,marginBottom:7}}>
         <input style={input} value={x.name||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'name',e.target.value)} placeholder="Name"/>
-        <input style={input} value={x.role||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'role',e.target.value)} placeholder="Role"/>
         <input style={input} value={x.email||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'email',e.target.value)} placeholder="Email"/>
-        <input style={{...input,gridColumn:'1 / -2'}} value={x.address||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'address',e.target.value)} placeholder="Address — needed for the mediation agreement"/>
+        <input style={{...input,gridColumn:'1 / -2'}} value={x.address||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'address',e.target.value)} placeholder="Address (only if different from the address above)"/>
         <button style={btn} onClick={()=>removePerson(p.id,x.id)}>×</button>
       </div>)}
       <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:8,marginTop:10}}>
