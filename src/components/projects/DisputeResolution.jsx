@@ -82,6 +82,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       party_type:p.party_type||null,
       position_statement:p.position_statement||null,
       desired_outcome:p.desired_outcome||null,
+      fee:p.fee===''||p.fee==null?null:Number(p.fee),
       updated_at:new Date().toISOString()
     }).eq('id',p.id);
     if(manage)setSaving(false);
@@ -234,6 +235,10 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         PARTY_B_ADDRESS_1:peopleB[0]?.address||'',
         PARTY_B_NAME_2:peopleB[1]?.name||'',
         PARTY_B_ADDRESS_2:peopleB[1]?.address||'',
+        PARTY_A_FEE:partyA.fee!=null?String(partyA.fee):'',
+        PARTY_B_FEE:partyB.fee!=null?String(partyB.fee):'',
+        MEDIATION_DATE:caseRow?.mediation_date?new Date(caseRow.mediation_date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'',
+        MEDIATION_TIME:caseRow?.mediation_time||'',
         DISPUTE_DESCRIPTION:partyA.position_statement||partyB.position_statement||'',
         AGREEMENT_DAY:String(today.getDate()),
         AGREEMENT_MONTH:today.toLocaleDateString('en-GB',{month:'long'}),
@@ -267,6 +272,15 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   // invoice modal untouched — just pre-fills bill_to_name/email from
   // whichever party is selected here, plus the person's email if the
   // party itself has none. No new invoice UI or PDF logic needed.
+  // Added 2026-08-14, on request: mediation date/time, shown once both
+  // parties are in — feeds MEDIATION_DATE/MEDIATION_TIME in the
+  // agreement, same as PARTY_A_FEE/PARTY_B_FEE do for the fee table.
+  const saveMediationDateTime=async(k,v)=>{
+    setCaseRow(c=>({...c,[k]:v}));
+    const {error}=await sb.from('dispute_cases').update({[k]:v||null}).eq('id',caseRow.id);
+    if(error)setError(error.message);
+  };
+
   const raiseInvoiceFor=(p)=>{
     const person=(p.dispute_party_people||[])[0];
     onRaiseInvoice?.({
@@ -283,6 +297,13 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
       {onBack?<button style={btn} onClick={onBack}>← Back</button>:<div/>}
       <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+        {parties.length>=2&&(
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:12,color:'var(--text3)'}}>Mediation date:</span>
+            <input type="date" style={{...input,width:150}} value={caseRow?.mediation_date||''} onChange={e=>saveMediationDateTime('mediation_date',e.target.value)}/>
+            <input type="time" style={{...input,width:110}} value={caseRow?.mediation_time||''} onChange={e=>saveMediationDateTime('mediation_time',e.target.value)}/>
+          </div>
+        )}
         {parties.length>=2&&(
           <button style={primary} onClick={generateMediationAgreement} disabled={generatingAgreement}>
             {generatingAgreement?'Generating…':'📄 Generate mediation agreement'}
@@ -326,6 +347,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginBottom:10}}>
         <input style={input} value={p.party_name||''} onChange={e=>patchParty(p.id,'party_name',e.target.value)} placeholder="Party / company name"/>
         <input style={input} value={p.party_type||''} onChange={e=>patchParty(p.id,'party_type',e.target.value)} placeholder="Role e.g. Homeowner / Contractor"/>
+        <input style={input} type="number" value={p.fee??''} onChange={e=>patchParty(p.id,'fee',e.target.value)} placeholder="Mediation fee (£) for this party"/>
       </div>
       <textarea style={{...input,minHeight:220,resize:'vertical',marginBottom:10}} value={p.position_statement||''} onChange={e=>patchParty(p.id,'position_statement',e.target.value)} placeholder="Paste this party's complete initial case brief, claim, response or position here"/>
       <textarea style={{...input,minHeight:72,resize:'vertical'}} value={p.desired_outcome||''} onChange={e=>patchParty(p.id,'desired_outcome',e.target.value)} placeholder="What this party is asking for / outcome sought"/>
