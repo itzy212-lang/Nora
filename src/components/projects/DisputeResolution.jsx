@@ -27,6 +27,7 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
   const [evidence,setEvidence]=useState([]);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
+  const [justSavedIds,setJustSavedIds]=useState(new Set());
   const [uploading,setUploading]=useState(false);
   const [brief,setBrief]=useState(null);
   const [error,setError]=useState('');
@@ -70,7 +71,15 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     const i=parties.length;
     const {data,error}=await sb.from('dispute_parties').insert({case_id:caseRow.id,label:partyLabel(i),sort_order:i}).select('*').single();
     if(error)return setError(error.message);
-    setParties(x=>[...x,{...data,dispute_party_people:[]}]);
+    // Fixed 2026-08-14, real reported confusion: a party used to start
+    // with zero people, so there was nowhere to enter an address at
+    // all unless you separately clicked '+ Add person' — not obvious
+    // for the ordinary case of one person/company per side. Now
+    // creates that first person row automatically, so a name and
+    // address field are visible immediately.
+    const {data:person,error:personErr}=await sb.from('dispute_party_people').insert({party_id:data.id,name:'',sort_order:0}).select('*').single();
+    if(personErr)return setError(personErr.message);
+    setParties(x=>[...x,{...data,dispute_party_people:[person]}]);
   };
 
   const patchParty=(id,k,v)=>setParties(ps=>ps.map(p=>p.id===id?{...p,[k]:v}:p));
@@ -87,6 +96,12 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     }).eq('id',p.id);
     if(manage)setSaving(false);
     if(error){setError(error.message);throw error;}
+    // Added 2026-08-14, real reported confusion: no visible
+    // confirmation that a save actually happened — genuinely
+    // unclear whether the button (or auto-save on leaving a field)
+    // had done anything at all.
+    setJustSavedIds(s=>new Set([...s,p.id]));
+    setTimeout(()=>setJustSavedIds(s=>{const n=new Set(s);n.delete(p.id);return n;}),1800);
   };
 
   const removeParty=async p=>{
@@ -345,12 +360,12 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         <button style={{...btn,color:'#dc2626'}} onClick={()=>removeParty(p)}>Remove</button>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginBottom:10}}>
-        <input style={input} value={p.party_name||''} onChange={e=>patchParty(p.id,'party_name',e.target.value)} placeholder="Party / company name"/>
-        <input style={input} value={p.party_type||''} onChange={e=>patchParty(p.id,'party_type',e.target.value)} placeholder="Role e.g. Homeowner / Contractor"/>
-        <input style={input} type="number" value={p.fee??''} onChange={e=>patchParty(p.id,'fee',e.target.value)} placeholder="Mediation fee (£) for this party"/>
+        <input style={input} value={p.party_name||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'party_name',e.target.value)} placeholder="Party / company name"/>
+        <input style={input} value={p.party_type||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'party_type',e.target.value)} placeholder="Role e.g. Homeowner / Contractor"/>
+        <input style={input} type="number" value={p.fee??''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'fee',e.target.value)} placeholder="Mediation fee (£) for this party"/>
       </div>
-      <textarea style={{...input,minHeight:220,resize:'vertical',marginBottom:10}} value={p.position_statement||''} onChange={e=>patchParty(p.id,'position_statement',e.target.value)} placeholder="Paste this party's complete initial case brief, claim, response or position here"/>
-      <textarea style={{...input,minHeight:72,resize:'vertical'}} value={p.desired_outcome||''} onChange={e=>patchParty(p.id,'desired_outcome',e.target.value)} placeholder="What this party is asking for / outcome sought"/>
+      <textarea style={{...input,minHeight:220,resize:'vertical',marginBottom:10}} value={p.position_statement||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'position_statement',e.target.value)} placeholder="Paste this party's complete initial case brief, claim, response or position here"/>
+      <textarea style={{...input,minHeight:72,resize:'vertical'}} value={p.desired_outcome||''} onBlur={()=>saveParty(p)} onChange={e=>patchParty(p.id,'desired_outcome',e.target.value)} placeholder="What this party is asking for / outcome sought"/>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,marginBottom:8}}>
         <div style={{fontSize:12,fontWeight:700,color:'var(--text2)'}}>People in {p.label}</div>
         <button style={btn} onClick={()=>addPerson(p)}>+ Add person</button>
@@ -362,7 +377,10 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
         <input style={{...input,gridColumn:'1 / -2'}} value={x.address||''} onBlur={()=>savePerson(x)} onChange={e=>patchPerson(p.id,x.id,'address',e.target.value)} placeholder="Address — needed for the mediation agreement"/>
         <button style={btn} onClick={()=>removePerson(p.id,x.id)}>×</button>
       </div>)}
-      <div style={{display:'flex',justifyContent:'flex-end',marginTop:10}}><button style={primary} onClick={()=>saveParty(p)}>{saving?'Saving…':'Save party'}</button></div>
+      <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:8,marginTop:10}}>
+        {justSavedIds.has(p.id)&&<span style={{fontSize:12,color:'#16a34a',fontWeight:700}}>✓ Saved</span>}
+        <button style={primary} onClick={()=>saveParty(p)}>{saving?'Saving…':'Save party'}</button>
+      </div>
     </div>)}
 
     <div style={box}>
