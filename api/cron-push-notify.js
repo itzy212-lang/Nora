@@ -61,17 +61,12 @@ export default async function handler(req, res) {
 
     if (!projects?.length) return res.status(200).json({ ok: true, sent: 0, message: 'No active projects' });
 
-    // Load AOs from adjoining_owners table
-    const { data: aoRows } = await sb
-      .from('adjoining_owners')
-      .select('*')
-      .in('project_id', projects.map(p => p.id));
-
-    const aosByProject = {};
-    (aoRows || []).forEach(ao => {
-      if (!aosByProject[ao.project_id]) aosByProject[ao.project_id] = [];
-      aosByProject[ao.project_id].push(ao);
-    });
+    // Fixed 2026-08-16: removed the adjoining_owners table query
+    // entirely — confirmed it has zero deadline-related columns, and
+    // was causing real deadlines to be silently missed for any
+    // project with rows there (see the note below). The JSON aos
+    // column on projects is the actual, confirmed source of this
+    // data.
 
     // Load all push subscriptions
     const { data: subscriptions } = await sb.from('push_subscriptions').select('*');
@@ -81,9 +76,22 @@ export default async function handler(req, res) {
 
     for (const project of projects) {
       const addr = project.bo_premise_address || project.ref || project.id;
-      const tableAos = aosByProject[project.id] || [];
       const jsonAos = Array.isArray(project.aos) ? project.aos : [];
-      const aos = tableAos.length > 0 ? tableAos : jsonAos;
+      // Fixed 2026-08-16: real, confirmed bug, found while verifying
+      // this endpoint's actual deadline-finding logic (not just its
+      // auth, which was fixed separately) — adjoining_owners has zero
+      // deadline-related columns at all, confirmed directly against
+      // its schema. The real deadline fields (consentDeadline,
+      // s10Deadline etc.) only ever exist in the JSON aos column on
+      // projects, confirmed directly against real data. The old
+      // 'prefer the table if it has any rows' logic meant any project
+      // with rows in adjoining_owners (14 real projects, checked)
+      // silently used the deadline-less table instead of the JSON
+      // column that actually has the data — those projects' deadlines
+      // could never have been found, any day, with no visible error.
+      // adjoining_owners structurally cannot hold this data, so always
+      // using the JSON column here is correct, not just a workaround.
+      const aos = jsonAos;
 
       for (const ao of aos) {
         const st = (ao.status || '').toLowerCase();
