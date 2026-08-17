@@ -4,7 +4,7 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
-import { loadCachedEmails, saveCachedEmails } from '../../utils/emailCache';
+import { loadCachedEmails, saveCachedEmails, clearEmailCache } from '../../utils/emailCache';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
@@ -2357,6 +2357,29 @@ if (syncErr) throw syncErr;
               display: 'inline-block',
               animation: (checkingForUpdates || syncing) ? 'nora-refresh-spin 0.8s linear infinite' : 'none',
             }}>↻</span>
+          </button>
+          {/* Added 2026-08-17, on request: inbox showing stale/wrong
+              content briefly on reload — genuinely likely caused by
+              old, inconsistent entries sitting in the on-device cache
+              (built to make reopening the app instant) getting out of
+              sync with the real database. There was no way to clear
+              just this before short of a full uninstall/reinstall.
+              This clears the local cache specifically and forces a
+              real, full reload from the database. */}
+          <button
+            onClick={async () => {
+              if (!confirm('Clear local email cache and reload from the database? This only clears what\'s stored on this device — nothing in your mailbox is affected.')) return;
+              await clearEmailCache();
+              window.location.reload();
+            }}
+            title="Clear local cache and reload — use this if the inbox is showing stale or inconsistent content"
+            style={{
+              padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 99,
+              background: 'none', fontSize: 12, flexShrink: 0,
+              color: 'var(--text3)', cursor: 'pointer',
+            }}
+          >
+            Fix inbox
           </button>
         </div>
 
