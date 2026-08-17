@@ -2016,7 +2016,7 @@ ${cleanEmailBody(email.body || '')}
 `.trim().slice(0, 40000);
 }
 
-async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null, inboxSearchResults = [] }) {
+async function buildSystemPrompt({ brain, projectId, resolvedProject, projectBundle, scopedEmailContext, modeHint, draftingExamples = [], userPrompt = '', projectsContext = [], contactsContext = [], chatHistory = [], surface = '', representation = null, stage1Brief = null, inboxSearchResults = [] }) {
 
   // ── MILESTONE 2: Stage 2 Lean Prompt ──────────────────────────────────────
   // When a Stage 1 brief is available, bypass the full 70k prompt and build a
@@ -2240,6 +2240,21 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
         return `- ${p.bo_premise_address || p.address || 'Unknown address'} (${p.ref || 'no ref'}, status: ${p.status || 'active'})${aoLines ? ` — ${aoLines}` : ''}`;
       }).join('\n');
       prompt += `\n\nALL PROJECTS SUMMARY (for cross-practice / aggregate questions — every project regardless of status):\n${summaryLines}\n`;
+    }
+    // Added 2026-08-17, on request: contacts (surveyors etc.) existed
+    // as real data but were never available to look up when drafting —
+    // e.g. 'nominate Alex Frame, Surinder and Maurice as third
+    // surveyor options' needs their real firm/email/phone pulled in
+    // properly, not just the bare names repeated back. Included in
+    // both project chat and general chat — unlike the projects
+    // summary above, this isn't gated on no project being active, a
+    // contact lookup is just as useful while drafting within a
+    // project. Only ~20 total, cheap to include in full.
+    if ((contactsContext || []).length > 0) {
+      const contactLines = contactsContext.map(c =>
+        `- ${c.name || 'Unknown'}${c.firm ? `, ${c.firm}` : ''}${c.email ? ` — ${c.email}` : ''}${c.phone ? ` — ${c.phone}` : ''}`
+      ).join('\n');
+      prompt += `\n\nCONTACTS (look these up by name when the user references someone to include their real details — e.g. nominating a third surveyor):\n${contactLines}\n`;
     }
   } catch (semErr) {
     console.warn('[ely-smart] semantic search failed silently:', semErr.message);
@@ -4231,6 +4246,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       draftingExamples,
       userPrompt: prompt,
       projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
+      contactsContext: body?.context?.contacts || body?.contacts || [],
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
       representation,

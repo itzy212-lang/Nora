@@ -191,6 +191,20 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   const [globalSessions, setGlobalSessions] = useState([]);
   const [error, setError] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
+  // Added 2026-08-17, on request: contacts existed as real, populated
+  // data (name/firm/email/phone) but were never wired into chat/
+  // drafting at all — the AI genuinely had no way to look someone up
+  // by name and pull their real details. Fetched once per hook
+  // instance (only 20 total, cheap) and included on every request
+  // below, regardless of surface — this is exactly as useful in
+  // project chat as in general chat.
+  const [contacts, setContacts] = useState([]);
+  useEffect(() => {
+    if (!sb) return;
+    sb.from('contacts').select('name, firm, email, phone, type').then(({ data }) => {
+      if (data) setContacts(data);
+    });
+  }, []);
 
   const userId =
     state.currentUser?.id ||
@@ -509,6 +523,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         context: {
           currentProject,
           projectsContext,
+          contacts,
           recentEmails: surface === 'main_chat' ? recentEmails : [],
           currentView: state.currentView || null,
           activeProjectId: effectiveProjectId,
@@ -640,6 +655,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     state.currentView,
     chatHistory,
     userId,
+    contacts,
     buildProjectsContext,
     buildCurrentProject,
     buildRecentEmails,
