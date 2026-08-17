@@ -65,7 +65,11 @@ export default function App() {
   const { state, dispatch } = useApp();
   const { currentUser, settings } = state;
   const { loadProjects, setCurrentProject, clearCurrentProject } = useProjects();
-  const { loadEmails, loadMoreEmails, loadingMore, hasMoreEmails } = useEmails();
+  // Fixed 2026-08-17: loadEmails itself is no longer called from here
+  // (see the removed call in the login effect below) — only
+  // loadMoreEmails (pagination) and the loading-state flags are
+  // actually used in this file now.
+  const { loadMoreEmails, loadingMore, hasMoreEmails } = useEmails();
   const { invoices, createInvoice } = useInvoices();
 
   const [authChecked, setAuthChecked]       = useState(false);
@@ -139,7 +143,18 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       loadProjects();
-      loadEmails();
+      // Fixed 2026-08-17: real, confirmed bug — this fired a
+      // completely separate, older, simpler loadEmails (from
+      // useEmails.js: flat 'fetch 300, replace everything', no cache
+      // awareness) at the same time Inbox.jsx runs its own newer,
+      // proper cache-and-incremental system. Both wrote to the same
+      // shared state independently, racing each other with no
+      // coordination — whichever finished last won, which is exactly
+      // what caused 'sometimes shows old cached content, sometimes
+      // briefly blank, sometimes correct' on refresh. Inbox.jsx's own
+      // system already handles the initial load properly (including
+      // showing cached data instantly); this duplicate call is
+      // removed, not replaced.
 
       // Register push notifications after login (deferred so it doesn't block)
       setTimeout(() => registerPushNotifications(currentUser.email), 3000);
