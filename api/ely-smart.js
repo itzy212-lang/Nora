@@ -2221,6 +2221,26 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
         console.log('[ely-smart] cross-project results found:', crossResult.results.length, 'items');
       }
     }
+    // Fixed 2026-08-17, on request: searchNamedProject above only ever
+    // finds ONE specific project the user names directly — there was
+    // genuinely no mechanism at all for aggregate, cross-practice
+    // questions ('which third surveyors do I recommend', 'how many
+    // AOs have I dealt with this year'), so the AI had nothing to
+    // reason across and correctly said it had no access. This gives
+    // it real visibility: a compact one-line-per-project summary
+    // covering every project regardless of status, so it can actually
+    // answer these. Small and cheap — only 37 projects total.
+    if (projectsCtx.length) {
+      const summaryLines = projectsCtx.map(p => {
+        const aoLines = (p.aos || []).map(ao => {
+          const ts = ao.thirdSurveyor;
+          const tsText = ts?.name ? `, third surveyor: ${ts.name}${ts.firm ? ` (${ts.firm})` : ''}` : '';
+          return `${ao.name || 'AO'}${tsText}`;
+        }).join('; ');
+        return `- ${p.bo_premise_address || p.address || 'Unknown address'} (${p.ref || 'no ref'}, status: ${p.status || 'active'})${aoLines ? ` — ${aoLines}` : ''}`;
+      }).join('\n');
+      prompt += `\n\nALL PROJECTS SUMMARY (for cross-practice / aggregate questions — every project regardless of status):\n${summaryLines}\n`;
+    }
   } catch (semErr) {
     console.warn('[ely-smart] semantic search failed silently:', semErr.message);
     semanticResults = null;

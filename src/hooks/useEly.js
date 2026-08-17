@@ -215,8 +215,14 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   const buildProjectsContext = useCallback(() => {
     const projects = state.projects || [];
 
+    // Fixed 2026-08-17, on request: this used to exclude every
+    // complete/archived project, so cross-practice questions (e.g.
+    // 'which third surveyors do I recommend') had no access to
+    // exactly the data that answers them — a genuine recommendation
+    // almost always comes from a finished case, not one still open.
+    // Only 37 total projects exist, so there's no real payload-size
+    // reason to exclude anything.
     return projects
-      .filter(p => p.status !== 'complete' && p.status !== 'archived')
       .slice(0, 50)
       .map(p => {
         const np = normaliseProject(p);
@@ -239,6 +245,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
             premise: ao.premise,
             status: ao.status,
             surveyor: ao.surveyor,
+            thirdSurveyor: ao.third_surveyor,
           })),
         };
       });

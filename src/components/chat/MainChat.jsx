@@ -328,7 +328,8 @@ export default function MainChat({ onOpenComposer, onClose }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceStopSignal, setVoiceStopSignal] = useState(0);
   const [lastDraft, setLastDraft] = useState('');
-  const [restoreAttempted, setRestoreAttempted] = useState(false);
+  // Fixed 2026-08-17: restoreAttempted was only used by the removed
+  // session-restoration effect above — no longer needed.
   const [linkingProject, setLinkingProject] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -480,37 +481,15 @@ export default function MainChat({ onOpenComposer, onClose }) {
     if (!stillExists) setSelectedEmailId('');
   }, [allEmails, selectedEmailId]);
 
-  useEffect(() => {
-    if (restoreAttempted || sessionsLoading || !sortedSessions.length) return;
-
-    let savedSessionId = '';
-    try {
-      savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY) || '';
-    } catch {}
-
-    // Only restore if there's an explicitly saved session — never auto-load most recent
-    const targetSession = savedSessionId
-      ? sortedSessions.find(s => String(s.id) === String(savedSessionId))
-      : null;
-
-    if (!targetSession?.id) {
-      setRestoreAttempted(true);
-      return;
-    }
-
-    setRestoreAttempted(true);
-
-    loadSession(targetSession.id)
-      .then(bundle => {
-        if (bundle?.messages) {
-          setMessages(bundle.messages);
-          setActiveChatId(targetSession.id);
-        }
-      })
-      .catch(err => {
-        console.warn('[MainChat] Failed to restore session:', err.message);
-      });
-  }, [restoreAttempted, sessionsLoading, sortedSessions, loadSession]);
+  // Fixed 2026-08-17, on request: this used to restore whichever chat
+  // was last active, so opening Ask Nora always continued the
+  // previous conversation instead of starting fresh. That was
+  // deliberate, working-as-designed behavior — not a bug — the user
+  // now wants a genuinely new chat every time instead. Restoration
+  // logic removed entirely; messages/activeChatId simply stay at
+  // their default new-chat state on every mount. Manually switching to
+  // a past chat from the history list elsewhere is untouched — this
+  // only removes the automatic restore-on-open.
 
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current;
