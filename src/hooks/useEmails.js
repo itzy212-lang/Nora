@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
 import { saveCachedEmails } from '../utils/emailCache';
@@ -320,6 +320,7 @@ export function useEmails() {
 
     // Save sent email row to Supabase so to_emails and project_id are recorded
     let savedEmailId = null;
+    let insertedRow = null;
     if (sb) {
       const toList = String(to || '').split(/[;,\n]/).map(s => s.trim()).filter(Boolean);
       const ccList = cc ? String(cc).split(/[;,\n]/).map(s => s.trim()).filter(Boolean) : [];
@@ -338,8 +339,9 @@ export function useEmails() {
         is_read: true,
         project_id: projectId || null,
         user_id: state.currentUser?.id || null,
-      }).select('id').maybeSingle();
-      savedEmailId = inserted?.data?.id || null;
+      }).select('*').maybeSingle();
+      savedEmailId = inserted?.id || null;
+      insertedRow = inserted || null;
     }
 
     // Extract key facts into project memory in the background (fire and forget)
@@ -363,27 +365,34 @@ export function useEmails() {
       }).catch(() => {});
     }
 
-    await loadEmails({ force: true }).catch(() => {});
+    // Fixed 2026-08-17, on request: this used to call loadEmails({
+    // force: true }) — this hook's own blunt 'fetch 300 most recent,
+    // replace everything' function, completely bypassing Inbox.jsx's
+    // proper cache-aware system. A narrower race than the 5-minute
+    // interval removed above (only if the inbox happened to be
+    // loading at the exact moment an email was sent), but the same
+    // underlying flaw. Appends just the one email that was actually
+    // sent instead — safe regardless of what else is loading.
+    if (insertedRow) {
+      dispatch({ type: 'APPEND_EMAILS', payload: [normalizeEmail(insertedRow)] });
+    }
     return data || { ok: true };
-  }, [loadEmails, state.currentUser]);
+  }, [state.currentUser]);
 
-  // ── Auto-sync every 5 minutes ────────────────────────────────────────────
-  const syncIntervalRef = useRef(null);
-
-  useEffect(() => {
-    // Start auto-sync after initial load
-    syncIntervalRef.current = setInterval(async () => {
-      try {
-        await syncOutlook();
-      } catch {
-        // Silent — never interrupt the user
-      }
-    }, 5 * 60 * 1000); // every 5 minutes
-
-    return () => {
-      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
-    };
-  }, [syncOutlook]);
+  // Fixed 2026-08-17, on request: real, confirmed second instance of
+  // the same class of bug fixed earlier today (two independent
+  // systems writing to shared inbox state, racing each other). This
+  // auto-sync interval ran completely independently of Inbox.jsx's
+  // own, proper cache-aware sync (which already runs its own 3-minute
+  // auto-sync) — every 5 minutes it could replace the whole emails
+  // array based on its own snapshot, bypassing the local cache
+  // entirely (it never called saveCachedEmails), so the on-device
+  // cache and what was briefly shown could genuinely diverge. That
+  // matches exactly what was reported: emails flickering between
+  // current, stale July content, and briefly empty. Inbox.jsx already
+  // owns this responsibility correctly — this duplicate is removed
+  // entirely rather than patched. syncIntervalRef was only ever used
+  // here, no longer needed.
 
   return {
     emails: state.emails,
