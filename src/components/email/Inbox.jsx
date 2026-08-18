@@ -2277,6 +2277,21 @@ if (syncErr) throw syncErr;
     // needs to apply folder filtering on top of that already-correct set.
     return true;
   });
+  // Fixed 2026-08-18, real, confirmed root cause of repeated reports
+  // of the inbox showing stale/out-of-order content (emails from
+  // today mixed with mid-July ones): the displayed list was NEVER
+  // explicitly sorted by date anywhere in this pipeline — it simply
+  // trusted whatever order the underlying source happened to provide.
+  // A fresh database fetch happens to come back sorted, since
+  // Supabase sorts server-side, which is why this was never obvious.
+  // But the on-device cache (IndexedDB) does NOT guarantee date order
+  // on a plain read, and nothing ever re-sorted after loading from
+  // it — so the actual displayed order was just whatever order the
+  // cache happened to return rows in, genuinely mixing old and new.
+  // This sorts unconditionally, every time, regardless of source, so
+  // display order can never again depend on an assumption about how
+  // the data arrived.
+  filtered.sort((a, b) => new Date(b.received_at || b.created_at || 0) - new Date(a.received_at || a.created_at || 0));
 
   const unreadCount = (state.emails || []).filter(e => !e.is_read).length;
   const allChecked  = filtered.length > 0 && checkedIds.size === filtered.length;
