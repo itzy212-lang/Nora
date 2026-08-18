@@ -1870,8 +1870,16 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         if (isStale) loadEmails({ incremental: true });
         return;
       }
+      // Fixed 2026-08-18, on request: while this effect was reading
+      // the on-device cache (a real, if brief, async gap), nothing
+      // set the loading state — the UI could show 'No emails in
+      // Inbox' for a moment even though data genuinely hadn't loaded
+      // yet, not because the inbox was actually empty. Now shows a
+      // real loading state for this window specifically.
+      setLoading(true);
       const cached = await loadCachedEmails();
       if (cancelled) return;
+      setLoading(false);
       if (cached.length > 0) {
         dispatch({ type: 'SET_EMAILS', payload: cached });
         loadEmails({ incremental: true, existingOverride: cached }); // check for anything new since the cache was last saved
