@@ -201,10 +201,21 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   const [contacts, setContacts] = useState([]);
   useEffect(() => {
     if (!sb) return;
-    sb.from('contacts').select('name, firm, email, phone, type').then(({ data }) => {
+    // Fixed 2026-08-18, real bug found via server-side diagnostic
+    // logging: this used to run exactly once on mount with an empty
+    // dependency array. If Supabase's auth session hadn't finished
+    // restoring yet at that exact moment (a common timing issue —
+    // session restoration from storage is async), this query ran
+    // unauthenticated, RLS correctly returned zero rows, and since
+    // the effect never re-ran, contacts stayed empty for the entire
+    // session — not intermittent, consistently zero, matching exactly
+    // what was reported. Now depends on the actual user id being
+    // present, so it fires again once auth genuinely is ready.
+    sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
+      if (error) { console.error('[useEly] contacts fetch failed:', error.message); return; }
       if (data) setContacts(data);
     });
-  }, []);
+  }, [state.currentUser?.id, state.currentUser?.email]);
 
   const userId =
     state.currentUser?.id ||
