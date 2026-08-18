@@ -4083,6 +4083,13 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       email_count:    (projectBundle?.project_emails || []).length,
       memory_count:   (projectBundle?.project_memory || []).length,
     }));
+    // Added 2026-08-18, diagnostic: real-time check of whether
+    // contacts data is actually arriving in the request at all, per
+    // reported issue in project chat.
+    console.log('[ely-smart] contacts received:', JSON.stringify({
+      count: (body?.context?.contacts || body?.contacts || []).length,
+      sample: (body?.context?.contacts || body?.contacts || [])[0] || null,
+    }));
 
     const representation = resolveRepresentation({ body, projectBundle });
 
