@@ -1830,13 +1830,28 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         } catch {}
       }
 
-      if (doIncremental && newEmails.length > 0) {
-        // Prepend new emails to existing list
-        const existingIds = new Set(existing.map(e => e.id));
-        const truly_new = newEmails.filter(e => !existingIds.has(e.id));
-        if (truly_new.length > 0) {
-          dispatch({ type: 'SET_EMAILS', payload: [...truly_new, ...existing] });
-          saveCachedEmails(truly_new); // persist just the new ones — added 2026-08-14
+      if (doIncremental) {
+        // Fixed 2026-08-18, real, confirmed bug — the exact cause of
+        // 'inbox shows correctly, then goes blank a moment later'.
+        // The old condition was `doIncremental && newEmails.length >
+        // 0` with an else branch that replaced state with newEmails.
+        // That else branch fires in two completely different
+        // situations that got treated identically: a genuine full
+        // reload (where replacing is correct), and — far more
+        // commonly — an incremental check that simply found nothing
+        // new, which is the normal, expected outcome most of the
+        // time. In that second case, newEmails is a real, empty
+        // array, and the old code replaced the entire correctly-
+        // displayed inbox with it. Now: incremental with something
+        // new prepends it; incremental with nothing new does
+        // nothing at all, leaving whatever's already shown alone.
+        if (newEmails.length > 0) {
+          const existingIds = new Set(existing.map(e => e.id));
+          const truly_new = newEmails.filter(e => !existingIds.has(e.id));
+          if (truly_new.length > 0) {
+            dispatch({ type: 'SET_EMAILS', payload: [...truly_new, ...existing] });
+            saveCachedEmails(truly_new);
+          }
         }
       } else {
         dispatch({ type: 'SET_EMAILS', payload: newEmails });
