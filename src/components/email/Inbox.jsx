@@ -4,7 +4,7 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
-import { loadCachedEmails, saveCachedEmails, clearEmailCache } from '../../utils/emailCache';
+import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
@@ -1982,6 +1982,11 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     if (!email.is_read && sb) {
       await sb.from('emails').update({ is_read: true }).eq('id', email.id);
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, is_read: true } });
+      // Fixed 2026-08-19, real confirmed bug: this updated the
+      // database and in-memory state, but never the local cache — a
+      // real refresh reads the cache first, so it showed the old,
+      // stale unread status, undoing what was just done.
+      updateCachedEmail(email.id, { is_read: true });
     }
 
     // ── Silent appointment detection ──────────────────────────────────────
@@ -2095,6 +2100,7 @@ if (syncErr) throw syncErr;
     if (replyToId) {
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
+      updateCachedEmail(replyToId, { is_replied: true }); // same fix as mark-as-read above
     }
 
     // Embed the sent email (fire and forget) — enables semantic search
@@ -2254,6 +2260,7 @@ if (syncErr) throw syncErr;
     if (!sb || !window.confirm('Delete this email?')) return;
     await sb.from('emails').delete().eq('id', id);
     dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => e.id !== id) });
+    deleteCachedEmails([id]); // same fix as mark-as-read/replied above — otherwise reappears on refresh
     if (selectedEmail?.id === id) setSelectedEmail(null);
     setCheckedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
   };
@@ -2262,6 +2269,7 @@ if (syncErr) throw syncErr;
     if (!sb || checkedIds.size === 0 || !window.confirm(`Delete ${checkedIds.size} emails?`)) return;
     await sb.from('emails').delete().in('id', [...checkedIds]);
     dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !checkedIds.has(e.id)) });
+    deleteCachedEmails([...checkedIds]);
     if (checkedIds.has(selectedEmail?.id)) setSelectedEmail(null);
     setCheckedIds(new Set());
   };

@@ -72,6 +72,55 @@ export async function saveCachedEmails(emails) {
   }
 }
 
+// Added 2026-08-19, real confirmed bug: marking an email as read or
+// replied updated the database and in-memory state, but never told
+// the local cache — so a real refresh (which reads the cache first)
+// would show the old, stale read/replied status, undoing what had
+// just been done. This does a proper partial update: reads the
+// existing cached entry (if any) and merges the change into it,
+// rather than overwriting the whole cached row with just the changed
+// fields, which would wipe out subject/sender/body/etc.
+export async function updateCachedEmail(id, patch) {
+  try {
+    const db = await openDB();
+    const existing = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    if (!existing) return; // not cached — nothing to update, the next full/incremental load will pick up the real state
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put({ ...existing, ...patch });
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.error('[emailCache] update failed:', err);
+  }
+}
+
+// Added 2026-08-19, same real bug class as updateCachedEmail above,
+// found while investigating it further: deleting an email removed it
+// from the database and in-memory state, but never the cache — so a
+// deleted email would reappear after a real refresh.
+export async function deleteCachedEmails(ids) {
+  if (!ids || !ids.length) return;
+  try {
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.error('[emailCache] delete failed:', err);
+  }
+}
+
 async function enforceCacheBound() {
   try {
     const db = await openDB();
