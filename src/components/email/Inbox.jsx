@@ -1882,7 +1882,28 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         // anything new, same as before, no need to touch the cache.
         const lastLoaded = state.emailsLoadedAt || 0;
         const isStale = Date.now() - lastLoaded > 5 * 60 * 1000;
-        if (isStale) loadEmails({ incremental: true });
+        if (isStale) {
+          // Fixed 2026-08-19, real, confirmed bug: this only ever
+          // checked the LOCAL database for anything newer than the
+          // cache — it never actually asked Outlook for new mail. The
+          // only two things that did were the 3-minute auto-sync
+          // interval and the manual refresh button — which is exactly
+          // why opening the app showed nothing new immediately, but
+          // hitting refresh (or waiting ~3 minutes) did. Now genuinely
+          // syncs with Outlook first, same as those two paths, before
+          // checking the database.
+          try {
+            if (!syncingRef.current) {
+              syncingRef.current = true;
+              await sb.functions.invoke('sync_outlook', { body: {} });
+              syncingRef.current = false;
+            }
+          } catch (err) {
+            console.warn('[initial-load sync] error:', err);
+            syncingRef.current = false;
+          }
+          loadEmails({ incremental: true });
+        }
         return;
       }
       // Fixed 2026-08-18, on request: while this effect was reading
@@ -1897,6 +1918,18 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       setLoading(false);
       if (cached.length > 0) {
         dispatch({ type: 'SET_EMAILS', payload: cached });
+        // Same fix as above — genuinely sync with Outlook first, not
+        // just check the local database.
+        try {
+          if (!syncingRef.current) {
+            syncingRef.current = true;
+            await sb.functions.invoke('sync_outlook', { body: {} });
+            syncingRef.current = false;
+          }
+        } catch (err) {
+          console.warn('[initial-load sync] error:', err);
+          syncingRef.current = false;
+        }
         loadEmails({ incremental: true, existingOverride: cached }); // check for anything new since the cache was last saved
       } else {
         loadEmails({ force: true }); // genuinely first-ever load — nothing cached yet
