@@ -849,9 +849,33 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     if (!to.trim() || !htmlBody.trim()) return;
     setSending(true);
     try {
-      const outgoingBody = includeSignature && signatureHtml
+      const outgoingBodyWithSignature = includeSignature && signatureHtml
         ? `${htmlBody}<br><br>${signatureHtml}`
         : htmlBody;
+
+      // Fixed 2026-08-19, on request: real, confirmed gap, not a
+      // broken feature — a reply never actually included the message
+      // being replied to. The thread WAS shown, but only as a
+      // collapsible reference panel in this compose UI, for the
+      // sender to read while writing — it was never appended to the
+      // actual email sent to the recipient. Every normal email client
+      // quotes the message being replied to; this now does the same,
+      // for both reply and reply-all (forward already gets full
+      // context a different, standard way, so this is skipped there).
+      const quotedThread = (!isForward && email) ? (() => {
+        const dateStr = email.received_at
+          ? new Date(email.received_at).toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '';
+        const fromStr = email.sender_name
+          ? `${email.sender_name}${email.sender_email ? ` <${email.sender_email}>` : ''}`
+          : (email.sender_email || 'Unknown sender');
+        return `<br><br><div style="border-left: 2px solid #ccc; padding-left: 12px; margin-top: 16px; color: #555;">`
+          + `On ${dateStr}, ${fromStr} wrote:<br>`
+          + (email.body || email.body_preview || '')
+          + `</div>`;
+      })() : '';
+
+      const outgoingBody = outgoingBodyWithSignature + quotedThread;
 
       await onSend({ to, cc, subject, body: outgoingBody, replyToId: email?.id, includeSignature, createTask, attachments });
       setSending(false);
