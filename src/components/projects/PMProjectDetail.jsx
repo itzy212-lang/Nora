@@ -3477,38 +3477,36 @@ Proceed?`
                             const firmAddressParts = [firm?.address_line1, firm?.address_line2, firm?.city, firm?.postcode].filter(Boolean);
                             const firmContactParts = [firm?.tel, firm?.email].filter(Boolean);
 
-                            // Added 2026-08-20, on request: pull the
-                            // real next quote number from the setting
-                            // built earlier (Settings > Invoice >
-                            // Quote Numbering), then advance it so the
-                            // NEXT quote generated gets the number
-                            // after this one. Filters by the real
-                            // user id specifically — there are two
-                            // rows for this data_type in the database
-                            // (one with a broken placeholder user_id
-                            // from an earlier issue), and querying
-                            // without this filter risks silently
-                            // grabbing the wrong one.
+                            // Fixed 2026-08-20, on request: this used
+                            // to read a separate firm_settings.
+                            // vat_registered column I'd just created —
+                            // wrong, per direct correction. There was
+                            // already a real, working VAT setting
+                            // (Settings > Invoice > VAT), the same one
+                            // actual invoices already read — quotes
+                            // need to read from that exact same place,
+                            // not a second, disconnected one. Also
+                            // reused for the quote number below, same
+                            // settings row.
                             let quoteNumber = null;
+                            let qSettingsData = null;
                             if (state.currentUser?.id) {
                               const { data: qSettings } = await sb.from('ely_data').select('data')
                                 .eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings').maybeSingle();
-                              const lastQuoteNumber = Number(qSettings?.data?.last_quote_number || 0);
+                              qSettingsData = qSettings?.data || {};
+                              const lastQuoteNumber = Number(qSettingsData.last_quote_number || 0);
                               quoteNumber = lastQuoteNumber + 1;
                               await sb.from('ely_data').update({
-                                data: { ...(qSettings?.data || {}), last_quote_number: quoteNumber, next_quote_number: quoteNumber + 1 },
+                                data: { ...qSettingsData, last_quote_number: quoteNumber, next_quote_number: quoteNumber + 1 },
                               }).eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings');
                             }
 
-                            // Fixed 2026-08-19, on request: VAT used to
-                            // be hardcoded to always apply at 20%, with
-                            // no way to turn it off anywhere. Now reads
-                            // the real firm-wide setting (Settings >
-                            // Firm) — off entirely when the firm isn't
-                            // VAT-registered, matching the actual
-                            // meaning of that setting.
-                            const vatApplies = firm?.vat_registered !== false;
-                            const VAT_RATE = vatApplies ? 0.20 : 0;
+                            // Real VAT rate, exactly as invoices already
+                            // use it (InvoiceModal.jsx: settings?.
+                            // vat_rate || 0) — not a fixed 20%/0% toggle,
+                            // whatever percentage is actually set there.
+                            const VAT_RATE = Number(qSettingsData?.vat_rate || 0) / 100;
+                            const vatApplies = VAT_RATE > 0;
                             const vatAmount = subtotal * VAT_RATE;
                             const grandTotal = subtotal + vatAmount;
 
@@ -3559,7 +3557,7 @@ Proceed?`
                               `</div>` +
                               rows +
                               totalRow('Subtotal', subtotal, false) +
-                              (vatApplies ? totalRow('VAT (20%)', vatAmount, false) : '') +
+                              (vatApplies ? totalRow(`VAT (${Math.round(VAT_RATE * 100)}%)`, vatAmount, false) : '') +
                               totalRow('Total', grandTotal, true) +
                               `</div>`;
 

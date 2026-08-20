@@ -437,7 +437,6 @@ function FirmTab() {
     firmName: '', surveyorName: '', qualifications: '',
     addressLine1: '', addressLine2: '', city: '', postcode: '',
     tel: '', email: '', website: '',
-    vatRegistered: true,
   });
   const [firmSettingsId, setFirmSettingsId] = useState(null);
   const [sigB64, setSigB64] = useState(null);
@@ -469,14 +468,6 @@ function FirmTab() {
             tel: data.tel || '',
             email: data.email || '',
             website: data.website || '',
-            // Added 2026-08-19, on request: this used to be hardcoded
-            // to always add 20% VAT on every quote, with no way to
-            // turn it off. Real firm-wide setting now — quote
-            // generation reads this instead of a fixed rate. Default
-            // true if the column happens to be unset, matching prior
-            // behaviour so nothing changes for existing setups until
-            // this is explicitly turned off.
-            vatRegistered: data.vat_registered !== false,
           });
           setSigB64(data.signature_b64 || null);
           setLogoB64(data.logo_base64 || null);
@@ -525,7 +516,6 @@ function FirmTab() {
         tel: form.tel,
         email: form.email,
         website: form.website,
-        vat_registered: form.vatRegistered,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -581,14 +571,12 @@ function FirmTab() {
         </div>
       ))}
 
-      {/* Added 2026-08-19, on request: real firm-wide VAT setting —
-          quotes used to always add 20% VAT with no way to turn it off
-          anywhere at all. This is the single source of truth quote
-          generation now reads. */}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)', cursor: 'pointer', userSelect: 'none' }}>
-        <input type="checkbox" checked={form.vatRegistered} onChange={e => set('vatRegistered', e.target.checked)} />
-        Firm is VAT-registered — add VAT to quotes
-      </label>
+      {/* Fixed 2026-08-20: removed the VAT checkbox added here on
+          2026-08-19 — a genuine mistake, correctly pointed out live.
+          It created a second, disconnected VAT setting instead of
+          using the real one that already existed and already governed
+          actual invoices (Settings > Invoice > VAT). Quote generation
+          now reads that same, single, real setting instead. */}
 
       <button onClick={save} className="btn btn-primary" style={{ cursor: 'pointer', borderRadius: 99, marginTop: 4, justifyContent: 'center' }}>
         {saved ? '✓ Saved!' : 'Save firm details'}
