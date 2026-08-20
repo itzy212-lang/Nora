@@ -3511,55 +3511,132 @@ Proceed?`
                             const grandTotal = subtotal + vatAmount;
 
                             const rows = scopeItems.map(item => (
-                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
-                              `<div style="flex:1;padding:8px 10px;font-size:10pt;">` +
-                              `<div style="font-weight:700;">${esc(item.title)}</div>` +
-                              (item.description ? `<div style="color:#4b5563;margin-top:2px;">${esc(item.description)}</div>` : '') +
-                              `</div>` +
-                              `<div style="flex:0 0 130px;min-width:130px;padding:8px 10px;font-size:10pt;text-align:right;white-space:nowrap;">${fmtMoney(itemCharge(item))}</div>` +
-                              `</div>`
+                              `<tr>` +
+                              `<td class="td-desc"><div style="font-weight:700;">${esc(item.title)}</div>` +
+                              (item.description ? `<div style="color:#6b7280;margin-top:2px;font-weight:400;">${esc(item.description)}</div>` : '') +
+                              `</td>` +
+                              `<td class="td-r">${fmtMoney(itemCharge(item))}</td>` +
+                              `</tr>`
                             )).join('');
 
-                            const infoRow = (label, value) => (
-                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
-                              `<div style="flex:0 0 120px;min-width:120px;background:#F3F4F6;font-weight:700;color:#374151;padding:8px 12px;font-size:10pt;">${esc(label)}</div>` +
-                              `<div style="flex:1;padding:8px 12px;font-size:10pt;">${esc(value)}</div>` +
-                              `</div>`
-                            );
+                            // Fixed 2026-08-20, on request: restyled
+                            // entirely to genuinely match the real
+                            // invoice template (api/generate-invoice-
+                            // pdf.js) — same fonts, colours, spacing,
+                            // and structure, not just a passing
+                            // resemblance. Reused that file's actual
+                            // CSS directly rather than approximating
+                            // it. Where invoice shows bank details,
+                            // this shows the requested validity
+                            // message instead. Bill To now uses the
+                            // client/billing address added earlier
+                            // today (falls back to the site address if
+                            // that was never set separately) — the
+                            // same distinction that address field was
+                            // built for. In Respect Of uses the site
+                            // address plus the project's own works
+                            // description, rather than the invoice's
+                            // hardcoded 'Party wall surveyor services',
+                            // which wouldn't make sense for a
+                            // construction/PM quote.
+                            const validUntil = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+                              .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                            const billToAddress = project.bo_service_address || projectAddress;
 
-                            const totalRow = (label, value, bold) => (
-                              `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
-                              `<div style="flex:1;padding:${bold ? '10px' : '8px 10px'};text-align:right;font-size:${bold ? '11pt' : '10pt'};font-weight:${bold ? '700' : '400'};">${esc(label)}</div>` +
-                              `<div style="flex:0 0 130px;min-width:130px;padding:${bold ? '10px' : '8px 10px'};text-align:right;font-size:${bold ? '11pt' : '10pt'};font-weight:${bold ? '700' : '400'};white-space:nowrap;${bold ? 'background:#F3F4F6;' : ''}">${fmtMoney(value)}</div>` +
-                              `</div>`
-                            );
+                            const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;font-size:11.5px;line-height:1.55;padding:40px 48px;background:#fff;}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid #1e3a6e;margin-bottom:26px;}
+  .firm-name{font-size:21px;font-weight:700;color:#1e3a6e;margin-bottom:5px;}
+  .firm-line{font-size:11.5px;color:#555;margin-bottom:1px;}
+  .doc-right{text-align:right;}
+  .doc-word{font-size:32px;font-weight:700;color:#1a1a2e;letter-spacing:3px;}
+  .doc-num{font-size:13px;color:#6b7280;margin-top:4px;}
+  .meta{display:flex;border:1px solid #dde1e9;border-radius:8px;overflow:hidden;margin-bottom:20px;}
+  .mc{flex:1;padding:11px 14px;border-right:1px solid #dde1e9;background:#f7f8fc;}
+  .mc:last-child{border-right:none;}
+  .ml{font-size:8.5px;font-weight:700;color:#9ca3af;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:5px;}
+  .mv{font-size:12px;color:#111827;font-weight:600;}
+  .box{border:1px solid #dde1e9;border-radius:8px;padding:12px 16px;background:#f7f8fc;margin-bottom:14px;}
+  .bl{font-size:8.5px;font-weight:700;color:#9ca3af;letter-spacing:1.8px;text-transform:uppercase;margin-bottom:6px;}
+  .bv{font-size:12px;color:#111827;}
+  .bv strong{font-weight:700;}
+  table{width:100%;border-collapse:collapse;margin-bottom:4px;}
+  thead tr{background:#1e3a6e;}
+  th{color:#fff;font-size:8.5px;letter-spacing:1.4px;text-transform:uppercase;font-weight:700;padding:10px 12px;text-align:left;}
+  th.th-r{text-align:right;}
+  .td-desc{padding:10px 12px;border-bottom:1px solid #eef0f5;color:#374151;font-size:11.5px;vertical-align:top;}
+  .td-r{padding:10px 12px;border-bottom:1px solid #eef0f5;text-align:right;white-space:nowrap;font-size:11.5px;color:#374151;vertical-align:top;}
+  .totals-wrap{display:flex;justify-content:flex-end;margin:14px 0 28px;}
+  .totals{width:260px;border:1px solid #dde1e9;border-radius:8px;overflow:hidden;}
+  .tr{display:flex;justify-content:space-between;padding:9px 14px;font-size:12px;border-bottom:1px solid #eef0f5;color:#374151;}
+  .tr.grand{background:#1e3a6e;color:#fff;font-weight:700;font-size:14px;border-bottom:none;padding:11px 14px;}
+  .footer{display:flex;justify-content:space-between;align-items:flex-end;padding-top:16px;border-top:1.5px solid #dde1e9;}
+  .validity{font-size:12px;font-weight:700;color:#111827;}
+  .company-reg{margin-top:18px;font-size:9.5px;color:#b0b7c3;text-align:center;padding-top:10px;border-top:1px solid #f0f0f5;}
+</style>
+</head>
+<body>
 
-                            const html = `<div style="font-family:Arial,sans-serif;">` +
-                              `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">` +
-                              `<div>` +
-                              `<div style="font-size:24pt;font-weight:700;color:#1F2937;">QUOTATION</div>` +
-                              (quoteNumber ? `<div style="font-size:10pt;color:#4b5563;margin-top:4px;">Quote Number: ${esc(String(quoteNumber))}</div>` : '') +
-                              `</div>` +
-                              (firmName ? `<div style="text-align:right;font-size:9pt;color:#4b5563;line-height:1.5;">` +
-                                `<div style="font-size:12pt;font-weight:700;color:#1F2937;">${esc(firmName)}</div>` +
-                                (firmAddressParts.length ? `<div>${esc(firmAddressParts.join(', '))}</div>` : '') +
-                                (firmContactParts.length ? `<div>${esc(firmContactParts.join(' · '))}</div>` : '') +
-                                `</div>` : '') +
-                              `</div>` +
-                              `<div style="border-top:1px solid #C8C8C8;margin-bottom:20px;">` +
-                              infoRow('Project', projectAddress) +
-                              (clientName ? infoRow('Client', clientName) : '') +
-                              infoRow('Date', quoteDate) +
-                              `</div>` +
-                              `<div style="display:flex;background:#1F2937;color:#fff;">` +
-                              `<div style="flex:1;padding:8px 10px;font-size:10pt;">Description</div>` +
-                              `<div style="flex:0 0 130px;min-width:130px;padding:8px 10px;font-size:10pt;text-align:right;">Price</div>` +
-                              `</div>` +
-                              rows +
-                              totalRow('Subtotal', subtotal, false) +
-                              (vatApplies ? totalRow(`VAT (${Math.round(VAT_RATE * 100)}%)`, vatAmount, false) : '') +
-                              totalRow('Total', grandTotal, true) +
-                              `</div>`;
+<div class="hdr">
+  <div>
+    ${firmName ? `<div class="firm-name">${esc(firmName)}</div>` : ''}
+    ${firmAddressParts.length ? `<div class="firm-line">${esc(firmAddressParts.join(', '))}</div>` : ''}
+    ${firmContactParts.length ? `<div class="firm-line">${esc(firmContactParts.join(' · '))}</div>` : ''}
+  </div>
+  <div class="doc-right">
+    <div class="doc-word">QUOTATION</div>
+    ${quoteNumber ? `<div class="doc-num">Quote Number: ${esc(String(quoteNumber))}</div>` : ''}
+  </div>
+</div>
+
+<div class="meta">
+  <div class="mc"><div class="ml">Issued Date</div><div class="mv">${esc(quoteDate)}</div></div>
+  <div class="mc"><div class="ml">Valid Until</div><div class="mv">${esc(validUntil)}</div></div>
+  <div class="mc"><div class="ml">Project Ref</div><div class="mv">${esc(project.ref || '')}</div></div>
+</div>
+
+<div class="box">
+  <div class="bl">Bill To</div>
+  <div class="bv">
+    ${clientName ? `<strong>${esc(clientName)}</strong><br/>` : ''}
+    ${esc(billToAddress || '')}
+  </div>
+</div>
+
+<div class="box">
+  <div class="bl">In Respect Of</div>
+  <div class="bv">
+    ${esc(projectAddress || '')}<br/>
+    ${esc(project.works || 'Project management services')}
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Description</th><th class="th-r">Total</th></tr></thead>
+  <tbody>${rows || `<tr><td class="td-desc" colspan="2" style="color:#9ca3af;font-style:italic;">No line items</td></tr>`}</tbody>
+</table>
+
+<div class="totals-wrap">
+  <div class="totals">
+    <div class="tr"><span>Subtotal</span><span>${fmtMoney(subtotal)}</span></div>
+    ${vatApplies ? `<div class="tr"><span>VAT (${Math.round(VAT_RATE * 100)}%)</span><span>${fmtMoney(vatAmount)}</span></div>` : ''}
+    <div class="tr grand"><span>Total</span><span>${fmtMoney(grandTotal)}</span></div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="validity">This quote is valid for 14 days.</div>
+</div>
+
+<div class="company-reg">${esc(firm?.footer_text || 'Square One Consulting is a trading division of Itzik Ltd | Registered in England & Wales')}</div>
+
+</body>
+</html>`;
 
                             const address = (projectAddress || 'Project').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
                             const res = await fetch('/api/export-minutes-pdf', {
