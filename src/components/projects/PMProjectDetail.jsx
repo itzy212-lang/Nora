@@ -87,6 +87,7 @@ function DetachModal({ item, projectId, rooms, onSave, onClose }) {
       const unitCost = r.cost ? parseFloat(r.cost) : null;
       const { data } = await sb.from('scope_items').insert([{
         project_id: projectId,
+        quote_id: item.quote_id || null,
         title: r.title.trim(),
         description: qty && qty !== 1 ? `Qty: ${qty}` : null,
         trade: item.trade || null,
@@ -887,7 +888,7 @@ function ContractorInput({ value, onChange, subs, inputStyle, placeholder }) {
   );
 }
 
-function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
+function ScopeModal({ item, projectId, quoteId, rooms, onSave, onClose }) {
   const isNew = !item || item === 'new';
   const [form, setForm] = useState({
     title: isNew ? '' : item.title || '',
@@ -917,6 +918,7 @@ function ScopeModal({ item, projectId, rooms, onSave, onClose }) {
     setSaving(true);
     const payload = {
       project_id: projectId,
+      quote_id: isNew ? (quoteId || null) : (item.quote_id ?? undefined),
       title: form.title.trim(),
       description: form.description.trim() || null,
       trade: form.trade.trim() || null,
@@ -1848,14 +1850,41 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [dualAIReview, setDualAIReview] = useState(null); // { diff, gptItems, file }
   const [dualAIVerifying, setDualAIVerifying] = useState(false);
   const [drawingError, setDrawingError] = useState('');
+  // Added 2026-08-21, on request: proper quote versioning. Each
+  // quote is its own tab with its own scope items and its own
+  // number, assigned once on first generation and reused on every
+  // regeneration after that — not a new number every time.
+  const [quotes, setQuotes] = useState([]);
+  const [activeQuoteId, setActiveQuoteId] = useState(null);
+  const [quotesLoading, setQuotesLoading] = useState(false);
 
-  // Load scope items
+  // Load quotes for this project — always ensures at least one exists
   useEffect(() => {
     if (tab !== 'scope' || !project?.id) return;
-    setScopeLoading(true);
-    sb.from('scope_items').select('*').eq('project_id', project.id)
-      .order('position').then(({ data }) => { setScopeItems(data || []); setScopeLoading(false); });
+    setQuotesLoading(true);
+    (async () => {
+      let { data } = await sb.from('quotes').select('*').eq('project_id', project.id).order('sort_order');
+      if (!data || data.length === 0) {
+        const { data: created } = await sb.from('quotes').insert([{
+          project_id: project.id, status: 'draft', label: 'Original Quote', sort_order: 0,
+        }]).select('*').single();
+        data = created ? [created] : [];
+      }
+      setQuotes(data);
+      setActiveQuoteId(prev => prev && data.some(q => q.id === prev) ? prev : data[0]?.id || null);
+      setQuotesLoading(false);
+    })();
   }, [tab, project?.id]);
+
+  // Load scope items — scoped to whichever quote tab is active
+  useEffect(() => {
+    if (tab !== 'scope' || !activeQuoteId) return;
+    setScopeLoading(true);
+    sb.from('scope_items').select('*').eq('quote_id', activeQuoteId)
+      .order('position').then(({ data }) => { setScopeItems(data || []); setScopeLoading(false); });
+  }, [tab, activeQuoteId]);
+
+  const activeQuote = quotes.find(q => q.id === activeQuoteId) || null;
 
   // Load payment stages
   useEffect(() => {
@@ -2943,8 +2972,47 @@ Proceed?`
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Scope of Works</div>
                 <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Price each item — costs flow into financials and payment schedule</div>
               </div>
+            </div>
+
+            {/* Added 2026-08-21, on request: quote tabs — each one is a
+                genuinely distinct quote (original scope, a later
+                variation, etc.), with its own scope items and its own
+                quote number. '+' starts a new one; the active tab's
+                label shows its quote number once it's been generated,
+                or a plain draft label before that. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+              {quotes.map(q => (
+                <button key={q.id} onClick={() => setActiveQuoteId(q.id)}
+                  style={{
+                    padding: '7px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    border: activeQuoteId === q.id ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    background: activeQuoteId === q.id ? '#eff6ff' : '#fff',
+                    color: activeQuoteId === q.id ? '#1e40af' : '#6b7280',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                  {q.quote_number ? `Quote ${q.quote_number}` : (q.label || 'Draft')}
+                  {q.status === 'accepted' && <span style={{ color: '#059669' }}>✓</span>}
+                </button>
+              ))}
+              <button onClick={async () => {
+                const nextSort = Math.max(0, ...quotes.map(q => q.sort_order || 0)) + 1;
+                const { data: created } = await sb.from('quotes').insert([{
+                  project_id: project.id, status: 'draft', label: `Quote ${quotes.length + 1}`, sort_order: nextSort,
+                }]).select('*').single();
+                if (created) {
+                  setQuotes(prev => [...prev, created]);
+                  setActiveQuoteId(created.id);
+                }
+              }}
+                title="Start a new quote — e.g. for a variation"
+                style={{ padding: '7px 12px', borderRadius: 99, fontSize: 14, fontWeight: 700, cursor: 'pointer', border: '1.5px dashed #cbd5e1', background: 'transparent', color: '#6b7280' }}>
+                +
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {project.quote_status !== 'accepted' && scopeItems.length > 0 && (
+                {activeQuote?.status !== 'accepted' && scopeItems.length > 0 && (
                   <button onClick={async () => {
                     const proceed = window.confirm(
                       `Accept quote and generate the programme?\n\n` +
@@ -3003,7 +3071,22 @@ Proceed?`
                     const { data: createdTasks } = await sb.from('programme_tasks').insert(newTasks).select('*');
                     if (createdTasks) setTasks(prev => [...prev, ...createdTasks]);
 
-                    const contractValue = scopeItems.reduce((s, i) => s + parseFloat(i.client_charge || 0), 0);
+                    // Fixed 2026-08-21, on request: this now marks the
+                    // ACTIVE quote (this tab) as accepted, not the whole
+                    // project — a project can have multiple accepted
+                    // quotes over time (original + variations). Still
+                    // updates projects.quote_status/contract_value for
+                    // anywhere else in the app that reads those —
+                    // quote_status becomes 'accepted' once at least one
+                    // quote is, and contract_value is the sum of every
+                    // accepted quote's total, not just this one.
+                    const acceptedAt = new Date().toISOString();
+                    await sb.from('quotes').update({ status: 'accepted', accepted_at: acceptedAt }).eq('id', activeQuoteId);
+                    setQuotes(prev => prev.map(q => q.id === activeQuoteId ? { ...q, status: 'accepted', accepted_at: acceptedAt } : q));
+
+                    const { data: allQuoteItems } = await sb.from('scope_items').select('client_charge, quote_id').eq('project_id', project.id);
+                    const acceptedQuoteIds = new Set([...quotes.filter(q => q.status === 'accepted').map(q => q.id), activeQuoteId]);
+                    const contractValue = (allQuoteItems || []).filter(i => acceptedQuoteIds.has(i.quote_id)).reduce((s, i) => s + parseFloat(i.client_charge || 0), 0);
                     await sb.from('projects').update({ quote_status: 'accepted', contract_value: contractValue }).eq('id', project.id);
                     setProject(prev => ({ ...prev, quote_status: 'accepted', contract_value: contractValue }));
 
@@ -3013,7 +3096,7 @@ Proceed?`
                     ✓ Accept Quote
                   </button>
                 )}
-                {project.quote_status === 'accepted' && (
+                {activeQuote?.status === 'accepted' && (
                   <div style={{ padding: '7px 14px', borderRadius: 99, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: 12, fontWeight: 600 }}>
                     ✓ Quote accepted — programme generated
                   </div>
@@ -3044,6 +3127,7 @@ Proceed?`
                       position: Math.min(...selected.map(s => s.position || 0)),
                       extracted_by_ai: selected.some(s => s.extracted_by_ai),
                       project_id: project.id,
+                      quote_id: selected[0]?.quote_id || activeQuoteId,
                     };
                     // Delete all selected items
                     for (const s of selected) await sb.from('scope_items').delete().eq('id', s.id);
@@ -3066,20 +3150,6 @@ Proceed?`
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   + Add Item
                 </button>
-                {/* Drawing type selector */}
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  {[
-                    { key: 'general', label: '🏗️ General' },
-                    { key: 'electrical', label: '⚡ Electrical' },
-                    { key: 'plumbing', label: '🔧 Plumbing' },
-                    { key: 'structural', label: '🏛️ Structural' },
-                  ].map(t => (
-                    <button key={t.key} onClick={() => setDrawingType(t.key)}
-                      style={{ padding: '5px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1.5px solid', borderColor: drawingType === t.key ? '#7c3aed' : '#d1d5db', background: drawingType === t.key ? '#f5f3ff' : '#fff', color: drawingType === t.key ? '#7c3aed' : '#6b7280' }}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
                 <button onClick={() => document.getElementById('drawing-upload-input').click()}
                   disabled={drawingExtracting || dualAIVerifying}
                   style={{ padding: '7px 14px', borderRadius: 99, background: '#7c3aed', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (drawingExtracting || dualAIVerifying) ? 0.6 : 1 }}>
@@ -3254,6 +3324,7 @@ Proceed?`
                         const isGenuineBreakdown = breakdown.length > 1;
                         const { data: newItem } = await sb.from('scope_items').insert([{
                           project_id: project.id,
+                          quote_id: activeQuoteId,
                           title: item.title,
                           description: item.description || null,
                           trade: item.trade || null,
@@ -3315,6 +3386,7 @@ Proceed?`
                     const item = finalItems[i];
                     const { data: newItem } = await sb.from('scope_items').insert([{
                       project_id: project.id,
+                      quote_id: activeQuoteId,
                       title: item.title,
                       description: item.description || null,
                       trade: item.trade || null,
@@ -3447,7 +3519,16 @@ Proceed?`
                         if (unpricedCount > 0) {
                           if (!window.confirm(`${unpricedCount} item${unpricedCount !== 1 ? 's' : ''} still need pricing. Generate anyway?`)) return;
                         }
-                        await sb.from('projects').update({ quote_type: type, quote_status: 'draft' }).eq('id', project.id);
+                        // Fixed 2026-08-21: this used to unconditionally
+                        // set quote_status back to 'draft' on every
+                        // single generate — including generating a
+                        // brand new variation quote tab after an
+                        // earlier one had already been accepted, which
+                        // would have silently un-accepted the project's
+                        // overall status. Only resets to 'draft' if no
+                        // quote on this project has ever been accepted.
+                        const anyAccepted = quotes.some(q => q.status === 'accepted');
+                        await sb.from('projects').update({ quote_type: type, ...(anyAccepted ? {} : { quote_status: 'draft' }) }).eq('id', project.id);
 
                         if (type === 'quote') {
                           setQuoteGenerating(true);
@@ -3488,9 +3569,25 @@ Proceed?`
                             // not a second, disconnected one. Also
                             // reused for the quote number below, same
                             // settings row.
-                            let quoteNumber = null;
+                            // Fixed 2026-08-21, on request: this used
+                            // to issue a brand new quote number on
+                            // EVERY generate click, even for the exact
+                            // same quote — so adding a missed item and
+                            // regenerating silently created a new
+                            // quote each time. Now: if this quote (this
+                            // tab) already has a number, reuse it and
+                            // skip the settings update entirely —
+                            // regenerating is just producing the PDF
+                            // again. A number is only ever assigned
+                            // once, the first time a given quote tab is
+                            // generated.
+                            let quoteNumber = activeQuote?.quote_number || null;
                             let qSettingsData = null;
-                            if (state.currentUser?.id) {
+                            if (quoteNumber) {
+                              const { data: qSettings } = await sb.from('ely_data').select('data')
+                                .eq('user_id', state.currentUser?.id).eq('data_type', 'invoice_settings').maybeSingle();
+                              qSettingsData = qSettings?.data || {};
+                            } else if (state.currentUser?.id) {
                               const { data: qSettings } = await sb.from('ely_data').select('data')
                                 .eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings').maybeSingle();
                               qSettingsData = qSettings?.data || {};
@@ -3499,6 +3596,8 @@ Proceed?`
                               await sb.from('ely_data').update({
                                 data: { ...qSettingsData, last_quote_number: quoteNumber, next_quote_number: quoteNumber + 1 },
                               }).eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings');
+                              await sb.from('quotes').update({ quote_number: quoteNumber, generated_at: new Date().toISOString() }).eq('id', activeQuoteId);
+                              setQuotes(prev => prev.map(q => q.id === activeQuoteId ? { ...q, quote_number: quoteNumber } : q));
                             }
 
                             // Real VAT rate, exactly as invoices already
@@ -4297,6 +4396,7 @@ Proceed?`
         <ScopeModal
           item={scopeModal}
           projectId={project.id}
+          quoteId={activeQuoteId}
           rooms={rooms}
           onSave={(result, isNew) => {
             setScopeItems(prev => isNew ? [...prev, result] : prev.map(s => s.id === result.id ? result : s));
