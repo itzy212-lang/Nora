@@ -3737,11 +3737,16 @@ Proceed?`
 </body>
 </html>`;
 
-                            const address = (projectAddress || 'Project').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+                            // Fixed 2026-08-21, on request: filename
+                            // should read as the quote number followed
+                            // by the plain address — no dashes, no
+                            // underscores.
+                            const cleanAddress = (projectAddress || 'Project').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+                            const filename = quoteNumber ? `${quoteNumber} ${cleanAddress}.pdf` : `${cleanAddress}.pdf`;
                             const res = await fetch('/api/export-minutes-pdf', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ html, filename: `${address}_Quote.pdf` }),
+                              body: JSON.stringify({ html, filename }),
                             });
                             if (!res.ok) {
                               const err = await res.json().catch(() => ({}));
@@ -3751,7 +3756,7 @@ Proceed?`
                               const url = URL.createObjectURL(blob);
                               const a = document.createElement('a');
                               a.href = url;
-                              a.download = `${address}_Quote.pdf`;
+                              a.download = filename;
                               document.body.appendChild(a);
                               a.click();
                               a.remove();
