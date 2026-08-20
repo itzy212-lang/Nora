@@ -700,16 +700,30 @@ export default function NewProjectModal({ onClose, onCreated }) {
               )}
               {!uploadMode && (
                 <>
-                  {[
-                { key: 'boPremise', label: 'Site address *', placeholder: 'Full site address including postcode', isForm: true },
-              ].map(({ key, label: lbl, placeholder }) => (
-                <div key={key}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.55px', marginBottom: 6 }}>{lbl}</div>
-                  <input value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    placeholder={placeholder}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)' }} />
-                </div>
-              ))}
+              {/* Fixed 2026-08-19, on request: real gap — construction
+                  projects only ever had one address field, so a client
+                  based somewhere other than the work site (e.g. a
+                  company at its registered HQ, with the actual work
+                  happening at a property they own elsewhere) had no
+                  way to record that distinction. Reuses the same
+                  proven AddressBlock component party wall projects
+                  already use — the underlying payload already
+                  correctly supports this (bo_service_address falls
+                  back to the site address when not given separately),
+                  this was purely a missing UI field for this project
+                  type specifically. */}
+              <AddressBlock
+                title="Site / project address"
+                premise={form.boPremise}
+                service={form.boService}
+                sameAddr={boSameAddr}
+                onPremise={v => setForm(f => ({ ...f, boPremise: v }))}
+                onService={v => setForm(f => ({ ...f, boService: v }))}
+                onToggle={setBoSameAddr}
+                premiseLabel="Site address"
+                premiseHint="The property where the work is actually happening."
+                required
+              />
               {[
                 { key: 'name', label: 'Client name', placeholder: 'Client full name' },
                 { key: 'email', label: 'Client email', placeholder: 'client@email.com' },
