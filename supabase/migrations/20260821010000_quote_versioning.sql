@@ -26,3 +26,10 @@ CREATE INDEX IF NOT EXISTS idx_scope_items_quote ON scope_items(quote_id);
 -- quote number existed to carry forward (the old system never
 -- persisted one per project), so both start unissued and get a real,
 -- tracked number the next time they're generated under the new system.
+
+-- Fixed 2026-08-21 (same day, follow-up): the quotes table above was
+-- created with row-level security enabled by default and zero
+-- policies ever added — meaning every read/write from the actual app
+-- was silently blocked the whole time. Disabled RLS to match every
+-- other table in this single-tenant app (scope_items included).
+ALTER TABLE quotes DISABLE ROW LEVEL SECURITY;
