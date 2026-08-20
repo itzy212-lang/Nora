@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import sb from '../../supabaseClient';
+import { useApp } from '../../state/appStore';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import WeeklyMinutes from '../minutes/WeeklyMinutes';
 
@@ -1815,6 +1816,7 @@ function SubModal({ sub, projectId, onSave, onClose }) {
 
 // ── Main component ────────────────────────────────────────────────────────
 export default function PMProjectDetail({ project: initialProject, onBack, onOpenComposer }) {
+  const { state } = useApp();
   const [project, setProject] = useState(initialProject);
   const [quoteGenerating, setQuoteGenerating] = useState(false);
   const [tab, setTab] = useState('overview');
@@ -3475,6 +3477,29 @@ Proceed?`
                             const firmAddressParts = [firm?.address_line1, firm?.address_line2, firm?.city, firm?.postcode].filter(Boolean);
                             const firmContactParts = [firm?.tel, firm?.email].filter(Boolean);
 
+                            // Added 2026-08-20, on request: pull the
+                            // real next quote number from the setting
+                            // built earlier (Settings > Invoice >
+                            // Quote Numbering), then advance it so the
+                            // NEXT quote generated gets the number
+                            // after this one. Filters by the real
+                            // user id specifically — there are two
+                            // rows for this data_type in the database
+                            // (one with a broken placeholder user_id
+                            // from an earlier issue), and querying
+                            // without this filter risks silently
+                            // grabbing the wrong one.
+                            let quoteNumber = null;
+                            if (state.currentUser?.id) {
+                              const { data: qSettings } = await sb.from('ely_data').select('data')
+                                .eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings').maybeSingle();
+                              const lastQuoteNumber = Number(qSettings?.data?.last_quote_number || 0);
+                              quoteNumber = lastQuoteNumber + 1;
+                              await sb.from('ely_data').update({
+                                data: { ...(qSettings?.data || {}), last_quote_number: quoteNumber, next_quote_number: quoteNumber + 1 },
+                              }).eq('user_id', state.currentUser.id).eq('data_type', 'invoice_settings');
+                            }
+
                             // Fixed 2026-08-19, on request: VAT used to
                             // be hardcoded to always apply at 20%, with
                             // no way to turn it off anywhere. Now reads
@@ -3513,7 +3538,10 @@ Proceed?`
 
                             const html = `<div style="font-family:Arial,sans-serif;">` +
                               `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">` +
+                              `<div>` +
                               `<div style="font-size:24pt;font-weight:700;color:#1F2937;">QUOTATION</div>` +
+                              (quoteNumber ? `<div style="font-size:10pt;color:#4b5563;margin-top:4px;">Quote Number: ${esc(String(quoteNumber))}</div>` : '') +
+                              `</div>` +
                               (firmName ? `<div style="text-align:right;font-size:9pt;color:#4b5563;line-height:1.5;">` +
                                 `<div style="font-size:12pt;font-weight:700;color:#1F2937;">${esc(firmName)}</div>` +
                                 (firmAddressParts.length ? `<div>${esc(firmAddressParts.join(', '))}</div>` : '') +
