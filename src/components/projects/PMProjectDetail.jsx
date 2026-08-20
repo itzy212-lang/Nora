@@ -3460,17 +3460,22 @@ Proceed?`
                             };
                             const fmtMoney = (v) => `£${parseFloat(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             const subtotal = scopeItems.reduce((s, item) => s + itemCharge(item), 0);
-                            const VAT_RATE = 0.20;
-                            const vatAmount = subtotal * VAT_RATE;
-                            const grandTotal = subtotal + vatAmount;
-                            const projectAddress = project.bo_premise_address || project.bo_address || '';
-                            const clientName = project.client_name || project.bo_1_name || '';
-                            const quoteDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-
                             const { data: firm } = await sb.from('firm_settings').select('*').limit(1).maybeSingle();
                             const firmName = firm?.trading_name || firm?.firm_name || '';
                             const firmAddressParts = [firm?.address_line1, firm?.address_line2, firm?.city, firm?.postcode].filter(Boolean);
                             const firmContactParts = [firm?.tel, firm?.email].filter(Boolean);
+
+                            // Fixed 2026-08-19, on request: VAT used to
+                            // be hardcoded to always apply at 20%, with
+                            // no way to turn it off anywhere. Now reads
+                            // the real firm-wide setting (Settings >
+                            // Firm) — off entirely when the firm isn't
+                            // VAT-registered, matching the actual
+                            // meaning of that setting.
+                            const vatApplies = firm?.vat_registered !== false;
+                            const VAT_RATE = vatApplies ? 0.20 : 0;
+                            const vatAmount = subtotal * VAT_RATE;
+                            const grandTotal = subtotal + vatAmount;
 
                             const rows = scopeItems.map(item => (
                               `<div style="display:flex;border:1px solid #C8C8C8;border-top:none;">` +
@@ -3516,7 +3521,7 @@ Proceed?`
                               `</div>` +
                               rows +
                               totalRow('Subtotal', subtotal, false) +
-                              totalRow('VAT (20%)', vatAmount, false) +
+                              (vatApplies ? totalRow('VAT (20%)', vatAmount, false) : '') +
                               totalRow('Total', grandTotal, true) +
                               `</div>`;
 
