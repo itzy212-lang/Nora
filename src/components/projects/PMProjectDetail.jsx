@@ -3460,6 +3460,16 @@ Proceed?`
                             };
                             const fmtMoney = (v) => `£${parseFloat(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             const subtotal = scopeItems.reduce((s, item) => s + itemCharge(item), 0);
+                            // Fixed 2026-08-20: these three declarations
+                            // were accidentally deleted during the VAT
+                            // fix in the previous edit — real mistake,
+                            // caused a genuine ReferenceError the moment
+                            // the code below tried to use them ('project
+                            // is not defined' / 'project address is not
+                            // defined'). Restored exactly as they were.
+                            const projectAddress = project.bo_premise_address || project.bo_address || '';
+                            const clientName = project.client_name || project.bo_1_name || '';
+                            const quoteDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
                             const { data: firm } = await sb.from('firm_settings').select('*').limit(1).maybeSingle();
                             const firmName = firm?.trading_name || firm?.firm_name || '';
                             const firmAddressParts = [firm?.address_line1, firm?.address_line2, firm?.city, firm?.postcode].filter(Boolean);
