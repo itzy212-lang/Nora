@@ -7,6 +7,8 @@ const STORAGE_KEY = 'ely_invoice_settings';
 function normaliseInvoiceSettings(raw = {}) {
   const lastFromLast = Number(raw.last_invoice_number);
   const lastFromNext = Number(raw.next_invoice_number) - 1;
+  const lastQuoteFromLast = Number(raw.last_quote_number);
+  const lastQuoteFromNext = Number(raw.next_quote_number) - 1;
 
   return {
     last_invoice_number: Number.isFinite(lastFromLast)
@@ -14,6 +16,14 @@ function normaliseInvoiceSettings(raw = {}) {
       : Number.isFinite(lastFromNext)
         ? lastFromNext
         : 1600,
+    // Added 2026-08-20, on request: quote numbering, directly under
+    // Invoice Numbering — same last/next pattern, its own separate
+    // sequence from invoices.
+    last_quote_number: Number.isFinite(lastQuoteFromLast)
+      ? lastQuoteFromLast
+      : Number.isFinite(lastQuoteFromNext)
+        ? lastQuoteFromNext
+        : 0,
     bank_name: raw.bank_name || '',
     sort_code: raw.sort_code || '',
     account_number: raw.account_number || '',
@@ -66,6 +76,7 @@ export default function InvoiceSettings() {
     const payload = {
       ...clean,
       next_invoice_number: Number(clean.last_invoice_number || 0) + 1,
+      next_quote_number: Number(clean.last_quote_number || 0) + 1,
     };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -91,6 +102,8 @@ export default function InvoiceSettings() {
 
   const lastNumber = Number(settings.last_invoice_number || 0);
   const nextNumber = lastNumber + 1;
+  const lastQuoteNumber = Number(settings.last_quote_number || 0);
+  const nextQuoteNumber = lastQuoteNumber + 1;
 
   return (
     <div style={s.container}>
@@ -133,6 +146,49 @@ export default function InvoiceSettings() {
               disabled
             />
             <span style={s.hint}>Read-only. This is calculated from Last Invoice Number + 1.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Added 2026-08-20, on request: quote numbering, directly under
+          Invoice Numbering — same last/next pattern, its own separate
+          sequence. */}
+      <div style={s.group}>
+        <div style={s.groupTitle}>Quote Numbering</div>
+
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: 10,
+          background: 'var(--blue-bg)',
+          border: '1px solid var(--blue)',
+          color: 'var(--blue)',
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          marginBottom: 2,
+        }}>
+          Set the <strong>last quote number issued</strong>. Ely will create the next quote as that number plus one.
+        </div>
+
+        <div style={s.row2}>
+          <div style={s.field}>
+            <label style={s.label}>Last Quote Number</label>
+            <input
+              style={s.input}
+              type="number"
+              value={settings.last_quote_number}
+              onChange={e => setField('last_quote_number', parseInt(e.target.value || '0', 10))}
+            />
+            <span style={s.hint}>Change this if you delete or void the latest draft quote and need to reset the sequence.</span>
+          </div>
+
+          <div style={s.field}>
+            <label style={s.label}>Next Quote Number</label>
+            <input
+              style={{ ...s.input, background: 'var(--bg3)', color: 'var(--text3)' }}
+              value={nextQuoteNumber}
+              disabled
+            />
+            <span style={s.hint}>Read-only. This is calculated from Last Quote Number + 1.</span>
           </div>
         </div>
       </div>
@@ -267,7 +323,7 @@ export default function InvoiceSettings() {
           {saved ? '✓ Saved' : 'Save Invoice Settings'}
         </button>
 
-        {saved && <span style={s.savedMsg}>Settings saved. Next invoice will be {nextNumber}.</span>}
+        {saved && <span style={s.savedMsg}>Settings saved. Next invoice will be {nextNumber}, next quote will be {nextQuoteNumber}.</span>}
       </div>
     </div>
   );
