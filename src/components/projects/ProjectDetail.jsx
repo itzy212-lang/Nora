@@ -2112,7 +2112,22 @@ function ProjectChat({ project, onOpenComposer }) {
         {
           id: `${Date.now()}-ely`,
           role: 'ely',
-          content: result.reply || result.replyText || 'Done.',
+          // Fixed 2026-08-21, real, confirmed bug — traced live with
+          // console diagnostics after discovering the file this
+          // actually runs in was different from where the
+          // investigation started (an unreachable, never-imported
+          // duplicate elsewhere had been the focus). This fallback
+          // never checked result.draft or result.documentText at
+          // all — if the backend put the draft content only in one
+          // of those fields (which it does whenever a request is
+          // recognised as 'just show the draft', with result.reply
+          // correctly left empty), this showed literal 'Done.'
+          // instead of the actual content. Explains exactly why a
+          // refresh 'fixed' it too — the database save elsewhere in
+          // this same file already used the wider fallback below,
+          // so the correct content was always there, just not on
+          // this first, narrower render.
+          content: result.reply || result.draft || result.documentText || result.replyText || 'Done.',
         },
       ]);
 
