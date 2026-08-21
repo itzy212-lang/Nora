@@ -32,13 +32,22 @@ let contactsCachePromise = null;
 // definitely in flight — or already cached — no matter which runs
 // first).
 function ensureContactsFetchStarted() {
-  if (contactsCache || contactsCachePromise || !sb) return contactsCachePromise;
+  // Added 2026-08-21, diagnostic: still arriving as count:0 live even
+  // after a confirmed fresh reload (ruling out caching), across two
+  // real attempts at fixing this. Logging every branch so the next
+  // real test shows exactly which path this takes and why.
+  if (contactsCache) { console.log('[useEly] contacts: already cached, count=', contactsCache.length); return contactsCachePromise; }
+  if (contactsCachePromise) { console.log('[useEly] contacts: fetch already in flight, reusing it'); return contactsCachePromise; }
+  if (!sb) { console.log('[useEly] contacts: sb client is falsy — cannot fetch at all'); return contactsCachePromise; }
+  console.log('[useEly] contacts: starting a fresh fetch now');
   contactsCachePromise = sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
-    if (error) throw error;
+    if (error) { console.log('[useEly] contacts: query returned an error:', error.message); throw error; }
     const result = (data && data.length) ? data : [{ __fetch_error: 'query succeeded but returned 0 rows' }];
+    console.log('[useEly] contacts: fetch resolved, count=', data?.length);
     contactsCache = result;
     return result;
   }).catch(err => {
+    console.log('[useEly] contacts: fetch threw:', err?.message || String(err));
     contactsCachePromise = null; // allow retry on next mount rather than caching a failure forever
     throw err;
   });
@@ -508,9 +517,10 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     // starts the fetch itself if nothing has, so there's always
     // something real to wait for regardless of which runs first.
     if (!contactsCache) {
-      try { await ensureContactsFetchStarted(); } catch {}
+      try { await ensureContactsFetchStarted(); } catch (err) { console.log('[useEly] send(): contacts wait threw:', err?.message); }
     }
     const effectiveContacts = contactsCache || contacts;
+    console.log('[useEly] send(): effectiveContacts count=', effectiveContacts.length, 'contactsCache set?', !!contactsCache, 'sb defined?', !!sb);
 
     const effectiveProjectId =
       extraOpts.projectId ||
