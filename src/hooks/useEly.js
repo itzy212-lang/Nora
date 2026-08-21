@@ -7,6 +7,19 @@ import { callEly } from '../api/elyRouter';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
 
+// Added 2026-08-21, real, confirmed bug: 'Draft with Ely' (and any
+// other surface using this hook) fully unmounts and remounts every
+// time it's opened, so a brand new instance started its contacts
+// fetch from scratch each time — confirmed live via server logs,
+// intermittently arriving with 0 contacts (sent before the fetch
+// finished) versus 20 (sent after) within the same short session.
+// Module-level cache, outside React state, so it survives across
+// every hook instance for the lifetime of the page load — once
+// fetched successfully anywhere, every future mount uses it
+// instantly instead of racing a fresh network round-trip again.
+let contactsCache = null;
+let contactsCachePromise = null;
+
 function first(...values) {
   return values.find(v => v !== undefined && v !== null && String(v).trim() !== '') || '';
 }
@@ -198,20 +211,22 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   // instance (only 20 total, cheap) and included on every request
   // below, regardless of surface — this is exactly as useful in
   // project chat as in general chat.
-  const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState(() => contactsCache || []);
   useEffect(() => {
-    // Fixed 2026-08-18, on request: auth-timing fix alone didn't
-    // resolve the reported issue (confirmed count:0 still arriving
-    // even after that fix went live) — this was the wrong diagnosis.
-    // Any real failure now gets encoded directly into the contacts
-    // array itself as a visible marker object, so it shows up
-    // directly in the existing server-side 'contacts received'
-    // diagnostic log without needing separate client-side visibility.
+    if (contactsCache) { setContacts(contactsCache); return; } // already fetched this session — instant, no race
     if (!sb) { setContacts([{ __fetch_error: 'sb client not available' }]); return; }
-    sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
-      if (error) { setContacts([{ __fetch_error: error.message }]); return; }
-      setContacts((data && data.length) ? data : [{ __fetch_error: 'query succeeded but returned 0 rows' }]);
-    }).catch(err => {
+    if (!contactsCachePromise) {
+      contactsCachePromise = sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
+        if (error) throw error;
+        const result = (data && data.length) ? data : [{ __fetch_error: 'query succeeded but returned 0 rows' }];
+        contactsCache = result;
+        return result;
+      }).catch(err => {
+        contactsCachePromise = null; // allow retry on next mount rather than caching a failure forever
+        throw err;
+      });
+    }
+    contactsCachePromise.then(setContacts).catch(err => {
       setContacts([{ __fetch_error: 'fetch threw: ' + (err?.message || String(err)) }]);
     });
   }, [state.currentUser?.id, state.currentUser?.email]);
@@ -470,6 +485,16 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     setLoading(true);
     setError(null);
 
+    // Fixed 2026-08-21: closes the remaining race for the very first
+    // request in a session — if contacts are still being fetched
+    // (module-level promise in flight, not yet resolved into React
+    // state), wait for it here rather than send with whatever
+    // contacts happened to be in state at this exact moment.
+    if (contactsCachePromise && !contactsCache) {
+      try { await contactsCachePromise; } catch {}
+    }
+    const effectiveContacts = contactsCache || contacts;
+
     const effectiveProjectId =
       extraOpts.projectId ||
       projectId ||
@@ -533,7 +558,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
         context: {
           currentProject,
           projectsContext,
-          contacts,
+          contacts: effectiveContacts,
           recentEmails: surface === 'main_chat' ? recentEmails : [],
           currentView: state.currentView || null,
           activeProjectId: effectiveProjectId,
