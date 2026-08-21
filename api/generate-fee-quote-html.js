@@ -36,7 +36,7 @@ function coverRow(label, value, label2='', value2='') {
   </tr>`;
 }
 
-function optionRow(num, title, fee, perProp, notes, shade) {
+function optionRow(num, title, fee, perProp, notes, shade, discountPct) {
   const bg = shade ? LIGHT : WHITE;
   return `<tr style="background:${bg};">
     <td style="border:1px solid ${BORDER};padding:6px 8px;font-weight:bold;font-size:8.5pt;color:${DARK};text-align:center;vertical-align:top;width:6%;">${num}</td>
@@ -44,7 +44,7 @@ function optionRow(num, title, fee, perProp, notes, shade) {
     <td style="border:1px solid ${BORDER};padding:6px 8px;font-weight:bold;font-size:8.5pt;color:${DARK};text-align:right;vertical-align:top;width:18%;">
       ${esc(fee)}<br>
       <span style="font-weight:normal;font-size:7pt;color:${GREY};font-style:italic;">${esc(perProp)}</span><br>
-      <span style="font-weight:normal;font-size:6.5pt;color:${GREY};font-style:italic;">25% reduction on further appts</span><br>
+      <span style="font-weight:normal;font-size:6.5pt;color:${GREY};font-style:italic;">${discountPct}% reduction on further appts</span><br>
       <span style="font-weight:normal;font-size:6.5pt;color:${GREY};font-style:italic;">Additional discounts for 3+ AOs</span>
     </td>
     <td style="border:1px solid ${BORDER};padding:6px 8px;font-size:7.5pt;color:${GREY};vertical-align:top;">${notes}</td>
@@ -65,9 +65,16 @@ export default async function handler(req, res) {
       fee_soc = '500',
       fee_agreed = '950',
       fee_separate = '950',
+      discount_pct = '25',
       quote_ref,
       bo_email = '',
     } = body;
+
+    // Added 2026-08-21, on request: this used to always say '25%
+    // reduction', regardless of which discount actually applies — now
+    // reflects whichever was chosen (25% different surveyor, or 50%
+    // same surveyor for every owner).
+    const discountPct = discount_pct === '50' ? 50 : 25;
 
     const ref = quote_ref || generateQuoteRef();
     const numAOs = parseInt(num_aos) || 1;
@@ -134,13 +141,13 @@ export default async function handler(req, res) {
     <td class="hdr-label" style="text-align:right;width:18%;">FEE</td>
     <td class="hdr-label" style="width:50%;">DESCRIPTION</td>
   </tr>
-  ${optionRow('1', 'Consent — No Further Action', 'No additional fee', 'per property', 'The Adjoining Owner consents to the works without conditions. No further action required. The notice fee above covers all work at this stage.', false)}
-  ${optionRow('2', 'Consent Subject to Schedule of Conditions', fmt(fee_soc), 'per property', 'A photographic Schedule of Conditions is prepared prior to works commencing, recording the existing state of the Adjoining Owner\'s property as a baseline for any future claims.', true)}
-  ${optionRow('3', 'Dissent — Appoint Itzik Darel as Agreed Surveyor', fmt(fee_agreed), 'per appointment', 'A Party Wall Award is prepared acting as Agreed Surveyor for both parties. Fee is fixed regardless of the number of notices served.', false)}
-  ${optionRow('4', 'Dissent — Appoint Own Surveyor', fmt(fee_separate), 'per appointment', 'The Adjoining Owner appoints their own surveyor. I act as the Building Owner\'s Appointed Surveyor. Each party bears their own surveyor\'s fees separately.', true)}
+  ${optionRow('1', 'Consent — No Further Action', 'No additional fee', 'per property', 'The Adjoining Owner consents to the works without conditions. No further action required. The notice fee above covers all work at this stage.', false, discountPct)}
+  ${optionRow('2', 'Consent Subject to Schedule of Conditions', fmt(fee_soc), 'per property', 'A photographic Schedule of Conditions is prepared prior to works commencing, recording the existing state of the Adjoining Owner\'s property as a baseline for any future claims.', true, discountPct)}
+  ${optionRow('3', 'Dissent — Appoint Itzik Darel as Agreed Surveyor', fmt(fee_agreed), 'per appointment', 'A Party Wall Award is prepared acting as Agreed Surveyor for both parties. Fee is fixed regardless of the number of notices served.', false, discountPct)}
+  ${optionRow('4', 'Dissent — Appoint Own Surveyor', fmt(fee_separate), 'per appointment', 'The Adjoining Owner appoints their own surveyor. I act as the Building Owner\'s Appointed Surveyor. Each party bears their own surveyor\'s fees separately.', true, discountPct)}
 </table>
 <p style="font-size:7pt;color:${GREY};font-style:italic;margin-bottom:10px;">
-  All fees for Options 2&ndash;4 are per adjoining property. The 25% reduction applies to the second and any further appointment. Where there are more than two adjoining properties, additional discounts can be discussed.
+  All fees for Options 2&ndash;4 are per adjoining property. The ${discountPct}% reduction applies to the second and every further appointment, subject to accessing each property on the same day.
 </p>
 
 <!-- Notes -->

@@ -145,25 +145,14 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .filter(p => !isProjectClosed(p))
     .reduce((s, p) => s + Math.max(0, parseFloat(p.fee || 0) - parseFloat(p.fee_invoiced || 0)), 0);
 
-  // Fixed 2026-08-21: leadPipeline now uses the real fee breakdown
-  // (party wall: notice/SOC/award per adjoining owner, with the
-  // discount applied — same logic as Leads.jsx; PM: contract_value
-  // from priced scope items) rather than a single estimated_value
-  // field, which no longer exists on this data model.
+  // Fixed 2026-08-21, on direct correction: pipeline value comes from
+  // the 'Projected fee' entered on the lead form itself (project.fee),
+  // matching Leads.jsx — not computed from the fee-breakdown screen.
+  // Notice/SOC/award aren't cumulative per owner, they're different
+  // possible outcomes, so summing them was never a correct total.
   const leadPipeline = freshLeads.reduce((s, l) => {
     if (l.project_type === 'construction' || l.project_type === 'pm') return s + (l.contract_value || 0);
-    const q = l.pw_lead_quote || {};
-    if (q.num_aos) {
-      const n = Number(q.num_aos) || 1;
-      const notice = Number(q.fee_notice) || 0;
-      const soc = Number(q.fee_soc) || 0;
-      const award = Number(q.fee_agreed) || 0;
-      const discount = q.discount_mode === '50' ? 0.5 : 0.25;
-      let awardTotal = award;
-      for (let i = 1; i < n; i++) awardTotal += Math.round(award * (1 - discount) * 100) / 100;
-      return s + notice * n + soc * n + awardTotal;
-    }
-    return s + (q.estimated_value || 0);
+    return s + (l.fee || 0);
   }, 0);
 
   const now = Date.now();

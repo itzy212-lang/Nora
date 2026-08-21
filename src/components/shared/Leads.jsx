@@ -29,22 +29,17 @@ const s = {
   empty:     { textAlign: 'center', padding: '60px 20px', color: 'var(--text3)' },
 };
 
+// Fixed 2026-08-21, on direct correction: pipeline value comes from
+// the 'Projected fee' entered on the lead form itself (project.fee),
+// not computed from the fee-breakdown screen — notice/SOC/award
+// aren't cumulative per owner, they're different possible outcomes,
+// so summing them was never a correct total to begin with. PM leads
+// still use contract_value, from actual priced scope items.
 function leadValue(project) {
   if (project.project_type === 'construction' || project.project_type === 'pm') {
     return project.contract_value || 0;
   }
-  const q = project.pw_lead_quote || {};
-  if (q.num_aos) {
-    const n = Number(q.num_aos) || 1;
-    const notice = Number(q.fee_notice) || 0;
-    const soc = Number(q.fee_soc) || 0;
-    const award = Number(q.fee_agreed) || 0;
-    const discount = q.discount_mode === '50' ? 0.5 : 0.25;
-    let awardTotal = award;
-    for (let i = 1; i < n; i++) awardTotal += Math.round(award * (1 - discount) * 100) / 100;
-    return notice * n + soc * n + awardTotal;
-  }
-  return q.estimated_value || 0;
+  return project.fee || 0;
 }
 
 export default function Leads({ onOpenProject }) {
