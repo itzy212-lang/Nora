@@ -54,6 +54,25 @@ function ensureContactsFetchStarted() {
   return contactsCachePromise;
 }
 
+// Added 2026-08-21, real, confirmed fix: found via the Network tab's
+// Initiator column, which pointed at Inbox.jsx, not this file at
+// all — the actual 'Draft with Ely' panel the user has been testing
+// all day is DraftWithElyOverlay, defined directly inside Inbox.jsx
+// with its own completely separate callEly function and direct
+// fetch('/api/ely-smart', ...) call, never routing through this
+// hook's send() at all. Every fix made here today, while all
+// genuinely correct for the surfaces that DO use this hook
+// (EmailComposer's DraftWithEly.jsx among them), was irrelevant to
+// the actual panel being tested. Exported so Inbox.jsx can reuse
+// this exact, already-robust fetch/cache logic directly, rather than
+// duplicating it a third time.
+export async function getContactsForRequest() {
+  if (!contactsCache) {
+    try { await ensureContactsFetchStarted(); } catch {}
+  }
+  return contactsCache || [];
+}
+
 function first(...values) {
   return values.find(v => v !== undefined && v !== null && String(v).trim() !== '') || '';
 }

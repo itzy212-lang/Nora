@@ -5,6 +5,7 @@ import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
+import { getContactsForRequest } from '../../hooks/useEly';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
@@ -437,6 +438,7 @@ ${threadText}`;
         : text;
 
       const { data: { session: _inboxSession } } = await (sb?.auth.getSession() || Promise.resolve({ data: { session: null } }));
+      const contactsForRequest = await getContactsForRequest();
       const res = await fetch('/api/ely-smart', {
         method: 'POST',
         headers: {
@@ -451,6 +453,7 @@ ${threadText}`;
           projectId: email?.project_id || null,
           project_id: email?.project_id || null,
           chatHistory: isAuto ? [] : history,
+          contacts: contactsForRequest,
           emailContext: {
             from: email.sender_name || email.sender_email,
             subject: email.subject,
