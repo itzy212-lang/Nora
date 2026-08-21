@@ -2251,21 +2251,25 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
     // contact lookup is just as useful while drafting within a
     // project. Only ~20 total, cheap to include in full.
     if ((contactsContext || []).length > 0) {
+      // Fixed 2026-08-21, real, serious bug — confirmed live: asked
+      // to nominate three real contacts, the AI invented a wrong
+      // surname entirely ('Maurice Hunt' — the real contact is
+      // 'Maurice Ndirika', nowhere close) and abbreviated/altered
+      // every qualification (e.g. 'MRICS' where the real record says
+      // 'FRICS' — a different membership grade, not a rounding
+      // error). The previous instruction said to use the full name
+      // verbatim but didn't stop the model paraphrasing it anyway.
+      // Two changes: each contact's exact name is now on its own
+      // clearly delimited line, separated from the firm/contact
+      // clutter that was likely making it harder to isolate a clean
+      // string to copy; and the instruction is now unambiguous that
+      // this is a copy operation, not a rewrite — inventing or
+      // altering so much as one letter is a serious error, not a
+      // style choice.
       const contactLines = contactsContext.map(c =>
-        `- ${c.name || 'Unknown'}${c.firm ? `, ${c.firm}` : ''}${c.email ? ` — ${c.email}` : ''}${c.phone ? ` — ${c.phone}` : ''}`
+        `NAME (copy exactly, do not alter): ${c.name || 'Unknown'}\n  Firm: ${c.firm || 'n/a'}\n  Email: ${c.email || 'n/a'}\n  Phone: ${c.phone || 'n/a'}`
       ).join('\n');
-      // Fixed 2026-08-21, real, confirmed bug: the previous
-      // instruction was too vague about HOW to use this data.
-      // Accreditations/qualifications (MSc, FRICS, FFPWS, etc.) are
-      // stored as part of the name field itself, not separately —
-      // when asked to include someone's accreditations, this was
-      // being read as a request for data that doesn't exist, so the
-      // AI wrote a generic 'together with their respective
-      // accreditations' placeholder instead of realising those
-      // letters already ARE the accreditations. Now explicit about
-      // this, and about full names being the correct, professional
-      // way to reference someone in formal correspondence.
-      prompt += `\n\nCONTACTS (look these up by name when the user references someone to include their real details — e.g. nominating a third surveyor). Each contact's name includes their full professional qualifications/accreditations where held (e.g. "Alex M. Frame MSc., FRICS., FFPWS.") — this IS the accreditation, not a separate field. When asked to include someone's name, title, or accreditations, use their full name exactly as stored, letters and all — never write a placeholder phrase like "together with their accreditations" instead of the actual letters:\n${contactLines}\n`;
+      prompt += `\n\nCONTACTS — look these up by name when the user references someone (e.g. nominating a third surveyor). Each NAME line already includes that person's full professional qualifications/accreditations where held (e.g. "Alex M. Frame MSc., FRICS., FFPWS."). This is a COPY operation, not a rewrite: reproduce the NAME line character-for-character, including every qualification letter — never shorten, paraphrase, invent, or guess at a name or a qualification, and never write a placeholder phrase like "together with their accreditations" instead of the actual letters. If a name doesn't appear below, say so rather than guessing:\n${contactLines}\n`;
     }
   } catch (semErr) {
     console.warn('[ely-smart] semantic search failed silently:', semErr.message);
