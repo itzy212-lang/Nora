@@ -67,10 +67,12 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const [actioningAOs, setActioningAOs] = useState({}); // key: `${projectId}:${aoId}` → 'loading' | 'done'
   const { generateDocument } = useDocumentGenerator();
 
-  // Load leads
+  // Fixed 2026-08-21, on request: leads are now real project records
+  // (stage='lead'), not the separate leads table — reading from
+  // projects directly, matching the same architecture Leads.jsx uses.
   useEffect(() => {
     if (!sb) return;
-    sb.from('leads').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+    sb.from('projects').select('*').eq('stage', 'lead').order('created_at', { ascending: false }).then(({ data }) => {
       if (data) setFreshLeads(data);
     });
   }, []);
@@ -143,9 +145,26 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     .filter(p => !isProjectClosed(p))
     .reduce((s, p) => s + Math.max(0, parseFloat(p.fee || 0) - parseFloat(p.fee_invoiced || 0)), 0);
 
-  const leadPipeline = freshLeads
-    .filter(l => (l.lead_stage || l.status) !== 'lost')
-    .reduce((s, l) => s + parseFloat(l.estimated_value || l.fee || 0), 0);
+  // Fixed 2026-08-21: leadPipeline now uses the real fee breakdown
+  // (party wall: notice/SOC/award per adjoining owner, with the
+  // discount applied — same logic as Leads.jsx; PM: contract_value
+  // from priced scope items) rather than a single estimated_value
+  // field, which no longer exists on this data model.
+  const leadPipeline = freshLeads.reduce((s, l) => {
+    if (l.project_type === 'construction' || l.project_type === 'pm') return s + (l.contract_value || 0);
+    const q = l.pw_lead_quote || {};
+    if (q.num_aos) {
+      const n = Number(q.num_aos) || 1;
+      const notice = Number(q.fee_notice) || 0;
+      const soc = Number(q.fee_soc) || 0;
+      const award = Number(q.fee_agreed) || 0;
+      const discount = q.discount_mode === '50' ? 0.5 : 0.25;
+      let awardTotal = award;
+      for (let i = 1; i < n; i++) awardTotal += Math.round(award * (1 - discount) * 100) / 100;
+      return s + notice * n + soc * n + awardTotal;
+    }
+    return s + (q.estimated_value || 0);
+  }, 0);
 
   const now = Date.now();
   const monthStart = new Date();
@@ -155,9 +174,11 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const paidThisMonth  = invoices.filter(i => i.status === 'paid' && i.paid_date && new Date(i.paid_date) >= monthStart).reduce((s, i) => s + parseFloat(i.total || 0), 0);
   const overdue        = invoices.filter(i => i.status === 'unpaid' && i.due_date && new Date(i.due_date) < new Date()).reduce((s, i) => s + parseFloat(i.total || 0), 0);
 
+  // Fixed 2026-08-21: the granular new/contacted/quoted/follow_up
+  // stages belonged to the old leads table and no longer exist —
+  // every project with stage='lead' is simply an active lead now.
   const activeLeads = [...freshLeads]
-    .filter(l => ['new','contacted','quoted','follow_up'].includes(l.lead_stage || l.status))
-    .sort((a, b) => (a._t || 0) - (b._t || 0))
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     .slice(0, 5);
 
   // Upcoming deadlines
@@ -656,13 +677,13 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
           {activeLeads.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--text3)', fontStyle: 'italic' }}>No active leads.</div>
           ) : activeLeads.map(lead => {
-            const days = lead._t ? Math.floor((Date.now() - lead._t) / 86400000) : 0;
+            const days = lead.created_at ? Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000) : 0;
             return (
               <div key={lead.id} onClick={() => onNavigate('leads')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '12px' : '9px 10px', borderRadius: 12, marginBottom: 6, border: '1px solid #e7eaf0', cursor: 'pointer', background: '#fafafa' }}>
                 <div>
-                  <div style={{ fontSize: isMobile ? 14 : 13, fontWeight: 500, color: 'var(--text)' }}>{lead.contact_name || lead.name}</div>
-                  {(lead.project_address || lead.address) && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{lead.project_address || lead.address}</div>
+                  <div style={{ fontSize: isMobile ? 14 : 13, fontWeight: 500, color: 'var(--text)' }}>{lead.bo_1_name || lead.bo || 'Unnamed lead'}</div>
+                  {lead.bo_premise_address && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{lead.bo_premise_address}</div>
                   )}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, color: ageColour(days), background: `${ageColour(days)}22`, padding: '2px 7px', borderRadius: 99 }}>

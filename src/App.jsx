@@ -31,6 +31,7 @@ import Leads from './components/shared/Leads';
 import SOC from './components/soc/SOC';
 import DisputeAgreement from './components/dispute/DisputeAgreement';
 import DisputeResolution from './components/projects/DisputeResolution';
+import PartyWallLeadQuote from './components/shared/PartyWallLeadQuote';
 import NotepadOverlay from './components/shared/NotepadOverlay';
 import DebugPayloadViewer from './components/shared/DebugPayloadViewer';
 import QuickRefOverlay from './components/shared/QuickRefOverlay';
@@ -475,6 +476,27 @@ export default function App() {
         );
       }
 
+      // Added 2026-08-21, on request: party wall leads don't get the
+      // full notice/AO workflow — just the fee entry screen, matching
+      // the confirmed mockup. PM leads deliberately aren't handled
+      // here — PMProjectDetail's own scope-of-works/quote system
+      // already works correctly for a lead, no separate view needed.
+      if (projectView.stage === 'lead' && (!projectView.project_type || projectView.project_type === 'party_wall')) {
+        return (
+          <ErrorBoundary key={projectView?.id}>
+            <PartyWallLeadQuote
+              project={projectView}
+              onBack={onBack}
+              onAccept={async (total) => {
+                if (!window.confirm('Accept this quote and make it a live party wall job?')) return;
+                await sb.from('projects').update({ stage: 'live' }).eq('id', projectView.id);
+                onBack();
+              }}
+            />
+          </ErrorBoundary>
+        );
+      }
+
       // Fixed 2026-08-14, on request: standalone Dispute projects
       // render the dispute-resolution workspace directly, not the
       // normal party wall/construction ProjectDetail — this is the
@@ -555,7 +577,7 @@ export default function App() {
           />
         );
       case 'leads':
-        return <Leads />;
+        return <Leads onOpenProject={handleOpenProject} />;
       case 'contacts':
         return <Contacts />;
       case 'notices':

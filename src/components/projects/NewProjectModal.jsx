@@ -225,7 +225,7 @@ function buildAORecord(form, aoService) {
   };
 }
 
-export default function NewProjectModal({ onClose, onCreated }) {
+export default function NewProjectModal({ onClose, onCreated, defaultStage = 'live' }) {
   const [form, setForm] = useState({
     project_type: 'party_wall',
     role: 'BO',
@@ -335,6 +335,22 @@ export default function NewProjectModal({ onClose, onCreated }) {
     // (the dispute-resolution workspace itself), not in this modal.
     if (isDispute) {
       // no validation — nothing required here
+    } else if (defaultStage === 'lead') {
+      // Added 2026-08-21, on request: a lead should be capturable with
+      // just a name to start — 'I get a lead come in, I can put a name
+      // in' — the full address and everything else can be filled in as
+      // it's learned, same record throughout, right up to accepting it.
+      if (isAO) {
+        if (!form.ao1.name.trim()) {
+          setError('Adjoining owner name is required.');
+          return;
+        }
+      } else {
+        if (!form.bo1.name.trim()) {
+          setError('Building owner name is required.');
+          return;
+        }
+      }
     } else if (!isConstruction) {
       if (isAO) {
         if (!form.aoPremise.trim()) {
@@ -450,6 +466,11 @@ export default function NewProjectModal({ onClose, onCreated }) {
         works: form.works.trim() || null,
         fee: Number.isFinite(fee) ? fee : null,
         project_type: form.project_type || 'party_wall',
+        // Added 2026-08-21, on request: leads are real project records
+        // from the start, just flagged — 'Add New Lead' passes
+        // defaultStage='lead' through so the same creation flow marks
+        // it correctly, no separate lead table or form.
+        stage: defaultStage,
         quote_status: isConstruction ? 'draft' : null,
         client_name: isConstruction ? (form.bo1.name.trim() || null) : null,
         client_email: isConstruction ? (form.bo1.email.trim() || null) : null,
@@ -585,7 +606,7 @@ export default function NewProjectModal({ onClose, onCreated }) {
           justifyContent: 'space-between',
         }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>New project</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{defaultStage === 'lead' ? 'New lead' : 'New project'}</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
               {isConstruction ? 'Construction / PM project' : isAO ? 'AO appointment setup' : 'BO appointment setup'}
             </div>
