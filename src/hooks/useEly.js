@@ -20,6 +20,31 @@ import sb from '../supabaseClient';
 let contactsCache = null;
 let contactsCachePromise = null;
 
+// Fixed 2026-08-21, real, confirmed live: contacts still arrived
+// empty (count:0 in server logs) even after the earlier fix. The
+// remaining gap: send() only awaited contactsCachePromise if it had
+// ALREADY been set by the fetch effect — but if send() runs before
+// that effect has even fired yet (a genuine race right on a fresh
+// mount, not just a slow network), there was nothing yet to await,
+// and the check silently did nothing. This function is now the
+// single place that starts the fetch, called both by the effect
+// (normal case) and directly by send() (guarantees a fetch is
+// definitely in flight — or already cached — no matter which runs
+// first).
+function ensureContactsFetchStarted() {
+  if (contactsCache || contactsCachePromise || !sb) return contactsCachePromise;
+  contactsCachePromise = sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
+    if (error) throw error;
+    const result = (data && data.length) ? data : [{ __fetch_error: 'query succeeded but returned 0 rows' }];
+    contactsCache = result;
+    return result;
+  }).catch(err => {
+    contactsCachePromise = null; // allow retry on next mount rather than caching a failure forever
+    throw err;
+  });
+  return contactsCachePromise;
+}
+
 function first(...values) {
   return values.find(v => v !== undefined && v !== null && String(v).trim() !== '') || '';
 }
@@ -215,18 +240,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   useEffect(() => {
     if (contactsCache) { setContacts(contactsCache); return; } // already fetched this session — instant, no race
     if (!sb) { setContacts([{ __fetch_error: 'sb client not available' }]); return; }
-    if (!contactsCachePromise) {
-      contactsCachePromise = sb.from('contacts').select('name, firm, email, phone, type').then(({ data, error }) => {
-        if (error) throw error;
-        const result = (data && data.length) ? data : [{ __fetch_error: 'query succeeded but returned 0 rows' }];
-        contactsCache = result;
-        return result;
-      }).catch(err => {
-        contactsCachePromise = null; // allow retry on next mount rather than caching a failure forever
-        throw err;
-      });
-    }
-    contactsCachePromise.then(setContacts).catch(err => {
+    ensureContactsFetchStarted().then(setContacts).catch(err => {
       setContacts([{ __fetch_error: 'fetch threw: ' + (err?.message || String(err)) }]);
     });
   }, [state.currentUser?.id, state.currentUser?.email]);
@@ -485,13 +499,16 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     setLoading(true);
     setError(null);
 
-    // Fixed 2026-08-21: closes the remaining race for the very first
-    // request in a session — if contacts are still being fetched
-    // (module-level promise in flight, not yet resolved into React
-    // state), wait for it here rather than send with whatever
-    // contacts happened to be in state at this exact moment.
-    if (contactsCachePromise && !contactsCache) {
-      try { await contactsCachePromise; } catch {}
+    // Fixed 2026-08-21, real, confirmed live via server logs (count:0
+    // still arriving): this used to only await an ALREADY in-flight
+    // fetch — if send() ran before the fetch effect had even fired
+    // yet (a genuine race right on a fresh mount, not just a slow
+    // network), there was nothing yet to await and this silently did
+    // nothing. Now calls ensureContactsFetchStarted() directly, which
+    // starts the fetch itself if nothing has, so there's always
+    // something real to wait for regardless of which runs first.
+    if (!contactsCache) {
+      try { await ensureContactsFetchStarted(); } catch {}
     }
     const effectiveContacts = contactsCache || contacts;
 
