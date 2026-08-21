@@ -3268,12 +3268,34 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     const data = await updateProjectSafely(project.id, payload);
 
+    // Added 2026-08-21, on request: when the address changes on a
+    // project that already has a OneDrive folder — e.g. a lead
+    // originally created with just a name, now getting its real
+    // address filled in — rename the existing folder to match rather
+    // than leaving it behind under the old name.
+    const addressChanged = payload.bo_premise_address && payload.bo_premise_address !== project.bo_premise_address;
+    if (addressChanged && project.onedrive_folder_id) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        await fetch('/api/onedrive-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({
+            user_id: 'help@sq1consulting.co.uk',
+            action: 'rename_folder',
+            folder_id: project.onedrive_folder_id,
+            new_name: payload.bo_premise_address,
+          }),
+        }).catch(() => {}); // non-fatal — the project itself is already saved regardless
+      } catch {}
+    }
+
     setProject(prev => ({
       ...prev,
       ...payload,
       ...(data || {}),
     }));
-  }, [project.id]);
+  }, [project.id, project.bo_premise_address, project.onedrive_folder_id]);
 
   const handleSaveAO = useCallback(async (form, existingAO = null) => {
     const currentAOs = project.aos || [];

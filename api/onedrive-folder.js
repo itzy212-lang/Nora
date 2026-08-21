@@ -136,6 +136,29 @@ export default async function handler(req, res) {
       });
     }
 
+    if (action === 'rename_folder') {
+      // Added 2026-08-21, on request: when a lead's address is filled
+      // in properly after being created with just a name (or any
+      // project's address is corrected later), the OneDrive folder
+      // created back at the original name should be renamed to match
+      // — not left behind, and not duplicated by creating a second
+      // folder under the new name.
+      const { folder_id, new_name } = req.body || {};
+      if (!folder_id || !new_name) return res.status(400).json({ error: 'Missing folder_id or new_name' });
+      const sanitised = safeFolderName(new_name);
+      const renameRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${folder_id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: sanitised }),
+      });
+      if (!renameRes.ok) {
+        const errText = await renameRes.text().catch(() => '');
+        return res.status(renameRes.status).json({ error: `Graph rename failed: ${errText}` });
+      }
+      const renamed = await renameRes.json();
+      return res.status(200).json({ success: true, folder_id: renamed.id, folder_name: renamed.name, web_url: renamed.webUrl });
+    }
+
     if (action === 'create_ao_folder' || action === 'create_subfolder') {
       const subfolderName = ao_address || folder_name;
       if (!subfolderName) return res.status(400).json({ error: 'Missing ao_address or folder_name' });

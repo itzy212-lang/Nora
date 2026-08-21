@@ -320,6 +320,14 @@ export default function ProjectList({ onOpenProject }) {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('active');
+  // Added 2026-08-21, on request: leads (stage='lead') were showing
+  // up in the main Active view alongside real active projects — no
+  // filter anywhere excluded them. New, genuinely separate tab here,
+  // inside the Projects page itself — defaults to Active (which now
+  // correctly excludes leads), with Quotes showing only leads.
+  // Accepting a lead already flips stage to 'live' elsewhere — that
+  // alone now moves it here automatically, no other change needed.
+  const [projectTab, setProjectTab] = useState('active');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -339,7 +347,16 @@ export default function ProjectList({ onOpenProject }) {
 
   const filtered = projects.filter(p => {
     if (p.project_type === 'dispute') return false;
-    const matchesFilter = filter === 'all' || p.status === filter;
+    // Fixed 2026-08-21, on request: the actual bug — genuinely
+    // nothing excluded leads from this list before. projectTab is
+    // the real fix; the pre-existing status dropdown (filter) stays
+    // as a secondary refinement within whichever tab is active.
+    const matchesTab = projectTab === 'active' ? p.stage !== 'lead' : p.stage === 'lead';
+    if (!matchesTab) return false;
+    // Status dropdown only meaningfully applies to real active
+    // projects — leads aren't differentiated by the same status
+    // values, so it's bypassed entirely on the Quotes tab.
+    const matchesFilter = projectTab !== 'active' || filter === 'all' || p.status === filter;
     const q = search.toLowerCase();
 
     const appointmentAddress = getAppointmentAddress(p);
@@ -468,6 +485,30 @@ export default function ProjectList({ onOpenProject }) {
         />
       )}
 
+      {/* Added 2026-08-21, on request: Active/Quotes tabs — leads
+          shouldn't appear alongside real active projects by default. */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {[
+          { key: 'active', label: 'Active' },
+          { key: 'quotes', label: 'Quotes' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setProjectTab(t.key)}
+            style={{
+              padding: '7px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              border: projectTab === t.key ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+              background: projectTab === t.key ? '#eff6ff' : '#fff',
+              color: projectTab === t.key ? '#1e40af' : '#6b7280',
+            }}>
+            {t.label}
+            {t.key === 'quotes' && (
+              <span style={{ marginLeft: 6, opacity: 0.7 }}>
+                {projects.filter(p => p.stage === 'lead' && p.project_type !== 'dispute').length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* ── Toolbar ── */}
       {(() => {
         const isMob = window.innerWidth <= 768;
@@ -488,23 +529,25 @@ export default function ProjectList({ onOpenProject }) {
               />
             )}
 
-            {/* Status filter */}
-            <select
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              style={{
-                padding: '8px 10px', fontSize: 13,
-                background: '#ffffff', border: '1px solid #e5e7eb',
-                borderRadius: 12, color: 'var(--text)', cursor: 'pointer',
-              }}
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="award_served">Award Served</option>
-              <option value="complete">Complete</option>
-              <option value="on_hold">On hold</option>
-              <option value="dispute">Dispute</option>
-            </select>
+            {/* Status filter — only meaningful on the Active tab */}
+            {projectTab === 'active' && (
+              <select
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                style={{
+                  padding: '8px 10px', fontSize: 13,
+                  background: '#ffffff', border: '1px solid #e5e7eb',
+                  borderRadius: 12, color: 'var(--text)', cursor: 'pointer',
+                }}
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="award_served">Award Served</option>
+                <option value="complete">Complete</option>
+                <option value="on_hold">On hold</option>
+                <option value="dispute">Dispute</option>
+              </select>
+            )}
 
             {/* Desktop-only: Refresh + Sync */}
             {!isMob && (
