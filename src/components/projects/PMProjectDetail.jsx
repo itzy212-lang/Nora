@@ -2413,21 +2413,47 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                             bo_1_email: detailsForm.client_email || null,
                           };
                           await sb.from('projects').update(payload).eq('id', project.id);
-                          // Same rename-on-address-change behaviour already
-                          // built for party wall projects — a construction
-                          // project's OneDrive folder shouldn't be left
-                          // behind under its old address either.
-                          if (addressChanged && project.onedrive_folder_id) {
-                            fetch('/api/onedrive-folder', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                user_id: 'help@sq1consulting.co.uk',
-                                action: 'rename_folder',
-                                folder_id: project.onedrive_folder_id,
-                                new_name: detailsForm.site_address,
-                              }),
-                            }).catch(() => {});
+                          // Fixed 2026-08-21, real gap found while
+                          // answering a direct question: a lead created
+                          // with just a name never gets a OneDrive
+                          // folder at all — creation only runs if an
+                          // address was given at that point. This used
+                          // to only rename an EXISTING folder, which
+                          // does nothing for a project that never had
+                          // one. Now creates one if missing, renames if
+                          // it already exists.
+                          if (addressChanged) {
+                            if (project.onedrive_folder_id) {
+                              fetch('/api/onedrive-folder', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  user_id: 'help@sq1consulting.co.uk',
+                                  action: 'rename_folder',
+                                  folder_id: project.onedrive_folder_id,
+                                  new_name: detailsForm.site_address,
+                                }),
+                              }).catch(() => {});
+                            } else {
+                              fetch('/api/onedrive-folder', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  user_id: 'help@sq1consulting.co.uk',
+                                  action: 'create_project_folder',
+                                  project_address: detailsForm.site_address,
+                                }),
+                              }).then(r => r.json()).then(folderData => {
+                                if (folderData.success && folderData.folder_id) {
+                                  sb.from('projects').update({
+                                    onedrive_folder_id: folderData.folder_id,
+                                    onedrive_folder_url: folderData.web_url || null,
+                                  }).eq('id', project.id).then(() => {
+                                    setProject(p => ({ ...p, onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null }));
+                                  });
+                                }
+                              }).catch(() => {});
+                            }
                           }
                           setProject(p => ({ ...p, ...payload }));
                           setDetailsEditing(false);

@@ -3268,25 +3268,51 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     const data = await updateProjectSafely(project.id, payload);
 
-    // Added 2026-08-21, on request: when the address changes on a
-    // project that already has a OneDrive folder — e.g. a lead
-    // originally created with just a name, now getting its real
-    // address filled in — rename the existing folder to match rather
-    // than leaving it behind under the old name.
+    // Fixed 2026-08-21, real gap found while answering a direct
+    // question: a lead created with just a name (allowed since
+    // earlier today) never gets a OneDrive folder at all — the
+    // create-on-creation step only runs if an address was given.
+    // This used to only rename an EXISTING folder once the address
+    // was later filled in, which does nothing for a project that
+    // never had one to begin with. Now creates one if missing,
+    // renames if it already exists — covers the full lead lifecycle,
+    // not just the partial case.
     const addressChanged = payload.bo_premise_address && payload.bo_premise_address !== project.bo_premise_address;
-    if (addressChanged && project.onedrive_folder_id) {
+    if (addressChanged) {
       try {
         const { data: { session } } = await sb.auth.getSession();
-        await fetch('/api/onedrive-folder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-          body: JSON.stringify({
-            user_id: 'help@sq1consulting.co.uk',
-            action: 'rename_folder',
-            folder_id: project.onedrive_folder_id,
-            new_name: payload.bo_premise_address,
-          }),
-        }).catch(() => {}); // non-fatal — the project itself is already saved regardless
+        const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        if (project.onedrive_folder_id) {
+          await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeader },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'rename_folder',
+              folder_id: project.onedrive_folder_id,
+              new_name: payload.bo_premise_address,
+            }),
+          }).catch(() => {}); // non-fatal — the project itself is already saved regardless
+        } else {
+          const folderRes = await fetch('/api/onedrive-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeader },
+            body: JSON.stringify({
+              user_id: 'help@sq1consulting.co.uk',
+              action: 'create_project_folder',
+              project_address: payload.bo_premise_address,
+            }),
+          });
+          const folderData = await folderRes.json().catch(() => ({}));
+          if (folderData.success && folderData.folder_id) {
+            await sb.from('projects').update({
+              onedrive_folder_id: folderData.folder_id,
+              onedrive_folder_url: folderData.web_url || null,
+            }).eq('id', project.id);
+            data.onedrive_folder_id = folderData.folder_id;
+            data.onedrive_folder_url = folderData.web_url || null;
+          }
+        }
       } catch {}
     }
 
