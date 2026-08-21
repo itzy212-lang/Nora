@@ -1837,6 +1837,15 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
   const [materialModal, setMaterialModal] = useState(null);
   const [contractEditing, setContractEditing] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
+  // Added 2026-08-21, on request: PM/construction projects had no way
+  // at all to edit the site address or client details after
+  // creation — confirmed directly, the only existing edit section
+  // was for contract terms, nothing touched these fields. Matches
+  // the same rename-OneDrive-folder-on-address-change behaviour
+  // already built for party wall projects.
+  const [detailsEditing, setDetailsEditing] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsForm, setDetailsForm] = useState(null);
   const [stages, setStages] = useState([]);
   const [stageModal, setStageModal] = useState(null);
   const [scopeItems, setScopeItems] = useState([]);
@@ -2283,41 +2292,61 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   interim: '📅 Interim / weekly'
                 }[project.payment_mode || 'task']}</div>
               </div>
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <div style={label}>Site address</div>
-                  <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Site & Client Details</div>
+                  <button onClick={() => {
+                    if (!detailsEditing) {
+                      setDetailsForm({
+                        site_address: project.site_address || project.bo_premise_address || '',
+                        bo_service_address: project.bo_service_address || '',
+                        client_name: project.client_name || project.bo_1_name || '',
+                        client_email: project.client_email || project.bo_1_email || '',
+                      });
+                    }
+                    setDetailsEditing(!detailsEditing);
+                  }}
+                    style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                    {detailsEditing ? 'Cancel' : 'Edit'}
+                  </button>
                 </div>
-                <div>
-                  <div style={label}>Client</div>
-                  <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
-                  {(project.client_email || project.bo_1_email) && (
-                    clientPortalStatus === 'active' || clientPortalStatus === 'pending' ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: clientPortalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>
-                        Portal: {clientPortalStatus}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={async () => {
-                          setClientInviting(true);
-                          try {
-                            const res = await fetch('/api/portal', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                action: 'invite', project_id: project.id,
-                                email: project.client_email || project.bo_1_email,
-                                name: project.client_name || project.bo_1_name,
-                                user_type: 'client',
-                              }),
-                            });
-                            const json = await res.json();
-                            if (res.ok) {
-                              setClientPortalStatus('pending');
-                              const clientEmail = project.client_email || project.bo_1_email;
-                              if (json.email_sent) {
-                                alert(`Invite email sent to ${clientEmail}.`);
-                              } else {
-                                window.prompt('Could not send the email automatically — copy this link to send manually:', json.invite_url);
+
+                {!detailsEditing ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={label}>Site address</div>
+                      <div style={value}>{project.site_address || project.bo_premise_address || '—'}</div>
+                    </div>
+                    <div>
+                      <div style={label}>Client</div>
+                      <div style={value}>{project.client_name || project.bo_1_name || '—'}</div>
+                      {(project.client_email || project.bo_1_email) && (
+                        clientPortalStatus === 'active' || clientPortalStatus === 'pending' ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: clientPortalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>
+                            Portal: {clientPortalStatus}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              setClientInviting(true);
+                              try {
+                                const res = await fetch('/api/portal', {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    action: 'invite', project_id: project.id,
+                                    email: project.client_email || project.bo_1_email,
+                                    name: project.client_name || project.bo_1_name,
+                                    user_type: 'client',
+                                  }),
+                                });
+                                const json = await res.json();
+                                if (res.ok) {
+                                  setClientPortalStatus('pending');
+                                  const clientEmail = project.client_email || project.bo_1_email;
+                                  if (json.email_sent) {
+                                    alert(`Invite email sent to ${clientEmail}.`);
+                                  } else {
+                                    window.prompt('Could not send the email automatically — copy this link to send manually:', json.invite_url);
                               }
                             } else {
                               alert(json.error || 'Could not send invite.');
@@ -2342,6 +2371,78 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   <div style={label}>Status</div>
                   <div style={{ ...value, textTransform: 'capitalize' }}>{project.project_stage?.replace('_', ' ') || project.status || 'Active'}</div>
                 </div>
+              </div>
+                ) : (
+                  <div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={label}>Site address</div>
+                      <input value={detailsForm.site_address} onChange={e => setDetailsForm(f => ({ ...f, site_address: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={label}>Client's registered / billing address (if different)</div>
+                      <input value={detailsForm.bo_service_address} onChange={e => setDetailsForm(f => ({ ...f, bo_service_address: e.target.value }))}
+                        placeholder="Leave blank if same as site address"
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                      <div>
+                        <div style={label}>Client name</div>
+                        <input value={detailsForm.client_name} onChange={e => setDetailsForm(f => ({ ...f, client_name: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={label}>Client email</div>
+                        <input value={detailsForm.client_email} onChange={e => setDetailsForm(f => ({ ...f, client_email: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setDetailsSaving(true);
+                        try {
+                          const addressChanged = detailsForm.site_address && detailsForm.site_address !== (project.site_address || project.bo_premise_address);
+                          const payload = {
+                            site_address: detailsForm.site_address || null,
+                            bo_premise_address: detailsForm.site_address || null,
+                            bo_service_address: detailsForm.bo_service_address || null,
+                            client_name: detailsForm.client_name || null,
+                            bo_1_name: detailsForm.client_name || null,
+                            bo: detailsForm.client_name || null,
+                            client_email: detailsForm.client_email || null,
+                            bo_1_email: detailsForm.client_email || null,
+                          };
+                          await sb.from('projects').update(payload).eq('id', project.id);
+                          // Same rename-on-address-change behaviour already
+                          // built for party wall projects — a construction
+                          // project's OneDrive folder shouldn't be left
+                          // behind under its old address either.
+                          if (addressChanged && project.onedrive_folder_id) {
+                            fetch('/api/onedrive-folder', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                user_id: 'help@sq1consulting.co.uk',
+                                action: 'rename_folder',
+                                folder_id: project.onedrive_folder_id,
+                                new_name: detailsForm.site_address,
+                              }),
+                            }).catch(() => {});
+                          }
+                          setProject(p => ({ ...p, ...payload }));
+                          setDetailsEditing(false);
+                        } catch (err) {
+                          alert(err.message || 'Could not save details.');
+                        } finally {
+                          setDetailsSaving(false);
+                        }
+                      }}
+                      disabled={detailsSaving}
+                      style={{ padding: '9px 14px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      {detailsSaving ? 'Saving...' : 'Save Details'}
+                    </button>
+                  </div>
+                )}
               </div>
               {project.works && (
                 <div style={{ marginTop: 10 }}>
