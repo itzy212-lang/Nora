@@ -1850,10 +1850,14 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
             .from('email_attachments')
             .select('email_id')
             .in('email_id', emailIds);
-          if (hasAttach?.length) {
-            const attachedSet = new Set(hasAttach.map(a => a.email_id));
-            newEmails = newEmails.map(e => ({ ...e, has_attachments: attachedSet.has(e.id) }));
-          }
+          // Fixed 2026-08-21, real gap found while investigating the
+          // missing-paperclip bug: this used to only run the .map()
+          // if hasAttach had at least one row — meaning has_attachments
+          // was left undefined (rather than explicitly false) on any
+          // batch where nothing in it had an attachment yet. Always
+          // runs now, regardless.
+          const attachedSet = new Set((hasAttach || []).map(a => a.email_id));
+          newEmails = newEmails.map(e => ({ ...e, has_attachments: attachedSet.has(e.id) }));
         } catch {}
       }
 
@@ -1945,6 +1949,39 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       setLoading(false);
       if (cached.length > 0) {
         dispatch({ type: 'SET_EMAILS', payload: cached });
+        // Added 2026-08-21, real, confirmed bug — reported live as a
+        // recent regression: the paperclip attachment indicator
+        // missing on emails that genuinely have one. Traced to the
+        // caching system itself (built a few days ago, matching
+        // 'recent development'): the has_attachments flag is only
+        // ever set on a genuine database query — never re-checked on
+        // a cache read. If an email got synced and cached slightly
+        // before its attachment finished linking in the database (a
+        // real, plausible timing gap between the two), it was cached
+        // with the flag wrong, permanently — nothing ever re-verified
+        // it afterwards. Re-checks the most recent 50 cached emails
+        // against the database directly here and corrects both state
+        // and the cache for any mismatch found.
+        (async () => {
+          try {
+            const recent = [...cached].sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0)).slice(0, 50);
+            const ids = recent.map(e => e.id).filter(Boolean);
+            if (!ids.length) return;
+            const { data: hasAttach } = await sb.from('email_attachments').select('email_id').in('email_id', ids);
+            const attachedSet = new Set((hasAttach || []).map(a => a.email_id));
+            const mismatches = recent.filter(e => !!e.has_attachments !== attachedSet.has(e.id));
+            if (!mismatches.length) return;
+            mismatches.forEach(e => updateCachedEmail(e.id, { has_attachments: attachedSet.has(e.id) }));
+            dispatch({
+              type: 'SET_EMAILS',
+              payload: cached.map(e => attachedSet.has(e.id) !== !!e.has_attachments
+                ? { ...e, has_attachments: attachedSet.has(e.id) }
+                : e),
+            });
+          } catch (err) {
+            console.warn('[attachment recheck] error:', err);
+          }
+        })();
         // Same fix as above — genuinely sync with Outlook first, not
         // just check the local database.
         try {
