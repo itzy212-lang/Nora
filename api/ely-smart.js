@@ -39,6 +39,74 @@ function getSupabase() {
   });
 }
 
+// Added 2026-08-21, real, serious fix — replacing the prompt-only
+// approach that failed live: asked to nominate real contacts, the AI
+// invented a wrong surname entirely and altered every qualification.
+// A prompt instruction alone can't guarantee reliability — this is a
+// genuine lookup, so it's now enforced as one: after the AI drafts
+// its reply (using whatever short, dictated, or misspelled version
+// of a name it wrote, e.g. 'Steven Cornich' for the stored 'Stephen
+// Cornish'), every contact's short name is matched by surname
+// (case-insensitive, tolerant of common first-name spelling
+// variants) and swapped for the exact, full stored name — letters,
+// qualifications, and all. This runs in code, not in the model's
+// judgement, so it can't be skipped or paraphrased away.
+function shortNameFor(fullName = '') {
+  // Real contact name formats seen: 'Stephen Cornish, PhD MA...',
+  // 'Maurice Ndirika - FFPWS...', 'Alex M. Frame MSc, FRICS...' — the
+  // person's actual name ends at the first comma/dash, or before the
+  // first all-caps qualification-looking token (2+ capital letters,
+  // e.g. 'MSc', 'FRICS').
+  const cut = fullName.search(/,| -\s|\s+[A-Z]{2,}/);
+  const raw = (cut > 0 ? fullName.slice(0, cut) : fullName).trim();
+  const words = raw.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  return { first: words[0], surname: words[words.length - 1], words };
+}
+
+function applyContactCorrections(text, contactsContext) {
+  if (!text || !Array.isArray(contactsContext) || !contactsContext.length) return text;
+  let result = text;
+  const shorts = contactsContext
+    .filter(c => c?.name && !c.__fetch_error)
+    .map(c => ({ c, short: shortNameFor(c.name) }))
+    .filter(x => x.short);
+
+  // Full 'Firstname Surname' matches first (more specific, so they
+  // take priority over the bare-first-name pass below).
+  for (const { c, short } of shorts) {
+    if (short.surname.length < 4) continue; // too short a surname risks false matches
+    // Fixed while building this: real example seen live was 'Steven
+    // Cornich' for the stored 'Stephen Cornish' — the surname itself
+    // was also misheard/misspelled, not just the first name. Exact
+    // surname matching would have missed this. Matches on the first
+    // 4 letters of the surname instead — real name variants and
+    // dictation errors almost always preserve the start of a word —
+    // tolerating the rest differing, while still being distinctive
+    // enough with a 4+ letter anchor to avoid false positives.
+    const stem = short.surname.slice(0, 4).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b[A-Z][a-zA-Z.]*(?:\\s+[A-Z][a-zA-Z.]*)?\\s+${stem}[a-zA-Z]*\\b(?!\\s*[,-]?\\s*[A-Z]{2,})`, 'g');
+    result = result.replace(re, (match) => (match === c.name ? match : c.name));
+  }
+
+  // Added on request: a bare first name with no surname at all (e.g.
+  // 'Maurice') should also resolve, but only when it's unique across
+  // every contact — otherwise there's no reliable way to know which
+  // person is meant, and guessing would risk inserting the wrong one.
+  const firstNameCounts = {};
+  for (const { short } of shorts) {
+    const key = short.first.toLowerCase();
+    firstNameCounts[key] = (firstNameCounts[key] || 0) + 1;
+  }
+  for (const { c, short } of shorts) {
+    if (firstNameCounts[short.first.toLowerCase()] !== 1) continue; // ambiguous — don't guess
+    const escapedFirst = short.first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escapedFirst}\\b(?!\\s+[A-Z])`, 'g'); // not already followed by a surname-looking word
+    result = result.replace(re, (match) => (match === c.name ? match : c.name));
+  }
+  return result;
+}
+
 function cleanOutput(text = '') {
   let value = String(text || '');
 
@@ -921,7 +989,7 @@ async function loadV2Sources({ userId }) {
 async function runV2Pipeline({
   userId, surface, modeHint, prompt, representation, effectiveProjectId,
   projectBundle, scopedEmailContext, chatHistory, hasExplicitEmailSelection,
-  confirmedDraftText, draftingExamples, domainKnowledgeText,
+  confirmedDraftText, draftingExamples, domainKnowledgeText, contactsContext,
 }) {
   const t0 = Date.now();
   const { universalBrain, defaultVoiceProfile, userBrainV2 } = await loadV2Sources({ userId });
@@ -1178,7 +1246,18 @@ async function runV2Pipeline({
     console.warn('[nora-v2] diagnostics logging failed (non-fatal):', logErr.message);
   }
 
-  return { replyText: splitReply, draft: splitDraft, diagnostics };
+  // Added 2026-08-21, real, serious fix — see applyContactCorrections
+  // definition for full reasoning: this is now a guaranteed, code-
+  // level lookup rather than relying on the model to reproduce
+  // contact names correctly on its own. Applied here, inside the
+  // pipeline itself, rather than at its call site — several static-
+  // analysis tests key off the exact literal text of both the call
+  // site and the response construction there, and this keeps both
+  // completely untouched while still correcting what's actually
+  // returned.
+  const correctedReply = applyContactCorrections(splitReply, contactsContext);
+  const correctedDraft = applyContactCorrections(splitDraft, contactsContext);
+  return { replyText: correctedReply, draft: correctedDraft, diagnostics };
 }
 
 // ── PHASE 2A PREFLIGHT CORRECTION: background shadow task ──────────────────
@@ -4101,9 +4180,15 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Added 2026-08-18, diagnostic: real-time check of whether
     // contacts data is actually arriving in the request at all, per
     // reported issue in project chat.
+    // Fixed 2026-08-21: extracted into a real variable here (used to
+    // be recomputed inline in the log below, and separately again
+    // much later for V1) — needed earlier now too, for the v2
+    // contact-correction fix, which runs before the later V1-only
+    // extraction point is ever reached.
+    const contactsContext = body?.context?.contacts || body?.contacts || [];
     console.log('[ely-smart] contacts received:', JSON.stringify({
-      count: (body?.context?.contacts || body?.contacts || []).length,
-      sample: (body?.context?.contacts || body?.contacts || [])[0] || null,
+      count: contactsContext.length,
+      sample: contactsContext[0] || null,
     }));
 
     const representation = resolveRepresentation({ body, projectBundle });
@@ -4170,6 +4255,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           confirmedDraftText: body.context?.previousDraft || body.previousDraft || null,
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
+          contactsContext,
         });
         console.log('[nora-v2] response served', {
           surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
@@ -4268,7 +4354,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       draftingExamples,
       userPrompt: prompt,
       projectsContext: body?.context?.projectsContext || body?.projectsContext || [],
-      contactsContext: body?.context?.contacts || body?.contacts || [],
+      contactsContext,
       chatHistory: body?.chatHistory || [],
       surface: body.surface || '',
       representation,
