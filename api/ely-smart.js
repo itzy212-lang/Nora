@@ -2254,7 +2254,18 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
       const contactLines = contactsContext.map(c =>
         `- ${c.name || 'Unknown'}${c.firm ? `, ${c.firm}` : ''}${c.email ? ` — ${c.email}` : ''}${c.phone ? ` — ${c.phone}` : ''}`
       ).join('\n');
-      prompt += `\n\nCONTACTS (look these up by name when the user references someone to include their real details — e.g. nominating a third surveyor):\n${contactLines}\n`;
+      // Fixed 2026-08-21, real, confirmed bug: the previous
+      // instruction was too vague about HOW to use this data.
+      // Accreditations/qualifications (MSc, FRICS, FFPWS, etc.) are
+      // stored as part of the name field itself, not separately —
+      // when asked to include someone's accreditations, this was
+      // being read as a request for data that doesn't exist, so the
+      // AI wrote a generic 'together with their respective
+      // accreditations' placeholder instead of realising those
+      // letters already ARE the accreditations. Now explicit about
+      // this, and about full names being the correct, professional
+      // way to reference someone in formal correspondence.
+      prompt += `\n\nCONTACTS (look these up by name when the user references someone to include their real details — e.g. nominating a third surveyor). Each contact's name includes their full professional qualifications/accreditations where held (e.g. "Alex M. Frame MSc., FRICS., FFPWS.") — this IS the accreditation, not a separate field. When asked to include someone's name, title, or accreditations, use their full name exactly as stored, letters and all — never write a placeholder phrase like "together with their accreditations" instead of the actual letters:\n${contactLines}\n`;
     }
   } catch (semErr) {
     console.warn('[ely-smart] semantic search failed silently:', semErr.message);
