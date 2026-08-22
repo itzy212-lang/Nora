@@ -336,6 +336,16 @@ export function useEmails() {
         sent_at: sentAt,
         received_at: sentAt,
         folder: 'Sent',
+        // Fixed 2026-08-22, real, confirmed bug: this insert never
+        // set is_sent or direction, so the database trigger that
+        // fires a push notification on new mail (checking exactly
+        // these two fields) couldn't tell this apart from a genuine
+        // incoming email — explains being notified for your own sent
+        // emails. The other, separate send path (Inbox.jsx's own
+        // reply handler) already set is_sent correctly; this one
+        // didn't.
+        is_sent: true,
+        direction: 'outgoing',
         is_read: true,
         project_id: projectId || null,
         user_id: state.currentUser?.id || null,
