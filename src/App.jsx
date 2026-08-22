@@ -487,6 +487,7 @@ export default function App() {
             <PartyWallLeadQuote
               project={projectView}
               onBack={onBack}
+              onProjectUpdated={(patch) => setProjectView(prev => ({ ...prev, ...patch }))}
               onAccept={async () => {
                 if (!window.confirm('Accept this quote and make it a live party wall job?')) return;
                 await sb.from('projects').update({ stage: 'live' }).eq('id', projectView.id);
