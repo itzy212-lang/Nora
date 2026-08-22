@@ -184,8 +184,13 @@ export default async function handler(req, res) {
           sent++;
         } catch (err) {
           failed++;
-          // Remove expired/invalid subscriptions
-          if (err.statusCode === 410 || err.statusCode === 404) {
+          // Fixed 2026-08-22, real, confirmed bug — traced from live
+          // logs: two subscriptions from June/July have failed on
+          // every send since, but were never cleaned up, because this
+          // only ever recognised 410/404 as 'this subscription is
+          // dead'. The actual failure they produce is 403 (Forbidden),
+          // which was silently left in place forever.
+          if (err.statusCode === 410 || err.statusCode === 404 || err.statusCode === 403) {
             await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
           }
           console.warn('[cron-push-notify] Send failed:', err.statusCode, err.message?.slice(0, 100));
