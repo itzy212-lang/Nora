@@ -61,8 +61,21 @@ function splitDraftFromCommentary(rawText) {
   return { reply, draft: draft || null };
 }
 
+// Experimental change, 2026-08-22, on direct request — traced to a real,
+// evidenced miss: reviewed an actual project chat transcript against the
+// email it produced and confirmed the user's own instruction ('identify
+// the single strongest argument... do not give equal weight to every
+// point') existed in universal_brain_v2 but was not followed — the point
+// the user returned to three separate times in the conversation ended up
+// as paragraph 8 of 13, not leading the email. The prior version of this
+// instruction checked for that only as one passive clause ('the
+// controlling point has not been diluted') buried among eleven other
+// checks in a single sentence. Split into its own explicit, active check
+// here, in the last-read position before generation. If this makes
+// output worse rather than better, revert this specific commit — it
+// changes only this constant, nothing else.
 const FINAL_VALIDATION_INSTRUCTION =
-  'Before returning your response, confirm internally: it answers the actual request; the user\'s objective is preserved; representation is correct; factual claims are supported; nothing has been invented; the effective user voice is preserved; the controlling point has not been diluted; there is no material contradiction, unnecessary repetition or unnecessary expansion; a short email has remained short; recipient references are natural; time formatting follows the user\'s style; any supported unrequested suggestion has been kept separate.';
+  'Before returning your response, confirm internally: it answers the actual request; the user\'s objective is preserved; representation is correct; factual claims are supported; nothing has been invented; the effective user voice is preserved; there is no material contradiction, unnecessary repetition or unnecessary expansion; a short email has remained short; recipient references are natural; time formatting follows the user\'s style; any supported unrequested suggestion has been kept separate. Then, separately: identify the point the user returned to more than once, or stated most emphatically — that is the controlling point. Confirm it leads the correspondence or is otherwise structurally dominant, not one item among several equally-weighted points. If it is not, restructure before returning the draft.';
 
 function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, domainKnowledge, workingMemory, surface, modeHint, representationLock }) {
   const sections = [];
