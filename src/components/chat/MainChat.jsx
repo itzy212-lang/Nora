@@ -656,8 +656,30 @@ export default function MainChat({ onOpenComposer, onClose }) {
       return;
     }
 
-    const raw = result.draft || result.documentText || result.reply || result.replyText || '';
-    const { brief, draft, after } = splitAssistantResponse(raw);
+    // Fixed 2026-08-22, real, confirmed bug — traced to an exact,
+    // reproducible moment: asked to open the draft with a specific
+    // sentence before the greeting, the response arrived split across
+    // three separate messages instead of one, because this
+    // unconditionally re-split result.draft with a fragile heuristic
+    // (findDraftStart, looking for 'Hi'/'Dear' as the draft's start)
+    // even when the backend had already reliably separated draft from
+    // commentary using explicit <<<DRAFT>>> markers. Any legitimate
+    // sentence the user wanted before the greeting — like this
+    // confidentiality opener — got wrongly chopped off as separate
+    // 'brief' commentary. The !wantsDraft branch above already got
+    // this right (uses result.draft directly, no re-split); this
+    // branch didn't. Now matches it: use result.draft as-is when the
+    // backend already provided it, and only fall back to the
+    // heuristic split when it didn't (older/mixed response shapes).
+    let brief, draft, after;
+    if (result.draft) {
+      brief = result.reply || '';
+      draft = result.draft;
+      after = '';
+    } else {
+      const raw = result.documentText || result.reply || result.replyText || '';
+      ({ brief, draft, after } = splitAssistantResponse(raw));
+    }
     const newMessages = [];
 
     if (brief) {
