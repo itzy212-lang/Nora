@@ -89,21 +89,20 @@ function applyContactCorrections(text, contactsContext) {
     result = result.replace(re, (match) => (match === c.name ? match : c.name));
   }
 
-  // Added on request: a bare first name with no surname at all (e.g.
-  // 'Maurice') should also resolve, but only when it's unique across
-  // every contact — otherwise there's no reliable way to know which
-  // person is meant, and guessing would risk inserting the wrong one.
-  const firstNameCounts = {};
-  for (const { short } of shorts) {
-    const key = short.first.toLowerCase();
-    firstNameCounts[key] = (firstNameCounts[key] || 0) + 1;
-  }
-  for (const { c, short } of shorts) {
-    if (firstNameCounts[short.first.toLowerCase()] !== 1) continue; // ambiguous — don't guess
-    const escapedFirst = short.first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`\\b${escapedFirst}\\b(?!\\s+[A-Z])`, 'g'); // not already followed by a surname-looking word
-    result = result.replace(re, (match) => (match === c.name ? match : c.name));
-  }
+  // Fixed 2026-08-25, real, serious regression reported live: this
+  // bare-first-name pass was built narrowly for third-surveyor
+  // nomination text ('Maurice' alone resolving to the full stored
+  // name), but it applied unconditionally to EVERY bare first name
+  // anywhere in a draft — including plain email greetings. 'Hi
+  // David,' was being rewritten to 'Hi David Vizard AssocRICS
+  // MFPWS,' since 'David' is unique among contacts, exactly the
+  // condition this pass required. The harm (every casual greeting
+  // broken) far outweighs the narrow benefit this was built for.
+  // Removed entirely — the full 'Firstname Surname' pass above still
+  // catches genuine nomination-style mentions, which almost always
+  // include a surname-like word nearby; a truly bare first name is
+  // now left exactly as the AI wrote it.
+
   return result;
 }
 
