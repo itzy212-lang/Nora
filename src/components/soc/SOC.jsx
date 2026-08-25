@@ -1156,7 +1156,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                         onChange={e => { if (e.target.value !== section.title) moveRow(sIdx, rIdx, e.target.value); }}
                         style={{ ...s.aoSelect, flex: 1, fontSize: 12, padding: '4px 8px' }}
                       >
-                        {allSectionTitles.map(t => <option key={t} value={t}>{t}</option>)}
+                        {/* Fixed 2026-08-24, on request: this used to
+                            offer allSectionTitles (this report's real
+                            sections merged with a generic standard
+                            list), so moving a misplaced row showed
+                            rooms that don't exist in this schedule at
+                            all. Only this report's actual sections
+                            now. */}
+                        {editableSections.map(s => s.title).map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     <textarea

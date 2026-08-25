@@ -227,6 +227,14 @@ Classify each incoming note as one of:
 - SITE_NOTE: a note not forming part of the condition schedule
 - QUESTION: the surveyor asking about the session state
 - UNRESOLVED: unclear allocation
+- INCOMPLETE_OBSERVATION: a defect or condition is referenced but not
+  actually described — e.g. 'there's a defect to the floor' with no
+  further detail. This is different from UNRESOLVED: the ROOM is known,
+  but the OBSERVATION ITSELF has no real content to record yet. Added
+  2026-08-24, on request, after a real, confirmed case where this went
+  unflagged live and only surfaced as '[UNCLEAR: a defect to the floor
+  was dictated but not described]' at final document generation —
+  by then too late for the surveyor to just answer on the spot.
 
 SECTION INFERENCE
 Do not wait for explicit room declarations.
@@ -254,6 +262,7 @@ For a correction of a measurement: Amended [element] — [dimension] now recorde
 For a contextual note: Noted as context — [one line].
 For a question: [Direct answer from session state. Do not fabricate.]
 For an unresolved note: Note saved. Allocation uncertain — may belong under [best guess section 1] or [best guess section 2].
+For an incomplete observation: Got it — but you mentioned [defect/element] without describing it. What's the actual defect?
 
 Return structured JSON:
 {

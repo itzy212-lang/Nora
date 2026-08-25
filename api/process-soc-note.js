@@ -389,6 +389,7 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
     // ── 5. Determine note_status ──────────────────────────────────────────
     let noteStatus = 'allocated';
     if (noteType === 'unresolved') noteStatus = 'unresolved';
+    else if (noteType === 'incomplete_observation') noteStatus = 'unresolved'; // Added 2026-08-24: same downstream handling as 'unresolved' — still needs follow-up if not resolved live in the moment
     else if (noteType === 'contextual') noteStatus = 'contextual';
     else if (noteType === 'site_note') noteStatus = 'site_note';
     else if (noteType === 'question') noteStatus = 'question';
