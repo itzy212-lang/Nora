@@ -406,8 +406,21 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   }
 
   function makeSectionPrefix(title) {
+    // Fixed 2026-08-24, real, confirmed issues: single-word titles
+    // (e.g. "Kitchen") padded with a meaningless "Q" (K + Q = "KQ"),
+    // and multi-word titles took the first two words literally, so
+    // "Ground Floor Bathroom" became "GF" instead of "GB" — the
+    // filler word "Floor" was picked over the actual room type
+    // "Bathroom". Filler words are now skipped when choosing which
+    // words' initials to use; a single significant word (e.g.
+    // "Kitchen") now uses its own first two letters instead of a
+    // generic pad character.
+    const FILLER_WORDS = new Set(['floor', 'off', 'the', 'and', 'of', 'to', 'a', 'an', 'in', 'on']);
     const words = String(title || 'QA').match(/[A-Za-z0-9]+/g) || ['QA'];
-    return words.slice(0, 2).map(w => w[0]).join('').toUpperCase().padEnd(2, 'Q');
+    const significant = words.filter(w => !FILLER_WORDS.has(w.toLowerCase()));
+    const pick = significant.length ? significant : words;
+    if (pick.length === 1) return pick[0].slice(0, 2).toUpperCase().padEnd(2, 'X');
+    return pick.slice(0, 2).map(w => w[0]).join('').toUpperCase().padEnd(2, 'X');
   }
 
   // Added 2026-08-24, on request: renaming a section, or moving a row
@@ -419,7 +432,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const prefix = makeSectionPrefix(section.title);
     section.rows = (section.rows || []).map((row, i) => ({
       ...row,
-      ref: `${prefix}-${String(i + 1).padStart(3, '0')}`,
+      ref: `${prefix}-${String(i + 1).padStart(2, '0')}`,
     }));
     return section;
   }
@@ -430,7 +443,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       const match = String(row?.ref || '').match(/(\d+)$/);
       return match ? Math.max(highest, Number(match[1])) : highest;
     }, 0);
-    return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+    return `${prefix}-${String(max + 1).padStart(2, '0')}`;
   }
 
   function findSectionIndex(sections, title) {
