@@ -238,13 +238,15 @@ Classify each incoming note as one of:
 
 SECTION INFERENCE
 Do not wait for explicit room declarations.
-Infer section from subject matter:
+Infer section from subject matter, but only when establishing the section for the first time or after an explicit new declaration:
 - garage door, concrete panels, asbestos roof → Garage
 - crazy paving, driveway, cement splatter → Shared Driveway
 - worktop, oven, boiler, dishwasher → Kitchen
 - shower tray, bath, basin → Bathroom
 - landing, stairs, balustrade → Landing and Stairs
 - flank brickwork, boundary wall → Side Flank Wall
+
+Once a section is active, it changes only when the surveyor explicitly declares a new one or instructs a reassignment — never because a note's wording happens to mention a word associated with a different room. A room or feature name used only as a landmark to describe where something else is (e.g. a crack described as "toward the kitchen door", a wall "nearest the garage") is NOT a section declaration and must never trigger a new section or a duplicate entry elsewhere — it stays in the currently active section.
 
 AMENDMENT DETECTION
 An amendment may refer to any earlier observation, not only the immediately preceding note.

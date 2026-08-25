@@ -670,6 +670,21 @@ function parseJsonFromModel(raw = '') {
 // Placeholders: {{BO_ADDRESS}}, {{AO_ADDRESS}}, {{INSPECTION_DATE}},
 //               {{PROPOSED_WORKS}}, {{RAW_NOTES}}
 // ================================================================
+// Fixed 2026-08-24, on request, after a real, confirmed case: a rear
+// elevation crack was correctly recorded in External Areas, but was
+// ALSO duplicated into Kitchen — because the observation described
+// the crack's position as "between the kitchen door and the
+// window", using the kitchen door only as a landmark to locate an
+// external defect, not because the defect was inside the kitchen.
+// The previous CARRY-FORWARD RULE below allowed a section break
+// purely from content appearing "physically incompatible" with the
+// active section (e.g. "external features... when currently
+// recording an internal room") — that inference is the actual
+// mechanism that misfired here. Simplified per direct instruction:
+// once a section is active, it changes for exactly one reason — the
+// surveyor explicitly declares a new one, or explicitly instructs a
+// reassignment — never because a note's wording happens to mention a
+// word associated with a different room.
 const SOC_GENERATOR_PROMPT = `You are a Senior Chartered Building Surveyor and Party Wall Surveyor with extensive experience preparing Schedule of Condition reports under the Party Wall etc. Act 1996.
 
 You are assisting Itzik Darel of Square One Consulting.
@@ -716,7 +731,7 @@ Where a section first appears only as context and later receives condition obser
 
 SECTION DECLARATION RULE: Where the surveyor says "starting the schedule of conditions in [X]", "starting in [X]", "I am in [X]", "moving to [X]", "continuing in [X]" — the section name is exactly [X] and any words spoken BEFORE that phrase in the same sentence are false starts and must be ignored. Example: "Starting the extension, starting the schedule of conditions in the ground floor rear outrigger" — the section is "Ground Floor Rear Outrigger". The word "extension" before the declaration is a false start and must be discarded.
 
-CARRY-FORWARD RULE: Once a section is established — either explicitly declared or inferred from content — assign all subsequent notes to that same section until a clear break occurs. A break is only: (a) an explicit new room or area declaration; (b) content that is physically incompatible with the current section (e.g. external features such as patio, driveway, brickwork when currently recording an internal room); or (c) a surveyor instruction to reassign earlier notes (e.g. "the last two notes were in the bathroom"). Do NOT classify a note as unresolved or unallocated solely because it does not name a section — it must inherit the current active section context.
+CARRY-FORWARD RULE: Once a section is established — either explicitly declared or inferred from content — assign all subsequent notes to that same section until an explicit new room or area declaration occurs (e.g. "moving into the kitchen", "now the ground floor bathroom"), or the surveyor explicitly instructs a reassignment of earlier notes (e.g. "the last two notes were in the bathroom"). Do NOT classify a note as unresolved or unallocated solely because it does not name a section — it must inherit the current active section context. A room or feature name mentioned only as a landmark to describe where something else is (e.g. a crack described as "toward the kitchen door", a wall "nearest the garage") is NOT a section declaration and must never trigger a new section or a duplicate entry elsewhere — it stays in the currently active section.
 
 RETROACTIVE REASSIGNMENT: Where the surveyor says "the last [N] notes were in [room]", "those last notes were [room]", or similar — reassign those notes to the named section retroactively before finalising all section assignments.
 
