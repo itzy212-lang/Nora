@@ -410,6 +410,20 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     return words.slice(0, 2).map(w => w[0]).join('').toUpperCase().padEnd(2, 'Q');
   }
 
+  // Added 2026-08-24, on request: renaming a section, or moving a row
+  // out of one, left the remaining refs stale (still the old prefix,
+  // or gapped — e.g. BA-01, BA-03 with BA-02 missing after a move).
+  // Renumbers every row in a section sequentially under its current
+  // title's prefix, closing any gap left behind.
+  function renumberSectionRows(section) {
+    const prefix = makeSectionPrefix(section.title);
+    section.rows = (section.rows || []).map((row, i) => ({
+      ...row,
+      ref: `${prefix}-${String(i + 1).padStart(3, '0')}`,
+    }));
+    return section;
+  }
+
   function nextRowRef(section) {
     const prefix = makeSectionPrefix(section?.title);
     const max = (section?.rows || []).reduce((highest, row) => {
@@ -812,6 +826,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       const [row] = next[fromSectionIdx].rows.splice(rowIdx, 1);
       const toIdx = next.findIndex(s => s.title === toSectionTitle);
       if (toIdx >= 0) next[toIdx].rows.push(row);
+      // Added 2026-08-24, on request: moving a row left the source
+      // section gapped (e.g. BA-01, BA-03 with BA-02 gone) and the
+      // moved row still carrying its old section's ref prefix.
+      // Renumbers both sections sequentially under their own prefix.
+      next[fromSectionIdx] = renumberSectionRows(next[fromSectionIdx]);
+      if (toIdx >= 0) next[toIdx] = renumberSectionRows(next[toIdx]);
       const filtered = next.filter(s => s.rows.length > 0);
       schedulePersistEdits(filtered);
       return filtered;
@@ -1125,6 +1145,20 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                     const next = JSON.parse(JSON.stringify(editableSections));
                     next[sIdx].title = e.target.value;
                     setEditableSections(next);
+                  }}
+                  onBlur={() => {
+                    // Added 2026-08-24, on request: renaming a section
+                    // (e.g. "Bathroom off the Kitchen" → "Ground Floor
+                    // Bathroom") should update every row's ref to
+                    // match the new prefix (BA-01 → GB-01), not just
+                    // the displayed title. Fires on blur, not every
+                    // keystroke, so it doesn't renumber mid-typing.
+                    setEditableSections(prev => {
+                      const next = JSON.parse(JSON.stringify(prev));
+                      next[sIdx] = renumberSectionRows(next[sIdx]);
+                      schedulePersistEdits(next);
+                      return next;
+                    });
                   }}
                   style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 'inherit', color: 'inherit', width: '100%', outline: 'none', cursor: 'text' }}
                   title="Click to rename section"
