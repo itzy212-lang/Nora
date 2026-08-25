@@ -77,13 +77,39 @@ function splitDraftFromCommentary(rawText) {
 const FINAL_VALIDATION_INSTRUCTION =
   'Before returning your response, confirm internally: it answers the actual request; the user\'s objective is preserved; representation is correct; factual claims are supported; nothing has been invented; the effective user voice is preserved; there is no material contradiction, unnecessary repetition or unnecessary expansion; a short email has remained short; recipient references are natural; time formatting follows the user\'s style; any supported unrequested suggestion has been kept separate. Then, separately: identify the point the user returned to more than once, or stated most emphatically — that is the controlling point. Confirm it leads the correspondence or is otherwise structurally dominant, not one item among several equally-weighted points. If it is not, restructure before returning the draft.';
 
-function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, domainKnowledge, workingMemory, surface, modeHint, representationLock }) {
+function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, domainKnowledge, workingMemory, surface, modeHint, representationLock, contactsContext }) {
   const sections = [];
   sections.push({ name: 'universal_brain', content: universalBrain || '' });
   if (representationLock) sections.push({ name: 'representation_lock', content: representationLock });
   sections.push({ name: 'effective_voice', content: effectiveVoice?.text || '' });
   if (goldStandardBlock?.text) sections.push({ name: 'gold_standard_examples', content: goldStandardBlock.text });
   if (domainKnowledge) sections.push({ name: 'domain_knowledge', content: domainKnowledge });
+  // Added 2026-08-25, real, critical fix — confirmed live: contactsContext
+  // was passed into runV2Pipeline all along, but only ever used for
+  // applyContactCorrections' post-hoc regex correction AFTER
+  // generation. The model itself never saw the contacts list or any
+  // instruction about it at any point — every 'contacts' instruction
+  // written and refined over the previous two days lived in
+  // buildSystemPrompt, the v1-only function this app's live traffic
+  // never calls. This explains the hallucinated names far better than
+  // the theory acted on at the time: the model wasn't misreading a
+  // supplied contacts list, it was guessing with no contacts data in
+  // its prompt at all, and the post-hoc correction sometimes
+  // reinforced the wrong guess instead of catching it. Real fix: give
+  // the model the actual list before it drafts, not just correct its
+  // guess afterwards.
+  if (Array.isArray(contactsContext) && contactsContext.length) {
+    const contactLines = contactsContext
+      .filter(c => c?.name && !c.__fetch_error)
+      .map(c => `NAME (copy exactly, do not alter): ${c.name}\n  Firm: ${c.firm || 'n/a'}\n  Email: ${c.email || 'n/a'}\n  Phone: ${c.phone || 'n/a'}`)
+      .join('\n');
+    if (contactLines) {
+      sections.push({
+        name: 'contacts',
+        content: `CONTACTS — ONLY use this list when the draft's own CONTENT needs to name, nominate, or reference a specific third party (e.g. nominating a third surveyor by name within the body). NEVER use this list to decide who an email is addressed to, who is being replied to, or the salutation of a reply — that is always determined by the actual sender of the email being replied to (their name, their sign-off, the thread itself), never by matching a dictated name against this list. Each NAME line already includes that person's full professional qualifications/accreditations where held. This is a COPY operation, not a rewrite: reproduce the NAME line character-for-character, including every qualification letter — never shorten, paraphrase, invent, or guess at a name or a qualification. If a name doesn't appear below, say so rather than guessing:\n${contactLines}`,
+      });
+    }
+  }
   if (workingMemory?.included?.length) {
     const memoryText = workingMemory.included.map((item) => `[${item.category}${item.source_id ? ':' + item.source_id : ''}${item.date ? ' ' + item.date : ''}] ${item.content}`).join('\n\n---\n\n');
     sections.push({ name: 'dynamic_working_memory', content: memoryText });

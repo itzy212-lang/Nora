@@ -1167,6 +1167,7 @@ async function runV2Pipeline({
     surface,
     modeHint,
     representationLock: representation ? JSON.stringify(representation) : null,
+    contactsContext,
   });
 
   const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || 'medium';
