@@ -6,6 +6,7 @@ import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
 import { getContactsForRequest } from '../../hooks/useEly';
+import QuickRefOverlay from '../shared/QuickRefOverlay';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
@@ -259,6 +260,13 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [loading, setLoading]         = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(false);
+  // Added 2026-08-27, on request: the quick-reference overlay (the
+  // top-bar 'open another page on top of this one' button) was
+  // completely inaccessible while drafting — this overlay covers the
+  // whole screen, including the top bar it lives in. Reused directly,
+  // self-contained (only needs onClose), rendered on top of this
+  // overlay when open.
+  const [showQuickRef, setShowQuickRef] = useState(false);
   const endRef        = useRef(null);
   const hasAutoRun    = useRef(null);
 
@@ -577,6 +585,12 @@ ${threadText}`;
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowQuickRef(true)}
+            title="Open another page on top of this one"
+            style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            🔍
+          </button>
           {messages.some(m => m.role === 'ely') && (
             <button
               onClick={() => {
@@ -782,6 +796,11 @@ ${threadText}`;
           `}</style>
         </div>
       </div>
+      {showQuickRef && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 700 }}>
+          <QuickRefOverlay onClose={() => setShowQuickRef(false)} />
+        </div>
+      )}
     </div>
   );
 }
