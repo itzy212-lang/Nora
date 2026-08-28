@@ -7,6 +7,29 @@ const NOTICE_TYPES = [
   { key: 's10', label: 'Section 10 Notice', deadlineDays: 10 },
 ];
 
+// Added 2026-08-27, on request: standard, pre-worded work item phrases
+// per section — selecting one drops it straight into a new work item,
+// still fully editable and still able to use "Polish with AI"
+// afterward. Wording confirmed directly, from a real dictated list —
+// item s2[1] was the least clear in dictation and was flagged as such
+// for review before this went live.
+const STANDARD_WORK_ITEMS = {
+  s6: [
+    "Excavation of trench-fill foundations within 3 metres of the adjoining owner's building or structure.",
+    "Excavation of trench-fill foundations supporting a box frame, within 3 metres of the adjoining owner's building or structure.",
+    "Excavation of pad foundations within 3 metres of the adjoining owner's building or structure.",
+  ],
+  s1: [
+    "Construction of a new flank wall along the line of junction, entirely upon the Building Owner's land.",
+    "Construction of a new wall astride the line of junction.",
+  ],
+  s2: [
+    "Cutting into the party wall for the purpose of, but not limited to, inserting steel beams.",
+    "Cutting into the party wall to install flashing, exposing the party wall as necessary while the works proceed, and maintaining adequate and continuous weather protection throughout.",
+    "Cutting into the party wall for the purpose of inserting a damp proof course.",
+  ],
+};
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -72,6 +95,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
 
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
+  const [libraryOpenFor, setLibraryOpenFor] = useState(null); // workKey(sec, ak), or null
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
   const multipleAOs = selectedAOs.length > 1;
@@ -93,6 +117,21 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
   const addWork = (sec, ak) => {
     const k = workKey(sec, ak);
     setSectionWorks(prev => ({ ...prev, [k]: [...(prev[k] || ['']), ''] }));
+  };
+
+  // Added 2026-08-27, on request: inserts a standard phrase directly
+  // as a new work item — same shape as addWork, just pre-filled
+  // rather than blank. Still fully editable afterward.
+  const addStandardWork = (sec, ak, phrase) => {
+    const k = workKey(sec, ak);
+    setSectionWorks(prev => {
+      const current = prev[k] || [''];
+      // Replace a single trailing blank item rather than appending
+      // after it, so picking a standard phrase on a fresh, empty
+      // section doesn't leave an unwanted empty row above it.
+      const isSingleBlank = current.length === 1 && !current[0].trim();
+      return { ...prev, [k]: isSingleBlank ? [phrase] : [...current, phrase] };
+    });
   };
 
   const removeWork = (sec, ak, index) => {
@@ -426,10 +465,33 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                           </div>
                         ))}
                       </div>
-                      <button type="button" onClick={() => addWork(sec, ak)}
-                        style={{ marginTop: 10, padding: '7px 14px', borderRadius: 10, border: '1px dashed #d1d5db', background: '#f9fafb', color: '#6b7280', cursor: 'pointer', fontSize: 13, width: '100%' }}>
-                        + Add work item
-                      </button>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button type="button" onClick={() => addWork(sec, ak)}
+                          style={{ padding: '7px 14px', borderRadius: 10, border: '1px dashed #d1d5db', background: '#f9fafb', color: '#6b7280', cursor: 'pointer', fontSize: 13, flex: 1 }}>
+                          + Add work item
+                        </button>
+                        {STANDARD_WORK_ITEMS[sec]?.length > 0 && (
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <button type="button" onClick={() => setLibraryOpenFor(prev => prev === workKey(sec, ak) ? null : workKey(sec, ak))}
+                              style={{ padding: '7px 14px', borderRadius: 10, border: '1px solid #93c5fd', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontSize: 13, width: '100%' }}>
+                              + Standard item
+                            </button>
+                            {libraryOpenFor === workKey(sec, ak) && (
+                              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #d1d5db', borderRadius: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden' }}>
+                                {STANDARD_WORK_ITEMS[sec].map((phrase, i) => (
+                                  <button key={i} type="button"
+                                    onClick={() => { addStandardWork(sec, ak, phrase); setLibraryOpenFor(null); }}
+                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderBottom: i < STANDARD_WORK_ITEMS[sec].length - 1 ? '1px solid #f0f0f0' : 'none', background: '#fff', cursor: 'pointer', fontSize: 12.5, lineHeight: 1.4, color: '#111827' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                                    {phrase}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
