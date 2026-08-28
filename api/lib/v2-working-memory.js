@@ -195,10 +195,24 @@ function buildStructuredProjectFacts(projectBundle) {
   const aos = projectBundle.adjoining_owners || [];
   if (aos.length) {
     const aoLines = aos.map((ao) => {
+      // Fixed 2026-08-27, real, confirmed gap: adjoining_owners has no
+      // status column at all — ao.status was always empty, silently
+      // dropped by the filter below, on every single request. The
+      // model never received an explicit consent/dissent label for
+      // any adjoining owner, only scattered fields to infer from
+      // (reported live: got a property number wrong, and missed that
+      // a surveyor's appointment for one owner made a Section 10
+      // notice for another owner unnecessary — both explained by
+      // never being told plainly who stands where). Derives a real
+      // status from what actually exists: a named surveyor means
+      // dissent and appointment; otherwise, awaiting response.
+      const derivedStatus = ao.surveyor_name
+        ? `dissented — appointed ${ao.surveyor_name}${ao.surveyor_firm ? ` (${ao.surveyor_firm})` : ''} as their surveyor`
+        : (ao.status || 'no response recorded yet');
       const bits = [
         ao.name || 'unnamed adjoining owner',
         ao.address || ao.premise || null,
-        ao.status || null,
+        derivedStatus,
         ao.notice_served_date ? `notice served ${ao.notice_served_date}` : null,
         ao.consent_deadline ? `response due ${ao.consent_deadline}` : null,
       ].filter(Boolean);
