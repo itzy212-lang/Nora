@@ -115,6 +115,10 @@ export default function App() {
   const [previousProjectId, setPreviousProjectId] = useState(getInitialPreviousProjectId);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [composerOpts, setComposerOpts]     = useState(null);
+  // Added 2026-08-28: holds Inbox.jsx's own overlay-close function
+  // when one of its internal overlays (reply, Draft with Nora) is
+  // open — see Inbox.jsx's onOverlayChange for the full reasoning.
+  const [inboxOverlayClose, setInboxOverlayClose] = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showNotepad, setShowNotepad]        = useState(false);
@@ -556,7 +560,7 @@ export default function App() {
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
-        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} onLoadMore={loadMoreEmails} loadingMore={loadingMore} hasMore={hasMoreEmails} />;
+        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} onLoadMore={loadMoreEmails} loadingMore={loadingMore} hasMore={hasMoreEmails} onOverlayChange={(isOpen, closeFn) => setInboxOverlayClose(isOpen ? () => closeFn : null)} />;
       case 'chat':
         return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':
@@ -636,8 +640,11 @@ export default function App() {
         onNavigate={handleNavigate}
         onOpenNotepad={() => setShowNotepad(true)}
         onOpenQuickRef={() => setShowQuickRef(true)}
-        isOverlayOpen={!!composerOpts}
-        onCloseOverlay={() => setComposerOpts(null)}
+        isOverlayOpen={!!composerOpts || !!inboxOverlayClose}
+        onCloseOverlay={() => {
+          setComposerOpts(null);
+          if (inboxOverlayClose) inboxOverlayClose();
+        }}
       />
 
       <div className="app-body">

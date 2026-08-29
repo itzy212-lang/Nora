@@ -1696,7 +1696,7 @@ function isBriefContent(text = '') {
 }
 
 
-export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore }) {
+export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
@@ -1783,6 +1783,21 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const windowWidth = useWindowWidth();
   const isMobile = isMobileWidth(windowWidth);
   const folderRef = useRef(null);
+
+  // Added 2026-08-28, real, confirmed fix for a genuine mistake:
+  // this component's own reply/draft overlays (ReplyOverlay,
+  // DraftWithElyOverlay) are entirely local state App.jsx has no
+  // visibility into — an earlier fix for 'stuck with no way to
+  // close' only ever covered App.jsx's own separate composerOpts,
+  // which turned out to have nothing to do with this actual, live
+  // reply flow. Reports this component's own overlay state up to
+  // App.jsx, via a plain callback, so the guaranteed top-bar close
+  // button can actually see and close whichever of these is open.
+  useEffect(() => {
+    if (!onOverlayChange) return;
+    const isOpen = !!replyOverlay || !!draftWithEly;
+    onOverlayChange(isOpen, () => { setReplyOverlay(null); setDraftWithEly(false); });
+  }, [replyOverlay, draftWithEly, onOverlayChange]);
 
   // Re-navigating to Inbox while already here (e.g. tapping "Inbox" in the
   // sidebar from inside an open email) bumps resetKey — clear the open-email
