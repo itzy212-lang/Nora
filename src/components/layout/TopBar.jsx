@@ -17,7 +17,7 @@ const VIEW_TITLES = {
   settings: 'Settings',
 };
 
-export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad, onOpenQuickRef }) {
+export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad, onOpenQuickRef, isOverlayOpen, onCloseOverlay }) {
   const { state } = useApp();
   const [autoPlay, setAutoPlayLocal] = useState(() => getAutoPlay());
 
@@ -40,6 +40,26 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 
+        {/* Added 2026-08-28, on request: a guaranteed, always-working
+            way to close whatever's currently open, reported as
+            genuinely stuck with no way out but a page refresh — the
+            composer/sidebar's own z-index stacking couldn't be fully
+            trusted, so this lives in the one place already proven
+            reliable at the highest z-index in the app. Only shown
+            when something is actually open, via isOverlayOpen. */}
+        {isOverlayOpen && (
+          <button
+            onClick={onCloseOverlay}
+            title="Close and return"
+            style={{
+              padding: '7px 14px', borderRadius: 8, background: '#dc2626', color: '#fff',
+              border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            ✕ Close
+          </button>
+        )}
         <button
           onClick={() => onNavigate('chat')}
           style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center' }}

@@ -636,6 +636,8 @@ export default function App() {
         onNavigate={handleNavigate}
         onOpenNotepad={() => setShowNotepad(true)}
         onOpenQuickRef={() => setShowQuickRef(true)}
+        isOverlayOpen={!!composerOpts}
+        onCloseOverlay={() => setComposerOpts(null)}
       />
 
       <div className="app-body">
