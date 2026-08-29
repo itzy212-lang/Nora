@@ -111,7 +111,10 @@ export default function QuickRefOverlay({ onClose }) {
         }
         .qr-mobile-panel {
           position: fixed;
-          inset: 0;
+          top: 54px;
+          left: 0;
+          right: 0;
+          bottom: 0;
           z-index: 8001;
           display: flex;
           flex-direction: column;
