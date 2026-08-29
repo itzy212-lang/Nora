@@ -1792,6 +1792,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     setSelectedEmail(null);
     setMobileShowEmail(false);
+    // Fixed 2026-08-28, real, confirmed gap alongside the composer
+    // fix: this only ever reset the open-email view, not an open
+    // reply or 'Draft with Nora' — both stayed open through
+    // navigation the same way the composer did, for the same reason
+    // (their own local state, untouched by handleNavigate/this reset
+    // key). Closes both here too, so the burger menu genuinely works
+    // as the fallback way out of any of these, not just an open email.
+    setReplyOverlay(null);
+    setDraftWithEly(false);
   }, [resetKey]);
 
   useEffect(() => {

@@ -241,6 +241,19 @@ export default function App() {
   }, [currentView, previousView, projectView, pendingProjectId, previousProjectId]);
 
   const handleNavigate = useCallback((view) => {
+    // Fixed 2026-08-28, real, confirmed root cause, reported live:
+    // 'burger menu doesn't work' once a composer/reply is open. It
+    // was never actually broken — handleNavigate genuinely does
+    // change currentView every time. The composer just never closes
+    // when navigating away, since it renders independently based on
+    // composerOpts, not currentView — so it stayed visually on top
+    // of whatever view was navigated to, making it look like nothing
+    // happened. This is also the direct fix for 'no way to close
+    // reply/reply all and go back to inbox' — the burger menu is
+    // meant to be exactly that fallback, per the existing sidebar
+    // z-index comment, but couldn't be while this stayed open.
+    setComposerOpts(null);
+
     if (view === 'chat') {
       rememberPreviousLocation();
       setCurrentView('chat');
