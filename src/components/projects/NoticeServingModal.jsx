@@ -62,7 +62,7 @@ function normaliseAOList({ ao, aos, project }) {
   return out;
 }
 
-export default function NoticeServingModal({ project, ao, aos = [], defaultSections = [], onServe, onClose }) {
+export default function NoticeServingModal({ project, ao, aos = [], defaultSections = [], prefillData = null, editingNoticeId = null, onServe, onClose }) {
   const lockedToSingleAO = !!ao;
 
   const availableAOs = useMemo(
@@ -79,19 +79,36 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
   // Which sections are globally selected (at least one AO assigned)
   const [selected, setSelected] = useState(defaultSections || []);
 
-  const [includeCover, setIncludeCover] = useState(!defaultSections?.includes('s10'));
-  const [createDeadlineTask, setCreateDeadlineTask] = useState(true);
-  const [noticeDate, setNoticeDate] = useState(todayIso());
+  // Fixed 2026-08-28, real, confirmed gap found while building notice
+  // history/edit: prefillData was already being passed by the
+  // existing 'Back to Edit' flow, but this component never actually
+  // read it for anything beyond defaultSections (which sections were
+  // chosen) — the notice date, cover letter choice, and every work
+  // item's actual text always started blank, silently, on every
+  // 'Back to Edit' click, not just for the new history feature. Now
+  // genuinely restores all of it when prefillData is supplied.
+  const [includeCover, setIncludeCover] = useState(prefillData ? !!prefillData.includeCover : !defaultSections?.includes('s10'));
+  const [createDeadlineTask, setCreateDeadlineTask] = useState(prefillData?.createDeadlineTask ?? true);
+  const [noticeDate, setNoticeDate] = useState(prefillData?.noticeDate || todayIso());
   const [loading, setLoading] = useState(false);
 
   // s2Subsections per AO: { [aoKey]: string }
-  const [s2SubsectionsMap, setS2SubsectionsMap] = useState({});
+  const [s2SubsectionsMap, setS2SubsectionsMap] = useState(() => prefillData?.aoS2SubsMap || {});
 
-  const [safeguardingMap, setSafeguardingMap] = useState({}); // { [aoKey]: boolean }
-  const [aoTenureTypes, setAoTenureTypes] = useState({});
+  const [safeguardingMap, setSafeguardingMap] = useState(() => prefillData?.safeguardingMap || {}); // { [aoKey]: boolean }
+  const [aoTenureTypes, setAoTenureTypes] = useState(() => prefillData?.tenureMap || {});
 
   // Works per section per AO: { [`${sec}-${aoKey}`]: string[] }
-  const [sectionWorks, setSectionWorks] = useState({});
+  const [sectionWorks, setSectionWorks] = useState(() => {
+    if (!prefillData?.aoWorksMap) return {};
+    const out = {};
+    Object.entries(prefillData.aoWorksMap).forEach(([ak, bySection]) => {
+      Object.entries(bySection || {}).forEach(([sec, items]) => {
+        out[`${sec}-${ak}`] = (items || []).map(w => (typeof w === 'string' ? w : w?.text || ''));
+      });
+    });
+    return out;
+  });
 
   const [polishingIndex, setPolishingIndex] = useState(null);
   const [dictatingIndex, setDictatingIndex] = useState(null);
@@ -262,6 +279,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
       }
 
       await onServe({
+        editingNoticeId,
         aos: selectedAOs,
         aoSectionMap,
         aoWorksMap,

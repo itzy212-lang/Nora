@@ -4,6 +4,7 @@ import { useEly } from '../../hooks/useEly';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import NoticeReviewModal from './NoticeReviewModal';
+import NoticeHistoryModal from './NoticeHistoryModal';
 import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, buildBOLOAPdfPlaceholders, buildAOLOAPdfPlaceholders, buildASLOAPdfPlaceholders, buildLOAPdfFileName } from '../../utils/buildLOAPlaceholders';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
@@ -1195,6 +1196,7 @@ function AOCard({
   onToggleAgreedSurveyor,
   onNoteIntention,
   onOpenSOCForAO,
+  onOpenNoticeHistory,
   loaLoading,
   awardLoading,
   emailResponseTasks = [],
@@ -1640,6 +1642,25 @@ function AOCard({
                 Schedule of Condition
               </button>
             )}
+
+            {/* Added 2026-08-28, on request: same pattern as Schedule of
+                Condition — browse this AO's previously generated
+                notices, view the real PDF, edit and re-save if needed. */}
+            <button
+              onClick={() => onOpenNoticeHistory?.(ao)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: 99,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: '1px solid var(--blue)',
+                background: 'transparent',
+                color: 'var(--blue)',
+              }}
+            >
+              Notices
+            </button>
           </div>
         </div>
       </div>
@@ -2841,6 +2862,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [showAddAO, setShowAddAO] = useState(false);
   const [s104bAO, setS104bAO] = useState(null);
   const [noticeModal, setNoticeModal] = useState(null);
+  // Added 2026-08-28, on request: browse an AO's previously generated
+  // notices — same pattern as noticeModal, holds the AO whose history
+  // is currently being viewed, or null when closed.
+  const [noticeHistoryAO, setNoticeHistoryAO] = useState(null);
   const [reviewQueue, setReviewQueue] = useState(null);
   const [generatingNotice, setGeneratingNotice] = useState(false);
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
@@ -3470,17 +3495,21 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project.id, project.bo_premise_address]);
 
 
-  const saveNoticeRecord = useCallback(async ({ ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '' }) => {
-    // Calculate next run_number for this project/AO
+  const saveNoticeRecord = useCallback(async ({ editingNoticeId = null, ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '' }) => {
+    // Calculate next run_number for this project/AO — only relevant
+    // for a genuinely new notice; an edit keeps its original run_number.
     const aoId = ao?.id || String(ao?.num || '');
-    const { data: existingRuns } = await sb
-      .from('notices')
-      .select('run_number')
-      .eq('project_id', project.id)
-      .eq('ao_id', aoId)
-      .order('run_number', { ascending: false })
-      .limit(1);
-    const runNumber = existingRuns?.[0]?.run_number ? existingRuns[0].run_number + 1 : 1;
+    let runNumber = 1;
+    if (!editingNoticeId) {
+      const { data: existingRuns } = await sb
+        .from('notices')
+        .select('run_number')
+        .eq('project_id', project.id)
+        .eq('ao_id', aoId)
+        .order('run_number', { ascending: false })
+        .limit(1);
+      runNumber = existingRuns?.[0]?.run_number ? existingRuns[0].run_number + 1 : 1;
+    }
 
     const record = {
       project_id: project.id,
@@ -3494,7 +3523,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       notice_date: noticeDate,
       status: 'served',
       template_type: selectedSections.includes('s10') ? 's10' : 'notice_pack',
-      run_number: runNumber,
+      ...(editingNoticeId ? {} : { run_number: runNumber }),
       section_2_subsections: selectedSections.includes('s2') ? section2Subsections : null,
       notifiable_works: (() => { const items = worksItems.map(w => typeof w === 'object' ? w : { text: w, sections: [] }).filter(w => w.text?.trim()); return items.length ? items : null; })(),
       safeguarding: !!safeguarding,
@@ -3502,7 +3531,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     };
 
     try {
-      await sb.from('notices').insert([record]);
+      // Fixed 2026-08-28, on request: an edited notice should update
+      // its existing record, not create a duplicate alongside it.
+      if (editingNoticeId) {
+        await sb.from('notices').update(record).eq('id', editingNoticeId);
+      } else {
+        await sb.from('notices').insert([{ ...record, run_number: runNumber }]);
+      }
     } catch (err) {
       console.warn('Could not save notices table record:', err?.message || err);
     }
@@ -3904,6 +3939,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   // Batch version: generate docs for ALL AOs, open review modal.
   // Workflow state (status, task) is saved ONLY after user confirms in the modal.
   const handleServeBatchNoticePack = useCallback(async ({
+    editingNoticeId = null,
     aos: batchAOs,
     aoSectionMap = {},
     aoWorksMap = {},
@@ -3994,7 +4030,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
 
     if (aoQueue.length > 0) {
-      setReviewQueue({ aoQueue, project, formData, includeCover, createDeadlineTask, safeguarding, tenureMap });
+      setReviewQueue({ aoQueue, project, formData, includeCover, createDeadlineTask, safeguarding, safeguardingMap, tenureMap, editingNoticeId });
     }
 
     if (allWarnings.length) console.warn('[notice batch] Warnings:', allWarnings);
@@ -4065,6 +4101,120 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       soc_target_ao: ao,
     });
   }, [onOpenSOC, project]);
+
+  const handleOpenNoticeHistory = useCallback((ao) => {
+    setNoticeHistoryAO(ao);
+  }, []);
+
+  // Added 2026-08-28, on request: regenerates the real PDF for a
+  // previously saved notices row — there's no stored file to pull
+  // back, only the data used to build it (sections served, work
+  // items, date), so this reuses the exact same generation building
+  // blocks as handleServeBatchNoticePack, just for one stored record
+  // instead of a fresh batch. Reuses the existing, working
+  // NoticeReviewModal viewer rather than building a new one.
+  const handleViewHistoricalNotice = useCallback(async (notice, ao) => {
+    setNoticeHistoryAO(null);
+    // Map stored boolean columns back to section keys directly, rather
+    // than guess at a naming transform — clearer and less error-prone.
+    const sectionMap = { section_1: 's1', section_2: 's2', section_6: 's6', section_10: 's10' };
+    const resolvedSections = Object.entries(sectionMap).filter(([col]) => notice[col]).map(([, key]) => key);
+    const aoWorksItems = Array.isArray(notice.notifiable_works) ? notice.notifiable_works : [];
+    const includeCover = !!notice.notice_cover_letter;
+    const noticeDate = notice.notice_date || todayIso();
+
+    const generatedDocs = [];
+    const zip = new PizZip();
+    const keysToGenerate = [...resolvedSections];
+    if (includeCover) keysToGenerate.unshift('cover');
+
+    for (const key of keysToGenerate) {
+      try {
+        const sectionWorks = aoWorksItems
+          .filter(w => { if (key === 'cover') return true; const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
+          .map(w => (w?.text || w || '').trim())
+          .filter(Boolean);
+        const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: notice.section_2_subsections || '', allSections: resolvedSections, worksItems: sectionWorks });
+        const result = await generateDocument({
+          templateKey: key === 's2' ? 's3' : key,
+          mergeData,
+          fileName: mergeData.file_name,
+          projectId: project.id,
+          skipDownload: true,
+        });
+        if (result?.success && result?.docx_b64) {
+          generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
+          addDocxToZip(zip, mergeData.file_name, result.docx_b64);
+        }
+      } catch (err) {
+        console.warn('[historical notice] generation error for', key, err.message);
+      }
+    }
+
+    if (!generatedDocs.length) {
+      alert('Could not regenerate this notice — no documents were produced.');
+      return;
+    }
+
+    const ORDER = ['cover', 's2', 's6', 's1', 's10'];
+    const sorted = [...generatedDocs].sort((a, b) => {
+      const ai = ORDER.indexOf(a.key); const bi = ORDER.indexOf(b.key);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    setReviewQueue({
+      aoQueue: [{ ao, sortedDocs: sorted, aoSections: resolvedSections, aoWorksItems, aoS2Subs: notice.section_2_subsections || '' }],
+      project,
+      // Fixed 2026-08-28, real bug caught while building this: leaving
+      // formData null meant noticeDate would silently fall back to
+      // today's date if the user chose 'Save' again from this view —
+      // a minimal but correct formData avoids that. editingNoticeId is
+      // set here too (not just for the separate Edit path), so any
+      // re-save from View also updates this same record rather than
+      // creating a duplicate — matches the actual request: any re-save
+      // of an existing notice should update it, not multiply it.
+      formData: { noticeDate, sections: resolvedSections },
+      includeCover,
+      createDeadlineTask: false,
+      safeguarding: !!notice.safeguarding,
+      safeguardingMap: { [String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '')]: !!notice.safeguarding },
+      tenureMap: {},
+      editingNoticeId: notice.id,
+      isHistoricalView: true,
+    });
+  }, [project, generateDocument]);
+
+  const handleEditHistoricalNotice = useCallback((notice, ao) => {
+    setNoticeHistoryAO(null);
+    const sectionMap = { section_1: 's1', section_2: 's2', section_6: 's6', section_10: 's10' };
+    const resolvedSections = Object.entries(sectionMap).filter(([col]) => notice[col]).map(([, key]) => key);
+    const ak = String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '');
+    // Real shape, matching formData exactly (see handleServeBatchNoticePack
+    // and the existing 'Back to Edit' onBack handler) — aoWorksMap keyed
+    // by AO, then by section, not the shape guessed at on the first
+    // attempt at this function.
+    const aoWorksMap = { [ak]: {} };
+    (notice.notifiable_works || []).forEach(w => {
+      const secs = (w?.sections?.length ? w.sections : resolvedSections);
+      secs.forEach(sec => {
+        aoWorksMap[ak][sec] = [...(aoWorksMap[ak][sec] || []), (w?.text || w || '')];
+      });
+    });
+    setNoticeModal({
+      ao,
+      editingNoticeId: notice.id,
+      defaultSections: resolvedSections,
+      prefillData: {
+        sections: resolvedSections,
+        includeCover: !!notice.notice_cover_letter,
+        noticeDate: notice.notice_date,
+        aoWorksMap,
+        aoS2SubsMap: { [ak]: notice.section_2_subsections || '' },
+        safeguardingMap: { [ak]: !!notice.safeguarding },
+        tenureMap: { [ak]: notice.tenure || '' },
+      },
+    });
+  }, []);
 
   const handleRaiseInvoice = useCallback(() => {
     // Invoice is always raised against the Building Owner regardless of surveyor role
@@ -4225,13 +4375,24 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               const createDeadlineTask = rq?.createDeadlineTask ?? true;
               const includeCover = rq?.includeCover ?? true;
               const safeguarding = rq?.safeguarding ?? false;
+              const safeguardingMap = rq?.safeguardingMap || {};
               const tenureMap = rq?.tenureMap || {};
               const aoSections = pack.aoSections || rq?.formData?.sections || [];
               const aoWorksItems = pack.aoWorksItems || [];
               const aoS2Subs = pack.aoS2Subs || '';
+              // Fixed 2026-08-28, real, pre-existing bug found while
+              // building notice history/edit — ak was referenced below
+              // (safeguardingMap[ak], tenureMap[ak]) but never declared
+              // anywhere in this loop or the enclosing scope, confirmed
+              // directly with a full-file search. Would throw
+              // ReferenceError on every single notice confirmation.
+              // Not something introduced by this change, but this
+              // exact path is what the new View/Edit flows depend on,
+              // so it needed fixing regardless.
+              const ak = String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '');
 
               const aoSafeguarding = safeguardingMap[ak] !== undefined ? !!safeguardingMap[ak] : !!safeguarding;
-      await saveNoticeRecord({ ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
+      await saveNoticeRecord({ editingNoticeId: rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
 
               const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
               if (nonS10.length > 0) {
@@ -4291,10 +4452,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           ao={noticeModal.ao}
           aos={modalAOs}
           defaultSections={noticeModal.defaultSections || []}
+          prefillData={noticeModal.prefillData || null}
+          editingNoticeId={noticeModal.editingNoticeId || null}
           generateDocument={generateDocument}
-          onServe={({ aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap }) => {
+          onServe={({ editingNoticeId, aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap }) => {
             const aosToServe = servedAOs || (servedAO ? [servedAO] : noticeModal.ao ? [noticeModal.ao] : []);
             return handleServeBatchNoticePack({
+              editingNoticeId,
               aos: aosToServe,
               safeguardingMap,
               sections,
@@ -4733,6 +4897,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onToggleAgreedSurveyor={handleToggleAgreedSurveyor}
                       onNoteIntention={handleNoteIntention}
                       onOpenSOCForAO={handleOpenSOCForAO}
+                      onOpenNoticeHistory={handleOpenNoticeHistory}
                       loaLoading={loaLoading === aoKey}
                       awardLoading={awardLoading === aoKey}
                       emailResponseTasks={emailResponseTasks}
