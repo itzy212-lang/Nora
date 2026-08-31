@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
+import { useSpeech } from '../../hooks/useSpeech';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import NoticeReviewModal from './NoticeReviewModal';
@@ -1892,6 +1893,11 @@ function ProjectChat({ project, onOpenComposer }) {
   const projectRef = project?.ref || project?.name || 'this project';
   const windowWidth = useWindowWidth();
   const isMobile = windowWidth < 760;
+  // Added 2026-08-31, on request: Project Chat had no way to play a
+  // response aloud at all, unlike Main Chat — manual only, matching
+  // the same fix applied there (never auto-plays, regardless of any
+  // setting).
+  const { speak, stop, speaking } = useSpeech();
 
   const {
     send,
@@ -2446,6 +2452,28 @@ function ProjectChat({ project, onOpenComposer }) {
         }}>
           {split.intro}
         </div>
+      )}
+
+      {split.intro && msg.role !== 'user' && (
+        <button
+          type="button"
+          onClick={() => speaking ? stop() : speak(split.intro)}
+          style={{
+            alignSelf: 'flex-start',
+            border: '1px solid var(--border)',
+            background: 'var(--bg2)',
+            borderRadius: 999,
+            padding: '4px 10px',
+            cursor: 'pointer',
+            fontSize: 11,
+            color: 'var(--text2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {speaking ? '■ Stop' : '▶ Play'}
+        </button>
       )}
 
       {split.draft && (

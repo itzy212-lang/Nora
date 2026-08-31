@@ -694,8 +694,23 @@ ${threadText}`;
                 {msg.role === 'ely' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {msg.explanation && msg.explanation.length > 5 && !msg.draft && (
-                      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
-                        {msg.explanation}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: '10px 13px', borderRadius: 10, fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
+                          {msg.explanation}
+                        </div>
+                        {/* Added 2026-08-31, on request: this surface
+                            already had a Play button for a generated
+                            draft, but not for a plain explanatory
+                            response — exactly the gap reported. */}
+                        <button onClick={() => {
+                            const u = window.speechSynthesis;
+                            if (u.speaking) { u.cancel(); return; }
+                            const ut = new SpeechSynthesisUtterance(msg.explanation);
+                            u.speak(ut);
+                          }}
+                          style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer' }}>
+                          ▶ Play
+                        </button>
                       </div>
                     )}
                     {msg.draft && (

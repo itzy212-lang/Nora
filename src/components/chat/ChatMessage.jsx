@@ -181,15 +181,14 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   };
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const { speak, stop, speaking, autoPlay } = useSpeech();
+  const { speak, stop, speaking } = useSpeech();
 
-  // Auto-play when a new Ely response arrives
-  useEffect(() => {
-    if (!isUser && autoPlay && replyText) {
-      speak(replyText);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [msg.id]);
+  // Fixed 2026-08-31, on request: this used to auto-play a new
+  // response the moment it arrived, whenever the global autoPlay
+  // setting was on. Removed entirely, regardless of that setting —
+  // the manual Play button below is the only way this should ever
+  // trigger. autoPlay itself is left untouched elsewhere; this
+  // component simply no longer reads or acts on it.
 
   const replyText = msg.content || msg.reply || '';
   const draftSource = msg.draft || msg.documentText || (isDraft ? replyText : '');
