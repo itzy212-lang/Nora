@@ -84,8 +84,24 @@ function applyContactCorrections(text, contactsContext) {
     // dictation errors almost always preserve the start of a word —
     // tolerating the rest differing, while still being distinctive
     // enough with a 4+ letter anchor to avoid false positives.
-    const stem = short.surname.slice(0, 4).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`\\b[A-Z][a-zA-Z.]*(?:\\s+[A-Z][a-zA-Z.]*)?\\s+${stem}[a-zA-Z]*\\b(?!\\s*[,-]?\\s*[A-Z]{2,})`, 'g');
+    const surnameStem = short.surname.slice(0, 4).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Fixed 2026-08-31, real, severe, confirmed bug reported live:
+    // this originally accepted ANY capitalized first name before a
+    // matching surname stem, not specifically a variant of this
+    // contact's own first name — so a genuinely different person
+    // sharing only a surname (a real, live example: 'Shaw Kelly', a
+    // barrister the user actually knows, repeatedly and silently
+    // overwritten with the stored contact 'John Kelly', despite
+    // direct, repeated correction — the user was never actually
+    // fighting the AI's output, but this exact function running
+    // afterward). Now also requires the matched first name to share
+    // the stored contact's own first-name stem (first 3 letters),
+    // the same tolerance-for-variants approach already used for the
+    // surname, applied to the first name too — 'Steven' still
+    // matches 'Stephen' (both start 'Ste'), but 'Shaw' no longer
+    // matches 'John' at all.
+    const firstNameStem = short.first.slice(0, 3).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b(${firstNameStem}[a-zA-Z]*)(?:\\s+[A-Z][a-zA-Z.]*)?\\s+${surnameStem}[a-zA-Z]*\\b(?!\\s*[,-]?\\s*[A-Z]{2,})`, 'g');
     result = result.replace(re, (match) => (match === c.name ? match : c.name));
   }
 
