@@ -452,27 +452,22 @@ ${threadText}`;
             aiSessionIdRef.current = session?.id || null;
           }
           if (aiSessionIdRef.current) {
-            const savedUserMsg = await saveAiMessage({
+            // Fixed 2026-09-02, on direct clarification: earlier
+            // today this embedded every intermediate chat turn for
+            // semantic search — corrected on request. Only the
+            // final, actually-sent email should be reachable by
+            // semantic search here, not the drafting back-and-forth
+            // that produced it. Saving still happens (real record of
+            // what was said), but embedding of these chat messages
+            // does not. The sent email itself is embedded separately,
+            // already correctly, where it's actually inserted below.
+            await saveAiMessage({
               sessionId: aiSessionIdRef.current,
               projectId: email?.project_id || null,
               surface: 'inbox_draft',
               role: 'user',
               content: text,
             });
-            // Fixed 2026-09-02, on request, real gap found while
-            // checking this same fix: the save was added but the
-            // embedding trigger was not — matches the exact pattern
-            // of gap just found and fixed separately in the
-            // background email sync (saved but never embedded).
-            // useEly.js already embeds every saved message this same
-            // way; this brings Inbox.jsx's own save path in line with it.
-            if (email?.project_id && savedUserMsg?.id) {
-              fetch('/api/embed', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'embed_record', record_id: savedUserMsg.id, table: 'ai_messages' }),
-              }).catch(() => {});
-            }
           }
         } catch (err) {
           console.warn('[DraftWithElyOverlay] user message save failed:', err?.message);
@@ -586,10 +581,12 @@ ${threadText}`;
         ? data.missing_points
         : null;
 
-      // Added 2026-09-02, on request, same real fix as the user-message
-      // save above — saves the assistant's actual response too, using
-      // the same session. Fire-and-forget for the same reason: never
-      // delay the draft appearing on screen for a database write.
+      // Added 2026-09-02, on request — saves the assistant's actual
+      // response too, using the same session. Fire-and-forget so it
+      // never delays the draft appearing on screen. Deliberately not
+      // embedded (corrected on direct clarification): only the
+      // final, actually-sent email should be reachable by semantic
+      // search, not every intermediate draft iteration that led to it.
       if (aiSessionIdRef.current) {
         const savedContent = draft ? `${explanation || ''}\n\n---\n${draft}\n---` : (explanation || reply || '');
         saveAiMessage({
@@ -598,16 +595,6 @@ ${threadText}`;
           surface: 'inbox_draft',
           role: 'ely',
           content: savedContent,
-        }).then(savedMsg => {
-          // Same real gap, same fix as the user-message save above —
-          // embedding is a separate step from saving.
-          if (email?.project_id && savedMsg?.id) {
-            fetch('/api/embed', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'embed_record', record_id: savedMsg.id, table: 'ai_messages' }),
-            }).catch(() => {});
-          }
         }).catch(err => console.warn('[DraftWithElyOverlay] assistant message save failed:', err?.message));
       }
 
