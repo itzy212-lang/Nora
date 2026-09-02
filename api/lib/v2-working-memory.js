@@ -218,8 +218,23 @@ function buildStructuredProjectFacts(projectBundle) {
       // never being told plainly who stands where). Derives a real
       // status from what actually exists: a named surveyor means
       // dissent and appointment; otherwise, awaiting response.
-      const derivedStatus = ao.surveyor_name
-        ? `dissented — appointed ${ao.surveyor_name}${ao.surveyor_firm ? ` (${ao.surveyor_firm})` : ''} as their surveyor`
+      // Fixed 2026-09-02, real, confirmed bug found while
+      // investigating a specific case live: adjoining_owners often
+      // has no rows at all for a project — the real AO data instead
+      // lives in a separate projects.aos JSON column, which the
+      // backend already correctly falls back to (loadProjectFacts).
+      // But that JSON's own objects use different field names
+      // entirely (surv_name/surv_firm and, inconsistently, a second
+      // duplicate set surveyorName/surveyorFirm — confirmed directly
+      // against real data) — not the table's surveyor_name/
+      // surveyor_firm this fix originally checked. So for any
+      // project using the JSON fallback, this status derivation
+      // silently never found the surveyor at all. Now checks every
+      // real variant confirmed to exist.
+      const svName = ao.surveyor_name || ao.surv_name || ao.surveyorName;
+      const svFirm = ao.surveyor_firm || ao.surv_firm || ao.surveyorFirm;
+      const derivedStatus = svName
+        ? `dissented — appointed ${svName}${svFirm ? ` (${svFirm})` : ''} as their surveyor`
         : (ao.status || 'no response recorded yet');
       const bits = [
         ao.name || 'unnamed adjoining owner',
