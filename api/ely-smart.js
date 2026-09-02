@@ -1058,9 +1058,34 @@ async function runV2Pipeline({
   if (effectiveProjectId && prompt) {
     try {
       searchResults = (await semanticSearchProject(effectiveProjectId, prompt, 25)) || [];
+      // Added 2026-09-02, on request: this call has been genuinely
+      // live and working since the 2026-08-06 v2 wiring correction
+      // above it, but was never given the same logging the old,
+      // now-dead v1 buildSystemPrompt version had — so
+      // semantic_search_log went stale on that exact date even
+      // though the feature itself kept working, making it look
+      // abandoned. Fire-and-forget, matches the old logging shape.
+      getSupabase()?.from('semantic_search_log').insert([{
+        project_id: effectiveProjectId,
+        surface: surface || 'unknown',
+        prompt_snippet: (prompt || '').slice(0, 120),
+        results_count: searchResults?.length || 0,
+        success: !!(searchResults?.length),
+        fallback_used: false,
+        error_message: null,
+      }]).then(() => {}).catch(() => {});
     } catch (searchErr) {
       console.warn('[nora-v2] semantic search failed (non-fatal):', searchErr.message);
       searchResults = [];
+      getSupabase()?.from('semantic_search_log').insert([{
+        project_id: effectiveProjectId,
+        surface: surface || 'unknown',
+        prompt_snippet: (prompt || '').slice(0, 120),
+        results_count: 0,
+        success: false,
+        fallback_used: false,
+        error_message: String(searchErr.message || searchErr).slice(0, 300),
+      }]).then(() => {}).catch(() => {});
     }
   }
   const alreadyIncludedIds = new Set([
