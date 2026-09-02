@@ -5,7 +5,7 @@ import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
-import { getContactsForRequest } from '../../hooks/useEly';
+import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
@@ -260,6 +260,14 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
   const [loading, setLoading]         = useState(false);
   const [firmSettings, setFirmSettings] = useState(null);
   const [pendingCaseReview, setPendingCaseReview] = useState(false);
+  // Added 2026-09-02, on request, real fix: this overlay never saved
+  // a single message to ai_messages at all — confirmed directly, two
+  // separate real conversations, including an actually sent email,
+  // were completely unrecoverable afterward. This ref holds one
+  // session id for the lifetime of this overlay instance, so every
+  // turn in one draft conversation saves under the same session
+  // rather than creating a new one each time.
+  const aiSessionIdRef = useRef(null);
   // Added 2026-08-27, on request: the quick-reference overlay (the
   // top-bar 'open another page on top of this one' button) was
   // completely inaccessible while drafting — this overlay covers the
@@ -423,6 +431,41 @@ ${threadText}`;
       setMessages([{ id: 0, role: 'system', content: '- Reading ' + ((threadEmails || []).length > 1 ? 'thread (' + (threadEmails || []).length + ' emails)' : 'email') + ' and drafting...' }]);
     }
 
+    // Added 2026-09-02, on request, real fix: this overlay never
+    // saved a single message to ai_messages — confirmed directly,
+    // two separate real conversations, including an actually sent
+    // email, were completely unrecoverable afterward. One session is
+    // created on the first real turn and reused for the rest of this
+    // overlay's lifetime via aiSessionIdRef. Not awaited inline —
+    // fire-and-forget, so a save failure never blocks or delays the
+    // actual draft the user is waiting for; errors are only logged.
+    if (!isAuto) {
+      (async () => {
+        try {
+          if (!aiSessionIdRef.current) {
+            const session = await createAiSession({
+              projectId: email?.project_id || null,
+              surface: 'inbox_draft',
+              mode: 'draft_with_ely',
+              title: email?.subject || 'Draft with Nora',
+            });
+            aiSessionIdRef.current = session?.id || null;
+          }
+          if (aiSessionIdRef.current) {
+            await saveAiMessage({
+              sessionId: aiSessionIdRef.current,
+              projectId: email?.project_id || null,
+              surface: 'inbox_draft',
+              role: 'user',
+              content: text,
+            });
+          }
+        } catch (err) {
+          console.warn('[DraftWithElyOverlay] user message save failed:', err?.message);
+        }
+      })();
+    }
+
     try {
       const fullThread = threadTextOverride || ((threadEmails || []).length > 1
         ? [...(threadEmails || [])]
@@ -528,6 +571,21 @@ ${threadText}`;
       const missingPoints = Array.isArray(data.missing_points) && data.missing_points.length > 0
         ? data.missing_points
         : null;
+
+      // Added 2026-09-02, on request, same real fix as the user-message
+      // save above — saves the assistant's actual response too, using
+      // the same session. Fire-and-forget for the same reason: never
+      // delay the draft appearing on screen for a database write.
+      if (aiSessionIdRef.current) {
+        const savedContent = draft ? `${explanation || ''}\n\n---\n${draft}\n---` : (explanation || reply || '');
+        saveAiMessage({
+          sessionId: aiSessionIdRef.current,
+          projectId: email?.project_id || null,
+          surface: 'inbox_draft',
+          role: 'ely',
+          content: savedContent,
+        }).catch(err => console.warn('[DraftWithElyOverlay] assistant message save failed:', err?.message));
+      }
 
       const msgId = Date.now() + 1;
       const newMsg = { id: msgId, role: 'ely', explanation: explanation?.trim(), draft, missingPoints };

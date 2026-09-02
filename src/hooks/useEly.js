@@ -178,7 +178,14 @@ function mapDbMessagesToUiMessages(messages = []) {
     }));
 }
 
-async function createAiSession({ userId, projectId, surface, mode = 'discuss', title = 'New chat', sessionType = 'chat' }) {
+// Exported 2026-09-02, on request, real fix: Inbox.jsx's own
+// 'Draft with Nora' flow (DraftWithElyOverlay/callEly) never saved a
+// single message to ai_messages at all, confirmed directly — two
+// separate real conversations, including an actually sent email,
+// were completely unrecoverable afterward. Exporting these two
+// functions so Inbox.jsx can reuse the exact, already-working save
+// logic directly, rather than duplicate or rebuild it.
+export async function createAiSession({ userId, projectId, surface, mode = 'discuss', title = 'New chat', sessionType = 'chat' }) {
   if (!sb) return null;
 
   const { data, error } = await sb
@@ -210,7 +217,7 @@ async function createAiSession({ userId, projectId, surface, mode = 'discuss', t
   return data || null;
 }
 
-async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model, messageType }) {
+export async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model, messageType }) {
   if (!sb || !sessionId || !content) return null;
 
   const dbRole = role === 'ely' ? 'assistant' : role;
