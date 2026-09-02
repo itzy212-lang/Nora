@@ -186,6 +186,18 @@ function buildStructuredProjectFacts(projectBundle) {
 
   const identityLines = [
     p.name ? `Project: ${p.name}` : null,
+    // Fixed 2026-09-02, real, confirmed, high-impact gap: the
+    // building owner's own name was never included here at all —
+    // only the project name, address, reference and status. Every
+    // party wall project has exactly one building owner, and the
+    // user is in direct correspondence with them constantly, so this
+    // was a significant, high-frequency gap, not an edge case.
+    // Confirmed directly: dictated 'Sean' got written exactly as
+    // dictated, though the real building owner on this project is
+    // 'Shawn' — the model had genuinely never seen the correct
+    // spelling anywhere in its prompt to check against.
+    (p.bo || p.bo_1_name) ? `Building Owner: ${p.bo || p.bo_1_name}${p.bo_1_email ? ` (${p.bo_1_email})` : ''}` : null,
+    p.bo_2_name ? `Building Owner 2: ${p.bo_2_name}${p.bo_2_email ? ` (${p.bo_2_email})` : ''}` : null,
     p.bo_premise_address || p.address ? `Address: ${p.bo_premise_address || p.address}` : null,
     p.ref ? `Reference: ${p.ref}` : null,
     p.status ? `Status: ${p.status}` : null,
