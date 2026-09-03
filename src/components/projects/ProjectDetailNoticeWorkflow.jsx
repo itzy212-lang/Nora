@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ProjectDetail from './ProjectDetail';
 import sb from '../../supabaseClient';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 function addDaysIso(value, days) {
   const [year, month, day] = String(value || '').slice(0, 10).split('-').map(Number);
@@ -88,7 +89,7 @@ async function reconcileNoticeStatuses(projectId) {
 
   if (!changed) return;
 
-  const { error } = await sb.from('projects').update({ aos: updatedAOs }).eq('id', projectId);
+  const { error } = await saveAdjoiningOwners(projectId, updatedAOs);
   if (error) throw error;
 }
 

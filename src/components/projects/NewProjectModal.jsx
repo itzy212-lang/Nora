@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import sb from '../../supabaseClient';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const mInput = {
   width: '100%',
@@ -187,7 +188,13 @@ async function getNextRef() {
 
 function buildAORecord(form, aoService) {
   return {
-    id: `ao-${Date.now()}`,
+    // Fixed 2026-09-03, part of the AO consolidation: the old
+    // `ao-${Date.now()}` format isn't a valid UUID, which the
+    // adjoining_owners table's id column requires — confirmed
+    // directly as the exact issue that caused problems migrating
+    // existing data with this same legacy format. New AOs now get a
+    // real UUID from the start.
+    id: crypto.randomUUID(),
     num: 1,
 
     premise: form.aoPremise.trim(),
@@ -485,6 +492,15 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
         .single();
 
       if (err) throw err;
+
+      // Added 2026-09-03, part of the AO consolidation: the project
+      // insert above already includes aos in its payload (the JSON
+      // write), but the new adjoining_owners table needs its own
+      // row created too, which only happens once we have the real
+      // project id back from the insert.
+      if (payload.aos?.length) {
+        await saveAdjoiningOwners(data.id, payload.aos);
+      }
 
       // Auto-create OneDrive folder for new project
       const boAddr = boPremise || payload.bo_premise_address || '';

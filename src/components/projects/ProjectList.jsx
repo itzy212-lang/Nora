@@ -3,6 +3,7 @@ import { useApp } from '../../state/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from './NewProjectModal';
 import sb from '../../supabaseClient';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 function getProjectColour(project) {
   const aos = project.aos || [];
@@ -462,7 +463,7 @@ export default function ProjectList({ onOpenProject }) {
 
           // Save updated aos array back to project
           if (aosUpdated) {
-            await sb.from('projects').update({ aos: updatedAos }).eq('id', project.id);
+            await saveAdjoiningOwners(project.id, updatedAos);
           }
         }
       }

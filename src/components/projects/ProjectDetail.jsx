@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { useSpeech } from '../../hooks/useSpeech';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
@@ -3381,7 +3382,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     const newAO = {
       ...(existingAO || {}),
-      id: existingAO?.id || `ao-${Date.now()}`,
+      // Fixed 2026-09-03, same real bug as NewProjectModal.jsx's
+      // buildAORecord — the old ao-${Date.now()} format isn't a
+      // valid UUID for the adjoining_owners table.
+      id: existingAO?.id || crypto.randomUUID(),
       num: existingAO?.num || currentAOs.length + 1,
 
       premise: form.premise || '',
@@ -3426,14 +3430,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ? currentAOs.map(a => (a.id && existingAO.id ? a.id === existingAO.id : a.num === existingAO.num) ? newAO : a)
       : [...currentAOs, newAO];
 
-    // Only update the aos jsonb column — address/appointment_address/appointment_name
-    // do not exist as top-level columns; getAppointmentAddress/Name read from the aos array directly
-    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
+    // Writes to the adjoining_owners table (the real source, per
+    // yesterday's migration) and the legacy JSON column together,
+    // via the shared function — replaces the old direct write here.
+    await saveAdjoiningOwners(project.id, updatedAOs);
 
     setProject(prev => ({
       ...prev,
       aos: updatedAOs,
-      ...(data || {}),
     }));
 
     // Auto-create OneDrive subfolder for new AOs and save folder ID back
@@ -3462,7 +3466,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 onedrive_folder_url: folderData.web_url || null,
               } : a
             );
-            await updateProjectSafely(project.id, { aos: withFolder });
+            await saveAdjoiningOwners(project.id, withFolder);
             setProject(prev => ({ ...prev, aos: withFolder }));
           }
         } catch (err) {
@@ -3479,12 +3483,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       : item
     );
 
-    const data = await updateProjectSafely(project.id, { aos: updatedAOs });
+    await saveAdjoiningOwners(project.id, updatedAOs);
 
     setProject(prev => ({
       ...prev,
       aos: updatedAOs,
-      ...(data || {}),
     }));
   }, [project.id, project.aos]);
 
@@ -3801,7 +3804,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           const updatedAOs = (project.aos || []).map(a =>
             a.id === ao.id ? { ...a, s104b_served_date: date, s104bServedDate: date, status: 's104b' } : a
           );
-          await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+          await saveAdjoiningOwners(project.id, updatedAOs);
           setProject(p => ({ ...p, aos: updatedAOs }));
         },
       }],
@@ -3820,7 +3823,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const updatedAOs = (project.aos || []).map(a =>
       a.id === ao.id ? { ...a, award_served_date: date, awardServedDate: date, status: 'complete' } : a
     );
-    await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+    await saveAdjoiningOwners(project.id, updatedAOs);
     setProject(p => ({ ...p, aos: updatedAOs }));
 
     // Auto-raise final invoice after award served
@@ -4757,7 +4760,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                             agreedSurveyor: next,
                           }));
                           try {
-                            await updateProjectSafely(project.id, { aos: updatedAOs });
+                            await saveAdjoiningOwners(project.id, updatedAOs);
                             setProject(prev => ({ ...prev, aos: updatedAOs }));
                           } catch (e) {
                             console.warn('[agreed surveyor toggle] save failed:', e.message);

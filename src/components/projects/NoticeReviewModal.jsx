@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import sb from '../../supabaseClient';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const INSERT_OPTIONS = [
   { value: 'after_last', label: 'After last page' },
@@ -357,7 +358,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       const updatedAOs = (project?.aos || []).map(item => aoMatches(item, ao)
         ? { ...item, s104b_served_date: date, s104bServedDate: date, status: 's104b', updated_at: new Date().toISOString() }
         : item);
-      const { error } = await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+      const { error } = await saveAdjoiningOwners(project.id, updatedAOs);
       if (error) throw error;
     }
 

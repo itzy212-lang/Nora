@@ -29,11 +29,93 @@ export function useProjects() {
           docMap[d.project_id].push(d);
         });
 
+        // Added 2026-09-03, stage 2 of the AO consolidation planned
+        // and audited yesterday: adjoining_owners is now the migrated,
+        // verified source (every project's row count confirmed to
+        // match its original JSON exactly before this was switched
+        // on). Fetched here, transformed back into the exact same
+        // shape the rest of the app already reads from project.aos —
+        // nothing downstream needs to change for this stage. The JSON
+        // fallback stays in place per project (not just globally) as
+        // the safety net agreed in the plan, for any row this doesn't
+        // cover.
+        const { data: aoRows } = await sb
+          .from('adjoining_owners')
+          .select('*')
+          .in('project_id', ids);
+        const aoMap = {};
+        (aoRows || []).forEach(ao => {
+          if (!aoMap[ao.project_id]) aoMap[ao.project_id] = [];
+          aoMap[ao.project_id].push({
+            id: ao.id,
+            num: ao.num,
+            name: ao.name,
+            name2: ao.name2,
+            email: ao.email,
+            email2: ao.email2,
+            phone: ao.phone,
+            phone2: ao.phone2,
+            status: ao.status,
+            premise: ao.address,
+            address: ao.address,
+            reg_addr: ao.reg_addr,
+            service_address: ao.service_address,
+            surv_name: ao.surveyor_name,
+            surveyorName: ao.surveyor_name,
+            surv_email: ao.surveyor_email,
+            surveyorEmail: ao.surveyor_email,
+            surv_firm: ao.surveyor_firm,
+            surveyorFirm: ao.surveyor_firm,
+            third_surveyor_name: ao.third_surveyor_name,
+            third_surveyor_email: ao.third_surveyor_email,
+            third_surveyor_firm: ao.third_surveyor_firm,
+            onedrive_folder_id: ao.onedrive_folder_id,
+            onedrive_folder_url: ao.onedrive_folder_url,
+            consent_deadline: ao.consent_deadline,
+            consentDeadline: ao.consent_deadline,
+            s10_deadline: ao.s10_deadline,
+            s10Deadline: ao.s10_deadline,
+            s10_served_date: ao.s10_served_date,
+            s10ServedDate: ao.s10_served_date,
+            notice_served_date: ao.notice_served_date,
+            noticeServedDate: ao.notice_served_date,
+            dissent_received_date: ao.dissent_received_date,
+            dissentReceivedDate: ao.dissent_received_date,
+            s104b_served_date: ao.s104b_served_date,
+            award_served_date: ao.award_served_date,
+            awardServedDate: ao.award_served_date,
+            award_generated_at: ao.award_generated_at,
+            awardGeneratedAt: ao.award_generated_at,
+            soc_agreed_date: ao.soc_agreed_date,
+            soc_date: ao.soc_agreed_date,
+            socDate: ao.soc_agreed_date,
+            socAgreedDate: ao.soc_agreed_date,
+            schedule_of_condition_date: ao.schedule_of_condition_date,
+            scheduleOfConditionDate: ao.schedule_of_condition_date,
+            schedule_of_conditions_date: ao.schedule_of_condition_date,
+            scheduleOfConditionsDate: ao.schedule_of_condition_date,
+            soc_status: ao.soc_status,
+            soc_required: ao.soc_required,
+            soc_task_id: ao.soc_task_id,
+            third_surveyor_phone: ao.third_surveyor_phone,
+            security_amount: ao.security_amount,
+            section_11_amount: ao.section_11_amount,
+            response_deadline: ao.response_deadline,
+            responseDeadline: ao.response_deadline,
+            sections_served: ao.sections_served,
+            intention_date: ao.intention_date,
+            intention_noted: ao.intention_noted,
+            agreed_surveyor: ao.agreed_surveyor,
+            appointed_by_me: ao.appointed_by_me,
+            updated_at: ao.last_status_change,
+          });
+        });
+
         const enriched = projectRows.map(p => {
           // AOs come from project.aos JSONB — field names from the old app:
           // premise = address, reg_addr = registered address
           // surv_name/firm/email/phone, consent_deadline, notice_served_date, s10_deadline
-          const aos = Array.isArray(p.aos) ? p.aos : [];
+          const aos = aoMap[p.id] || (Array.isArray(p.aos) ? p.aos : []);
 
           return {
             ...p,

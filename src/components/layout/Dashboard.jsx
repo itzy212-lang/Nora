@@ -3,6 +3,7 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const cardStyle = {
   background: '#ffffff',
@@ -299,7 +300,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
             ? { ...a, s104b_served_date: today, s104bServedDate: today, status: 's104b' }
             : a
         );
-        await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+        await saveAdjoiningOwners(project.id, updatedAOs);
         setActioningAOs(prev => ({ ...prev, [key]: 'done' }));
         return;
       }
@@ -337,7 +338,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
             ? { ...a, s10_served_date: today, s10ServedDate: today, status: 's10' }
             : a
         );
-        await sb.from('projects').update({ aos: updatedAOs }).eq('id', project.id);
+        await saveAdjoiningOwners(project.id, updatedAOs);
         setActioningAOs(prev => ({ ...prev, [key]: 'done' }));
         return;
       }
