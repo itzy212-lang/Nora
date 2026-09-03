@@ -931,6 +931,35 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
       })()
     : '');
   const [subject, setSubject] = useState(prefillSubject || `${isForward ? 'Fwd' : 'Re'}: ${(email?.subject || '').replace(/^(Re|Fwd):\s*/i, '').trim()}`);
+  // Added 2026-09-03, on request, real, confirmed gap: To/CC here
+  // rendered through a completely generic input with no search or
+  // suggestions at all — this functionality never existed on this
+  // screen, unlike the separate compose-new-email screen. Reused
+  // the same, already-correct pattern from there (search only the
+  // in-progress fragment after the last comma; clicking a
+  // suggestion replaces only that fragment, keeping what's already
+  // typed).
+  const [toSuggestions, setToSuggestions] = useState([]);
+  const [ccSuggestions, setCcSuggestions] = useState([]);
+  const handleRecipientInput = async (val, setField, setSuggestions) => {
+    setField(val);
+    const q = val.trim();
+    if (!q) { setSuggestions([]); return; }
+    const lastPart = q.split(/[,;]/).pop().trim();
+    if (lastPart.length < 2) { setSuggestions([]); return; }
+    const { data } = await sb.rpc('search_email_contacts', {
+      search_query: lastPart,
+      p_project_id: null,
+      p_user_id: null,
+    });
+    setSuggestions((data || []).slice(0, 8).map(r => ({ name: r.name, email: r.email })));
+  };
+  const addRecipientSuggestion = (email, currentVal, setField, setSuggestions) => {
+    const parts = currentVal.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+    parts[parts.length - 1] = email;
+    setField(parts.join(', '));
+    setSuggestions([]);
+  };
   const forwardQuote = isForward ? (
     '<br><br>---------- Forwarded message ----------<br>' +
     'From: ' + (email?.sender_name || email?.sender_email || '') + '<br>' +
@@ -1129,10 +1158,37 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{email?.subject}</div>
             </div>
-            {[{ label: 'To', val: to, set: setTo }, { label: 'CC', val: cc, set: setCc }, { label: 'Subject', val: subject, set: setSubject }].map(({ label, val, set }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {[{ label: 'To', val: to, set: setTo, suggestions: toSuggestions, setSuggestions: setToSuggestions }, { label: 'CC', val: cc, set: setCc, suggestions: ccSuggestions, setSuggestions: setCcSuggestions }, { label: 'Subject', val: subject, set: setSubject, suggestions: null }].map(({ label, val, set, suggestions, setSuggestions }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
                 <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right' }}>{label}</div>
-                <input value={val} onChange={e => set(e.target.value)} style={{ ...inp }} />
+                {setSuggestions ? (
+                  <input
+                    value={val}
+                    onChange={e => handleRecipientInput(e.target.value, set, setSuggestions)}
+                    onBlur={() => setTimeout(() => setSuggestions([]), 200)}
+                    placeholder="Name or email address — separate multiple with a comma"
+                    autoComplete="off"
+                    style={{ ...inp }}
+                  />
+                ) : (
+                  <input value={val} onChange={e => set(e.target.value)} style={{ ...inp }} />
+                )}
+                {suggestions?.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 62, right: 0, zIndex: 200, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--r)', maxHeight: 180, overflowY: 'auto', boxShadow: 'var(--shadow)' }}>
+                    {suggestions.map((c, i) => (
+                      <div
+                        key={i}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12.5, borderBottom: '1px solid var(--border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg4)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
+                        onMouseDown={(e) => { e.preventDefault(); addRecipientSuggestion(c.email, val, set, setSuggestions); }}
+                      >
+                        <strong>{c.name || c.email}</strong>
+                        {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
