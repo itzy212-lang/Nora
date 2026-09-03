@@ -649,10 +649,17 @@ export default function App() {
         onNavigate={handleNavigate}
         onOpenNotepad={() => setShowNotepad(true)}
         onOpenQuickRef={() => setShowQuickRef(true)}
-        isOverlayOpen={!!composerOpts || !!inboxOverlayClose}
+        isOverlayOpen={!!composerOpts || !!inboxOverlayClose || showQuickRef}
         onCloseOverlay={() => {
           setComposerOpts(null);
           if (inboxOverlayClose) inboxOverlayClose();
+          // Fixed 2026-09-03, real, confirmed bug reported live: the
+          // search overlay's own close button became unreachable
+          // once its own z-index was raised earlier today — this
+          // guarantees a working way out regardless, via the same
+          // top-bar mechanism already proven reliable for the
+          // composer.
+          setShowQuickRef(false);
         }}
         hideAskNora={currentView === 'projects' && projectActiveTab === 'chat'}
       />
@@ -701,7 +708,7 @@ export default function App() {
     <>
       {appBody}
       {showNotepad && <NotepadOverlay onClose={() => setShowNotepad(false)} />}
-      {showQuickRef && <QuickRefOverlay onClose={() => setShowQuickRef(false)} />}
+      {showQuickRef && <QuickRefOverlay onClose={() => setShowQuickRef(false)} onOpenComposer={openComposer} />}
     </>
   );
 }

@@ -26,7 +26,7 @@ const VIEW_TITLES = {
   awards: 'Awards',
 };
 
-export default function QuickRefOverlay({ onClose }) {
+export default function QuickRefOverlay({ onClose, onOpenComposer }) {
   const [overlayView, setOverlayView] = useState('dashboard');
   const [overlayProject, setOverlayProject] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -56,14 +56,20 @@ export default function QuickRefOverlay({ onClose }) {
         return overlayProject ? (
           <ProjectDetail
             project={overlayProject}
-            onOpenComposer={() => {}}
+            // Fixed 2026-09-03, real, confirmed bug reported live:
+            // this was a silent no-op — any action within this
+            // embedded project view that depends on opening a
+            // composer (replying, drafting, emailing) did genuinely
+            // nothing, with no error, exactly matching what was
+            // described as 'I select it, but it doesn't do anything.'
+            onOpenComposer={onOpenComposer || (() => {})}
             onClose={() => { setOverlayProject(null); setOverlayView('projects'); }}
           />
         ) : (
           <ProjectList onOpenProject={handleOpenProject} />
         );
       case 'inbox':
-        return <Inbox onOpenComposer={() => {}} />;
+        return <Inbox onOpenComposer={onOpenComposer || (() => {})} />;
       case 'calendar':
         return <Calendar />;
       case 'leads':
