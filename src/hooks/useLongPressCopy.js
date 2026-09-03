@@ -100,3 +100,20 @@ export function useLongPressCopy(getText) {
 }
 
 export { createLongPressCopyHandlers, performCopy, longPressBubbleStyle, HOLD_MS };
+
+// Added 2026-09-03, on request: generic version of the same
+// long-press mechanism above, for any action (not just copying
+// text) — e.g. opening an address in the phone's maps app. Same
+// timing and gesture, different action performed on release.
+export function createLongPressActionHandlers(action) {
+  let start = null;
+  return {
+    onPressStart: () => { start = Date.now(); },
+    onPressEnd: () => {
+      const s = start;
+      start = null;
+      if (!s || Date.now() - s < HOLD_MS) return;
+      action?.();
+    },
+  };
+}

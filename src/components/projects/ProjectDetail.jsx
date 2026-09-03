@@ -3,7 +3,7 @@ import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { useSpeech } from '../../hooks/useSpeech';
-import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
+import { createLongPressCopyHandlers, longPressBubbleStyle, createLongPressActionHandlers } from '../../hooks/useLongPressCopy';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import NoticeReviewModal from './NoticeReviewModal';
@@ -1335,15 +1335,37 @@ function AOCard({
             </button>
           </div>
 
-          {address && (
-            <div style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4 }}>
-              {address}
-            </div>
-          )}
+          {address && (() => {
+            // Added 2026-09-03, on request: long-press an address to
+            // open it in the phone's maps app. Uses the Google Maps
+            // web URL rather than an OS-specific scheme (Apple Maps'
+            // maps://, Android's geo:) — this works identically on
+            // iOS and Android with no device detection: the OS hands
+            // off to the native maps app automatically if one's
+            // installed, or opens in the browser if not.
+            const lp = createLongPressActionHandlers(() => {
+              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
+            });
+            return (
+              <div
+                style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4, ...longPressBubbleStyle }}
+                onMouseDown={lp.onPressStart}
+                onMouseUp={lp.onPressEnd}
+                onMouseLeave={lp.onPressEnd}
+                onTouchStart={lp.onPressStart}
+                onTouchEnd={lp.onPressEnd}
+              >
+                {address}
+              </div>
+            );
+          })()}
 
           {ao.phone && (
             <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 6 }}>
-              📞 {ao.phone}
+              {/* Added 2026-09-03, on request: tap to call directly —
+                  a plain tel: link, universally supported on both
+                  iOS and Android with no detection needed. */}
+              📞 <a href={`tel:${ao.phone}`} style={{ color: 'inherit', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>{ao.phone}</a>
             </div>
           )}
 
@@ -1505,7 +1527,7 @@ function AOCard({
 
               {survPhone && (
                 <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
-                  📞 {survPhone}
+                  📞 <a href={`tel:${survPhone}`} style={{ color: 'inherit', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>{survPhone}</a>
                 </div>
               )}
             </div>
