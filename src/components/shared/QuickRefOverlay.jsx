@@ -102,7 +102,7 @@ export default function QuickRefOverlay({ onClose }) {
           transform: translate(-50%, -50%);
           width: min(82vw, 1200px);
           height: 85vh;
-          z-index: 8001;
+          z-index: 9501;
           display: flex;
           border-radius: 20px;
           overflow: hidden;
@@ -115,7 +115,7 @@ export default function QuickRefOverlay({ onClose }) {
           left: 0;
           right: 0;
           bottom: 0;
-          z-index: 8001;
+          z-index: 9501;
           display: flex;
           flex-direction: column;
           background: var(--bg);
@@ -186,7 +186,7 @@ export default function QuickRefOverlay({ onClose }) {
           position: fixed;
           inset: 0;
           background: rgba(0,0,0,0.5);
-          z-index: 8010;
+          z-index: 9510;
         }
         .qr-mobile-drawer-backdrop.open { display: block; }
         .qr-mobile-drawer {
@@ -194,7 +194,7 @@ export default function QuickRefOverlay({ onClose }) {
           left: 0; top: 0; bottom: 0;
           width: 260px;
           background: var(--bg2);
-          z-index: 8011;
+          z-index: 9511;
           transform: translateX(-100%);
           transition: transform 0.3s ease;
           overflow-y: auto;
@@ -228,7 +228,16 @@ export default function QuickRefOverlay({ onClose }) {
           background: 'rgba(15,23,42,0.45)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          zIndex: 8000,
+          // Fixed 2026-09-03, real, confirmed bug reported live:
+          // this was 8000-8011, below EmailComposer's own effective
+          // stacking (which has no explicit z-index of its own) —
+          // opening this search overlay from within an open
+          // composer/reply left its own close buttons unreachable,
+          // with no way back except a full page reload. Raised to
+          // just below the top bar's own 9999, so this is now
+          // reliably above the composer while the top bar itself
+          // stays reachable above it.
+          zIndex: 9500,
         }}
       />
       <div className="qr-desktop-panel">

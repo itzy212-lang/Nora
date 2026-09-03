@@ -140,13 +140,35 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
       setToSuggestions(projectContacts.slice(0, 8));
       return;
     }
-    if (q.length < 2) { setToSuggestions([]); return; }
+    // Fixed 2026-09-03, real, confirmed bug reported live: this
+    // searched using the entire raw field value, including any
+    // already-typed, complete address before the comma — so typing
+    // "existing@x.com, new" searched for that whole compound string
+    // and never matched anything. The CC field already handled this
+    // correctly (search only the in-progress fragment after the
+    // last comma); To never did. Now matches that same, working logic.
+    const lastPart = q.split(/[;,]/).pop().trim();
+    if (lastPart.length < 2) { setToSuggestions([]); return; }
     const { data } = await sb.rpc('search_email_contacts', {
-      search_query: q,
+      search_query: lastPart,
       p_project_id: projectId || null,
       p_user_id: null,
     });
     setToSuggestions((data || []).slice(0, 8).map(r => ({ name: r.name, email: r.email })));
+  };
+
+  // Added 2026-09-03, same real fix: clicking a suggestion in the To
+  // field replaced the entire field (setTo(c.email)) rather than
+  // appending to what was already there — meaning selecting a second
+  // recipient silently wiped out the first. Matches the CC field's
+  // own, already-correct addCcSuggestion below.
+  const addToSuggestion = (email) => {
+    setTo((prev) => {
+      const parts = prev.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+      parts[parts.length - 1] = email; // replace the in-progress fragment
+      return parts.join(', ');
+    });
+    setToSuggestions([]);
   };
 
   const handleToFocus = () => {
@@ -349,7 +371,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
                       style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12.5, borderBottom: '1px solid var(--border)' }}
                       onMouseEnter={e => e.target.style.background = 'var(--bg4)'}
                       onMouseLeave={e => e.target.style.background = ''}
-                      onMouseDown={(e) => { e.preventDefault(); setTo(c.email); setToSuggestions([]); }}
+                      onMouseDown={(e) => { e.preventDefault(); addToSuggestion(c.email); }}
                     >
                       <strong>{c.name || c.email}</strong>
                       {c.name && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.email}{c.role && c.role !== 'email_history' && c.role !== 'contact' ? ` . ${c.role}` : ''}</div>}
