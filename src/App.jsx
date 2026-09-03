@@ -119,6 +119,13 @@ export default function App() {
   // when one of its internal overlays (reply, Draft with Nora) is
   // open — see Inbox.jsx's onOverlayChange for the full reasoning.
   const [inboxOverlayClose, setInboxOverlayClose] = useState(null);
+  // Added 2026-09-03, on request: hide the top bar's own 'Ask Nora'
+  // button whenever the user is already inside a Nora chat surface
+  // (Project Chat's own tab, or Draft with Nora, covered separately
+  // via isOverlayOpen) — reported as redundant clutter, squashing
+  // the top bar, since a second way to open the same kind of chat is
+  // already right there.
+  const [projectActiveTab, setProjectActiveTab] = useState(null);
   const [invoiceProject, setInvoiceProject] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showNotepad, setShowNotepad]        = useState(false);
@@ -475,6 +482,7 @@ export default function App() {
       const onBack = () => {
         setProjectView(null);
         setPendingProjectId('');
+        setProjectActiveTab(null);
         clearCurrentProject();
         try {
           sessionStorage.setItem('ely_current_view', 'projects');
@@ -539,6 +547,7 @@ export default function App() {
             onRaiseInvoice={handleRaiseInvoice}
             onOpenSOC={handleOpenSOC}
             onOpenDisputeAgreement={handleOpenDisputeAgreement}
+            onActiveTabChange={setProjectActiveTab}
           />
         </ErrorBoundary>
       );
@@ -645,6 +654,7 @@ export default function App() {
           setComposerOpts(null);
           if (inboxOverlayClose) inboxOverlayClose();
         }}
+        hideAskNora={currentView === 'projects' && projectActiveTab === 'chat'}
       />
 
       <div className="app-body">

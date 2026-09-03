@@ -17,7 +17,7 @@ const VIEW_TITLES = {
   settings: 'Settings',
 };
 
-export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad, onOpenQuickRef, isOverlayOpen, onCloseOverlay }) {
+export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNotepad, onOpenQuickRef, isOverlayOpen, onCloseOverlay, hideAskNora }) {
   const { state } = useApp();
   const [autoPlay, setAutoPlayLocal] = useState(() => getAutoPlay());
 
@@ -62,7 +62,13 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
         )}
         <button
           onClick={() => onNavigate('chat')}
-          style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          // Added 2026-09-03, on request: hidden whenever the user is
+          // already inside a Nora chat surface — a composer/reply is
+          // open (Draft with Nora is right there at the bottom), or
+          // Project Chat's own tab is active — reported as redundant
+          // clutter squashing the top bar, since a second way into
+          // the same kind of chat is already visible.
+          style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: (isOverlayOpen || hideAskNora) ? 'none' : 'flex', alignItems: 'center' }}
         >
           ✨ Ask Nora
         </button>

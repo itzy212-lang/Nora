@@ -2869,8 +2869,15 @@ function splitDraftMessage(content = '') {
   return { intro, draft, outro, aoSubjectRef };
 }
 
-export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement }) {
+export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement, onActiveTabChange }) {
   const [tab, setTab] = useState('details');
+  // Added 2026-09-03, on request: reports the active tab up to
+  // App.jsx so the top bar can hide its own 'Ask Nora' button while
+  // Project Chat's own tab is open.
+  useEffect(() => {
+    onActiveTabChange?.(tab);
+    return () => onActiveTabChange?.(null);
+  }, [tab, onActiveTabChange]);
   const [emails, setEmails] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [selectedEmailId, setSelectedEmailId] = useState(null);
