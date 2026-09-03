@@ -175,7 +175,11 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const handleUserLongPressEnd = async () => {
     const start = longPressStartTime.current;
     longPressStartTime.current = null;
-    if (!start || Date.now() - start < 500) return;
+    // Fixed 2026-09-03, on request: 500ms was firing on an ordinary
+    // tap-before-scroll, copying constantly while scrolling through a
+    // conversation. Raised to a genuine 2-second hold, across all
+    // three chat surfaces.
+    if (!start || Date.now() - start < 2000) return;
     const ok = await copyToClipboard(msg.content || '');
     if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
   };

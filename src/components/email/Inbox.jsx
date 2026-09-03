@@ -739,11 +739,16 @@ ${threadText}`;
                     <div
                       style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', userSelect: 'none' }}
                       onTouchStart={(e) => {
+                        // Fixed 2026-09-03, on request: 500ms fired
+                        // on an ordinary tap-before-scroll, copying
+                        // constantly while scrolling. Raised to a
+                        // genuine 2-second hold, across all three
+                        // chat surfaces.
                         e._lpTimer = setTimeout(() => {
                           navigator.clipboard.writeText(msg.content || '');
                           e.target.style.opacity = '0.6';
                           setTimeout(() => { e.target.style.opacity = '1'; }, 600);
-                        }, 500);
+                        }, 2000);
                       }}
                       onTouchEnd={(e) => clearTimeout(e._lpTimer)}
                     >
