@@ -195,10 +195,20 @@ export async function createAiSession({ userId, projectId, surface, mode = 'disc
       project_id: projectId || null,
       title,
       auto_title: title,
-      surface: projectId ? 'project_chat' : surface,
-      linked_from_surface: projectId ? surface : null,
+      // Fixed 2026-09-03, real, confirmed bug reported live: this
+      // collapsed the surface to 'project_chat' whenever a project
+      // was linked, regardless of where the conversation actually
+      // happened — a Draft with Nora session on a project-linked
+      // email became indistinguishable from a genuine Project Chat
+      // session, and unfindable by its real surface. project_id
+      // already tracks the project link separately; surface should
+      // only ever record where the conversation actually took
+      // place, so both 'find every Draft with Nora session' and
+      // 'find this project's Draft with Nora sessions' work
+      // correctly, with no ambiguity and no duplication needed.
+      surface,
       mode,
-      session_type: projectId ? 'project_chat' : sessionType,
+      session_type: sessionType,
       context_scope: projectId ? 'project' : 'global',
       last_message_at: new Date().toISOString(),
       metadata: {
@@ -230,7 +240,10 @@ export async function saveAiMessage({ sessionId, userId, projectId, surface, rol
       content: String(content || ''),
       user_id: userId || 'itzy212@gmail.com',
       project_id: projectId || null,
-      surface: projectId ? 'project_chat' : surface,
+      // Fixed 2026-09-03, same real bug as createAiSession above —
+      // surface must always reflect where the conversation actually
+      // happened, not be collapsed based on project linkage.
+      surface,
       source_type: 'chat',
       ...(model ? { model } : {}),
       ...(messageType ? { message_type: messageType } : {}),

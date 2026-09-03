@@ -589,7 +589,20 @@ ${threadText}`;
       // final, actually-sent email should be reachable by semantic
       // search, not every intermediate draft iteration that led to it.
       if (aiSessionIdRef.current) {
-        const savedContent = draft ? `${explanation || ''}\n\n---\n${draft}\n---` : (explanation || reply || '');
+        // Fixed 2026-09-03, real, confirmed bug found by reviewing
+        // this exact session live: explanation falls back to the
+        // same value as draft when there's no genuinely separate
+        // intro text (explanation = reply || draft, a few lines
+        // above) — so whenever a response was just a clean draft
+        // with nothing separate to say about it, this concatenated
+        // the same content into itself, duplicating the entire
+        // draft in what was saved every single time. Now only
+        // includes explanation when it's genuinely different text.
+        const draftText = typeof draft === 'string' ? draft : (draft?.body || '');
+        const hasDistinctExplanation = explanation && draftText && explanation.trim() !== draftText.trim();
+        const savedContent = draftText
+          ? (hasDistinctExplanation ? `${explanation}\n\n---\n${draftText}\n---` : draftText)
+          : (explanation || reply || '');
         saveAiMessage({
           sessionId: aiSessionIdRef.current,
           projectId: email?.project_id || null,
