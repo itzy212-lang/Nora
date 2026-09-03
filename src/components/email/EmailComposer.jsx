@@ -18,11 +18,14 @@ function useIsMobile() {
 }
 
 // Build a project subject line, optionally appending a short AO reference
-// e.g. "Party Wall etc. Act 1996 — 12 Oak Road" or, when one or more AOs are
-// specified and share a street with the BO/each other, a compact form like
-// "Party Wall etc. Act 1996 — 12 Oak Road (Adjoining Owner: 8 & 6 Oak Road)".
+// e.g. "12 Oak Road" or, when one or more AOs are specified and share a
+// street with the BO/each other, a compact form like
+// "12 Oak Road (Adjoining Owner: 8 & 6 Oak Road)".
+// Fixed 2026-09-03, on request: 'Party Wall etc. Act 1996 --' prefix
+// removed — reported as too AI-driven/generic; just the address is
+// what's actually wanted here.
 function buildSubjectWithAoRef(baseAddress, aoList = []) {
-  const base = `Party Wall etc. Act 1996 -- ${baseAddress || ''}`.trim();
+  const base = String(baseAddress || '').trim();
   if (!aoList.length) return base;
 
   // Extract "<number(s)> <street name>" from a free-text address.
