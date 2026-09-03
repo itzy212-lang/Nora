@@ -3,6 +3,7 @@ import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { useSpeech } from '../../hooks/useSpeech';
+import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import NoticeReviewModal from './NoticeReviewModal';
@@ -2438,22 +2439,40 @@ function ProjectChat({ project, onOpenComposer }) {
         gap: 8,
       }}
     >
-      {split.intro && (
-        <div style={{
-          width: 'fit-content',
-          maxWidth: '100%',
-          overflowWrap: 'anywhere',
-          background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
-          color: msg.role === 'user' ? '#fff' : 'var(--text)',
-          padding: '10px 14px',
-          borderRadius: 12,
-          fontSize: 13,
-          lineHeight: 1.6,
-          whiteSpace: 'pre-wrap',
-        }}>
-          {split.intro}
-        </div>
-      )}
+      {split.intro && (() => {
+        // Added 2026-09-03, on request: this bubble never had
+        // long-press-to-copy at all — reported directly as exactly
+        // the kind of drift the shared-component work months ago was
+        // meant to prevent. Now genuinely calls the same, one shared
+        // implementation the other two chat surfaces use, only for
+        // the user's own message (matching them).
+        const lp = msg.role === 'user' ? createLongPressCopyHandlers(() => split.intro) : null;
+        return (
+          <div style={{
+            width: 'fit-content',
+            maxWidth: '100%',
+            overflowWrap: 'anywhere',
+            background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg3)',
+            color: msg.role === 'user' ? '#fff' : 'var(--text)',
+            padding: '10px 14px',
+            borderRadius: 12,
+            fontSize: 13,
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+            ...(lp ? longPressBubbleStyle : {}),
+          }}
+            {...(lp ? {
+              onMouseDown: lp.onPressStart,
+              onMouseUp: lp.onPressEnd,
+              onMouseLeave: lp.onPressEnd,
+              onTouchStart: lp.onPressStart,
+              onTouchEnd: lp.onPressEnd,
+            } : {})}
+          >
+            {split.intro}
+          </div>
+        );
+      })()}
 
       {split.intro && msg.role !== 'user' && (
         <button

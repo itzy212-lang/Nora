@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { renderMarkdown } from '../../utils/formatters';
 import DraftCard from './DraftCard';
 import { useSpeech } from '../../hooks/useSpeech';
+import { useLongPressCopy } from '../../hooks/useLongPressCopy';
 
 function stripHtml(html = '') {
   const div = document.createElement('div');
@@ -158,31 +159,12 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
   const isUser = msg.role === 'user';
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
-  const [userCopied, setUserCopied] = useState(false);
-  const longPressStartTime = useRef(null);
-
-  // Fixed 2026-08-06: the clipboard write must happen synchronously within
-  // a direct user-gesture event handler. The previous version deferred it
-  // via setTimeout, which loses the "recent user activation" that both
-  // navigator.clipboard.writeText and the execCommand('copy') fallback
-  // require on mobile browsers — causing a silent failure with no error
-  // and nothing copied. This version only records the press start time
-  // in the timeout-equivalent window, then performs the actual copy
-  // directly inside the touchend/mouseup handler itself.
-  const handleUserLongPressStart = () => {
-    longPressStartTime.current = Date.now();
-  };
-  const handleUserLongPressEnd = async () => {
-    const start = longPressStartTime.current;
-    longPressStartTime.current = null;
-    // Fixed 2026-09-03, on request: 500ms was firing on an ordinary
-    // tap-before-scroll, copying constantly while scrolling through a
-    // conversation. Raised to a genuine 2-second hold, across all
-    // three chat surfaces.
-    if (!start || Date.now() - start < 2000) return;
-    const ok = await copyToClipboard(msg.content || '');
-    if (ok) { setUserCopied(true); setTimeout(() => setUserCopied(false), 1800); }
-  };
+  // Fixed 2026-09-03, on request: replaced this component's own,
+  // separate long-press-to-copy implementation with the shared hook
+  // now used by every chat surface's own bubble — this was exactly
+  // the kind of drift the shared-component work was meant to
+  // prevent in the first place.
+  const { handlers: userLongPressHandlers, copied: userCopied } = useLongPressCopy(() => msg.content || '');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const { speak, stop, speaking } = useSpeech();
@@ -335,12 +317,8 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
       <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
         {isUser ? (
           <span
-            onMouseDown={handleUserLongPressStart}
-            onMouseUp={handleUserLongPressEnd}
-            onMouseLeave={handleUserLongPressEnd}
-            onTouchStart={handleUserLongPressStart}
-            onTouchEnd={handleUserLongPressEnd}
-            style={{ display: 'block', userSelect: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+            {...userLongPressHandlers}
+            style={{ display: 'block', ...userLongPressHandlers.style }}
           >
             {msg.content}
             {userCopied && <span style={{ marginLeft: 8, fontSize: 10, opacity: 0.7 }}>✓ Copied</span>}

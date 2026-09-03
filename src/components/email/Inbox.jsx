@@ -6,6 +6,7 @@ import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
+import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
 
 function BookingOverlay({ booking, onConfirm, onClose }) {
@@ -736,24 +737,28 @@ ${threadText}`;
               <div key={msg.id}>
                 {msg.role === 'user' && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <div
-                      style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', userSelect: 'none' }}
-                      onTouchStart={(e) => {
-                        // Fixed 2026-09-03, on request: 500ms fired
-                        // on an ordinary tap-before-scroll, copying
-                        // constantly while scrolling. Raised to a
-                        // genuine 2-second hold, across all three
-                        // chat surfaces.
-                        e._lpTimer = setTimeout(() => {
-                          navigator.clipboard.writeText(msg.content || '');
-                          e.target.style.opacity = '0.6';
-                          setTimeout(() => { e.target.style.opacity = '1'; }, 600);
-                        }, 2000);
-                      }}
-                      onTouchEnd={(e) => clearTimeout(e._lpTimer)}
-                    >
-                      {msg.content}
-                    </div>
+                    {(() => {
+                      // Fixed 2026-09-03, on request: this bubble
+                      // never had the shared long-press-to-copy
+                      // behaviour at all — reported directly as
+                      // exactly the kind of drift the shared-
+                      // component work months ago was meant to
+                      // prevent. Now genuinely calls the same, one
+                      // shared implementation Main Chat uses.
+                      const lp = createLongPressCopyHandlers(() => msg.content || '');
+                      return (
+                        <div
+                          style={{ maxWidth: '88%', background: 'var(--blue)', color: '#fff', padding: '9px 13px', borderRadius: '12px 12px 4px 12px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', ...longPressBubbleStyle }}
+                          onMouseDown={lp.onPressStart}
+                          onMouseUp={lp.onPressEnd}
+                          onMouseLeave={lp.onPressEnd}
+                          onTouchStart={lp.onPressStart}
+                          onTouchEnd={lp.onPressEnd}
+                        >
+                          {msg.content}
+                        </div>
+                      );
+                    })()}
                     <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, cursor: 'pointer', padding: '1px 6px' }}
                       onClick={() => navigator.clipboard.writeText(msg.content || '')}>
                       Copy
