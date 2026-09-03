@@ -2383,6 +2383,15 @@ if (syncErr) throw syncErr;
         sender_email: 'help@sq1consulting.co.uk',
         to_email: to,
         thread_id: replyToId || null,
+        // Fixed 2026-09-03, real, severe, confirmed bug found while
+        // directly answering a question live: this insert never
+        // included project_id at all. The sent email was embedded
+        // correctly, but a project-scoped semantic search filters
+        // by project_id — so it could never actually be found by
+        // one, despite the embedding existing. Inherits from the
+        // original email being replied to, the same source every
+        // other field on this send path already reads from.
+        project_id: email?.project_id || null,
         received_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       }]).select('id');
