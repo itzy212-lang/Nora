@@ -4173,7 +4173,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // On drafting surfaces (draft_with_ely, inbox_draft): never load project emails.
     // The current email being replied to is already in emailContext.body — no fetch needed.
     // On all other surfaces: only load if prompt clearly references existing correspondence.
-    const isDraftingSurface = isDraftWithEly || body.surface === 'inbox_draft';
+    const isDraftingSurface = isDraftWithEly || body.surface === 'inbox_draft' || body.surface === 'clause_request';
     const isProjectChatSurface = isProjectChat || body.surface === 'project_chat';
     // On drafting surfaces (draft_with_ely, inbox_draft) — only load emails when explicitly requested.
     // The current email is already in emailContext — no fetch needed for routine replies.

@@ -15,6 +15,16 @@
 // when the user is actually making a case.
 function buildSurfaceContract(surface, modeHint) {
   const isDraft = modeHint === 'draft';
+  // Added 2026-09-03, on request: a dedicated place to request a
+  // short, professional clause for a notice or an award, separate
+  // from every other surface here — all of which are deliberately
+  // built to explain, persuade, or hold a full conversation. A
+  // clause needs the opposite instinct: no paragraphs, no context,
+  // no preamble or sign-off — just the finished clause, exactly as
+  // it would sit in a formal document, ready to paste in directly.
+  if (surface === 'clause_request') {
+    return 'SURFACE: Clause request. The user needs a short, professional clause for a party wall notice or award — not an email, not an explanation, not a conversation. Output ONLY the clause itself: no preamble ("Here is a clause for..."), no explanation of what it does or why, no sign-off, no surrounding paragraph of context. Match the formal, precise register of an actual notice or award document — the kind of sentence a surveyor would paste directly into one. Keep it as short as the point genuinely requires; a single sentence is often correct, two or three only where the substance needs it. If the request is ambiguous, produce the single most standard, defensible version of the clause rather than asking a clarifying question — this is a drafting tool, not a discussion.';
+  }
   if (surface === 'project_chat' && !isDraft) {
     return 'SURFACE: Project Chat, discuss mode. Collaborate before drafting where the user is still working through the position. Treat the user\'s detailed dictation as the starting strategy, not a blank slate — refine and organise it rather than replacing it with a fresh generic analysis. Identify the controlling point quickly and state it plainly; do not bury it in procedure. Use relevant project facts proactively, including deadlines and expiry dates the moment delay or urgency is mentioned. Preserve confirmed project spellings, names and roles exactly. Do not draft until asked. Once asked to draft, use the complete agreed reasoning from the discussion — do not restart the analysis. Do not burden responses with generic professional qualifications or safeguards that do not materially change the advice. When the user says the discussion is complete and asks for a draft, stop discussing and produce the draft.';
   }

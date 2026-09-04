@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import ClausePanel from './ClausePanel';
 import { useSpeech } from '../../hooks/useSpeech';
 import { createLongPressCopyHandlers, longPressBubbleStyle, createLongPressActionHandlers } from '../../hooks/useLongPressCopy';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
@@ -4454,6 +4455,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     { id: 'details', label: 'Details' },
     { id: 'emails', label: 'Emails' },
     { id: 'documents', label: 'Documents' },
+    { id: 'clauses', label: '§ Clauses' },
     { id: 'chat', label: '💬 Chat' },
   ];
 
@@ -5449,6 +5451,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               );
             })}
           </div>
+        </div>
+      )}
+
+      {tab === 'clauses' && (
+        <div style={{ padding: '18px 0' }}>
+          <ClausePanel project={project} />
         </div>
       )}
 
