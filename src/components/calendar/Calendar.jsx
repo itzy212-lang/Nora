@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
+import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const EVENT_TYPES = {
   consent_deadline:  { label: 'Consent deadline', colour: '#ef4444', bg: '#fee2e2' },
@@ -199,7 +200,17 @@ async function syncSocToAO(project, aoId, socData) {
   });
 
   try {
-    await safeUpdate('projects', liveProject.id, { aos: nextAOs });
+    // Fixed 2026-09-03, real, severe regression found while
+    // investigating a live bug report: this wrote straight to the
+    // legacy projects.aos JSON column only, bypassing the
+    // adjoining_owners table entirely — a write path missed during
+    // today's earlier AO consolidation work. Since the read path was
+    // switched to prefer the table, this write became completely
+    // invisible to the rest of the app: a SOC date set here never
+    // reached anywhere that reads from the table, including award
+    // generation's own missing-date check. Now goes through the
+    // same shared function every other AO write site uses.
+    await saveAdjoiningOwners(liveProject.id, nextAOs);
   } catch (err) {
     console.warn('[Calendar] Could not sync SOC data to project AO card:', err.message);
   }
