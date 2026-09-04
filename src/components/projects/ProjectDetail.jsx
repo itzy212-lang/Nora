@@ -1023,6 +1023,13 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
     ao2: { name: ao?.name2 || '', email: ao?.email2 || '', phone: ao?.phone2 || '' },
     surv: { name: aoSurvName(ao || {}), firm: aoSurvFirm(ao || {}), email: aoSurvEmail(ao || {}), phone: aoSurvPhone(ao || {}) },
     third: { name: ao?.third_surveyor_name || '', firm: ao?.third_surveyor_firm || '', email: ao?.third_surveyor_email || '', phone: ao?.third_surveyor_phone || '' },
+    // Added 2026-09-03, on request: a direct way to set the SOC date
+    // manually — needed for a backdated Schedule of Condition (one
+    // completed outside the system, or before it was tracked here),
+    // as a genuine alternative to the calendar-linked flow, which
+    // only records a date going forward from when the calendar event
+    // is created.
+    socDate: ao?.soc_agreed_date || ao?.soc_date || ao?.socDate || ao?.socAgreedDate || '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -1124,6 +1131,32 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
           </div>
 
           <SurveyorBlock title="Third Surveyor" form={form.third} set={setThird} />
+        </div>
+
+        <div style={mSection}>
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.6px',
+            marginBottom: 12,
+          }}>
+            Schedule of Condition
+          </div>
+          {/* Added 2026-09-03, on request: a direct way to set the
+              SOC date manually, for a backdated Schedule of
+              Condition — one completed outside the system, or before
+              it was tracked here. The calendar-linked flow still
+              works for a forward-dated SOC; this is the missing
+              alternative for one already done. */}
+          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>SOC agreed / completed date</label>
+          <input
+            type="date"
+            value={form.socDate ? String(form.socDate).slice(0, 10) : ''}
+            onChange={e => setForm(f => ({ ...f, socDate: e.target.value }))}
+            style={mInput}
+          />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -3472,6 +3505,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       third_surveyor_firm: form.third?.firm || '',
       third_surveyor_email: form.third?.email || '',
       third_surveyor_phone: form.third?.phone || '',
+
+      // Added 2026-09-03, on request: the manual SOC date field above.
+      soc_agreed_date: form.socDate || existingAO?.soc_agreed_date || '',
+      soc_date: form.socDate || existingAO?.soc_date || '',
+      socDate: form.socDate || existingAO?.socDate || '',
+      socAgreedDate: form.socDate || existingAO?.socAgreedDate || '',
     };
 
     const updatedAOs = existingAO
