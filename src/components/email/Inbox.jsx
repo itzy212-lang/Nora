@@ -968,8 +968,11 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     setSuggestions((data || []).slice(0, 8).map(r => ({ name: r.name, email: r.email })));
   };
   const addRecipientSuggestion = (email, currentVal, setField, setSuggestions) => {
+    // Fixed 2026-09-08, same real bug as EmailComposer.jsx's own
+    // addToSuggestion/addCcSuggestion.
     const parts = currentVal.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-    parts[parts.length - 1] = email;
+    if (parts.length === 0) parts.push(email);
+    else parts[parts.length - 1] = email;
     setField(parts.join(', '));
     setSuggestions([]);
   };

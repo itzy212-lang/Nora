@@ -2858,39 +2858,68 @@ function firstNonEmpty(...values) {
 }
 
 function getProjectDraftRecipient({ project, draft = '', intro = '' }) {
+  // Fixed 2026-09-08, real, severe, confirmed bug reported live —
+  // caused a genuine mistake, an email sent to the wrong party. Two
+  // separate faults, both traced directly:
+  //
+  // 1) The AO email lookup checked fields that never exist on a
+  //    project object at all (project.ao_email, ao_1_email,
+  //    adjoining_owner_email) — adjoining owners live in an array
+  //    (project.aos), each with their own email; there is no single
+  //    "the AO's email" field. aoEmail was always empty, so the
+  //    "mentions AO" branch below could never actually fire — dead
+  //    code, every single time.
+  //
+  // 2) The fallback used whenever nothing confidently matched
+  //    defaulted to the building owner first (boEmail || aoEmail).
+  //    Combined with fault 1, this meant: unless the dictation
+  //    happened to contain the literal words "building owner" or
+  //    "BO", every draft defaulted to the building owner's email —
+  //    exactly what happened live, sending a reply intended for an
+  //    adjoining owner's surveyor to the building owner instead.
+  //
+  // Rebuilt properly: checks every real adjoining owner (and their
+  // surveyor, not considered here at all before) individually by
+  // name, and — on direct request — leaves the field empty rather
+  // than guess whenever nothing is confidently matched, instead of
+  // silently defaulting to any one party.
   const haystack = `${intro || ''}\n${draft || ''}`.toLowerCase();
+  const aos = Array.isArray(project?.aos) ? project.aos : [];
 
   const boEmail = firstNonEmpty(
-    project?.bo_email,
     project?.bo_1_email,
-    project?.building_owner_email,
-    project?.owner_email,
+    project?.bo_email,
   );
-
-  const aoEmail = firstNonEmpty(
-    project?.ao_email,
-    project?.ao_1_email,
-    project?.adjoining_owner_email,
-  );
+  const boName = String(project?.bo_1_name || project?.bo || '').toLowerCase().trim();
 
   const mentionsBO =
-    haystack.includes('building owner') ||
-    haystack.includes('bo ') ||
-    haystack.includes('bo,') ||
-    haystack.includes('bo.') ||
-    haystack.includes(String(project?.bo_1_name || project?.bo || '').toLowerCase());
-
-  const mentionsAO =
-    haystack.includes('adjoining owner') ||
-    haystack.includes('ao ') ||
-    haystack.includes('ao,') ||
-    haystack.includes('ao.') ||
-    haystack.includes(String(project?.ao_1_name || project?.ao || '').toLowerCase());
+    !!boName && haystack.includes(boName) ||
+    haystack.includes('building owner');
 
   if (mentionsBO && boEmail) return boEmail;
-  if (mentionsAO && aoEmail) return aoEmail;
 
-  return boEmail || aoEmail || '';
+  // Check each real adjoining owner individually, by their actual
+  // name, and their surveyor's name where one is appointed —
+  // "adjoining owner" alone is ambiguous with more than one AO, so
+  // that generic phrase only resolves it when there is exactly one.
+  for (const ao of aos) {
+    const aoName = String(ao?.name || '').toLowerCase().trim();
+    const survName = String(ao?.surv_name || ao?.surveyorName || ao?.surveyor_name || '').toLowerCase().trim();
+    const aoEmail = firstNonEmpty(ao?.email);
+    const survEmail = firstNonEmpty(ao?.surv_email, ao?.surveyorEmail, ao?.surveyor_email);
+
+    if (survName && haystack.includes(survName) && survEmail) return survEmail;
+    if (aoName && haystack.includes(aoName) && aoEmail) return aoEmail;
+  }
+
+  if (haystack.includes('adjoining owner') && aos.length === 1) {
+    const only = aos[0];
+    const onlyEmail = firstNonEmpty(only?.email);
+    if (onlyEmail) return onlyEmail;
+  }
+
+  // Nothing confidently matched — leave empty rather than guess.
+  return '';
 }
 
 

@@ -164,8 +164,16 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   // own, already-correct addCcSuggestion below.
   const addToSuggestion = (email) => {
     setTo((prev) => {
+      // Fixed 2026-09-08, real, confirmed bug reported live: when
+      // the field was empty (the very first selection, before
+      // typing anything), split/filter on an empty string produces
+      // an empty array — parts[parts.length - 1] then sets a
+      // non-existent index rather than adding anything, silently
+      // leaving the field blank. Now pushes when there's nothing to
+      // replace, instead of assuming at least one fragment exists.
       const parts = prev.split(/[;,]/).map(s => s.trim()).filter(Boolean);
-      parts[parts.length - 1] = email; // replace the in-progress fragment
+      if (parts.length === 0) parts.push(email);
+      else parts[parts.length - 1] = email; // replace the in-progress fragment
       return parts.join(', ');
     });
     setToSuggestions([]);
@@ -215,8 +223,10 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
 
   const addCcSuggestion = (email) => {
     setCc((prev) => {
+      // Fixed 2026-09-08, same real bug as addToSuggestion above.
       const parts = prev.split(/[;,]/).map(s => s.trim()).filter(Boolean);
-      parts[parts.length - 1] = email; // replace the in-progress fragment
+      if (parts.length === 0) parts.push(email);
+      else parts[parts.length - 1] = email; // replace the in-progress fragment
       return parts.join(', ');
     });
     setCcSuggestions([]);
