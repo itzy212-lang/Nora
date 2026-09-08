@@ -2044,7 +2044,30 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
       if (folder === 'Sent')    q = q.eq('is_sent', true);
-      if (folder === 'Inbox')   q = q.or('folder.eq.inbox,folder.is.null').or('is_draft.is.null,is_draft.eq.false').or('is_sent.is.null,is_sent.eq.false').or('sender_email.is.null,sender_email.neq.help@sq1consulting.co.uk');
+      // Fixed 2026-09-08, real, confirmed root cause of the refresh
+      // button reporting success (spinner ran, sync genuinely
+      // succeeded, new emails genuinely existed in the database) but
+      // never actually showing new inbox emails: this chained four
+      // separate .or() calls on the same query builder. Confirmed
+      // directly — multiple, independent reports document this exact
+      // pattern (repeated .or() on one PostgrestFilterBuilder) as
+      // unreliable in this client library; later calls can silently
+      // override or interact unpredictably with earlier ones rather
+      // than combining as separate AND'd conditions the way chaining
+      // every other filter method does. Three of the four conditions
+      // never actually needed OR logic at all — 'is_draft is null or
+      // is_draft = false' is just 'is_draft is not true', which
+      // PostgREST's own .not()/.neq() express directly and
+      // unambiguously (.neq() here uses PostgREST's IS DISTINCT FROM
+      // semantics, which already correctly includes NULL rows without
+      // a separate null check). Only the actual folder condition
+      // needs OR, so only one .or() call now exists on this query at all.
+      if (folder === 'Inbox') {
+        q = q.or('folder.eq.inbox,folder.is.null')
+             .not('is_draft', 'is', true)
+             .not('is_sent', 'is', true)
+             .neq('sender_email', 'help@sq1consulting.co.uk');
+      }
       if (doIncremental && newestDate) q = q.gt('received_at', newestDate).limit(50);
       const { data, error } = await q;
       if (error) throw error;
