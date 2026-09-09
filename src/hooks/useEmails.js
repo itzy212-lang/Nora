@@ -195,7 +195,17 @@ export function useEmails() {
 
           // Deduped: extraction handled by the forEach above
           // Inherit project_id from thread — if any email in same thread is linked, link all
-          const unlinkedWithThread = newRows.filter(r => !r.project_id && r.thread_id);
+          // Fixed 2026-09-09, real, confirmed bug reported live: a
+          // brand-new enquiry was silently auto-linked, with no
+          // safeguard at all, to a completely unrelated existing
+          // project via a coincidental Microsoft conversationId
+          // match — the exact same gap just fixed separately in the
+          // background sync_outlook function, duplicated here rather
+          // than shared. A genuinely new message's subject never
+          // starts with Re:/Fwd:/FW: — required now, before a thread
+          // match is trusted at all.
+          const looksLikeReplyOrForward = (subject) => /^\s*(re|fw|fwd)\s*:/i.test(subject || '');
+          const unlinkedWithThread = newRows.filter(r => !r.project_id && r.thread_id && looksLikeReplyOrForward(r.subject));
           if (unlinkedWithThread.length) {
             for (const row of unlinkedWithThread) {
               const { data: linked } = await sb
