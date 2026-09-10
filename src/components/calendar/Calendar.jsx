@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
-import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { saveAdjoiningOwners, syncSocToAO } from '../../utils/adjoiningOwners';
 
 const EVENT_TYPES = {
   consent_deadline:  { label: 'Consent deadline', colour: '#ef4444', bg: '#fee2e2' },
@@ -164,56 +164,6 @@ async function safeUpdate(table, id, payload) {
   }
 
   throw lastError || new Error('Could not update record.');
-}
-
-async function syncSocToAO(project, aoId, socData) {
-  if (!project?.id || !aoId) return;
-  // Always fetch fresh project from DB to avoid stale cache overwriting AO data
-  const { data: freshProject, error: fetchErr } = await sb
-    .from('projects').select('*').eq('id', project.id).single();
-  const liveProject = (!fetchErr && freshProject) ? freshProject : project;
-  const aos = getAOs(liveProject);
-  if (!aos.length) return;
-
-  const nextAOs = aos.map(ao => {
-    const cleanedAoId = clean(aoId);
-    if (String(aoKey(ao)) !== String(cleanedAoId)) return ao;
-
-    if (socData.clear) {
-      const next = { ...ao };
-      delete next.soc_date;
-      delete next.soc_time;
-      delete next.soc_task_id;
-      delete next.soc_status;
-      delete next.soc_agreed_date;
-      return next;
-    }
-
-    return {
-      ...ao,
-      soc_date: socData.date || '',
-      soc_agreed_date: socData.date || '',
-      soc_time: socData.time || '',
-      soc_task_id: socData.taskId || ao.soc_task_id || '',
-      soc_status: socData.status || ao.soc_status || 'booked',
-    };
-  });
-
-  try {
-    // Fixed 2026-09-03, real, severe regression found while
-    // investigating a live bug report: this wrote straight to the
-    // legacy projects.aos JSON column only, bypassing the
-    // adjoining_owners table entirely — a write path missed during
-    // today's earlier AO consolidation work. Since the read path was
-    // switched to prefer the table, this write became completely
-    // invisible to the rest of the app: a SOC date set here never
-    // reached anywhere that reads from the table, including award
-    // generation's own missing-date check. Now goes through the
-    // same shared function every other AO write site uses.
-    await saveAdjoiningOwners(liveProject.id, nextAOs);
-  } catch (err) {
-    console.warn('[Calendar] Could not sync SOC data to project AO card:', err.message);
-  }
 }
 
 const inputStyle = {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import sb from '../../supabaseClient';
+import { syncSocToAO } from '../../utils/adjoiningOwners';
 
 const TASK_TYPES = [
   { value: 'todo', label: 'General task' },
@@ -11,10 +12,28 @@ const TASK_TYPES = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'call', label: 'Call' },
   { value: 'site_visit', label: 'Site visit' },
+  // Added 2026-09-09, on request: the whole reason this exists — a
+  // Schedule of Condition previously could only be added from the
+  // separate Calendar screen. Linked the same way as there: picking
+  // this type reveals an adjoining owner selector, and saving syncs
+  // the date to that AO's own record via the same shared function
+  // the calendar itself uses, so award generation's own SOC-date
+  // check sees it immediately, from either place.
+  { value: 'soc', label: 'Schedule of Condition' },
 ];
 
-export default function TaskEditModal({ task, projectId, onClose, onSaved, onDeleted }) {
+function aoKey(ao = {}) {
+  const v = ao.id ?? ao.ao_id ?? ao.num ?? ao.name ?? ao.premise ?? ao.address;
+  return v === undefined || v === null ? '' : String(v).trim();
+}
+function aoLabel(ao = {}) {
+  return ao.name || ao.premise || ao.address || aoKey(ao) || 'Adjoining owner';
+}
+
+export default function TaskEditModal({ task, project, onClose, onSaved, onDeleted }) {
   const isNew = !task;
+  const projectId = project?.id || task?.project_id;
+  const aos = Array.isArray(project?.aos) ? project.aos : [];
   const [form, setForm] = useState({
     title: task?.title || '',
     description: task?.description || '',
@@ -22,15 +41,26 @@ export default function TaskEditModal({ task, projectId, onClose, onSaved, onDel
     priority: task?.priority || 'normal',
     task_type: task?.task_type || 'todo',
     status: task?.status || 'open',
+    ao_id: task?.ao_id || (aos.length === 1 ? aoKey(aos[0]) : ''),
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => setForm(f => ({
+    ...f,
+    [k]: v,
+    // Same behaviour as the calendar's own SOC field: default the
+    // title to something sensible the moment this type is picked,
+    // but only if the user hasn't already typed their own.
+    ...(k === 'task_type' && v === 'soc' && !f.title.trim() ? { title: 'Schedule of Condition' } : {}),
+  }));
+
+  const showAOSelect = form.task_type === 'soc' && aos.length > 0;
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Title is required'); return; }
+    if (form.task_type === 'soc' && aos.length > 0 && !form.ao_id) { setError('Select which adjoining owner this SOC is for'); return; }
     setSaving(true);
     setError('');
     try {
@@ -42,16 +72,28 @@ export default function TaskEditModal({ task, projectId, onClose, onSaved, onDel
         task_type: form.task_type,
         status: form.status,
         project_id: projectId,
+        ao_id: form.task_type === 'soc' ? (form.ao_id || null) : (task?.ao_id ?? null),
       };
+      let saved;
       if (isNew) {
         const { data, error: err } = await sb.from('tasks').insert([payload]).select('*').single();
         if (err) throw err;
-        onSaved(data);
+        saved = data;
       } else {
         const { data, error: err } = await sb.from('tasks').update(payload).eq('id', task.id).select('*').single();
         if (err) throw err;
-        onSaved(data);
+        saved = data;
       }
+
+      if (form.task_type === 'soc' && project && form.ao_id) {
+        await syncSocToAO(project, form.ao_id, {
+          date: form.due_date,
+          taskId: saved?.id || task?.id || '',
+          status: form.status === 'complete' ? 'complete' : 'booked',
+        });
+      }
+
+      onSaved(saved);
     } catch (e) {
       setError(e.message || 'Could not save task');
       setSaving(false);
@@ -61,6 +103,9 @@ export default function TaskEditModal({ task, projectId, onClose, onSaved, onDel
   const handleDelete = async () => {
     if (!window.confirm('Delete this task?')) return;
     setDeleting(true);
+    if (task.task_type === 'soc' && project && task.ao_id) {
+      await syncSocToAO(project, task.ao_id, { clear: true });
+    }
     await sb.from('tasks').delete().eq('id', task.id);
     onDeleted(task.id);
   };
@@ -152,6 +197,19 @@ export default function TaskEditModal({ task, projectId, onClose, onSaved, onDel
             </select>
           </div>
         </div>
+
+        {/* Adjoining owner (SOC only) */}
+        {showAOSelect && (
+          <div style={field}>
+            <label style={label}>Adjoining owner</label>
+            <select style={input} value={form.ao_id} onChange={e => set('ao_id', e.target.value)}>
+              <option value="">Select an adjoining owner...</option>
+              {aos.map(ao => (
+                <option key={aoKey(ao)} value={aoKey(ao)}>{aoLabel(ao)}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Status (edit only) */}
         {!isNew && (

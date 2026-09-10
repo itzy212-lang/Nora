@@ -5495,7 +5495,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       {taskModal && (
         <TaskEditModal
           task={taskModal === 'new' ? null : taskModal}
-          projectId={project.id}
+          project={project}
           onClose={() => setTaskModal(null)}
           onSaved={(saved) => {
             setProjectTasks(prev =>

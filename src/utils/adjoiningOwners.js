@@ -92,3 +92,61 @@ export async function saveAdjoiningOwners(projectId, aos) {
 
   return { error: jsonError || null };
 }
+
+// Added 2026-09-09, on request: moved here from Calendar.jsx — the
+// only place this could previously be called from, despite the
+// building-the-SOC-into-an-award flow needing it available from
+// inside a project too. Now a genuinely shared function both the
+// calendar and a project's own task modal call, rather than a
+// second copy duplicating the same logic — exactly the pattern that
+// caused a real, severe bug earlier today when this function's own
+// write path fell out of sync with the rest of the app.
+function clean(value) {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+function aoKey(ao = {}) {
+  return clean(ao.id || ao.ao_id || ao.num || ao.name || ao.premise || ao.address);
+}
+function getAOs(project = {}) {
+  return Array.isArray(project.aos) ? project.aos : [];
+}
+
+export async function syncSocToAO(project, aoId, socData) {
+  if (!project?.id || !aoId) return;
+  // Always fetch fresh project from DB to avoid stale cache overwriting AO data
+  const { data: freshProject, error: fetchErr } = await sb
+    .from('projects').select('*').eq('id', project.id).single();
+  const liveProject = (!fetchErr && freshProject) ? freshProject : project;
+  const aos = getAOs(liveProject);
+  if (!aos.length) return;
+
+  const nextAOs = aos.map(ao => {
+    const cleanedAoId = clean(aoId);
+    if (String(aoKey(ao)) !== String(cleanedAoId)) return ao;
+
+    if (socData.clear) {
+      const next = { ...ao };
+      delete next.soc_date;
+      delete next.soc_time;
+      delete next.soc_task_id;
+      delete next.soc_status;
+      delete next.soc_agreed_date;
+      return next;
+    }
+
+    return {
+      ...ao,
+      soc_date: socData.date || '',
+      soc_agreed_date: socData.date || '',
+      soc_time: socData.time || '',
+      soc_task_id: socData.taskId || ao.soc_task_id || '',
+      soc_status: socData.status || ao.soc_status || 'booked',
+    };
+  });
+
+  try {
+    await saveAdjoiningOwners(liveProject.id, nextAOs);
+  } catch (err) {
+    console.warn('[syncSocToAO] Could not sync SOC data to project AO card:', err.message);
+  }
+}
