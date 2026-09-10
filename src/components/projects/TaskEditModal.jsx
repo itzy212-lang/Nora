@@ -38,6 +38,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
     title: task?.title || '',
     description: task?.description || '',
     due_date: task?.due_date || '',
+    time: task?.time || '',
     priority: task?.priority || 'normal',
     task_type: task?.task_type || 'todo',
     status: task?.status || 'open',
@@ -64,15 +65,28 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
     setSaving(true);
     setError('');
     try {
+      // Fixed 2026-09-09, real, confirmed bug reported live with the
+      // actual RLS error message: "new row violates row-level
+      // security policy for table 'tasks'". Confirmed directly
+      // against the table's own policy (users_own_tasks: auth.uid()
+      // = user_id) — this never set user_id on the insert at all, so
+      // no row could ever pass that check. This affected every task
+      // created from inside a project, not only the new Schedule of
+      // Condition type added today — Calendar's own, separate save
+      // path already did this correctly, which is why creating a
+      // task there worked while this one never could have.
+      const { data: { user } } = await sb.auth.getUser();
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
         due_date: form.due_date || null,
+        time: form.time || null,
         priority: form.priority,
         task_type: form.task_type,
         status: form.status,
         project_id: projectId,
         ao_id: form.task_type === 'soc' ? (form.ao_id || null) : (task?.ao_id ?? null),
+        user_id: user?.id || task?.user_id || null,
       };
       let saved;
       if (isNew) {
@@ -88,6 +102,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
       if (form.task_type === 'soc' && project && form.ao_id) {
         await syncSocToAO(project, form.ao_id, {
           date: form.due_date,
+          time: form.time || '',
           taskId: saved?.id || task?.id || '',
           status: form.status === 'complete' ? 'complete' : 'booked',
         });
@@ -169,15 +184,26 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
           />
         </div>
 
-        {/* Due date */}
-        <div style={field}>
-          <label style={label}>Due date</label>
-          <input
-            type="date"
-            style={input}
-            value={form.due_date}
-            onChange={e => set('due_date', e.target.value)}
-          />
+        {/* Due date + time */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label style={label}>Due date</label>
+            <input
+              type="date"
+              style={input}
+              value={form.due_date}
+              onChange={e => set('due_date', e.target.value)}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={label}>Time</label>
+            <input
+              type="time"
+              style={input}
+              value={form.time}
+              onChange={e => set('time', e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Type + Priority row */}
