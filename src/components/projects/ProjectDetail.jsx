@@ -4,7 +4,7 @@ import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import ClausePanel from './ClausePanel';
 import { useSpeech } from '../../hooks/useSpeech';
-import { createLongPressCopyHandlers, longPressBubbleStyle, createLongPressActionHandlers } from '../../hooks/useLongPressCopy';
+import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import useDocumentGenerator from '../../hooks/useDocumentGenerator';
 import NoticeServingModal from './NoticeServingModal';
 import NoticeReviewModal from './NoticeReviewModal';
@@ -1369,30 +1369,24 @@ function AOCard({
             </button>
           </div>
 
-          {address && (() => {
-            // Added 2026-09-03, on request: long-press an address to
-            // open it in the phone's maps app. Uses the Google Maps
-            // web URL rather than an OS-specific scheme (Apple Maps'
-            // maps://, Android's geo:) — this works identically on
-            // iOS and Android with no device detection: the OS hands
-            // off to the native maps app automatically if one's
-            // installed, or opens in the browser if not.
-            const lp = createLongPressActionHandlers(() => {
-              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
-            });
-            return (
-              <div
-                style={{ fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4, ...longPressBubbleStyle }}
-                onMouseDown={lp.onPressStart}
-                onMouseUp={lp.onPressEnd}
-                onMouseLeave={lp.onPressEnd}
-                onTouchStart={lp.onPressStart}
-                onTouchEnd={lp.onPressEnd}
-              >
-                {address}
-              </div>
-            );
-          })()}
+          {address && (
+            // Fixed 2026-09-09, on request: changed from long-press
+            // to a plain tap, to match the phone number's own
+            // behaviour exactly — same tap-to-act pattern, now for
+            // navigation instead of calling. Still the Google Maps
+            // web URL rather than an OS-specific scheme, so the OS's
+            // own share/open picker handles multiple installed map
+            // apps the same way it already does for any other link.
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'block', fontSize: 13, color: 'var(--blue)', marginBottom: 4, lineHeight: 1.4, textDecoration: 'none' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {address}
+            </a>
+          )}
 
           {ao.phone && (
             <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 6 }}>
@@ -4813,9 +4807,29 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         }}>
           <div>
             <div style={{ ...card({ padding: '16px 18px', marginBottom: 14 }) }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35 }}>
-                {titleAddress}
-              </div>
+              {/* Fixed 2026-09-09, on request: same tap-to-open-maps
+                  behaviour as the AO card's own address, and the
+                  phone number — "the AO address or even the BO
+                  address" was explicitly named. This is the
+                  project's main title address (appointment address,
+                  falling back to the building owner's own premise
+                  address). Guarded against the 'Address not
+                  recorded' fallback text itself becoming a
+                  pointless, confusing maps link. */}
+              {(appointmentAddress || boAddress) ? (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titleAddress)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35, textDecoration: 'none' }}
+                >
+                  {titleAddress}
+                </a>
+              ) : (
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35 }}>
+                  {titleAddress}
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12 }}>
                 <div>
