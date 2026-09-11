@@ -185,6 +185,20 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const [selectedPageIds, setSelectedPageIds] = useState(() => new Set());
   const [showAttach, setShowAttach] = useState(false);
   const [showSave, setShowSave] = useState(false);
+  // Added 2026-09-11, on request, after reviewing a mockup together:
+  // the desktop side-by-side layout (thumbnail rail + preview pane)
+  // doesn't fit a phone screen at all. Below this breakpoint, the
+  // list and preview become two separate full-width views, toggled
+  // by tapping a page (open) or Back (return to the list) — the
+  // desktop layout itself is completely untouched above this width.
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const isMobile = windowWidth < 768;
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const completedPacks = useRef([]);
   const currentEntry = aoQueue[queueIndex];
   const isLastAO = queueIndex === aoQueue.length - 1;
@@ -443,6 +457,65 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         </div>
       </div>
 
+      {isMobile ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {!mobilePreviewOpen ? (
+            <>
+              <div style={{ padding: 10, borderBottom: '1px solid #2a2d3a' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{pages.length} pages</span>
+                  <button onClick={() => setShowAttach(true)} disabled={generating} style={{ ...btn('ghost', generating), padding: '5px 10px', fontSize: 12 }}>+ Add page</button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: 10, WebkitOverflowScrolling: 'touch' }}>
+                {generating && !pages.length ? (
+                  <div style={{ color: '#64748b', fontSize: 13, textAlign: 'center', marginTop: 24 }}>Preparing pages…</div>
+                ) : pages.map((page, index) => {
+                  const selected = selectedPageIds.has(page.id);
+                  return (
+                    <div
+                      key={page.id}
+                      onClick={() => { setCurrentPageIdx(index); setMobilePreviewOpen(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, marginBottom: 8, background: selected ? '#1a2340' : '#191c26', border: `1px solid ${selected ? '#3b82f6' : '#2a2d3a'}`, borderRadius: 10, cursor: 'pointer' }}
+                    >
+                      <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ width: 20, height: 20, flexShrink: 0, accentColor: '#3b82f6', cursor: 'pointer' }} />
+                      <div style={{ width: 40, height: 54, background: '#fff', borderRadius: 3, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ padding: '8px 5px', display: 'flex', flexDirection: 'column', gap: 2 }}>{[88, 64, 78, 54, 82, 70].map((width, row) => <div key={row} style={{ height: row === 0 ? 2.5 : 2, width: `${width}%`, background: row === 0 ? '#9ca3af' : '#d1d5db', borderRadius: 1 }} />)}</div>
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>Page {index + 1}</div>
+                        <div title={page.label} style={{ marginTop: 3, fontSize: 11, color: '#64748b', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.label}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedCount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#21171c', borderTop: '1px solid #2a2d3a', flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, color: '#fecaca' }}>{selectedCount} selected</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setSelectedPageIds(new Set())} style={btn('ghost')}>Cancel</button>
+                    <button onClick={handleDeleteSelected} disabled={generating} style={btn('danger', generating)}>Delete</button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #2a2d3a', flexShrink: 0 }}>
+                <button onClick={() => setMobilePreviewOpen(false)} style={btn('ghost')}>← Back</button>
+                <span style={{ fontSize: 13, color: '#e2e8f0' }}>Page {currentPageIdx + 1} of {pages.length}</span>
+              </div>
+              <div style={{ flex: 1, background: '#d1d5db', overflow: 'hidden', position: 'relative' }}>
+                {generating && <div style={{ position: 'absolute', inset: 0, background: 'rgba(209,213,219,0.8)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: 13, color: '#475569' }}>Updating PDF…</div></div>}
+                {viewerUrl ? <iframe key={viewerUrl} src={viewerUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Notice preview" /> : !generating && <div style={{ color: '#ef4444', fontSize: 13, padding: 14 }}>PDF could not be loaded.</div>}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <aside style={{ width: 230, background: '#13151e', borderRight: '1px solid #2a2d3a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: 10, borderBottom: '1px solid #2a2d3a' }}>
@@ -484,6 +557,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
           {viewerUrl ? <iframe key={viewerUrl} src={viewerUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Notice preview" /> : !generating && <div style={{ color: '#ef4444', fontSize: 13 }}>PDF could not be loaded.</div>}
         </main>
       </div>
+      )}
 
       {!generating && pdfUrl && (
         <button
