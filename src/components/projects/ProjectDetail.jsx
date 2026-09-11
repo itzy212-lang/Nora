@@ -5108,14 +5108,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 </button>
               </div>
 
-              {aos.length > 1 && aos.filter(a => !a.noticed_date && !a.notice_served_date).length > 1 && (
-                <button
-                  onClick={handleServeBatch}
-                  style={{ width: '100%', marginBottom: 12, padding: '10px 16px', borderRadius: 10, border: '2px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
-                >
-                  ⚡ Serve notice to multiple adjoining owners
-                </button>
-              )}
+              {/* Fixed 2026-09-10, on request: removed — only ever
+                  appeared when there was more than one AO with an
+                  unserved notice, so it was never a reliable, always-
+                  there way to serve an additional or later notice.
+                  Replaced with an always-visible card below the AO
+                  cards themselves (same style as SOC Dictation/
+                  Clauses), which works for any AO at any time,
+                  including a second notice to one already served. */}
 
               {aos.length === 0 ? (
                 <div style={{ ...card({ padding: '20px', textAlign: 'center' }) }}>
@@ -5300,6 +5300,49 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
               </div>
             </div>
+
+            {/* Added 2026-09-10, on request: always-visible way to
+                serve a notice to any adjoining owner at any time,
+                replacing the old conditional "serve to multiple"
+                button that only appeared with 2+ unnoticed AOs.
+                Reuses handleServeBatch, which already opens the
+                notice modal with every AO selectable rather than one
+                pre-chosen — covers a genuinely new notice, a second
+                one to an AO already served, or serving several at
+                once, all from the one place. */}
+            {aos.length > 0 && (
+              <div
+                style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
+                onClick={handleServeBatch}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--blue)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 12,
+                    background: 'var(--blue-bg, #eff6ff)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 20,
+                    flexShrink: 0,
+                  }}>
+                    ⚡
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                      Serve notice
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
+                      Any adjoining owner, any time — including a second notice
+                    </div>
+                  </div>
+                  <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
+                </div>
+              </div>
+            )}
 
 
 
