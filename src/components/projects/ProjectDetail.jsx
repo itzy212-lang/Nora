@@ -4703,16 +4703,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           alignItems: 'center',
           flexWrap: 'wrap',
         }}>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowProjectEdit(true)} style={{
-            cursor: 'pointer',
-            borderRadius: 99,
-            padding: '4px 10px',
-            fontSize: 12,
-            minHeight: 30,
-          }}>
-            Edit
-          </button>
-
+          {/* Fixed 2026-09-10, on request: Edit moved into the BO
+              card itself, matching how each AO card already has its
+              own Edit button within the card, rather than sitting
+              separately up here under the tabs. */}
           {project.status !== 'award_served' && project.status !== 'complete' && (
             <button
               onClick={handleMarkAwardServed}
@@ -4811,29 +4805,45 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         }}>
           <div>
             <div style={{ ...card({ padding: '16px 18px', marginBottom: 14 }) }}>
-              {/* Fixed 2026-09-09, on request: same tap-to-open-maps
-                  behaviour as the AO card's own address, and the
-                  phone number — "the AO address or even the BO
-                  address" was explicitly named. This is the
-                  project's main title address (appointment address,
-                  falling back to the building owner's own premise
-                  address). Guarded against the 'Address not
-                  recorded' fallback text itself becoming a
-                  pointless, confusing maps link. */}
-              {(appointmentAddress || boAddress) ? (
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titleAddress)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35, textDecoration: 'none' }}
-                >
-                  {titleAddress}
-                </a>
-              ) : (
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12, lineHeight: 1.35 }}>
-                  {titleAddress}
-                </div>
-              )}
+              {/* Fixed 2026-09-10, on request: Edit moved into this
+                  card, matching how each AO card already has its own
+                  Edit button within the card, rather than sitting
+                  separately up under the tabs. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+                {/* Fixed 2026-09-09, on request: same tap-to-open-maps
+                    behaviour as the AO card's own address, and the
+                    phone number — "the AO address or even the BO
+                    address" was explicitly named. This is the
+                    project's main title address (appointment address,
+                    falling back to the building owner's own premise
+                    address). Guarded against the 'Address not
+                    recorded' fallback text itself becoming a
+                    pointless, confusing maps link. */}
+                {(appointmentAddress || boAddress) ? (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(titleAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, textDecoration: 'none', flex: 1 }}
+                  >
+                    {titleAddress}
+                  </a>
+                ) : (
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, flex: 1 }}>
+                    {titleAddress}
+                  </div>
+                )}
+                <button className="btn btn-sm btn-ghost" onClick={() => setShowProjectEdit(true)} style={{
+                  cursor: 'pointer',
+                  borderRadius: 99,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  minHeight: 30,
+                  flexShrink: 0,
+                }}>
+                  Edit
+                </button>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 12 }}>
                 <div>
