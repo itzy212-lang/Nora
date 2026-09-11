@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useApp } from '../../state/appStore';
 import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
@@ -2985,6 +2986,15 @@ function splitDraftMessage(content = '') {
 }
 
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement, onActiveTabChange }) {
+  // Added 2026-09-10, real, confirmed gap found while investigating a
+  // live question about the Dashboard's own red/amber AO status:
+  // this component's own project state is a local copy — saving or
+  // deleting an AO here never reached the shared app state the
+  // Dashboard reads from, which itself only loads once at login and
+  // is never automatically refreshed. Without this, the Dashboard
+  // would keep showing a deleted (or edited) AO until a full app
+  // reload, not just navigating back to it.
+  const { dispatch } = useApp();
   const [tab, setTab] = useState('details');
   // Added 2026-09-03, on request: reports the active tab up to
   // App.jsx so the top bar can hide its own 'Ask Nora' button while
@@ -3572,6 +3582,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ...prev,
       aos: updatedAOs,
     }));
+    // Fixed 2026-09-10, same real gap found and fixed for AO
+    // deletion — this local update alone never reached the Dashboard's
+    // own copy of this project.
+    dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
 
     // Auto-create OneDrive subfolder for new AOs and save folder ID back
     if (!existingAO) {
@@ -3601,13 +3615,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             );
             await saveAdjoiningOwners(project.id, withFolder);
             setProject(prev => ({ ...prev, aos: withFolder }));
+            dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
           }
         } catch (err) {
           console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);
         }
       }
     }
-  }, [project, role]);
+  }, [project, role, dispatch]);
 
   // Added 2026-09-10, on request: "a few projects I've done where
   // I've added AOs incorrectly that do not need to be on there...
@@ -3622,8 +3637,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     );
     await saveAdjoiningOwners(project.id, remaining);
     setProject(prev => ({ ...prev, aos: remaining }));
+    dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: remaining } });
     setEditingAO(null);
-  }, [project]);
+  }, [project, dispatch]);
 
   const updateAORecord = useCallback(async (ao, patch) => {
     const currentAOs = project.aos || [];
@@ -3955,6 +3971,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           );
           await saveAdjoiningOwners(project.id, updatedAOs);
           setProject(p => ({ ...p, aos: updatedAOs }));
+          dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
         },
       }],
       project,
@@ -3964,7 +3981,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       safeguarding: false,
       tenureMap: {},
     });
-  }, [project, sb, generateDocument, setReviewQueue, setProject]);
+  }, [project, sb, generateDocument, setReviewQueue, setProject, dispatch]);
 
   const handleServeAward = useCallback(async (ao) => {
     if (!window.confirm('Confirm the award has been served?')) return;
@@ -3974,6 +3991,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     );
     await saveAdjoiningOwners(project.id, updatedAOs);
     setProject(p => ({ ...p, aos: updatedAOs }));
+    dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
 
     // Auto-raise final invoice after award served
     const boBillToName = project.bo || project.bo_1_name || project.bo_name || '';
@@ -3987,7 +4005,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       project_id: project.id,
       invoice_note: 'Final invoice — award served',
     });
-  }, [project, sb, onRaiseInvoice, role]);
+  }, [project, sb, onRaiseInvoice, role, dispatch]);
 
   const handleServeS10 = useCallback((ao) => {
     handleOpenNoticeModal(ao, ['s10']);
@@ -4942,6 +4960,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                           try {
                             await saveAdjoiningOwners(project.id, updatedAOs);
                             setProject(prev => ({ ...prev, aos: updatedAOs }));
+                            dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
                           } catch (e) {
                             console.warn('[agreed surveyor toggle] save failed:', e.message);
                           }
