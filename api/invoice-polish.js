@@ -26,7 +26,19 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        // Fixed 2026-09-10, real bug reported live: this specific
+        // endpoint used 'gpt-4o-mini', a different, older model
+        // variant than every other working OpenAI call in this
+        // codebase — the confirmed-working main pipeline uses
+        // gpt-5.6-terra, and several other smaller features already
+        // use gpt-4o (without '-mini') successfully today. Couldn't
+        // fully confirm from search alone whether gpt-4o-mini has
+        // specifically been retired from OpenAI's own direct API (as
+        // opposed to the separate ChatGPT consumer app or Azure
+        // Foundry, which have their own, different retirement
+        // timelines) — rather than guess, switched to gpt-4o, the
+        // variant already proven to work in this same app today.
+        model: 'gpt-4o',
         temperature: 0.2,
         messages: [
           {
