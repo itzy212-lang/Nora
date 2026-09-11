@@ -3005,6 +3005,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]);
   const [taskModal, setTaskModal] = useState(null); // null | 'new' | {task object}
+  // Added 2026-09-10, on request: moved Clauses from a top tab to its
+  // own button/card below the AO cards, matching SOC Dictation and
+  // Dispute Agreement's own placement and style — the top-tab
+  // position "looked ugly across the tabs" and "doesn't sit right".
+  const [showClauses, setShowClauses] = useState(false);
 
   // Defensive cleanup: remove legacy floating Notices card only.
   useEffect(() => {
@@ -4478,7 +4483,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     { id: 'details', label: 'Details' },
     { id: 'emails', label: 'Emails' },
     { id: 'documents', label: 'Documents' },
-    { id: 'clauses', label: '§ Clauses' },
     { id: 'chat', label: '💬 Chat' },
   ];
 
@@ -5183,6 +5187,38 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               </div>
             </div>
 
+            <div
+              style={{ ...card({ padding: '12px 14px', cursor: 'pointer' }) }}
+              onClick={() => setShowClauses(true)}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--blue)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: 'var(--blue-bg, #eff6ff)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  flexShrink: 0,
+                }}>
+                  §
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                    Clauses
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
+                    Short, ready-to-paste clauses for a notice or award
+                  </div>
+                </div>
+                <span style={{ color: 'var(--text3)', fontSize: 16 }}>›</span>
+              </div>
+            </div>
+
 
 
 <div style={{ ...card({ padding: '14px 16px' }) }}>
@@ -5497,12 +5533,6 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         </div>
       )}
 
-      {tab === 'clauses' && (
-        <div style={{ padding: '18px 0' }}>
-          <ClausePanel project={project} />
-        </div>
-      )}
-
       {tab === 'chat' && <ProjectChat project={project} onOpenComposer={onOpenComposer} />}
 
       {/* Task create/edit modal */}
@@ -5524,6 +5554,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             setTaskModal(null);
           }}
         />
+      )}
+
+      {/* Clauses modal — moved off the top tabs, on request */}
+      {showClauses && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 900, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={() => setShowClauses(false)}
+        >
+          <div
+            style={{ background: 'var(--bg)', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: 16, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>§ Clauses</div>
+              <button onClick={() => setShowClauses(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text2)' }}>✕</button>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto' }}>
+              <ClausePanel project={project} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
