@@ -559,7 +559,15 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       </div>
       )}
 
-      {!generating && pdfUrl && (
+      {/* Fixed 2026-09-11, real bug caught while checking whether
+          Save/Email still worked on the new mobile layout: this
+          fixed, bottom-right button would sit on top of the new
+          delete bar (also bottom-positioned) whenever pages were
+          selected in the mobile list view. On mobile, only show it
+          while viewing the preview — where finalising naturally
+          belongs anyway, having just reviewed the pages — not
+          competing with the list view's own bottom actions. */}
+      {!generating && pdfUrl && (!isMobile || mobilePreviewOpen) && (
         <button
           onClick={() => setShowSave(true)}
           disabled={saving}
