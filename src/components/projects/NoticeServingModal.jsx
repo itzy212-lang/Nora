@@ -62,7 +62,7 @@ function normaliseAOList({ ao, aos, project }) {
   return out;
 }
 
-export default function NoticeServingModal({ project, ao, aos = [], defaultSections = [], prefillData = null, editingNoticeId = null, onServe, onClose }) {
+export default function NoticeServingModal({ project, ao, aos = [], defaultSections = [], prefillData = null, editingNoticeId = null, onServe, onClose, initialSelectedAO = null }) {
   const lockedToSingleAO = !!ao;
 
   const availableAOs = useMemo(
@@ -70,7 +70,19 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
     [ao, aos, project, lockedToSingleAO]
   );
 
-  const [selectedAOKeys, setSelectedAOKeys] = useState(lockedToSingleAO && ao ? [aoKey(ao)] : []);
+  // Fixed 2026-09-11, on request: the generic, always-available Serve
+  // notice card needs the full multi-select interface every time —
+  // "look exactly the same as it does now" — not the locked,
+  // single-AO restricted mode (which also limits the visible list to
+  // just that one AO and disables toggling it off). A separate,
+  // genuinely independent prop pre-checks an AO within the normal
+  // multi-select, without restricting anything else about it — used
+  // when the project only has one AO, so there's nothing meaningful
+  // left to choose, but the picker itself still looks and works the
+  // same as it always has.
+  const [selectedAOKeys, setSelectedAOKeys] = useState(
+    lockedToSingleAO && ao ? [aoKey(ao)] : (initialSelectedAO ? [aoKey(initialSelectedAO)] : [])
+  );
 
   // Per-section, per-AO selection: { [sectionKey]: Set of aoKeys }
   // When single AO locked, all selected sections apply to that AO automatically

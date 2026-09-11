@@ -3769,8 +3769,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
   // Batch serve — opens modal with no specific AO so all AOs are selectable
   const handleServeBatch = useCallback(() => {
-    setNoticeModal({ ao: null, defaultSections: [] });
-  }, []);
+    // Fixed 2026-09-11, on request: "if there's only one AO, then it
+    // should already be preselected" — the picker itself still looks
+    // and works exactly the same either way (full multi-select, not
+    // the locked single-AO mode); with just one AO on the project
+    // there's nothing else to choose, so it starts checked already.
+    const aos = project.aos || [];
+    setNoticeModal({ ao: null, defaultSections: [], initialSelectedAO: aos.length === 1 ? aos[0] : null });
+  }, [project]);
 
   const handleServe104b = useCallback(async (ao) => {
     // Check surveyor details are on the AO record
@@ -4668,6 +4674,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           project={project}
           ao={noticeModal.ao}
           aos={modalAOs}
+          initialSelectedAO={noticeModal.initialSelectedAO || null}
           defaultSections={noticeModal.defaultSections || []}
           prefillData={noticeModal.prefillData || null}
           editingNoticeId={noticeModal.editingNoticeId || null}
