@@ -84,6 +84,25 @@ export async function saveAdjoiningOwners(projectId, aos) {
     }
   }
 
+  // Fixed 2026-09-10, real, confirmed gap found while building AO
+  // deletion: upsert above only ever adds or updates rows — it never
+  // removes one for an AO no longer present in the list. Without
+  // this, deleting an AO would correctly update the JSON column (a
+  // full overwrite) but silently leave its row behind in the table,
+  // which the app now reads from first — the deleted AO would still
+  // be findable there even though it no longer appears anywhere in
+  // the UI. Delete any existing table row for this project not
+  // present in the current list, by id.
+  try {
+    const keepIds = list.map(ao => ao?.id).filter(Boolean);
+    let deleteQuery = sb.from('adjoining_owners').delete().eq('project_id', projectId);
+    deleteQuery = keepIds.length ? deleteQuery.not('id', 'in', `(${keepIds.join(',')})`) : deleteQuery;
+    const { error: deleteError } = await deleteQuery;
+    if (deleteError) console.warn('[saveAdjoiningOwners] stale row cleanup failed:', deleteError.message);
+  } catch (err) {
+    console.warn('[saveAdjoiningOwners] stale row cleanup failed:', err.message);
+  }
+
   // Legacy JSON write — temporary safety net during the transition,
   // not a second source of truth. Kept so existing read sites that
   // haven't been switched over yet don't silently go stale.

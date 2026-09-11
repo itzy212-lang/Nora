@@ -1011,7 +1011,7 @@ function ProjectEditModal({ project, onSave, onClose }) {
   );
 }
 
-function AOEditModal({ ao, mode, onSave, onClose }) {
+function AOEditModal({ ao, mode, onSave, onClose, onDelete }) {
   const isNew = mode === 'add' || ao?._mode === 'add' || ao?.isNew === true;
   const ip = aoAddress(ao || {});
   const is = aoServiceAddress(ao || {}) || ip;
@@ -1160,14 +1160,31 @@ function AOEditModal({ ao, mode, onSave, onClose }) {
           />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-            Cancel
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          {/* Added 2026-09-10, on request: "a few projects I've done
+              where I've added AOs incorrectly that do not need to be
+              on there... they could just be deleted." Only shown when
+              editing an existing AO — a brand-new, unsaved one has
+              nothing to delete yet. */}
+          {!isNew && onDelete ? (
+            <button
+              onClick={() => { if (window.confirm('Delete this adjoining owner? This cannot be undone.')) onDelete(); }}
+              className="btn btn-sm"
+              style={{ cursor: 'pointer', borderRadius: 99, color: 'var(--red)', border: '1px solid var(--red)', background: 'transparent' }}
+            >
+              Delete AO
+            </button>
+          ) : <div />}
 
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
-            {saving ? 'Saving…' : isNew ? 'Add AO' : 'Save changes'}
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+              Cancel
+            </button>
+
+            <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+              {saving ? 'Saving…' : isNew ? 'Add AO' : 'Save changes'}
+            </button>
+          </div>
         </div>
       </div>
     </ModalShell>
@@ -3592,6 +3609,22 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project, role]);
 
+  // Added 2026-09-10, on request: "a few projects I've done where
+  // I've added AOs incorrectly that do not need to be on there...
+  // they could just be deleted." Removes the AO from both the table
+  // and the JSON column via the same shared save function — its own
+  // recent fix now correctly deletes the stale table row too, not
+  // just updating the JSON.
+  const handleDeleteAO = useCallback(async (aoToDelete) => {
+    const currentAOs = project.aos || [];
+    const remaining = currentAOs.filter(a =>
+      (a.id && aoToDelete.id) ? a.id !== aoToDelete.id : a.num !== aoToDelete.num
+    );
+    await saveAdjoiningOwners(project.id, remaining);
+    setProject(prev => ({ ...prev, aos: remaining }));
+    setEditingAO(null);
+  }, [project]);
+
   const updateAORecord = useCallback(async (ao, patch) => {
     const currentAOs = project.aos || [];
     const updatedAOs = currentAOs.map(item => aoKeyMatches(item, ao)
@@ -4636,6 +4669,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           ao={editingAO}
           onSave={form => handleSaveAO(form, editingAO)}
           onClose={() => setEditingAO(null)}
+          onDelete={() => handleDeleteAO(editingAO)}
         />
       )}
 
