@@ -4501,6 +4501,22 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [sb, project, onBack]);
 
   const handleMarkAwardServed = async () => {
+    // Fixed 2026-09-10, real, confirmed problem reported live: this
+    // marked the entire project as served in a single click,
+    // regardless of how many adjoining owners there actually were —
+    // moving the whole project out of the active list even if only
+    // one of several AOs had genuinely had their award served. Each
+    // AO card already has its own, correct "Award Served" action
+    // (handleServeAward) that marks just that AO — this top-level
+    // action should only be able to close out the whole project once
+    // every AO has actually gone through that individually.
+    const aos = project.aos || [];
+    const unservedAOs = aos.filter(ao => !(ao.award_served_date || ao.awardServedDate || (ao.status || '').toLowerCase() === 'complete'));
+    if (unservedAOs.length > 0) {
+      const names = unservedAOs.map(ao => ao.name || 'an adjoining owner').join(', ');
+      window.alert(`Not every adjoining owner has had their award served yet: ${names}. Use the "Award Served" button on each AO's own card first — this marks the whole project served and moves it out of the active list, so it should only be used once every AO is actually done.`);
+      return;
+    }
     if (!window.confirm('Mark this project as Award Served? It will move out of the active project list.')) return;
     try {
       const { error } = await sb
