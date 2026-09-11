@@ -1368,24 +1368,13 @@ function AOCard({
             </div>
           </div>
 
-          {/* Always-visible serve notice button */}
-          <div style={{ marginTop: 6 }}>
-            <button
-              onClick={() => onServeNotice?.(ao)}
-              style={{
-                padding: '3px 10px',
-                borderRadius: 99,
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
-                border: '1px solid var(--blue)',
-                background: 'var(--blue-bg)',
-                color: 'var(--blue)',
-              }}
-            >
-              + Serve notice
-            </button>
-          </div>
+          {/* Fixed 2026-09-10, on request: removed — genuinely
+              redundant with the dynamic status button above (which
+              already shows "Serve notice" at this same stage, then
+              naturally progresses to Serve S10/Serve 104b/Serve Award
+              as the AO moves through the workflow). Both called the
+              exact same action for the exact same AO; only one is
+              needed. */}
 
           {address && (
             // Fixed 2026-09-09, on request: changed from long-press
@@ -1580,39 +1569,53 @@ function AOCard({
           )}
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {!isAOAppointment && !noticed && (
-              <button onClick={() => onServeNotice?.(ao)} style={{
-                padding: '5px 14px',
-                borderRadius: 99,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                background: 'var(--blue)',
-                color: '#fff',
-                border: 'none',
-              }}>
-                Serve notice
-              </button>
-            )}
-
-            {!isAOAppointment && noticed && ['Consent', 'Dissent'].map(a => (
+            {/* Fixed 2026-09-10, on request: "Consent" is now the
+                permanent button from the start, not gated behind a
+                served notice — covers the AO who was never Nora's own
+                notice to serve (e.g. appointed for a schedule of
+                condition only), letting them go straight to consent.
+                The same button's meaning shifts naturally once a
+                notice actually is served ('they consented to that
+                notice'), rather than being a separate button that
+                appears later. */}
+            {!isAOAppointment && (
               <button
-                key={a}
-                onClick={() => onSetAOStatus?.(ao, a.toLowerCase())}
+                onClick={() => onSetAOStatus?.(ao, 'consent')}
                 style={{
                   padding: '4px 12px',
                   borderRadius: 99,
                   fontSize: 12,
                   fontWeight: 500,
                   cursor: 'pointer',
-                  border: `1px solid ${a === 'Consent' ? 'var(--green)' : 'var(--red)'}`,
-                  background: (ao.status || '').toLowerCase() === a.toLowerCase() ? (a === 'Consent' ? 'var(--green-bg)' : 'var(--red-bg)') : 'transparent',
-                  color: a === 'Consent' ? 'var(--green)' : 'var(--red)',
+                  border: '1px solid var(--green)',
+                  background: (ao.status || '').toLowerCase() === 'consent' ? 'var(--green-bg)' : 'transparent',
+                  color: 'var(--green)',
                 }}
               >
-                {a}
+                Consent
               </button>
-            ))}
+            )}
+
+            {/* Dissent only makes sense once a notice has genuinely
+                been served — cannot dissent to a notice that was
+                never served. */}
+            {!isAOAppointment && noticed && (
+              <button
+                onClick={() => onSetAOStatus?.(ao, 'dissent')}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 99,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  border: '1px solid var(--red)',
+                  background: (ao.status || '').toLowerCase() === 'dissent' ? 'var(--red-bg)' : 'transparent',
+                  color: 'var(--red)',
+                }}
+              >
+                Dissent
+              </button>
+            )}
 
             {!isAOAppointment && noticed && (
               <button
