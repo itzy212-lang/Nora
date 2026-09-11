@@ -647,6 +647,39 @@ async function semanticSearchProject(projectId, userPrompt, limit = 20) {
   }
 }
 
+// ── Clause library: match a new clause request against the user's own
+// saved example clauses ────────────────────────────────────────────────
+// Added 2026-09-10, on request: reuses the same embedding pattern as
+// semanticSearchProject above. Only used for the clause_request
+// surface — genuinely irrelevant to every other surface here.
+async function matchClauseLibrary(userPrompt) {
+  const sb = getSupabase();
+  if (!sb || !userPrompt) return [];
+  try {
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_KEY) return [];
+
+    const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({ model: 'text-embedding-3-small', input: userPrompt.slice(0, 8000), dimensions: 1536 }),
+    });
+    if (!embedRes.ok) return [];
+    const embedData = await embedRes.json();
+    const queryEmbedding = embedData.data[0].embedding;
+
+    const { data, error } = await sb.rpc('match_clause_library', {
+      query_embedding: queryEmbedding,
+      match_count: 3,
+    });
+    if (error || !data?.length) return [];
+    return data.filter(m => m.similarity > 0.55);
+  } catch (err) {
+    console.warn('[ely-smart] clause library match failed:', err.message);
+    return [];
+  }
+}
+
 
 // ── PHASE 2A: Stage 1 Strategic Reasoning ─────────────────────────────────
 // Redesigned in place (Milestone 1/2's original Luna-based brief generator
@@ -1005,6 +1038,7 @@ async function runV2Pipeline({
   userId, surface, modeHint, prompt, representation, effectiveProjectId,
   projectBundle, scopedEmailContext, chatHistory, hasExplicitEmailSelection,
   confirmedDraftText, draftingExamples, domainKnowledgeText, contactsContext,
+  clauseLibraryMatches,
 }) {
   const t0 = Date.now();
   const { universalBrain, defaultVoiceProfile, userBrainV2 } = await loadV2Sources({ userId });
@@ -1209,6 +1243,7 @@ async function runV2Pipeline({
     modeHint,
     representationLock: representation ? JSON.stringify(representation) : null,
     contactsContext,
+    clauseLibraryMatches,
   });
 
   const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || 'medium';
@@ -4189,8 +4224,11 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // - Full bundle only loads when emails are explicitly requested or on non-project surfaces.
     const needsFullBundle = !isProjectChatSurface && !isDraftingSurface;
     const needsBrain = true; // always load brain
+    // Added 2026-09-10, on request: only relevant to the clause
+    // surface — genuinely irrelevant elsewhere.
+    const needsClauseLibrary = body.surface === 'clause_request';
 
-    const [projectBundle, scopedEmailContext, brain] = await Promise.all([
+    const [projectBundle, scopedEmailContext, brain, clauseLibraryMatches] = await Promise.all([
       projectId
         ? (needsFullBundle ? loadProjectBundle(projectId) : loadProjectFacts(projectId))
         : Promise.resolve(null),
@@ -4202,6 +4240,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         emailId: body.emailId || body.emailContext?.emailId || body.emailContext?.id,
       }) : Promise.resolve(suppliedEmailContext ? [suppliedEmailContext] : []),
       needsBrain ? loadBrain({ userId, projectId, surface: body.surface, modeHint }) : Promise.resolve(null),
+      needsClauseLibrary ? matchClauseLibrary(body.prompt) : Promise.resolve([]),
     ]);
 
     // ── Brain layer diagnostic logging ───────────────────────────────────────
@@ -4297,6 +4336,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           draftingExamples,
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
           contactsContext,
+          clauseLibraryMatches,
         });
         console.log('[nora-v2] response served', {
           surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
