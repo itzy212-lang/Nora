@@ -1744,8 +1744,18 @@ function AOCard({
                 the signed PDF once available, making the separate
                 buttons redundant clutter at that point. Stays
                 permanently available in Edit AO regardless, in case
-                it's ever needed again. */}
-            {!ao.loa_sent_at && (
+                it's ever needed again.
+
+                Also, on request: "if they've consented/dissented and
+                appointed their own surveyor, then I don't need to
+                serve an LOA — there's no LOA button." The Agreed
+                Surveyor LoA is only meaningful when the user is
+                actually the agreed surveyor for this AO — gated on
+                ao.agreed_surveyor (the same toggle shown above)
+                alongside the existing "not yet sent" check. Left the
+                separate isAOAppointment variant (a different scenario
+                entirely) untouched. */}
+            {!ao.loa_sent_at && (isAOAppointment || ao.agreed_surveyor) && (
             <div style={{ display: 'flex', gap: 1 }}>
               <button
                 className="btn btn-sm btn-ghost"
