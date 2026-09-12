@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
 import { useEmails } from './hooks/useEmails';
@@ -114,6 +114,21 @@ export default function App() {
   const [pendingProjectId, setPendingProjectId] = useState(getInitialProjectId);
   const [previousProjectId, setPreviousProjectId] = useState(getInitialPreviousProjectId);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
+  // Fixed 2026-09-11, real, confirmed bug reported live: "it always
+  // opens scrolled down slightly." Traced directly in the CSS —
+  // .main (not the window) is the actual scrollable container here,
+  // with its own overflow-y: auto, while the outer wrappers all have
+  // overflow: hidden. The window itself never scrolls at all, so
+  // every existing window.scrollTo(0, 0) call on navigation was
+  // resetting something that was never scrolled in the first place,
+  // while the real scroll position — inside .main — was never
+  // touched. This ref, and the helper below, reset the actual
+  // scrollable element instead.
+  const mainScrollRef = useRef(null);
+  const resetMainScroll = useCallback(() => {
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, []);
   const [composerOpts, setComposerOpts]     = useState(null);
   // Added 2026-08-28: holds Inbox.jsx's own overlay-close function
   // when one of its internal overlays (reply, Draft with Nora) is
@@ -186,7 +201,7 @@ export default function App() {
             if (proj) {
               dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
               setCurrentView('projects');
-              window.scrollTo(0, 0);
+              resetMainScroll();
             }
           };
           setTimeout(openDeepProject, 1500);
@@ -197,7 +212,7 @@ export default function App() {
           setTimeout(() => {
             dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: deepEmailId });
             setCurrentView('inbox');
-            window.scrollTo(0, 0);
+            resetMainScroll();
           }, 1500);
         }
       }
@@ -293,13 +308,13 @@ export default function App() {
     setPendingProjectId('');
     clearCurrentProject();
     setSidebarOpen(false);
-    window.scrollTo(0, 0);
+    resetMainScroll();
 
     try {
       sessionStorage.setItem('ely_current_view', view);
       sessionStorage.removeItem('ely_current_project_id');
     } catch {}
-  }, [clearCurrentProject, rememberPreviousLocation, currentView]);
+  }, [clearCurrentProject, rememberPreviousLocation, currentView, resetMainScroll]);
 
   const handleOpenProject = useCallback((project) => {
     if (project === 'new') {
@@ -316,14 +331,14 @@ export default function App() {
       setProjectView(project);
       setCurrentView('projects');
       setPendingProjectId('');
-      window.scrollTo(0, 0);
+      resetMainScroll();
 
       try {
         sessionStorage.setItem('ely_current_view', 'projects');
         sessionStorage.setItem('ely_current_project_id', project.id);
       } catch {}
     }
-  }, [setCurrentProject]);
+  }, [setCurrentProject, resetMainScroll]);
 
   const openComposer = useCallback((opts) => {
     if (opts?.body && typeof opts.body === 'string' && !opts.body.trim().startsWith('<')) {
@@ -669,7 +684,7 @@ export default function App() {
         <div className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{ width: 216, minWidth: 216, background: 'var(--bg2)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', zIndex: 500, overflowY: 'auto', transition: 'transform 0.3s' }}>
           <Sidebar currentView={currentView} onNavigate={handleNavigate} onRaiseInvoice={() => handleRaiseInvoice(null)} onClose={() => setSidebarOpen(false)} />
         </div>
-        <div className="main">
+        <div className="main" ref={mainScrollRef}>
           <div className="content">
             {renderContent()}
           </div>
