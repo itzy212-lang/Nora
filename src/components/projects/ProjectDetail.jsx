@@ -293,7 +293,7 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
 
   // Award generated — needs serving
   if (awardGenerated) {
-    return { label: 'Award drafted — serve award', colour: '#f59e0b', action: 'serve_award' };
+    return { label: 'Draft award', colour: '#f59e0b', action: 'serve_award' };
   }
 
   // Consent
@@ -1371,8 +1371,8 @@ function AOCard({
         <div style={{ width: 5, background: colour, borderRadius: '16px 0 0 16px', flexShrink: 0 }} />
 
         <div style={{ flex: 1, padding: '14px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-            <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, gap: 8 }}>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: colour }}>
                 AO{ao.num} - {(ao.name || '').toUpperCase()}
               </div>
@@ -1383,7 +1383,7 @@ function AOCard({
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               {/* LOA status icons */}
               {ao.loa_signed_at ? (
                 <span title={`LOA signed ${new Date(ao.loa_signed_at).toLocaleDateString('en-GB')}`}
@@ -1416,12 +1416,13 @@ function AOCard({
                       : statusMeta.action === 'serve_award' ? 'var(--amber-bg)' : 'var(--blue-bg)',
                     color: statusColour,
                     marginLeft: 8,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {statusLabel}
                 </button>
               ) : (
-                <span style={{ fontSize: 12, fontWeight: 700, color: statusColour, paddingLeft: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: statusColour, paddingLeft: 8, whiteSpace: 'nowrap' }}>
                   {statusLabel}
                 </span>
               )
