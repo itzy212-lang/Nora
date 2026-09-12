@@ -1037,7 +1037,7 @@ function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
   );
 }
 
-function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGenerateLoa }) {
+function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGenerateLoa, onOpenNoticeHistory }) {
   const isNew = mode === 'add' || ao?._mode === 'add' || ao?.isNew === true;
   const ip = aoAddress(ao || {});
   const is = aoServiceAddress(ao || {}) || ip;
@@ -1224,6 +1224,22 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
                   style={{ cursor: 'pointer', borderRadius: 99 }}
                 >
                   🔥 Agreed Surveyor LoA
+                </button>
+              )}
+              {/* Added 2026-09-12, on request: "we don't need it there
+                  anymore" on the main AO card — moved here as a
+                  backup, same pattern as everything else in this
+                  section. Browse this AO's previously generated
+                  notices, view the real PDF, edit and re-save if
+                  needed. */}
+              {onOpenNoticeHistory && (
+                <button
+                  type="button"
+                  onClick={() => onOpenNoticeHistory(ao)}
+                  className="btn btn-sm btn-ghost"
+                  style={{ cursor: 'pointer', borderRadius: 99 }}
+                >
+                  Notices
                 </button>
               )}
             </div>
@@ -1832,25 +1848,6 @@ function AOCard({
                 Schedule of Condition
               </button>
             )}
-
-            {/* Added 2026-08-28, on request: same pattern as Schedule of
-                Condition — browse this AO's previously generated
-                notices, view the real PDF, edit and re-save if needed. */}
-            <button
-              onClick={() => onOpenNoticeHistory?.(ao)}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 99,
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: 'pointer',
-                border: '1px solid var(--blue)',
-                background: 'transparent',
-                color: 'var(--blue)',
-              }}
-            >
-              Notices
-            </button>
           </div>
         </div>
       </div>
@@ -4833,6 +4830,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           onDelete={() => handleDeleteAO(editingAO)}
           onSetStatus={status => handleSetAOStatus?.(editingAO, status)}
           onGenerateLoa={() => handleGenerateAOLOA?.(editingAO)}
+          onOpenNoticeHistory={handleOpenNoticeHistory}
         />
       )}
 
