@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
@@ -233,6 +234,12 @@ function buildAORecord(form, aoService) {
 }
 
 export default function NewProjectModal({ onClose, onCreated, defaultStage = 'live' }) {
+  // Fixed 2026-09-12, on request: rolling out to testers now, who
+  // should only see Party Wall — "locked for everyone, but not for
+  // me." Reads the same per-account preference set in Settings ->
+  // Account -> Services.
+  const { state } = useApp();
+  const enabledProjectTypes = state?.currentUser?.user_metadata?.enabled_project_types || ['party_wall'];
   const [form, setForm] = useState({
     project_type: 'party_wall',
     role: 'BO',
@@ -650,7 +657,7 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
                 { value: 'party_wall', label: '⚖️ Party Wall', desc: 'Notices, awards, SOC' },
                 { value: 'construction', label: '🏗️ Construction / PM', desc: 'Projects, programme, financials' },
                 { value: 'dispute', label: '🤝 Dispute', desc: 'Standalone mediation, not tied to a project' },
-              ].map(opt => (
+              ].filter(opt => enabledProjectTypes.includes(opt.value)).map(opt => (
                 <button key={opt.value} type="button"
                   onClick={() => setForm(f => ({ ...f, project_type: opt.value }))}
                   style={{ flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',

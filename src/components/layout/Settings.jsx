@@ -646,12 +646,81 @@ function FirmTab() {
 function AccountTab() {
   const { state } = useApp();
   const { currentUser } = state;
+  // Fixed 2026-09-12, on request: "locked for everyone, but not for
+  // me" — testers rolling out now should only see Party Wall;
+  // Construction/PM and Dispute stay visible but locked, "coming
+  // soon", until the user's own account is what's logged in. Stored
+  // directly on the account itself (Supabase user metadata), not a
+  // separate table — reading and writing it is a normal auth call.
+  const isOwner = currentUser?.email === 'help@sq1consulting.co.uk';
+  const [enabledTypes, setEnabledTypes] = useState(
+    currentUser?.user_metadata?.enabled_project_types || ['party_wall']
+  );
+  const [savingTypes, setSavingTypes] = useState(false);
+
+  const toggleType = async (value) => {
+    if (!isOwner) return; // locked for everyone else — checkbox itself is disabled too, this is a second guard
+    const next = enabledTypes.includes(value)
+      ? enabledTypes.filter(t => t !== value)
+      : [...enabledTypes, value];
+    setEnabledTypes(next);
+    setSavingTypes(true);
+    try {
+      await sb.auth.updateUser({ data: { enabled_project_types: next } });
+    } catch (err) {
+      console.warn('[AccountTab] saving enabled_project_types failed:', err.message);
+    } finally {
+      setSavingTypes(false);
+    }
+  };
+
+  const SERVICE_OPTIONS = [
+    { value: 'party_wall', label: 'Party wall', desc: 'Notices, awards, schedules of condition' },
+    { value: 'construction', label: 'Construction / PM', desc: 'Projects, programme, financials' },
+    { value: 'dispute', label: 'Dispute resolution', desc: 'Standalone mediation, not tied to a project' },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Logged in as</div>
         <div style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 500 }}>{currentUser?.email}</div>
       </div>
+
+      <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>Which services do you need?</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 12 }}>
+          {isOwner ? 'This decides what shows up in "New project".' : 'Construction / PM and Dispute resolution are coming soon.'}
+        </div>
+        {SERVICE_OPTIONS.map(opt => {
+          const checked = enabledTypes.includes(opt.value);
+          const locked = !isOwner;
+          return (
+            <label key={opt.value} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10, padding: 10, marginBottom: 8,
+              border: `1px solid ${locked ? 'var(--border)' : checked ? 'var(--blue)' : 'var(--border)'}`,
+              background: locked ? 'transparent' : checked ? 'var(--blue-bg)' : 'transparent',
+              borderRadius: 10, opacity: locked && opt.value !== 'party_wall' ? 0.55 : 1,
+              cursor: locked ? 'default' : 'pointer',
+            }}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={locked || savingTypes}
+                onChange={() => toggleType(opt.value)}
+                style={{ marginTop: 2 }}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{opt.label}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
+                  {locked && opt.value !== 'party_wall' ? 'Coming soon' : opt.desc}
+                </div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
       <button onClick={async () => { if (sb) { await sb.auth.signOut(); window.location.reload(); } }}
         style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600, textAlign: 'center' }}>
         Log out
