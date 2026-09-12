@@ -351,7 +351,7 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
   // subsequent, not duplicated back onto the individual card too.
   // Nothing to show here at this stage — the AO simply has no
   // status yet, exactly as it should read before its first notice.
-  return { label: '', colour: '#94a3b8', action: null };
+  return { label: '', colour: '#3b82f6', action: null };
 }
 
 function fmtGBP(v) {
