@@ -823,7 +823,7 @@ async function maybeSaveSurveyor(surv) {
   }
 }
 
-function ProjectEditModal({ project, onSave, onClose }) {
+function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
   const ip = project.bo_premise_address || project.address || '';
   const is = project.bo_service_address || project.bo_1_service_address || project.bo_address || ip;
 
@@ -998,21 +998,38 @@ function ProjectEditModal({ project, onSave, onClose }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
-            Cancel
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          {/* Added 2026-09-11, on request: permanent override — the
+              main BO card's own Send LoA button disappears once it's
+              actually been sent; this stays available here regardless,
+              in case it's ever needed again. */}
+          {onGenerateLoa ? (
+            <button
+              type="button"
+              onClick={onGenerateLoa}
+              className="btn btn-sm btn-ghost"
+              style={{ cursor: 'pointer', borderRadius: 99 }}
+            >
+              🔥 Send LoA
+            </button>
+          ) : <div />}
 
-          <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ cursor: 'pointer', borderRadius: 99 }}>
+              Cancel
+            </button>
+
+            <button onClick={handleSave} disabled={saving} className="btn btn-sm btn-primary" style={{ cursor: saving ? 'not-allowed' : 'pointer', borderRadius: 99 }}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
         </div>
       </div>
     </ModalShell>
   );
 }
 
-function AOEditModal({ ao, mode, onSave, onClose, onDelete }) {
+function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGenerateLoa }) {
   const isNew = mode === 'add' || ao?._mode === 'add' || ao?.isNew === true;
   const ip = aoAddress(ao || {});
   const is = aoServiceAddress(ao || {}) || ip;
@@ -1160,6 +1177,50 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete }) {
             style={mInput}
           />
         </div>
+
+        {/* Added 2026-09-11, on request: permanent overrides — always
+            available here regardless of what's already happened on
+            the main card, in case the AO later does get in touch to
+            consent (or dissent) after all, or a re-sent LoA is ever
+            needed. These never disappear from this page, even once
+            used, unlike their equivalents on the main AO card. */}
+        {!isNew && (onSetStatus || onGenerateLoa) && (
+          <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Manual override (always available)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {onSetStatus && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onSetStatus('consent')}
+                    className="btn btn-sm"
+                    style={{ cursor: 'pointer', borderRadius: 99, border: '1px solid var(--green)', background: (ao.status || '').toLowerCase() === 'consent' ? 'var(--green-bg)' : 'transparent', color: 'var(--green)' }}
+                  >
+                    Consent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetStatus('dissent')}
+                    className="btn btn-sm"
+                    style={{ cursor: 'pointer', borderRadius: 99, border: '1px solid var(--red)', background: (ao.status || '').toLowerCase() === 'dissent' ? 'var(--red-bg)' : 'transparent', color: 'var(--red)' }}
+                  >
+                    Dissent
+                  </button>
+                </>
+              )}
+              {onGenerateLoa && (
+                <button
+                  type="button"
+                  onClick={onGenerateLoa}
+                  className="btn btn-sm btn-ghost"
+                  style={{ cursor: 'pointer', borderRadius: 99 }}
+                >
+                  🔥 Agreed Surveyor LoA
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           {/* Added 2026-09-10, on request: "a few projects I've done
@@ -1568,7 +1629,21 @@ function AOCard({
             </div>
           )}
 
+          {/* Fixed 2026-09-11, on request: once a Section 10 notice
+              is actually served (not automatically after any
+              deadline passes — only on that explicit action), the
+              AO is already being treated as having dissented by
+              default, so live Consent/Dissent buttons here are
+              redundant clutter. Removed from the main card once
+              aoS10Served(ao) is true; both remain permanently
+              available in Edit AO regardless, as a manual override
+              if the AO later does get in touch to actually consent,
+              or changes their mind again. Edit/Email AO stay in the
+              same flex row unconditionally — only the three status
+              buttons above them are gated. */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+            {!aoS10Served(ao) && (
+              <>
             {/* Fixed 2026-09-10, on request: "Consent" is now the
                 permanent button from the start, not gated behind a
                 served notice — covers the AO who was never Nora's own
@@ -1631,6 +1706,8 @@ function AOCard({
                 {ao.intention_noted ? 'Intention noted' : 'Note intention'}
               </button>
             )}
+              </>
+            )}
 
             <button className="btn btn-sm btn-ghost" onClick={() => onEditAO?.(ao)} style={{ cursor: 'pointer', fontSize: 12, borderRadius: 99 }}>
               Edit
@@ -1650,6 +1727,15 @@ function AOCard({
               </button>
             )}
 
+            {/* Fixed 2026-09-11, on request: once the LoA has
+                actually been sent, this whole button group disappears
+                from the main card — the existing status icon above
+                (✅/📤) already shows sent/signed state, with a link to
+                the signed PDF once available, making the separate
+                buttons redundant clutter at that point. Stays
+                permanently available in Edit AO regardless, in case
+                it's ever needed again. */}
+            {!ao.loa_sent_at && (
             <div style={{ display: 'flex', gap: 1 }}>
               <button
                 className="btn btn-sm btn-ghost"
@@ -1683,6 +1769,7 @@ function AOCard({
                 {loaLoading === `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}` ? 'Generating...' : '⬇ PDF'}
               </button>
             </div>
+            )}
 
             <button
               className="btn btn-sm btn-ghost"
@@ -4569,6 +4656,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           project={project}
           onSave={handleSaveProjectEdit}
           onClose={() => setShowProjectEdit(false)}
+          onGenerateLoa={handleGenerateBOLOA}
         />
       )}
 
@@ -4714,6 +4802,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           onSave={form => handleSaveAO(form, editingAO)}
           onClose={() => setEditingAO(null)}
           onDelete={() => handleDeleteAO(editingAO)}
+          onSetStatus={status => handleSetAOStatus?.(editingAO, status)}
+          onGenerateLoa={() => handleGenerateAOLOA?.(editingAO)}
         />
       )}
 
@@ -5022,7 +5112,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                     </div>
                   )}
 
-                  {(role === 'BO' || boAgreedSurveyorMode) && (
+                  {/* Fixed 2026-09-11, on request: once the BO's LoA
+                      has actually been sent, this button group
+                      disappears from the main card too — the status
+                      icon below already shows sent/signed state.
+                      Stays permanently available in Edit BO
+                      regardless. */}
+                  {(role === 'BO' || boAgreedSurveyorMode) && !project.bo_loa_sent_at && (
                     <div style={{ position: 'relative', display: 'inline-block' }}>
                       <div style={{ display: 'flex', gap: 1, marginTop: 6 }}>
                         <button
