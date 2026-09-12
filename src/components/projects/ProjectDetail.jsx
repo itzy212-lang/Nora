@@ -4557,26 +4557,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [onRaiseInvoice, project, appointmentAddress, boAddress, role]);
 
 
-  const [embeddingRefreshState, setEmbeddingRefreshState] = useState('idle'); // idle | running | done | error
-  const handleRefreshEmailSearch = useCallback(async () => {
-    if (embeddingRefreshState === 'running') return;
-    setEmbeddingRefreshState('running');
-    try {
-      const res = await fetch('/api/backfill-email-embeddings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' },
-        body: JSON.stringify({ project_id: project.id, limit: 100 }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Refresh failed');
-      setEmbeddingRefreshState('done');
-      setTimeout(() => setEmbeddingRefreshState('idle'), 3000);
-    } catch (err) {
-      console.error('[email search refresh] failed:', err.message);
-      setEmbeddingRefreshState('error');
-      setTimeout(() => setEmbeddingRefreshState('idle'), 3000);
-    }
-  }, [project?.id, embeddingRefreshState]);
+  // Fixed 2026-09-12, on request: the manual re-embed tool this state
+  // and function powered has been removed — the automatic embedding
+  // pipeline is now confirmed working reliably on its own.
 
   const handleDeleteProject = useCallback(async () => {
     const confirmed = window.confirm(
@@ -4955,25 +4938,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             Delete
           </button>
 
-          <button
-            onClick={handleRefreshEmailSearch}
-            disabled={embeddingRefreshState === 'running'}
-            style={{
-              padding: '4px 11px',
-              borderRadius: 99,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: embeddingRefreshState === 'running' ? 'default' : 'pointer',
-              background: embeddingRefreshState === 'error' ? 'var(--red-bg, #fde8e8)' : embeddingRefreshState === 'done' ? 'var(--green-bg, #e6f6ec)' : 'var(--blue-bg, #e8f0fe)',
-              color: embeddingRefreshState === 'error' ? 'var(--red)' : embeddingRefreshState === 'done' ? 'var(--green)' : 'var(--blue, #1a56db)',
-              border: `1px solid ${embeddingRefreshState === 'error' ? 'var(--red)' : embeddingRefreshState === 'done' ? 'var(--green)' : 'var(--blue, #1a56db)'}`,
-              minHeight: 30,
-              opacity: embeddingRefreshState === 'running' ? 0.7 : 1,
-            }}
-            title="Makes recent emails on this project fully searchable by Nora"
-          >
-            {embeddingRefreshState === 'running' ? '⏳ Refreshing…' : embeddingRefreshState === 'done' ? '✓ Refreshed' : embeddingRefreshState === 'error' ? '⚠ Try again' : '🔍 Refresh email search'}
-          </button>
+          {/* Fixed 2026-09-12, on request: "what is that? Where did
+              that come from? Remove it." This was a manual
+              re-embed-this-project's-emails tool, built as a
+              workaround from earlier in development, before the
+              automatic embedding pipeline (background email sync)
+              was reliable — that's now confirmed working correctly
+              on its own, making this manual trigger obsolete. */}
 
           <button style={{
             padding: '4px 11px',
