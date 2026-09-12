@@ -1223,7 +1223,7 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
                   className="btn btn-sm btn-ghost"
                   style={{ cursor: 'pointer', borderRadius: 99 }}
                 >
-                  🔥 Agreed Surveyor LoA
+                  ⇅ Agreed Surveyor LoA
                 </button>
               )}
               {/* Added 2026-09-12, on request: "we don't need it there
@@ -1795,7 +1795,7 @@ function AOCard({
                   paddingRight: 8,
                 }}
               >
-                {loaLoading ? 'Sending…' : isAOAppointment ? '📄 LoA eSignature' : '🔥 Agreed Surveyor LoA'}
+                {loaLoading ? 'Sending…' : isAOAppointment ? '📄 LoA eSignature' : '⇅ Agreed Surveyor LoA'}
               </button>
               <button
                 className="btn btn-sm btn-ghost"
@@ -1828,7 +1828,7 @@ function AOCard({
                 color: 'var(--blue)',
               }}
             >
-              {awardLoading ? 'Generating…' : '🏆 Generate Award'}
+              {awardLoading ? 'Generating…' : '📝 Generate Award'}
             </button>
 
             {!isAOAppointment && (
