@@ -1640,9 +1640,19 @@ function AOCard({
               if the AO later does get in touch to actually consent,
               or changes their mind again. Edit/Email AO stay in the
               same flex row unconditionally — only the three status
-              buttons above them are gated. */}
+              buttons above them are gated.
+
+              Fixed 2026-09-11, real, confirmed bug reported live
+              with a real screenshot: checking only aoS10Served (a
+              date field) missed AOs whose status is genuinely
+              already 'dissent' but never had that specific date
+              populated — confirmed directly in the database for the
+              exact two AOs reported (status: dissent, s10_served_date:
+              null). Checking the actual, meaningful status directly
+              is more robust than depending on one date field that
+              may or may not be present. */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {!aoS10Served(ao) && (
+            {!aoS10Served(ao) && (ao.status || '').toLowerCase() !== 'dissent' && (
               <>
             {/* Fixed 2026-09-10, on request: "Consent" is now the
                 permanent button from the start, not gated behind a
