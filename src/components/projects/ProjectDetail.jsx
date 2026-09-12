@@ -343,7 +343,15 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
     return { label: 'Notice served', colour: '#22c55e', action: null };
   }
 
-  return { label: 'Serve notice', colour: '#3b82f6', action: 'serve_notice' };
+  // Fixed 2026-09-11, on request: this used to prompt "Serve notice"
+  // on the AO card itself for an AO nothing has happened to yet —
+  // but the whole point of the generic, always-available Serve
+  // notice card (below all AO cards) is that it should be the one
+  // and only place notices get served from, for any AO, first or
+  // subsequent, not duplicated back onto the individual card too.
+  // Nothing to show here at this stage — the AO simply has no
+  // status yet, exactly as it should read before its first notice.
+  return { label: '', colour: '#94a3b8', action: null };
 }
 
 function fmtGBP(v) {
