@@ -2394,6 +2394,14 @@ if (syncErr) throw syncErr;
     if (!sb) return;
 
     const funcPayload = {
+      // Fixed 2026-09-12, real, confirmed bug: this edge function
+      // previously had no way to know which Nora user was sending —
+      // it just grabbed whichever Outlook account happened to be
+      // first in the whole table, meaning every user's sent email
+      // would have gone out through the same, single account
+      // regardless of who actually connected what. Now identifies
+      // the correct account explicitly.
+      user_id: state.currentUser?.email || state.currentUser?.id || null,
       to_email: to,
       cc_email: cc || null,
       subject: subject,
