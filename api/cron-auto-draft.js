@@ -100,6 +100,10 @@ export default async function handler(req, res) {
         }
 
         // Also load project context if linked
+        let projectAOs = [];
+        let projectTasksForDrafting = [];
+        let projectDocumentsForDrafting = [];
+        let existingCalendarEvents = [];
         if (email.project_id) {
           const { data: project } = await supabase
             .from('projects')
@@ -108,6 +112,67 @@ export default async function handler(req, res) {
             .single();
           if (project) {
             projectContext = 'PROJECT: Ref ' + project.ref + ' | ' + project.bo_address + ' | Building Owner: ' + project.bo_names + ' | Works: ' + (project.proposed_works || 'not specified') + '\n\n' + projectContext;
+          }
+
+          // Added 2026-09-12, on request, built into the correct
+          // system this time (the assistant reply, not Draft with
+          // Nora): this had no access to adjoining owners, scheduled
+          // tasks, or saved documents at all — so a factual question
+          // like "when is the Schedule of Condition booked" or "have
+          // the drawings been received" could never be answered
+          // accurately, only guessed at generically.
+          const { data: aos } = await supabase
+            .from('adjoining_owners')
+            .select('id, name, address')
+            .eq('project_id', email.project_id);
+          projectAOs = aos || [];
+          if (projectAOs.length) {
+            projectContext += '\n\nADJOINING OWNERS ON THIS PROJECT (' + projectAOs.length + '):\n' +
+              projectAOs.map(a => '- ' + (a.name || 'Unknown') + (a.address ? ' (' + a.address + ')' : '')).join('\n');
+          }
+
+          const { data: tasks } = await supabase
+            .from('tasks')
+            .select('id, title, task_type, due_date, time, status, ao_id, ao_address_snapshot')
+            .eq('project_id', email.project_id)
+            .order('due_date', { ascending: true })
+            .limit(30);
+          projectTasksForDrafting = tasks || [];
+          if (projectTasksForDrafting.length) {
+            projectContext += '\n\nSCHEDULED TASKS ON THIS PROJECT (' + projectTasksForDrafting.length + '):\n' +
+              projectTasksForDrafting.map(t => {
+                const when = t.due_date ? t.due_date + (t.time ? ' at ' + t.time : ' (no specific time set)') : 'no date set';
+                return '- ' + (t.title || t.task_type || 'Task') + ': ' + when + ' — status: ' + (t.status || 'open') + (t.ao_address_snapshot ? ' — AO: ' + t.ao_address_snapshot : '');
+              }).join('\n');
+          }
+
+          const { data: documents } = await supabase
+            .from('documents')
+            .select('id, file_name, category, section_type, created_at')
+            .eq('project_id', email.project_id)
+            .order('created_at', { ascending: false })
+            .limit(30);
+          projectDocumentsForDrafting = documents || [];
+          if (projectDocumentsForDrafting.length) {
+            projectContext += '\n\nDOCUMENTS SAVED ON THIS PROJECT (' + projectDocumentsForDrafting.length + '):\n' +
+              projectDocumentsForDrafting.map(d => '- ' + (d.file_name || 'file') + (d.category ? ' (' + d.category + ')' : '')).join('\n');
+          }
+
+          // Existing calendar events on this project — used below for
+          // conflict-checking before a new time gets proposed/confirmed.
+          const { data: calEvents } = await supabase
+            .from('calendar_events')
+            .select('title, start_time, end_time')
+            .eq('project_id', email.project_id)
+            .gte('start_time', new Date().toISOString());
+          existingCalendarEvents = calEvents || [];
+          if (existingCalendarEvents.length) {
+            projectContext += '\n\nEXISTING CALENDAR COMMITMENTS ON THIS PROJECT (upcoming, with real duration):\n' +
+              existingCalendarEvents.map(e => {
+                const start = new Date(e.start_time);
+                const end = new Date(e.end_time);
+                return '- ' + (e.title || 'Appointment') + ': ' + start.toLocaleDateString('en-GB') + ' ' + start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' to ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+              }).join('\n');
           }
         }
 
@@ -130,8 +195,18 @@ WHAT YOU CAN DO:
 - Confirm that matters are in hand or being progressed
 - Advise on next steps under the Party Wall Act where the situation is clear from the data
 
+FACTUAL RESOLUTION — check the actual project data provided above before drafting a generic acknowledgement:
+- A scheduled-date question (e.g. when is the Schedule of Condition, when is the inspection): check the scheduled tasks given above, if any exist. If a real date is found, state it precisely and factually — name the actual date and time, and which adjoining owner it is for if there is more than one on this project. If nothing relevant is found in the data provided, this does NOT mean nothing is booked — it may simply not be recorded here. Never state or imply that nothing is booked or scheduled. Instead, respond as Nora's own limited visibility: along the lines of "I do not seem to have access to his diary for this at the moment — I will find out and make sure he comes back to you to confirm" — calm, non-alarming, never a confident negative claim.
+- A document/drawing status question (e.g. have the drawings been received, are you still waiting on X): check the saved documents given above, if any exist. If the document appears to be there, confirm receipt factually by name. If not, check the thread history for whether this was genuinely requested — if a request is confirmed there, say so factually (e.g. "I can see this was requested from the structural engineer — not yet received, we will keep you posted"). If there is no confirmation either way, use the same cautious, non-alarming framing as the date case above.
+- If, and only if, this cautious framing was used anywhere in the draft, end the draft on its own final line with the exact marker <<<NEEDS_FOLLOWUP>>> — this is a signal for the app to remind Itzik to actually go check and confirm. Omit it entirely for any other kind of reply, including a factual answer that did find real data.
+
 WHAT YOU MUST NEVER DO:
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
+
+PROPOSED (NOT YET CONFIRMED) TIME — CHECK AVAILABILITY FIRST:
+If the other party is asking for or proposing a specific time (not yet agreed by Itzik) and existing calendar commitments for that day are provided above, check whether that day already has appointments:
+- If nothing is booked that day in the data provided, this doesn't confirm Itzik is free — do not state that he's available. Say he will be in touch to confirm a suitable time, per the rule above.
+- If the day already has other appointments in the data provided, acknowledge this naturally rather than pretending the diary is empty — e.g. "I can see he has a couple of appointments booked in that day, but I'll make sure he reaches out to you between them" — honest, not a confident commitment to an exact free slot you can't actually confirm.
 
 CONFIRMED APPOINTMENTS — SPECIAL RULE:
 If the thread shows that a specific call or meeting time has been confirmed (either Itzik offered it and they accepted, or they proposed a time and it was agreed), you should:
@@ -201,8 +276,16 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 
         if (!response.ok) throw new Error('OpenAI ' + response.status);
         const aiData = await response.json();
-        const draftBody = aiData.choices?.[0]?.message?.content || '';
-        if (!draftBody) throw new Error('Empty draft');
+        const rawDraftBody = aiData.choices?.[0]?.message?.content || '';
+        if (!rawDraftBody) throw new Error('Empty draft');
+
+        // Fixed 2026-09-12: the <<<NEEDS_FOLLOWUP>>> marker must never
+        // reach the actual saved draft — it would show up in the
+        // email text itself, and get sent to the recipient if used
+        // as-is. Detected here, then stripped before saving; the
+        // reminder-creation check below uses this same boolean.
+        const draftNeedsFollowup = rawDraftBody.includes('<<<NEEDS_FOLLOWUP>>>');
+        const draftBody = rawDraftBody.replace('<<<NEEDS_FOLLOWUP>>>', '').trim();
 
         const { error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
@@ -228,7 +311,16 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
               model: 'gpt-5.6-luna',
               max_completion_tokens: 200,
               messages: [
-                { role: 'developer', content: 'You extract confirmed appointment details from email threads. Respond only with valid JSON or null. If a specific call/meeting time is confirmed in the thread (not just proposed), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM", "duration_minutes": 30, "title": "Call with [name]", "description": "brief context"}. If no confirmed time, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
+                // Fixed 2026-09-12, on request: "if it's not a specific
+                // time, it's just a loose appointment... make it an
+                // all-day appointment... if it's for a specific time,
+                // allocate it — minimum should be half an hour."
+                // Previously this only ever extracted a fully-confirmed
+                // date+time together — a loose "he'll call you Monday"
+                // commitment with no specific time was never captured
+                // at all, since the model had no way to say "confirmed,
+                // but no time".
+                { role: 'developer', content: 'You extract confirmed appointment commitments from email threads. Respond only with valid JSON or null. If a day or a call/meeting has genuinely been committed to in the thread (not just proposed and left open), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM or null if no specific time was actually agreed", "duration_minutes": 30, "title": "Call with [name]", "description": "brief context"}. duration_minutes should reflect the real, stated length if one was given in the thread, and default to 30 (the minimum) if only a specific time was agreed with no stated length — never below 30. If no specific time was agreed at all, set time to null; do not invent one. If nothing has genuinely been committed to, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
                 { role: 'user', content: 'EMAIL FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + (email.body || '').slice(0, 1000) + '\n\n' + (projectContext || '') },
               ],
             }),
@@ -239,14 +331,31 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             const apptText = apptData.choices?.[0]?.message?.content || '';
             const appt = JSON.parse(apptText.replace(/```json|```/g, '').trim());
 
-            if (appt?.confirmed && appt.date && appt.time) {
-              const startDt = new Date(appt.date + 'T' + appt.time + ':00');
-              const endDt = new Date(startDt.getTime() + (appt.duration_minutes || 30) * 60000);
+            if (appt?.confirmed && appt.date) {
+              const hasSpecificTime = !!(appt.time && appt.time !== 'null');
+              let startDt, endDt, isAllDay;
+
+              if (hasSpecificTime) {
+                // A genuine, specific time was agreed — real timed slot,
+                // half an hour minimum even if nothing more specific
+                // was stated.
+                startDt = new Date(appt.date + 'T' + appt.time + ':00');
+                const durationMinutes = Math.max(30, appt.duration_minutes || 30);
+                endDt = new Date(startDt.getTime() + durationMinutes * 60000);
+                isAllDay = false;
+              } else {
+                // Loose commitment, no specific time — all-day entry
+                // for that date, not tied to a slot that was never
+                // actually agreed.
+                startDt = new Date(appt.date + 'T00:00:00');
+                endDt = new Date(appt.date + 'T23:59:59');
+                isAllDay = true;
+              }
 
               // Save to calendar_events table for Nora to display
               await supabase.from('calendar_events').insert({
                 title: appt.title || 'Call with ' + (email.sender_name || email.sender_email),
-                description: appt.description || 'Auto-booked from email: ' + email.subject,
+                description: (appt.description || 'Auto-booked from email: ' + email.subject) + (isAllDay ? ' (no specific time agreed)' : ''),
                 start_time: startDt.toISOString(),
                 end_time: endDt.toISOString(),
                 source: 'nora_auto_draft',
@@ -255,11 +364,40 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 created_by: 'cron-auto-draft',
               }).catch(e => console.warn('[cron-auto-draft] Calendar insert failed:', e.message));
 
-              console.log('[cron-auto-draft] Booked calendar event:', appt.title, appt.date, appt.time);
+              console.log('[cron-auto-draft] Booked calendar event:', appt.title, appt.date, hasSpecificTime ? appt.time : '(all-day, no specific time)');
             }
           }
         } catch (calErr) {
           console.warn('[cron-auto-draft] Calendar detection failed:', calErr.message);
+        }
+
+        // Added 2026-09-12, on request: when the draft used the
+        // cautious "I don't have visibility" framing, create a
+        // reminder for Itzik to actually go check and confirm — for
+        // today and tomorrow, so there are two real chances to see
+        // it, rather than relying on him remembering unprompted.
+        if (draftNeedsFollowup) {
+          try {
+            const today = new Date();
+            const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+            const reminderTitle = 'Follow up: ' + (email.subject || 'email reply awaiting confirmation');
+            for (const day of [today, tomorrow]) {
+              const dateStr = day.toISOString().split('T')[0];
+              await supabase.from('tasks').insert({
+                title: reminderTitle,
+                description: 'Nora sent a holding reply that needs a real follow-up — confirm the details and get back to them.',
+                due_date: dateStr,
+                task_type: 'follow_up',
+                status: 'open',
+                project_id: email.project_id || null,
+                linked_email_message_id: email.id,
+                user_id: '3bd1f331-e8ce-477a-8a5d-c5dcdd901434',
+              }).catch(e => console.warn('[cron-auto-draft] Follow-up reminder insert failed:', e.message));
+            }
+            console.log('[cron-auto-draft] Created follow-up reminders for', email.id);
+          } catch (reminderErr) {
+            console.warn('[cron-auto-draft] Follow-up reminder creation failed:', reminderErr.message);
+          }
         }
 
         results.drafted++;
