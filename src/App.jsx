@@ -125,6 +125,17 @@ export default function App() {
   // touched. This ref, and the helper below, reset the actual
   // scrollable element instead.
   const mainScrollRef = useRef(null);
+  // Fixed 2026-09-12, real, confirmed bug found while investigating a
+  // live report ("notification opens the app but just goes to the
+  // dashboard"): the deep-link handler below used
+  // useApp.getState?.() to read the projects list, which does
+  // nothing at all — useApp is a React Context hook here, not a
+  // store with a static getState() method, so this silently always
+  // returned undefined and the project was never found. This ref
+  // always holds the current projects list without the stale-closure
+  // problem a plain setTimeout reading `state` directly would have.
+  const projectsRef = useRef([]);
+  useEffect(() => { projectsRef.current = state.projects || []; }, [state.projects]);
   const resetMainScroll = useCallback(() => {
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
     window.scrollTo(0, 0);
@@ -195,16 +206,27 @@ export default function App() {
         window.history.replaceState({}, '', window.location.pathname);
 
         if (deepProjectId) {
-          const openDeepProject = () => {
-            const { projects } = useApp.getState?.() || {};
-            const proj = (projects || []).find(p => p.id === deepProjectId);
+          // Fixed 2026-09-12: poll for the project rather than a
+          // single fixed-delay attempt — projects load asynchronously
+          // right after login, and a fixed 1.5s guess could still
+          // fire before they're ready on a slower connection. Reads
+          // projectsRef.current fresh on every attempt (see above),
+          // not a stale value captured when this effect first ran.
+          let attempts = 0;
+          const tryOpenDeepProject = () => {
+            attempts += 1;
+            const proj = projectsRef.current.find(p => p.id === deepProjectId);
             if (proj) {
               dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
               setCurrentView('projects');
               resetMainScroll();
+            } else if (attempts < 15) {
+              setTimeout(tryOpenDeepProject, 400);
+            } else {
+              console.warn('[deep link] project not found after retrying:', deepProjectId);
             }
           };
-          setTimeout(openDeepProject, 1500);
+          setTimeout(tryOpenDeepProject, 400);
         }
 
         if (deepEmailId) {
