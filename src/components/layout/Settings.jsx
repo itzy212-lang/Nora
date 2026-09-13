@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
@@ -658,6 +658,67 @@ function AccountTab() {
   );
   const [savingTypes, setSavingTypes] = useState(false);
 
+  // Fixed 2026-09-12, on request: "Connect Outlook" existed once,
+  // was accidentally deleted in a refactor, and even the deleted
+  // version never actually worked end to end — it redirected to
+  // Microsoft's login correctly but pointed back to a callback route
+  // (/auth/callback) that nothing in this app ever handled, so no
+  // token was ever saved through it. Rebuilt properly this time: a
+  // real backend endpoint (api/microsoft-oauth-callback.js) does the
+  // token exchange server-side and saves it against the actual
+  // signed-in user, and this popup-based flow (rather than a
+  // full-page redirect) keeps the user on this page throughout.
+  const [msStatus, setMsStatus] = useState('Checking…');
+
+  const checkMicrosoftConnection = useCallback(async () => {
+    if (!sb || !currentUser) return;
+    try {
+      const { data } = await sb
+        .from('email_accounts')
+        .select('access_token, token_expires_at')
+        .eq('provider', 'outlook')
+        .eq('user_id', currentUser.email || currentUser.id)
+        .maybeSingle();
+      if (data?.access_token) {
+        const expired = data.token_expires_at && new Date(data.token_expires_at) < new Date();
+        setMsStatus(expired ? 'Token expired — reconnect' : 'Connected ✓');
+      } else {
+        setMsStatus('Not connected');
+      }
+    } catch {
+      setMsStatus('Unknown');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    checkMicrosoftConnection();
+  }, [checkMicrosoftConnection]);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.data?.type !== 'ms-oauth-result') return;
+      checkMicrosoftConnection();
+      if (!event.data.success) {
+        alert(`Could not connect Outlook: ${event.data.message || 'unknown error'}`);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [checkMicrosoftConnection]);
+
+  const connectMicrosoft = () => {
+    const clientId = import.meta.env.VITE_MS_CLIENT_ID || '';
+    if (!clientId) {
+      alert('Microsoft client ID not configured. Contact your administrator.');
+      return;
+    }
+    const redirectUri = encodeURIComponent(`${window.location.origin}/api/microsoft-oauth-callback`);
+    const scope = encodeURIComponent('https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access');
+    const state = encodeURIComponent(currentUser?.email || currentUser?.id || '');
+    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+    window.open(authUrl, 'ms-oauth', 'width=520,height=680');
+  };
+
   const toggleType = async (value) => {
     if (!isOwner) return; // locked for everyone else — checkbox itself is disabled too, this is a second guard
     const next = enabledTypes.includes(value)
@@ -685,6 +746,24 @@ function AccountTab() {
       <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Logged in as</div>
         <div style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 500 }}>{currentUser?.email}</div>
+      </div>
+
+      <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: msStatus.includes('Connected') ? 'var(--green)' : 'var(--amber)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Microsoft Outlook</div>
+              <div style={{ fontSize: 10.5, color: 'var(--text3)', marginTop: 3 }}>{msStatus}</div>
+            </div>
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={connectMicrosoft} style={{ cursor: 'pointer', borderRadius: 99 }}>
+            {msStatus.includes('Connected') ? 'Reconnect' : 'Connect Outlook'}
+          </button>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6 }}>
+          Connect your Outlook account to send and receive emails directly within Nora.
+        </div>
       </div>
 
       <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
