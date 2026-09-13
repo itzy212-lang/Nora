@@ -1870,18 +1870,25 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // notification deep-link already dispatched SET_SELECTED_EMAIL_ID,
   // but nothing here ever read it — the app opened to the inbox
   // generically instead of the actual email a notification pointed
-  // at. Waits for the matching email to actually be present in
-  // state.emails (loaded asynchronously, may not be ready the
-  // instant this runs) before opening it, and clears the deep-link
-  // value once opened so it doesn't re-trigger on a later re-render.
+  // at. Fixed once already by matching against state.emails, but
+  // reported still not working — that relied on the specific email
+  // already being present in the locally-loaded, folder-filtered
+  // list, which is exactly the kind of thing that can silently miss
+  // a brand-new email depending on timing or which folder happens to
+  // be selected. Fetches the specific email directly from the
+  // database by its own id instead — genuinely independent of
+  // whatever's currently loaded or which folder is showing.
   useEffect(() => {
-    if (!state.deepLinkEmailId) return;
-    const match = (state.emails || []).find(e => e.id === state.deepLinkEmailId);
-    if (match) {
-      setSelectedEmail(match);
-      dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: null });
-    }
-  }, [state.deepLinkEmailId, state.emails, dispatch]);
+    if (!state.deepLinkEmailId || !sb) return;
+    const targetId = state.deepLinkEmailId;
+    sb.from('emails').select('*').eq('id', targetId).maybeSingle().then(({ data, error }) => {
+      if (error) { console.warn('[deep link email] fetch failed:', error.message); return; }
+      if (data) {
+        setSelectedEmail(data);
+        dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: null });
+      }
+    });
+  }, [state.deepLinkEmailId, dispatch]);
   const [threadEmails, setThreadEmails]  = useState([]);
   const [folder, setFolder]              = useState('Inbox');
   const [folderOpen, setFolderOpen]      = useState(false);
