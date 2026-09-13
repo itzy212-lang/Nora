@@ -537,19 +537,6 @@ async function loadProjectBundle(projectId) {
       .limit(50)
   );
 
-  // Added 2026-09-12, real, confirmed gap: drafting a reply had no
-  // structured access to this project's own scheduled tasks (SOC
-  // inspections, calls, etc.) at all — relying on whatever happened
-  // to be mentioned in email text or memory instead of the actual,
-  // accurate record. Includes every AO's tasks; each one's own
-  // ao_id/ao_address_snapshot lets the surface contract match the
-  // right task to the right AO rather than mixing them up.
-  const tasks = await safeSelect(
-    'tasks',
-    'id, title, task_type, due_date, time, status, ao_id, ao_address_snapshot',
-    q => q.eq('project_id', projectId).order('due_date', { ascending: true }).limit(30)
-  );
-
   return {
     project_raw: project || null,
     project: normaliseProject(project || {}),
@@ -558,7 +545,6 @@ async function loadProjectBundle(projectId) {
     documents,
     project_memory: projectMemory,
     soc_reports: socReports,
-    tasks,
     project_chat_notes: projectChatMessages,
     project_emails: projectEmails,
   };
@@ -603,15 +589,6 @@ async function loadProjectFacts(projectId) {
     q => q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(10)
   );
 
-  // Added 2026-09-12, real, confirmed gap: same fix as loadProjectBundle
-  // — this slim-facts loader (used for drafting surfaces) had no
-  // structured access to this project's own scheduled tasks either.
-  const tasks = await safeSelect(
-    'tasks',
-    'id, title, task_type, due_date, time, status, ao_id, ao_address_snapshot',
-    q => q.eq('project_id', projectId).order('due_date', { ascending: true }).limit(30)
-  );
-
   // Slim fallback email load — only used if semantic search fails
   // Cap at 10 most recent to avoid prompt bloat
   const fallbackEmails = await safeSelect(
@@ -631,7 +608,6 @@ async function loadProjectFacts(projectId) {
     documents: [],
     project_memory: projectMemory,
     soc_reports: socReports,
-    tasks,
     project_chat_notes: [],
     project_emails: [],          // not injected directly — semantic search handles this
     fallback_emails: fallbackEmails, // only used if semantic search returns nothing
@@ -2607,28 +2583,6 @@ CONTENT SOURCE RULE — ABSOLUTE\n\nThe dictation and the supplied thread are th
       socBlock += `\n`;
     });
     prompt += socBlock;
-  }
-
-  // Added 2026-09-12, on request: "the assistant needs to check all
-  // aspects of a project if the email being responded to is linked
-  // to a project" — this project's own scheduled tasks (SOC
-  // inspections, calls, appointments) are now available as
-  // structured, accurate data, not left to whatever happens to be
-  // mentioned in email text or memory. Real, confirmed gap this
-  // fixes: a draft previously had to guess at a time it had no
-  // direct access to.
-  const projectTasks = projectBundle?.tasks || [];
-  if (projectTasks.length > 0) {
-    const aoCount = (projectBundle?.adjoining_owners || []).length || 1;
-    let tasksBlock = `\n\nSCHEDULED TASKS ON THIS PROJECT (${projectTasks.length}):\n`;
-    if (aoCount > 1) {
-      tasksBlock += `This project has multiple adjoining owners — match each task to the correct one by its own ao_id/address below, do not assume a task belongs to whichever AO the current email is about.\n\n`;
-    }
-    projectTasks.forEach(t => {
-      const when = t.due_date ? `${t.due_date}${t.time ? ' at ' + t.time : ' (no specific time set)'}` : 'no date set';
-      tasksBlock += `- ${t.title || t.task_type || 'Task'}: ${when} — status: ${t.status || 'open'}${t.ao_address_snapshot ? ` — AO: ${t.ao_address_snapshot}` : ''}\n`;
-    });
-    prompt += tasksBlock;
   }
 
   // Gold standard examples — inject for project chat / main chat drafting always.
