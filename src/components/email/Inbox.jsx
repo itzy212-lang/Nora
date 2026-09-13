@@ -1866,6 +1866,22 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   const [selectedEmail, setSelectedEmail]= useState(null);
+  // Fixed 2026-09-12, real, confirmed bug: App.jsx's email
+  // notification deep-link already dispatched SET_SELECTED_EMAIL_ID,
+  // but nothing here ever read it — the app opened to the inbox
+  // generically instead of the actual email a notification pointed
+  // at. Waits for the matching email to actually be present in
+  // state.emails (loaded asynchronously, may not be ready the
+  // instant this runs) before opening it, and clears the deep-link
+  // value once opened so it doesn't re-trigger on a later re-render.
+  useEffect(() => {
+    if (!state.deepLinkEmailId) return;
+    const match = (state.emails || []).find(e => e.id === state.deepLinkEmailId);
+    if (match) {
+      setSelectedEmail(match);
+      dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: null });
+    }
+  }, [state.deepLinkEmailId, state.emails, dispatch]);
   const [threadEmails, setThreadEmails]  = useState([]);
   const [folder, setFolder]              = useState('Inbox');
   const [folderOpen, setFolderOpen]      = useState(false);

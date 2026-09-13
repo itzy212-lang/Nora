@@ -95,6 +95,14 @@ function reducer(state, action) {
     case 'CLEAR_CURRENT_PROJECT':
       return { ...state, currentProject: null };
 
+    // Added 2026-09-12, real, confirmed bug fix: this action was
+    // already being dispatched from App.jsx's email deep-link
+    // handler, but had no case here at all — dispatching it did
+    // nothing, silently. Inbox.jsx watches this to open the specific
+    // email a notification pointed at, then clears it once opened.
+    case 'SET_SELECTED_EMAIL_ID':
+      return { ...state, deepLinkEmailId: action.payload };
+
     case 'SET_PROJECTS':
       return { ...state, projects: action.payload };
 
