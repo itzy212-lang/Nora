@@ -4275,7 +4275,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
           let query = sb
             .from('tasks')
-            .select('title, description, due_date, start_time, project_address_snapshot, ao_address_snapshot, task_type, status')
+            .select('title, description, due_date, start_time, project_address_snapshot, ao_address_snapshot, task_type, status, project_id')
             .neq('status', 'completed')
             .order('due_date', { ascending: true })
             .limit(10);
@@ -4284,11 +4284,29 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           if (dateTo) query = query.lte('due_date', dateTo);
 
           const { data } = await query;
+
+          // Fixed 2026-09-14, real, confirmed bug reported live: a
+          // task can be genuinely linked to a project via project_id
+          // while its own address snapshot field was simply never
+          // populated at creation time — the previous version only
+          // ever read the snapshot, with no fallback, so a
+          // genuinely-linked task could still report as having no
+          // known project/property at all. Falls back to a live
+          // lookup against the actual linked project when the
+          // snapshot is empty but a real project_id exists.
+          const tasksNeedingLookup = (data || []).filter(t => !t.project_address_snapshot && !t.ao_address_snapshot && t.project_id);
+          let liveProjectAddresses = {};
+          if (tasksNeedingLookup.length) {
+            const lookupIds = [...new Set(tasksNeedingLookup.map(t => t.project_id))];
+            const { data: liveProjects } = await sb.from('projects').select('id, bo_premise_address, ref').in('id', lookupIds);
+            (liveProjects || []).forEach(p => { liveProjectAddresses[p.id] = p.bo_premise_address || p.ref; });
+          }
+
           calendarResults = (data || []).map(t => ({
             title: t.title || t.task_type || 'Appointment',
             date: t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '',
             time: t.start_time || '',
-            address: t.project_address_snapshot || t.ao_address_snapshot || '',
+            address: t.project_address_snapshot || t.ao_address_snapshot || (t.project_id ? liveProjectAddresses[t.project_id] : '') || '',
             description: t.description || '',
             status: t.status || '',
           }));
