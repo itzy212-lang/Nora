@@ -4016,10 +4016,21 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
             const dateNum2 = `${String(targetDate.getDate()).padStart(2,'0')}/${String(targetDate.getMonth()+1).padStart(2,'0')}`;
 
             if (resolved.range === 'day') {
-              // Search emails received on that day OR mentioning that date in body/subject
+              // Fixed 2026-09-13, real, confirmed bug found while
+              // investigating a live report: received_at.gte.X and
+              // received_at.lte.Y were both loose top-level entries in
+              // the same .or() array — meaning "received after X" OR
+              // "received before Y", which is true for virtually every
+              // email ever received, not "received on that specific
+              // day". This never actually filtered by date at all; it
+              // just returned whichever 15 emails were most recent
+              // overall, which could easily push the actual relevant
+              // email (if received days or weeks earlier) out of the
+              // results entirely. Grouped the date range with and()
+              // so it's genuinely AND'd together, only OR'd against
+              // the separate body/subject date-mention checks.
               query = query.or([
-                `received_at.gte.${dayStart.toISOString()}`,
-                `received_at.lte.${dayEnd.toISOString()}`,
+                `and(received_at.gte.${dayStart.toISOString()},received_at.lte.${dayEnd.toISOString()})`,
                 `subject.ilike.%${dateStr}%`,
                 `body_preview.ilike.%${dateStr}%`,
                 `subject.ilike.%${dateStr2}%`,
