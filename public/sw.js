@@ -1,11 +1,13 @@
 // Nora Service Worker — PWA offline support
-// Bumped 2026-08-14 (fourth time today): icon files changed again —
-// 'nora' + dots restored, redrawn to genuinely match the real
-// splash's composition (vertically centered, same dot styling) —
-// and SplashScreen.jsx's earlier flash-to-black-first delay was
-// removed, since the two are now meant to look continuous, not
-// covered up.
-const CACHE_NAME = 'nora-v9';
+// Bumped 2026-09-13, real, confirmed cause of "I made a fix but
+// nothing changed at all": this version number hadn't moved since
+// August 14th, while today's session alone deployed dozens of times.
+// Static assets here are served cache-first — once a client has
+// cached something under an unchanged CACHE_NAME, it keeps serving
+// that same cached version indefinitely, regardless of how many new
+// deployments actually go live, until this version number itself
+// changes and the activate handler below deletes the stale cache.
+const CACHE_NAME = 'nora-v10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
