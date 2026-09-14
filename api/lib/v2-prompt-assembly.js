@@ -126,7 +126,7 @@ function splitDraftFromCommentary(rawText) {
 const FINAL_VALIDATION_INSTRUCTION =
   'Before returning your response, confirm internally: it answers the actual request; the user\'s objective is preserved; representation is correct; factual claims are supported; nothing has been invented; the effective user voice is preserved; there is no material contradiction, unnecessary repetition or unnecessary expansion; a short email has remained short; recipient references are natural; time formatting follows the user\'s style; any supported unrequested suggestion has been kept separate. Then, separately: identify the point the user returned to more than once, or stated most emphatically — that is the controlling point. Confirm it leads the correspondence or is otherwise structurally dominant, not one item among several equally-weighted points. If it is not, restructure before returning the draft.\n\nThen, separately and explicitly: every name of a real person used anywhere in this response — a salutation, a reference to the building owner, an adjoining owner, a surveyor, or anyone else — must be checked against the actual, known project or thread data available in this prompt, not against how the user said or dictated it. A dictated name is frequently a phonetic mishearing (Steven for Stephen, Sean for Shawn, Jamie for James) — when the project data or the email thread being replied to gives a confirmed spelling for the same person, that confirmed spelling wins, even where it differs from what the user typed or said. If a role is referred to ("the building owner", "the adjoining owner") without a name, and the actual project data available in this prompt identifies who holds that role, use their real name — never invent a plausible-sounding name, and never leave the role unnamed with an available name sitting in the same prompt unused.  Any specific date or time stated for an appointment, inspection, or call in this response must be checked against this project\'s own scheduled tasks (given above, if any) or the email thread being replied to — never a plausible-sounding invention. If no confirmed date or time is available anywhere in this prompt for something being referenced, describe it without inventing specifics (e.g. "the inspection already arranged") rather than stating a time that was not actually given.';
 
-function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, domainKnowledge, workingMemory, surface, modeHint, representationLock, contactsContext, clauseLibraryMatches }) {
+function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, domainKnowledge, workingMemory, surface, modeHint, representationLock, contactsContext, clauseLibraryMatches, inboxSearchContext }) {
   const sections = [];
   sections.push({ name: 'universal_brain', content: universalBrain || '' });
   if (representationLock) sections.push({ name: 'representation_lock', content: representationLock });
@@ -179,6 +179,16 @@ function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, d
       content: `SAVED CLAUSE EXAMPLES — the user has previously saved these clauses as ones they like the style and structure of. They are relevant to the current request (matched by similarity). Use them as genuine inspiration for phrasing, structure, and level of detail where they fit the current request — but the current request's own specifics (the actual work, the actual parties, the actual project) always take priority over anything in these examples that doesn't match. Do not copy an example verbatim if it doesn't genuinely fit what's being asked for now; do not force a fit that isn't there. All the drafting rules below (party names and their correct number, capitalisation, possessives, section references) still apply in full to the new clause, even where an older saved example doesn't follow them exactly.\n\n${exampleText}`,
     });
   }
+  // Fixed 2026-09-13, real, critical bug found live after extensive
+  // debugging: an inbox/calendar search context was being computed
+  // in api/ely-smart.js (email search, calendar search, the
+  // "forgot"/elimination-list logic) and passed toward the prompt,
+  // but assembleV2Prompt never actually read the parameter it was
+  // passed under — every fix made to that search logic all session
+  // was fixing genuinely unreachable code, since this function,
+  // not the parallel V1 codepath those fixes lived in, is what
+  // actually runs for main_chat. Wired directly in now.
+  if (inboxSearchContext) sections.push({ name: 'inbox_calendar_search', content: inboxSearchContext });
   sections.push({ name: 'surface_contract', content: buildSurfaceContract(surface, modeHint) });
   sections.push({ name: 'final_validation', content: FINAL_VALIDATION_INSTRUCTION });
   const prompt = sections.filter((s) => s.content && s.content.trim().length > 0).map((s) => s.content).join('\n\n---\n\n');

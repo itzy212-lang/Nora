@@ -1038,7 +1038,7 @@ async function runV2Pipeline({
   userId, surface, modeHint, prompt, representation, effectiveProjectId,
   projectBundle, scopedEmailContext, chatHistory, hasExplicitEmailSelection,
   confirmedDraftText, draftingExamples, domainKnowledgeText, contactsContext,
-  clauseLibraryMatches,
+  clauseLibraryMatches, inboxSearchContext,
 }) {
   const t0 = Date.now();
   const { universalBrain, defaultVoiceProfile, userBrainV2 } = await loadV2Sources({ userId });
@@ -1244,6 +1244,7 @@ async function runV2Pipeline({
     representationLock: representation ? JSON.stringify(representation) : null,
     contactsContext,
     clauseLibraryMatches,
+    inboxSearchContext,
   });
 
   const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || 'medium';
@@ -4407,6 +4408,55 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       console.warn('[ely-smart] drafting examples load failed:', err.message);
     }
 
+    // Fixed 2026-09-13, real, critical bug found live after extensive
+    // debugging with the user: generalInboxResults/calendarResults/
+    // eliminationResults were computed correctly above, but every
+    // consumer of them (the messages.splice() injection further down)
+    // lives entirely in the V1 codepath, which never runs at all for
+    // any request routed to V2 — confirmed this is every main_chat
+    // request tonight, via the diagnostic logging added earlier this
+    // session and the routing comment immediately below this block.
+    // Built as its own string here, before the V2/V1 routing
+    // decision, so it reaches whichever path actually runs.
+    let inboxSearchContextForV2 = null;
+    if (isMainChat && (asksAboutInbox || asksAboutForgetting)) {
+      console.log('[ely-smart] inbox/forgot search results:', {
+        generalInboxResultsCount: generalInboxResults.length,
+        calendarResultsCount: calendarResults.length,
+        eliminationResultsCount: eliminationResults.length,
+      });
+      let contextBlock = '';
+      if (calendarResults.length > 0) {
+        contextBlock += `DIARY/CALENDAR -- appointments found:\n\n${calendarResults.map(e =>
+          `${e.date}${e.time ? ' at ' + e.time : ''}: ${e.title}${e.address ? ' -- ' + e.address : ''}${e.description ? '\n' + e.description : ''}`
+        ).join('\n\n')}\n\n`;
+      } else if (asksAboutInbox && !asksAboutForgetting) {
+        contextBlock += `DIARY/CALENDAR -- no appointments found in the requested period.\n\n`;
+      }
+      if (generalInboxResults.length > 0) {
+        contextBlock += `INBOX SEARCH${asksAboutForgetting ? ' (last three weeks, since no specific date was given)' : ''} -- emails matching the query:\n\n${generalInboxResults.map(e =>
+          `From: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`
+        ).join('\n\n---\n\n')}\n\n`;
+      } else if (asksAboutInbox) {
+        contextBlock += `INBOX SEARCH${asksAboutForgetting ? ' (last three weeks, since no specific date was given)' : ''} -- no matching emails found.\n\n`;
+      }
+      if (asksAboutForgetting) {
+        if (eliminationResults.length > 0) {
+          contextBlock += `PROJECTS THAT MAY BE RELEVANT (available if the user wants to work through them -- do NOT list these out unless the email search above found nothing and the user has confirmed they want to see this list; otherwise just mention this option is available if needed):\n\n${eliminationResults.map(e =>
+            `${e.project} -- ${e.ao} (status: ${e.status}${e.noticeServed ? ', notice served ' + e.noticeServed : ''})`
+          ).join('\n')}\n\n`;
+        } else {
+          contextBlock += `PROJECTS THAT MAY BE RELEVANT -- none found (no active project currently has an adjoining owner past consent/dissent stage with no Schedule of Condition recorded).\n\n`;
+        }
+      }
+      if (contextBlock.trim()) {
+        inboxSearchContextForV2 = asksAboutForgetting
+          ? `The user is asking whether they forgot to book or do something -- they already know it is not in the calendar, that is why they are asking, so never mention having checked or not checked the diary for this. Use the email search results below to answer. If genuinely nothing relevant was found in the last three weeks, say so plainly and ask whether they would like you to look back further, or whether they would like you to go through the list of projects that could plausibly be relevant instead -- do not show that list unless they say yes to it.\n\n${contextBlock}`
+          : `Use the following diary and email information to answer the user's question accurately. Cross-reference both. If an appointment appears in emails but not the diary, say so explicitly.\n\n${contextBlock}`;
+      }
+    } else if (isMainChat && asksAboutInbox) {
+      inboxSearchContextForV2 = `INBOX AND DIARY SEARCH: Both were searched but nothing matching was found. Tell the user honestly that you checked both the diary and emails and couldn't find anything matching their query.`;
+    }
 
     // ── NORA V2: single routing decision point ──────────────────────────────
     // resolveArchitectureVersion() is the ONLY place either version is chosen.
@@ -4438,6 +4488,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
           contactsContext,
           clauseLibraryMatches,
+          inboxSearchContext: inboxSearchContextForV2,
         });
         console.log('[nora-v2] response served', {
           surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
