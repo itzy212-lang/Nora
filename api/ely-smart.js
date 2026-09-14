@@ -3969,6 +3969,17 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // specific constructions.
     const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|slipped my mind|did i (miss|book)|have i (missed|booked)|not sure (if|whether)|don'?t know (if|whether)|can'?t remember|can'?t recall)\b/i.test(prompt);
 
+    // Fixed 2026-09-14, real, confirmed gap reported live: "is there a
+    // property that hasn't had a schedule of conditions booked in" is
+    // a genuinely different question from "did I forget to book one
+    // for today" — it's not about a specific appointment or date at
+    // all, it's a direct request for the elimination list itself. The
+    // asksAboutForgetting flow searches email first and only offers
+    // this list as a fallback, which doesn't fit a direct question
+    // like this — shown immediately here instead, no email search
+    // needed first.
+    const asksAboutMissingSoc = isMainChat && /\b(schedule of conditions?|\bsoc\b)/i.test(prompt) && /\b(hasn'?t had|haven'?t had|doesn'?t have|don'?t have|without a|not yet (had|booked)|which (propert|project)|any (propert|project))\b/i.test(prompt);
+
     // Added 2026-09-13, on request, after real, justified pushback:
     // "no errors" was being treated as "nothing went wrong", but a
     // keyword-match miss is a silent, valid code path, not a crash —
@@ -4175,7 +4186,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // stage where this kind of thing would plausibly be outstanding,
     // so they can work through it together rather than search blind.
     let eliminationResults = [];
-    if (asksAboutForgetting) {
+    if (asksAboutForgetting || asksAboutMissingSoc) {
       try {
         const sb = getSupabase();
         if (sb) {
@@ -4437,7 +4448,23 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // Built as its own string here, before the V2/V1 routing
     // decision, so it reaches whichever path actually runs.
     let inboxSearchContextForV2 = null;
-    if (isMainChat && (asksAboutInbox || asksAboutForgetting)) {
+    // Fixed 2026-09-14, on request: "is there a property that hasn't
+    // had a schedule of conditions booked in" is a direct request for
+    // the elimination list itself, not a specific-date/appointment
+    // question -- handled as its own, separate case, shown directly
+    // rather than withheld pending confirmation (unlike the "forgot"
+    // flow's fallback use of the same list), and without the
+    // calendar/email search noise that question doesn't need.
+    if (isMainChat && asksAboutMissingSoc) {
+      console.log('[ely-smart] missing-SOC elimination results:', { eliminationResultsCount: eliminationResults.length });
+      if (eliminationResults.length > 0) {
+        inboxSearchContextForV2 = `The user is asking which properties/projects do not yet have a Schedule of Condition recorded. Use the list below directly to answer -- do not withhold it, this is exactly what was asked for.\n\nPROJECTS WITH NO SCHEDULE OF CONDITION RECORDED (${eliminationResults.length}):\n\n${eliminationResults.map(e =>
+          `${e.project} -- ${e.ao} (status: ${e.status}${e.noticeServed ? ', notice served ' + e.noticeServed : ''})`
+        ).join('\n')}`;
+      } else {
+        inboxSearchContextForV2 = `The user is asking which properties/projects do not yet have a Schedule of Condition recorded. None were found -- every active project's adjoining owners past consent/dissent stage already have one recorded. Say so plainly.`;
+      }
+    } else if (isMainChat && (asksAboutInbox || asksAboutForgetting)) {
       console.log('[ely-smart] inbox/forgot search results:', {
         generalInboxResultsCount: generalInboxResults.length,
         calendarResultsCount: calendarResults.length,
