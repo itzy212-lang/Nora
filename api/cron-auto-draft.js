@@ -148,7 +148,15 @@ export default async function handler(req, res) {
                   const s10OverdueDays = Math.floor((today - new Date(a.s10_deadline)) / 86400000);
                   parts.push('S10 deadline ' + a.s10_deadline + (s10OverdueDays > 0 ? ' (expired ' + s10OverdueDays + ' days ago — eligible for a Section 10(4)(b) appointment if no response)' : ''));
                 }
-                if (a.agreed_surveyor) parts.push('has their own agreed surveyor appointed');
+                // Fixed 2026-09-13: agreed_surveyor being true means
+                // Itzik himself is acting as the agreed surveyor for
+                // this AO — not that the AO has appointed their own,
+                // separate one. Getting this backwards would have
+                // produced a misleading status summary. Also on
+                // request: never name a separate surveyor, only that
+                // one exists.
+                if (a.agreed_surveyor) parts.push('Itzik is acting as their agreed surveyor');
+                else if ((a.status || '').toLowerCase() === 'dissent') parts.push('they have appointed their own surveyor');
                 if (a.soc_agreed_date) parts.push('Schedule of Condition booked for ' + a.soc_agreed_date);
                 else if (a.status && a.status.toLowerCase() !== 'notice_served' && !a.consent_deadline) parts.push('no Schedule of Condition booked yet');
                 if (a.s104b_served_date) parts.push('10(4)(b) served ' + a.s104b_served_date);
@@ -277,6 +285,12 @@ Professional, warm, concise. Write as Itzik would — not overly formal, not cas
 
 THREAD COMPLIANCE:
 Read the full thread before drafting. Do not re-agree things already established. Do not suggest options already ruled out. Pick up the conversation where it left off.
+
+SURVEYOR NAMES — STRICTLY NO NAMING:
+Never name an adjoining owner's own appointed surveyor in a draft, even if the name appears in the project data or thread history provided. If they have appointed their own surveyor, say only that — "they have appointed their own surveyor" — never the surveyor's name or firm. This applies regardless of who the draft is going to.
+
+AMBIGUOUS RESPONSE OPTIONS — CONSENT/DISSENT:
+A party wall notice response has four distinct options: consent without a Schedule of Condition, consent subject to a Schedule of Condition, dissent and appoint their own surveyor, or dissent and appoint the agreed surveyor. If an adjoining owner's reply only narrows this down partially — e.g. they say "I consent" or "I'm happy to consent" without specifying which of the two consent options, or they sign an acknowledgement form without indicating an option at all — do not treat this as a fully resolved response. Acknowledge what they have confirmed so far warmly, then ask specifically for the remaining detail needed to record their response accurately — e.g. "are you happy to consent without a Schedule of Condition, or would you like to request one first?" Frame this as wanting to record their response accurately for both parties' future reference, not as being difficult or drawing the process out — a brief, natural acknowledgement of that (e.g. "just want to make sure this is recorded correctly") is fine, but keep it light, not apologetic or over-explained.
 
 PARTY WALL COST QUERIES:
 If the Adjoining Owner refers to costs being covered by the contractor, builder, or neighbor, they almost certainly mean the party wall surveyor's fees. In this context confirm clearly: under the Party Wall etc. Act 1996, the Building Owner is responsible for the reasonable costs of the appointed surveyors. Do not ask them to clarify what they mean by costs — assume they mean surveyor's fees and confirm it directly and plainly.
