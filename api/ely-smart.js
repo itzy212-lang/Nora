@@ -4045,7 +4045,17 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
             }
           } else if (topicTerm) {
             // No date — fall back to topic keyword search
+            // Added 2026-09-13, on request: for a "did I forget to
+            // book this" question with no specific date given, bound
+            // this to the last three weeks by default rather than
+            // searching every email ever sent/received — small,
+            // easily-missed things like this are almost always recent.
             query = query.or(`subject.ilike.%${topicTerm}%,body_preview.ilike.%${topicTerm}%`);
+            if (asksAboutForgetting) {
+              const threeWeeksAgo = new Date(now);
+              threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21);
+              query = query.gte('received_at', threeWeeksAgo.toISOString());
+            }
           } else {
             // No date, no topic — get recent emails
             query = query.order('received_at', { ascending: false }).limit(10);
@@ -4126,10 +4136,58 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       }
     }
 
+    // ── Elimination list ────────────────────────────────────────────────
+    // Added 2026-09-13, on request: the agreed fallback when a "did I
+    // forget to book this" search comes up empty — rather than leaving
+    // the user stuck with nothing, list every project/AO that's at a
+    // stage where this kind of thing would plausibly be outstanding,
+    // so they can work through it together rather than search blind.
+    let eliminationResults = [];
+    if (asksAboutForgetting) {
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          const { data: aoRows } = await sb
+            .from('adjoining_owners')
+            .select('id, name, address, status, project_id, soc_agreed_date, notice_served_date')
+            .is('soc_agreed_date', null)
+            .in('status', ['consent', 'dissent', 'notice_served'])
+            .limit(40);
+          const projIds = [...new Set((aoRows || []).map(a => a.project_id).filter(Boolean))];
+          let projMap = {};
+          if (projIds.length) {
+            const { data: projRows } = await sb.from('projects').select('id, ref, bo_premise_address, status').in('id', projIds);
+            (projRows || []).forEach(p => { projMap[p.id] = p; });
+          }
+          eliminationResults = (aoRows || [])
+            .filter(a => {
+              // Only genuinely active projects — skip anything already closed/completed
+              const proj = projMap[a.project_id];
+              return proj && !/complete|closed|archived/i.test(proj.status || '');
+            })
+            .map(a => ({
+              project: projMap[a.project_id]?.ref || projMap[a.project_id]?.bo_premise_address || 'Unknown project',
+              ao: a.name || a.address || 'Unknown AO',
+              status: a.status,
+              noticeServed: a.notice_served_date || null,
+            }));
+        }
+      } catch (elimErr) {
+        console.warn('[ely-smart] elimination list failed:', elimErr.message);
+      }
+    }
+
     // ── Calendar search ──────────────────────────────────────────────────
     // When asking about appointments/dates, check the tasks/calendar table too
+    // Added 2026-09-13, on request: "have I forgotten to book something"
+    // is a fundamentally different question from "what's booked" — the
+    // user already knows it's not in the calendar, that's exactly why
+    // they're asking. Searching the calendar for this wastes a query
+    // and, worse, risks the model treating an empty calendar result as
+    // meaningful when it was never the right place to look.
+    const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|did i (miss|book)|have i (missed|booked)|slipped my mind)\b/i.test(prompt);
     let calendarResults = [];
-    if (asksAboutInbox) {
+    if (asksAboutInbox && !asksAboutForgetting) {
       try {
         const sb = getSupabase();
         if (sb) {
@@ -4527,29 +4585,51 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     }
 
     // Inject general inbox search results if we ran one
-    if (generalInboxResults.length > 0 || calendarResults.length > 0) {
+    if (generalInboxResults.length > 0 || calendarResults.length > 0 || eliminationResults.length > 0) {
       let contextBlock = '';
 
+      // Added 2026-09-13, on request: a "did I forget to book this"
+      // question skips the calendar search entirely (the user already
+      // knows it's not there) — so never claim to have checked the
+      // diary for this kind of question at all.
       if (calendarResults.length > 0) {
         contextBlock += `DIARY/CALENDAR -- appointments found:\n\n${calendarResults.map(e =>
           `${e.date}${e.time ? ' at ' + e.time : ''}: ${e.title}${e.address ? ' -- ' + e.address : ''}${e.description ? '\n' + e.description : ''}`
         ).join('\n\n')}\n\n`;
-      } else if (asksAboutInbox) {
+      } else if (asksAboutInbox && !asksAboutForgetting) {
         contextBlock += `DIARY/CALENDAR -- no appointments found in the requested period.\n\n`;
       }
 
       if (generalInboxResults.length > 0) {
-        contextBlock += `INBOX SEARCH -- emails matching the query:\n\n${generalInboxResults.map(e =>
+        contextBlock += `INBOX SEARCH${asksAboutForgetting ? ' (last three weeks, since no specific date was given)' : ''} -- emails matching the query:\n\n${generalInboxResults.map(e =>
           `From: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\n${e.body}`
-        ).join('\n\n---\n\n')}`;
+        ).join('\n\n---\n\n')}\n\n`;
       } else if (asksAboutInbox) {
-        contextBlock += `INBOX SEARCH -- no matching emails found.`;
+        contextBlock += `INBOX SEARCH${asksAboutForgetting ? ' (last three weeks, since no specific date was given)' : ''} -- no matching emails found.\n\n`;
+      }
+
+      // Added 2026-09-13, on request: only a fallback for the
+      // "forgot" scenario, and only ever offered, never dumped
+      // automatically the moment the email search is empty -- the
+      // user wants to be asked first ("should we start looking
+      // through all the projects?"), with the actual list held back
+      // until they say yes.
+      if (asksAboutForgetting) {
+        if (eliminationResults.length > 0) {
+          contextBlock += `PROJECTS THAT MAY BE RELEVANT (available if the user wants to work through them -- do NOT list these out unless the email search above found nothing and the user has confirmed they want to see this list; otherwise just mention this option is available if needed):\n\n${eliminationResults.map(e =>
+            `${e.project} -- ${e.ao} (status: ${e.status}${e.noticeServed ? ', notice served ' + e.noticeServed : ''})`
+          ).join('\n')}\n\n`;
+        } else {
+          contextBlock += `PROJECTS THAT MAY BE RELEVANT -- none found (no active project currently has an adjoining owner past consent/dissent stage with no Schedule of Condition recorded).\n\n`;
+        }
       }
 
       if (contextBlock.trim()) {
         messages.splice(1, 0, {
           role: 'system',
-          content: `Use the following diary and email information to answer the user's question accurately. Cross-reference both. If an appointment appears in emails but not the diary, say so explicitly.\n\n${contextBlock}`,
+          content: asksAboutForgetting
+            ? `The user is asking whether they forgot to book or do something -- they already know it is not in the calendar, that is why they are asking, so never mention having checked or not checked the diary for this. Use the email search results below to answer. If genuinely nothing relevant was found in the last three weeks, say so plainly and ask whether they would like you to look back further, or whether they would like you to go through the list of projects that could plausibly be relevant instead -- do not show that list unless they say yes to it.\n\n${contextBlock}`
+            : `Use the following diary and email information to answer the user's question accurately. Cross-reference both. If an appointment appears in emails but not the diary, say so explicitly.\n\n${contextBlock}`,
         });
       }
     } else if (asksAboutInbox) {
