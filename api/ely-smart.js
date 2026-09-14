@@ -3960,7 +3960,13 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // down (by the calendar search block) but used earlier, here, by
     // the email search block below. Moved the declaration up to
     // before its first actual use.
-    const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|did i (miss|book)|have i (missed|booked)|slipped my mind)\b/i.test(prompt);
+    // Fixed 2026-09-13, real, confirmed gap found from a live test's
+    // own diagnostic log: "I'm not sure if I've booked X" is one of
+    // the most natural ways to ask this and didn't match any of the
+    // original patterns (did I book / have I booked) at all. Broadened
+    // to cover uncertainty phrasing generally, not just those two
+    // specific constructions.
+    const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|slipped my mind|did i (miss|book)|have i (missed|booked)|not sure (if|whether)|don'?t know (if|whether)|can'?t remember|can'?t recall)\b/i.test(prompt);
 
     // Added 2026-09-13, on request, after real, justified pushback:
     // "no errors" was being treated as "nothing went wrong", but a
