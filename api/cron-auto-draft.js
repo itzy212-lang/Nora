@@ -121,14 +121,40 @@ export default async function handler(req, res) {
           // like "when is the Schedule of Condition booked" or "have
           // the drawings been received" could never be answered
           // accurately, only guessed at generically.
+          // Fixed 2026-09-12, real, confirmed gap found while
+          // discussing this directly: only name/address were fetched
+          // — nothing about actual status (dissent/consent, notice
+          // served, S10 served/expired, own surveyor appointed, SOC
+          // booked, award served) was available at all, so a genuine
+          // "where are we at" status question could never get a real
+          // answer, only a generic acknowledgement.
           const { data: aos } = await supabase
             .from('adjoining_owners')
-            .select('id, name, address')
+            .select('id, name, address, status, notice_served_date, s10_served_date, s10_deadline, consent_deadline, agreed_surveyor, award_served_date, s104b_served_date, soc_agreed_date, soc_status')
             .eq('project_id', email.project_id);
           projectAOs = aos || [];
           if (projectAOs.length) {
-            projectContext += '\n\nADJOINING OWNERS ON THIS PROJECT (' + projectAOs.length + '):\n' +
-              projectAOs.map(a => '- ' + (a.name || 'Unknown') + (a.address ? ' (' + a.address + ')' : '')).join('\n');
+            const today = new Date();
+            projectContext += '\n\nADJOINING OWNER STATUS ON THIS PROJECT (' + projectAOs.length + '):\n' +
+              projectAOs.map(a => {
+                const parts = [a.name || 'Unknown', a.address ? '(' + a.address + ')' : null, 'status: ' + (a.status || 'not yet actioned')];
+                if (a.notice_served_date) parts.push('notice served ' + a.notice_served_date);
+                if (a.consent_deadline) {
+                  const overdueDays = Math.floor((today - new Date(a.consent_deadline)) / 86400000);
+                  parts.push('consent deadline ' + a.consent_deadline + (overdueDays > 0 ? ' (' + overdueDays + ' days overdue)' : ''));
+                }
+                if (a.s10_served_date) parts.push('S10 served ' + a.s10_served_date);
+                if (a.s10_deadline) {
+                  const s10OverdueDays = Math.floor((today - new Date(a.s10_deadline)) / 86400000);
+                  parts.push('S10 deadline ' + a.s10_deadline + (s10OverdueDays > 0 ? ' (expired ' + s10OverdueDays + ' days ago — eligible for a Section 10(4)(b) appointment if no response)' : ''));
+                }
+                if (a.agreed_surveyor) parts.push('has their own agreed surveyor appointed');
+                if (a.soc_agreed_date) parts.push('Schedule of Condition booked for ' + a.soc_agreed_date);
+                else if (a.status && a.status.toLowerCase() !== 'notice_served' && !a.consent_deadline) parts.push('no Schedule of Condition booked yet');
+                if (a.s104b_served_date) parts.push('10(4)(b) served ' + a.s104b_served_date);
+                if (a.award_served_date) parts.push('award served ' + a.award_served_date);
+                return '- ' + parts.filter(Boolean).join(', ');
+              }).join('\n');
           }
 
           const { data: tasks } = await supabase
@@ -199,6 +225,8 @@ FACTUAL RESOLUTION — check the actual project data provided above before draft
 - A scheduled-date question (e.g. when is the Schedule of Condition, when is the inspection): check the scheduled tasks given above, if any exist. If a real date is found, state it precisely and factually — name the actual date and time, and which adjoining owner it is for if there is more than one on this project. If nothing relevant is found in the data provided, this does NOT mean nothing is booked — it may simply not be recorded here. Never state or imply that nothing is booked or scheduled. Instead, respond as Nora's own limited visibility: along the lines of "I do not seem to have access to his diary for this at the moment — I will find out and make sure he comes back to you to confirm" — calm, non-alarming, never a confident negative claim.
 - A document/drawing status question (e.g. have the drawings been received, are you still waiting on X): check the saved documents given above, if any exist. If the document appears to be there, confirm receipt factually by name. If not, check the thread history for whether this was genuinely requested — if a request is confirmed there, say so factually (e.g. "I can see this was requested from the structural engineer — not yet received, we will keep you posted"). If there is no confirmation either way, use the same cautious, non-alarming framing as the date case above.
 - If, and only if, this cautious framing was used anywhere in the draft, end the draft on its own final line with the exact marker <<<NEEDS_FOLLOWUP>>> — this is a signal for the app to remind Itzik to actually go check and confirm. Omit it entirely for any other kind of reply, including a factual answer that did find real data.
+
+GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing.
 
 WHAT YOU MUST NEVER DO:
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
