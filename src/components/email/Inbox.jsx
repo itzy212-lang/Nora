@@ -2509,7 +2509,16 @@ if (syncErr) throw syncErr;
           status: 'open',
           due_date: dueIso,
           priority: 'normal',
-          task_type: 'email_response',
+          // Fixed 2026-09-13, on request: task_type now uses the
+          // real to-do list categorisation ('email', not
+          // 'email_response'), source: 'manual' marks it as
+          // user-created for the blue/purple-text distinction
+          // (versus green for assistant-generated ones), and this is
+          // now linked to the actual email so the to-do list can open
+          // straight to it.
+          task_type: 'email',
+          source: 'manual',
+          linked_email_message_id: sentEmailId || null,
           metadata: JSON.stringify({ to_email: to, subject, sent_at: new Date().toISOString() }),
         }]);
       } catch (taskErr) {

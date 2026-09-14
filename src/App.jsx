@@ -744,7 +744,26 @@ export default function App() {
   return (
     <>
       {appBody}
-      {showNotepad && <NotepadOverlay onClose={() => setShowNotepad(false)} />}
+      {showNotepad && (
+        <NotepadOverlay
+          onClose={() => setShowNotepad(false)}
+          onOpenEmail={(emailId) => {
+            // Reuses the same deep-link mechanism already proven to
+            // work for push notifications — dispatch the target id,
+            // Inbox.jsx's own effect picks it up and fetches that
+            // specific email directly.
+            dispatch({ type: 'SET_SELECTED_EMAIL_ID', payload: emailId });
+            setCurrentView('inbox');
+            setShowNotepad(false);
+          }}
+          onOpenProject={(projectId) => {
+            const proj = (state.projects || []).find(p => p.id === projectId);
+            if (proj) dispatch({ type: 'SET_CURRENT_PROJECT', payload: proj });
+            setCurrentView('projects');
+            setShowNotepad(false);
+          }}
+        />
+      )}
       {showQuickRef && <QuickRefOverlay onClose={() => setShowQuickRef(false)} onOpenComposer={openComposer} />}
     </>
   );

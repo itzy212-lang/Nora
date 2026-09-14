@@ -430,7 +430,14 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 title: reminderTitle,
                 description: 'Nora sent a holding reply that needs a real follow-up — confirm the details and get back to them.',
                 due_date: dateStr,
-                task_type: 'follow_up',
+                // Fixed 2026-09-13, on request: task_type now uses the
+                // real to-do list categorisation (email/call/
+                // correspondence, not a one-off 'follow_up' type) so
+                // this shows up correctly in the to-do list. source:
+                // 'assistant' marks it as AI-generated for the
+                // green-text distinction agreed on.
+                task_type: 'email',
+                source: 'assistant',
                 status: 'open',
                 project_id: email.project_id || null,
                 linked_email_message_id: email.id,

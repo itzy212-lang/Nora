@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
+import TodoListView from './TodoListView';
 
 const COLORS = [
   { id: 'default',  bg: '#ffffff', border: '#e5e7eb' },
@@ -30,10 +31,10 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-export default function NotepadOverlay({ onClose }) {
+export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState('list'); // 'list' | 'edit'
+  const [mode, setMode] = useState('list'); // 'list' | 'edit' | 'todo'
   const [activeNote, setActiveNote] = useState(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -198,6 +199,28 @@ export default function NotepadOverlay({ onClose }) {
 
             {/* Notes list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+              {/* Added 2026-09-13, on request: a permanent, un-deletable
+                  to-do list — always the first card, top-left,
+                  regardless of how many other notes exist. This is
+                  not a row from the notes table at all — it's its own
+                  view over the same tasks the calendar already uses. */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                <div
+                  onClick={() => setMode('todo')}
+                  style={{
+                    background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 12,
+                    padding: '10px 12px', cursor: 'pointer', minHeight: 80,
+                    display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>✅ To-do list</div>
+                    <div style={{ fontSize: 11.5, color: '#3b82f6' }}>Calls, emails, correspondence</div>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#93c5fd', marginTop: 8 }}>Always here</div>
+                </div>
+              </div>
+
               {loading ? (
                 <div style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: 40 }}>Loading…</div>
               ) : notes.length === 0 ? (
@@ -228,6 +251,8 @@ export default function NotepadOverlay({ onClose }) {
               )}
             </div>
           </>
+        ) : mode === 'todo' ? (
+          <TodoListView onBack={() => setMode('list')} onOpenEmail={onOpenEmail} onOpenProject={onOpenProject} />
         ) : (
           /* Editor */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: activeColor.bg }}>
