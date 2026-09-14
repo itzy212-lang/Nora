@@ -3954,6 +3954,13 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     const asksAboutInbox = isMainChat && !suppliedEmailContext && !body.emailId && !body.threadId && (
       /appointment|meeting|booked|confirmed|friday|monday|tuesday|wednesday|thursday|saturday|sunday|this week|next week|schedule|diary|calendar|check my email|search my email|have i.*email|did i.*email|who (is|are|did|confirmed|booked|sent)|any.*appointment|any.*meeting|tomorrow|today|yesterday|\d+(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(prompt)
     );
+    // Fixed 2026-09-13, real, confirmed bug reported live immediately
+    // after deploy: "cannot access 'asksAboutForgetting' before
+    // initialization" — this was originally declared much further
+    // down (by the calendar search block) but used earlier, here, by
+    // the email search block below. Moved the declaration up to
+    // before its first actual use.
+    const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|did i (miss|book)|have i (missed|booked)|slipped my mind)\b/i.test(prompt);
 
     if (asksAboutInbox) {
       try {
@@ -4179,13 +4186,14 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     // ── Calendar search ──────────────────────────────────────────────────
     // When asking about appointments/dates, check the tasks/calendar table too
-    // Added 2026-09-13, on request: "have I forgotten to book something"
-    // is a fundamentally different question from "what's booked" — the
-    // user already knows it's not in the calendar, that's exactly why
-    // they're asking. Searching the calendar for this wastes a query
-    // and, worse, risks the model treating an empty calendar result as
+    // "have I forgotten to book something" is a fundamentally
+    // different question from "what's booked" — the user already
+    // knows it's not in the calendar, that's exactly why they're
+    // asking. Searching the calendar for this wastes a query and,
+    // worse, risks the model treating an empty calendar result as
     // meaningful when it was never the right place to look.
-    const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|did i (miss|book)|have i (missed|booked)|slipped my mind)\b/i.test(prompt);
+    // (asksAboutForgetting itself is declared earlier, above, since
+    // it's also needed by the email search block before this one.)
     let calendarResults = [];
     if (asksAboutInbox && !asksAboutForgetting) {
       try {
