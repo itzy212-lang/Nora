@@ -1,13 +1,10 @@
 // Nora Service Worker — PWA offline support
-// Bumped 2026-09-13, real, confirmed cause of "I made a fix but
-// nothing changed at all": this version number hadn't moved since
-// August 14th, while today's session alone deployed dozens of times.
-// Static assets here are served cache-first — once a client has
-// cached something under an unchanged CACHE_NAME, it keeps serving
-// that same cached version indefinitely, regardless of how many new
-// deployments actually go live, until this version number itself
-// changes and the activate handler below deletes the stale cache.
-const CACHE_NAME = 'nora-v10';
+// Bumped 2026-09-13 (second time today): the actual root cause of
+// the "can't close the notepad" bug is now genuinely fixed (a
+// z-index conflict with the app's own top bar) — bumping again so
+// this specific fix reaches devices promptly, given the previous
+// cache-staleness issue this same session already uncovered.
+const CACHE_NAME = 'nora-v11';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

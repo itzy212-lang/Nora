@@ -255,7 +255,7 @@ function AddTaskInline({ onClose, onCreated }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 9500, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10500, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 420, padding: 18 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Add task</div>
 

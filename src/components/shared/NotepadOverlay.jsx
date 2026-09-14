@@ -164,7 +164,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
       {/* Backdrop */}
       <div
         onClick={mode === 'list' ? onClose : mode === 'todo' ? onClose : backToList}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10000 }}
       />
 
       {/* Drawer */}
@@ -172,11 +172,19 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(420px, 100vw)',
         background: '#f8f9fa',
-        zIndex: 9001,
+        zIndex: 10001,
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
         animation: 'slideInRight 0.22s ease',
+        // Fixed 2026-09-13, real, confirmed root cause reported live:
+        // this overlay's own z-index (previously 9000/9001) sat
+        // BELOW the app's own top bar (.topbar in index.css,
+        // z-index: 9999, position: fixed) — meaning the top bar
+        // rendered directly over this drawer's entire header row,
+        // hiding and blocking every button in it (×, ← back, +
+        // add task) all at once. Raised above 9999 so the whole
+        // drawer, including its header, genuinely sits on top.
       }}>
         <style>{`
           @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
