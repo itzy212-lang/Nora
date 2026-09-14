@@ -1,10 +1,9 @@
 // Nora Service Worker — PWA offline support
-// Bumped 2026-09-13 (second time today): the actual root cause of
-// the "can't close the notepad" bug is now genuinely fixed (a
-// z-index conflict with the app's own top bar) — bumping again so
-// this specific fix reaches devices promptly, given the previous
-// cache-staleness issue this same session already uncovered.
-const CACHE_NAME = 'nora-v11';
+// Bumped 2026-09-13 (third time today): follow-up refinement to the
+// notepad z-index fix — it now sits below the top bar instead of
+// covering it, per request. Bumping again so this reaches devices
+// promptly.
+const CACHE_NAME = 'nora-v12';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

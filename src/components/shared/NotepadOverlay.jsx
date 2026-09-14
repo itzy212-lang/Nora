@@ -164,12 +164,12 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
       {/* Backdrop */}
       <div
         onClick={mode === 'list' ? onClose : mode === 'todo' ? onClose : backToList}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10000 }}
+        style={{ position: 'fixed', top: 54, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10000 }}
       />
 
       {/* Drawer */}
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
+        position: 'fixed', top: 54, right: 0, bottom: 0,
         width: 'min(420px, 100vw)',
         background: '#f8f9fa',
         zIndex: 10001,
@@ -177,6 +177,15 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
         flexDirection: 'column',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
         animation: 'slideInRight 0.22s ease',
+        // Fixed 2026-09-13, on request, following the z-index fix:
+        // raising above the top bar solved buttons being hidden, but
+        // the drawer then covered the top bar entirely instead — the
+        // user specifically wanted the top bar's own tab/search
+        // button to stay reachable even with the notepad open. Fixed
+        // properly by starting the drawer below the top bar (top: 54
+        // instead of top: 0) rather than covering it — the exact
+        // same, already-proven pattern the email composer and
+        // draft-with-Nora panel already use for this.
         // Fixed 2026-09-13, real, confirmed root cause reported live:
         // this overlay's own z-index (previously 9000/9001) sat
         // BELOW the app's own top bar (.topbar in index.css,
