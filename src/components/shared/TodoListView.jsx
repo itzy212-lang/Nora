@@ -34,7 +34,7 @@ function fmtDayHeading(dateStr) {
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-export default function TodoListView({ onBack, onOpenEmail, onOpenProject }) {
+export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenProject }) {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState({});
   const [loading, setLoading] = useState(true);
@@ -43,38 +43,55 @@ export default function TodoListView({ onBack, onOpenEmail, onOpenProject }) {
   const load = useCallback(async () => {
     if (!sb) return;
     setLoading(true);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    // Fixed 2026-09-13, on request: "today" means every incomplete
-    // task due today or earlier (so nothing overdue silently
-    // disappears — this is the rollover, achieved by query alone,
-    // not by physically moving data around), plus anything completed
-    // today (so a struck-through item stays visible until the day
-    // actually ends, then quietly stops matching this query
-    // tomorrow — no separate cleanup job needed for that either).
-    const { data } = await sb
-      .from('tasks')
-      .select('id, title, description, task_type, source, due_date, status, completed_at, project_id, linked_email_message_id')
-      .in('task_type', TODO_TYPES)
-      .or(`status.neq.complete,completed_at.gte.${todayStr}T00:00:00`)
-      .order('due_date', { ascending: true })
-      .limit(200);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      // Fixed 2026-09-13, on request: "today" means every incomplete
+      // task due today or earlier (so nothing overdue silently
+      // disappears — this is the rollover, achieved by query alone,
+      // not by physically moving data around), plus anything completed
+      // today (so a struck-through item stays visible until the day
+      // actually ends, then quietly stops matching this query
+      // tomorrow — no separate cleanup job needed for that either).
+      // Fixed 2026-09-13, real, confirmed bug reported live: the
+      // notepad became entirely unresponsive after opening the to-do
+      // list — nothing else in the app worked either, not even the
+      // sidebar menu, well beyond just this overlay failing to close.
+      // The .or() filter combined with .in() here is exactly the kind
+      // of supabase-js pattern already flagged as unreliable earlier
+      // today (chained/complex .or() calls) — moved this filtering
+      // entirely client-side instead of relying on that query syntax.
+      // Wrapped the whole thing in try/catch too — any unexpected
+      // error here must never be able to leave the overlay stuck.
+      const { data, error } = await sb
+        .from('tasks')
+        .select('id, title, description, task_type, source, due_date, status, completed_at, project_id, linked_email_message_id')
+        .in('task_type', TODO_TYPES)
+        .order('due_date', { ascending: true })
+        .limit(300);
 
-    const rows = (data || []).filter(t => {
-      if ((t.status || '').toLowerCase() !== 'complete') return true;
-      // Only keep a completed task if it was completed today —
-      // otherwise it should have already fallen away.
-      return t.completed_at && t.completed_at.slice(0, 10) === todayStr;
-    });
-    setTasks(rows);
+      if (error) throw error;
 
-    const projectIds = [...new Set(rows.map(t => t.project_id).filter(Boolean))];
-    if (projectIds.length) {
-      const { data: projRows } = await sb.from('projects').select('id, ref, bo_premise_address').in('id', projectIds);
-      const map = {};
-      (projRows || []).forEach(p => { map[p.id] = p; });
-      setProjects(map);
+      const rows = (data || []).filter(t => {
+        if ((t.status || '').toLowerCase() !== 'complete') return true;
+        // Only keep a completed task if it was completed today —
+        // otherwise it should have already fallen away.
+        return t.completed_at && t.completed_at.slice(0, 10) === todayStr;
+      });
+      setTasks(rows);
+
+      const projectIds = [...new Set(rows.map(t => t.project_id).filter(Boolean))];
+      if (projectIds.length) {
+        const { data: projRows } = await sb.from('projects').select('id, ref, bo_premise_address').in('id', projectIds);
+        const map = {};
+        (projRows || []).forEach(p => { map[p.id] = p; });
+        setProjects(map);
+      }
+    } catch (err) {
+      console.warn('[TodoListView] load failed:', err?.message);
+      setTasks([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -116,6 +133,10 @@ export default function TodoListView({ onBack, onOpenEmail, onOpenProject }) {
         <button onClick={() => setShowAdd(true)} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
           + Add task
         </button>
+        {/* Fixed 2026-09-13, on request: this view previously had no
+            direct way to close the whole overlay — only "back" to the
+            notes list. Added a genuine close button here too. */}
+        <button onClick={onCloseAll} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: '0 2px', lineHeight: 1 }}>×</button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>

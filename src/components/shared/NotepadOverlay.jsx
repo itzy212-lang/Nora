@@ -163,7 +163,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
     <>
       {/* Backdrop */}
       <div
-        onClick={mode === 'list' ? onClose : backToList}
+        onClick={mode === 'list' ? onClose : mode === 'todo' ? onClose : backToList}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }}
       />
 
@@ -252,7 +252,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
             </div>
           </>
         ) : mode === 'todo' ? (
-          <TodoListView onBack={() => setMode('list')} onOpenEmail={onOpenEmail} onOpenProject={onOpenProject} />
+          <TodoListView onBack={() => setMode('list')} onCloseAll={onClose} onOpenEmail={onOpenEmail} onOpenProject={onOpenProject} />
         ) : (
           /* Editor */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: activeColor.bg }}>
