@@ -3962,6 +3962,24 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // before its first actual use.
     const asksAboutForgetting = isMainChat && /\b(forgot|forgotten|did i (miss|book)|have i (missed|booked)|slipped my mind)\b/i.test(prompt);
 
+    // Added 2026-09-13, on request, after real, justified pushback:
+    // "no errors" was being treated as "nothing went wrong", but a
+    // keyword-match miss is a silent, valid code path, not a crash —
+    // there was no visibility at all into whether this detection
+    // fired for a given request. Logs the actual decision, not just
+    // the outcome, so this is checkable directly in the logs for the
+    // next real attempt rather than guessed at from the outside.
+    if (isMainChat) {
+      console.log('[ely-smart] inbox/forgot detection:', {
+        promptPreview: String(prompt || '').slice(0, 120),
+        asksAboutInbox,
+        asksAboutForgetting,
+        hasSuppliedEmailContext: !!suppliedEmailContext,
+        hasEmailId: !!body.emailId,
+        hasThreadId: !!body.threadId,
+      });
+    }
+
     if (asksAboutInbox) {
       try {
         const sb = getSupabase();
@@ -4590,6 +4608,17 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       } catch (err) {
         console.warn('[ely-smart] knowledge base injection failed:', err.message);
       }
+    }
+
+    // Added 2026-09-13, same reasoning as the detection log above —
+    // visibility into what the searches actually found, not just
+    // whether they ran.
+    if (isMainChat && (asksAboutInbox || asksAboutForgetting)) {
+      console.log('[ely-smart] inbox/forgot search results:', {
+        generalInboxResultsCount: generalInboxResults.length,
+        calendarResultsCount: calendarResults.length,
+        eliminationResultsCount: eliminationResults.length,
+      });
     }
 
     // Inject general inbox search results if we ran one
