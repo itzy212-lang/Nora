@@ -51,6 +51,7 @@ function toTableRow(ao, projectId) {
     s104b_served_date: ao.s104b_served_date ?? null,
     award_served_date: ao.award_served_date ?? ao.awardServedDate ?? null,
     award_generated_at: ao.award_generated_at ?? ao.awardGeneratedAt ?? null,
+    award_deadline: ao.award_deadline ?? ao.awardDeadline ?? null,
     soc_agreed_date: ao.soc_agreed_date ?? ao.soc_date ?? ao.socDate ?? ao.socAgreedDate ?? null,
     schedule_of_condition_date: ao.schedule_of_condition_date ?? ao.scheduleOfConditionDate ?? ao.schedule_of_conditions_date ?? ao.scheduleOfConditionsDate ?? null,
     soc_status: ao.soc_status ?? null,

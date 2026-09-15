@@ -465,15 +465,21 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
             const now = Date.now();
             const cd = ao?.consentDeadline || ao?.consent_deadline;
             const sd = ao?.s10Deadline || ao?.s10_deadline;
+            const ad = ao?.awardDeadline || ao?.award_deadline;
             const cdDays = cd ? Math.ceil((new Date(cd).getTime() - now) / 86400000) : null;
             const sdDays = sd ? Math.ceil((new Date(sd).getTime() - now) / 86400000) : null;
+            const adDays = ad ? Math.ceil((new Date(ad).getTime() - now) / 86400000) : null;
             const hasSurv = !!(ao?.surv_name || ao?.surveyorName || ao?.agreed_surveyor);
             const s10Served = !!(ao?.s10_served_date || ao?.s10ServedDate);
             const s104bServed = !!(ao?.s104b_served_date || ao?.s104bServedDate);
 
             let level = null, reason = null, action = null;
 
-            if (sdDays !== null && sdDays < 0 && !s104bServed && !hasSurv) {
+            if (st === 'award' && adDays !== null && adDays < 0) {
+              level = 'red'; reason = `Award draft overdue (${Math.abs(adDays)}d)`; action = 'extend_award';
+            } else if (st === 'award' && adDays !== null && adDays >= 0 && adDays <= 2) {
+              level = 'amber'; reason = `Award draft due in ${adDays}d`; action = 'serve_award';
+            } else if (sdDays !== null && sdDays < 0 && !s104bServed && !hasSurv) {
               level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
             } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && st !== 'consent' && !s10Served) {
               level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';

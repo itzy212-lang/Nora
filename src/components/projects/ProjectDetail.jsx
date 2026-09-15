@@ -291,9 +291,17 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
     return { label: 'Award served', colour: '#22c55e', action: null };
   }
 
-  // Award generated — needs serving
-  if (awardGenerated) {
-    return { label: 'Draft award', colour: '#f59e0b', action: 'serve_award' };
+  // Award drafted — 10-day countdown
+  if (st === 'award') {
+    const awardDeadline = ao?.award_deadline || ao?.awardDeadline;
+    if (awardDeadline) {
+      const daysLeft = Math.ceil((new Date(awardDeadline).getTime() - Date.now()) / 86400000);
+      if (daysLeft <= 0) {
+        return { label: `Award draft overdue (${Math.abs(daysLeft)}d)`, colour: '#ef4444', action: 'extend_award_deadline' };
+      }
+      return { label: `Draft award (${daysLeft}d left)`, colour: '#f59e0b', action: null };
+    }
+    return { label: 'Draft award', colour: '#f59e0b', action: null };
   }
 
   // Consent
@@ -1336,6 +1344,7 @@ function AOCard({
   onServeS10,
   onServe104b,
   onServeAward,
+  onExtendAwardDeadline,
   onSetAOStatus,
   onToggleAgreedSurveyor,
   onNoteIntention,
@@ -1432,6 +1441,7 @@ function AOCard({
                     else if (statusMeta.action === 'serve_notice') onServeNotice?.(ao);
                     else if (statusMeta.action === 'serve_104b') onServe104b?.(ao);
                     else if (statusMeta.action === 'serve_award') onServeAward?.(ao);
+                    else if (statusMeta.action === 'extend_award_deadline') onExtendAwardDeadline?.(ao);
                   }}
                   style={{
                     padding: '4px 12px',
@@ -1441,7 +1451,7 @@ function AOCard({
                     cursor: 'pointer',
                     border: `1px solid ${statusColour}`,
                     background: statusMeta.action === 'serve_s10' || statusMeta.action === 'serve_104b' ? 'var(--red-bg)'
-                      : statusMeta.action === 'serve_award' ? 'var(--amber-bg)' : 'var(--blue-bg)',
+                      : (statusMeta.action === 'serve_award' || statusMeta.action === 'extend_award_deadline') ? 'var(--amber-bg)' : 'var(--blue-bg)',
                     color: statusColour,
                     marginLeft: 8,
                     whiteSpace: 'nowrap',
@@ -3540,10 +3550,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         throw new Error(result?.error || 'Could not generate award.');
       }
 
-      // Mark AO as award drafted
+      // Mark AO as award drafted with 10-day deadline
+      const awardDeadline = new Date();
+      awardDeadline.setDate(awardDeadline.getDate() + 10);
+      const awardDeadlineISO = awardDeadline.toISOString().slice(0, 10);
+
       await updateAORecord(ao, {
+        status: 'award',
         award_generated_at: new Date().toISOString(),
         awardGeneratedAt: new Date().toISOString(),
+        award_deadline: awardDeadlineISO,
+        awardDeadline: awardDeadlineISO,
       });
 
       alert(`${award.awardTypeLabel || 'Award'} generated successfully.`);
@@ -3790,7 +3807,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       : item
     );
 
-    await saveAdjoiningOwners(project.id, updatedAOs);
+    const saveResult = await saveAdjoiningOwners(project.id, updatedAOs);
+    if (saveResult?.error) {
+      console.error('[updateAORecord] Save failed:', saveResult.error);
+      console.warn('[updateAORecord] Local state updated but NOT persisted to database');
+    }
 
     setProject(prev => ({
       ...prev,
@@ -4154,7 +4175,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (!window.confirm('Confirm the award has been served?')) return;
     const date = new Date().toISOString().slice(0, 10);
     const updatedAOs = (project.aos || []).map(a =>
-      a.id === ao.id ? { ...a, award_served_date: date, awardServedDate: date, status: 'complete' } : a
+      a.id === ao.id ? { ...a, award_served_date: date, awardServedDate: date, status: 'award_served' } : a
     );
     await saveAdjoiningOwners(project.id, updatedAOs);
     setProject(p => ({ ...p, aos: updatedAOs }));
@@ -4173,6 +4194,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       invoice_note: 'Final invoice — award served',
     });
   }, [project, sb, onRaiseInvoice, role, dispatch]);
+
+  const handleExtendAwardDeadline = useCallback(async (ao) => {
+    const newDeadline = new Date();
+    newDeadline.setDate(newDeadline.getDate() + 10);
+    const newDeadlineISO = newDeadline.toISOString().slice(0, 10);
+
+    await updateAORecord(ao, {
+      award_deadline: newDeadlineISO,
+      awardDeadline: newDeadlineISO,
+    });
+  }, [updateAORecord]);
 
   const handleServeS10 = useCallback((ao) => {
     handleOpenNoticeModal(ao, ['s10']);
@@ -5289,6 +5321,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onServeS10={handleServeS10}
                       onServe104b={handleServe104b}
                       onServeAward={handleServeAward}
+                      onExtendAwardDeadline={handleExtendAwardDeadline}
                       onSetAOStatus={handleSetAOStatus}
                       onToggleAgreedSurveyor={handleToggleAgreedSurveyor}
                       onNoteIntention={handleNoteIntention}
