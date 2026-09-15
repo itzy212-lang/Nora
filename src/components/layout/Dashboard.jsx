@@ -475,13 +475,13 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
 
             if (sdDays !== null && sdDays < 0 && !s104bServed && !hasSurv) {
               level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
-            } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && !s10Served) {
+            } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && st !== 'consent' && !s10Served) {
               level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';
             } else if (st === 'dissent' && !hasSurv) {
               level = 'red'; reason = 'Dissent — no surveyor appointed'; action = 'add_surveyor';
             } else if (sdDays !== null && sdDays >= 0 && sdDays <= 5) {
               level = 'amber'; reason = `Section 10 expires in ${sdDays}d`; action = 's104b';
-            } else if (cdDays !== null && cdDays >= 0 && cdDays <= 3 && st !== 'dissent') {
+            } else if (cdDays !== null && cdDays >= 0 && cdDays <= 3 && st !== 'dissent' && st !== 'consent') {
               level = 'amber'; reason = `Consent deadline in ${cdDays}d`; action = 's10';
             }
 
