@@ -3796,7 +3796,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       ...prev,
       aos: updatedAOs,
     }));
-  }, [project.id, project.aos]);
+    // Dispatch to Redux state so updates persist when navigating away/back
+    dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
+  }, [project.id, project.aos, dispatch]);
 
   const createProjectTask = useCallback(async ({ title, description, due_date, task_type, ao }) => {
     try {
