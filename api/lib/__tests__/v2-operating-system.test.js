@@ -4,30 +4,34 @@ import { V2_ALLOWLIST, isV2Enabled, isV2AllowedForUser, resolveArchitectureVersi
 const ITZIK_UUID = '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
 const OTHER_UUID = '00000000-0000-0000-0000-000000000000';
 
-describe('V2 routing — flag AND allowlist both required', () => {
+describe('V2 routing — permanent for every user, on request', () => {
   it('flag on, allowlisted user -> v2', () => {
     expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: ITZIK_UUID })).toBe('v2');
   });
 
-  it('flag on, non-allowlisted user -> v1', () => {
-    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: OTHER_UUID })).toBe('v1');
+  it('flag on, non-allowlisted user -> v2', () => {
+    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: OTHER_UUID })).toBe('v2');
   });
 
-  it('flag off, allowlisted user -> v1', () => {
-    expect(resolveArchitectureVersion({ brainVersionEnv: 'v1', userId: ITZIK_UUID })).toBe('v1');
+  it('flag off, allowlisted user -> v2', () => {
+    expect(resolveArchitectureVersion({ brainVersionEnv: 'v1', userId: ITZIK_UUID })).toBe('v2');
   });
 
-  it('flag off, non-allowlisted user -> v1', () => {
-    expect(resolveArchitectureVersion({ brainVersionEnv: 'v1', userId: OTHER_UUID })).toBe('v1');
+  it('flag off, non-allowlisted user -> v2', () => {
+    expect(resolveArchitectureVersion({ brainVersionEnv: 'v1', userId: OTHER_UUID })).toBe('v2');
   });
 
-  it('flag unset entirely, allowlisted user -> v1', () => {
-    expect(resolveArchitectureVersion({ brainVersionEnv: undefined, userId: ITZIK_UUID })).toBe('v1');
+  it('flag unset entirely, allowlisted user -> v2', () => {
+    expect(resolveArchitectureVersion({ brainVersionEnv: undefined, userId: ITZIK_UUID })).toBe('v2');
   });
 
-  it('missing userId -> v1 regardless of flag', () => {
-    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: null })).toBe('v1');
-    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: undefined })).toBe('v1');
+  it('missing userId -> v2 regardless of flag', () => {
+    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: null })).toBe('v2');
+    expect(resolveArchitectureVersion({ brainVersionEnv: 'v2', userId: undefined })).toBe('v2');
+  });
+
+  it('called with no arguments at all -> v2', () => {
+    expect(resolveArchitectureVersion()).toBe('v2');
   });
 
   it('always returns exactly one of the two literal strings', () => {

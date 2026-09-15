@@ -65,10 +65,17 @@ describe('buildSurfaceContract', () => {
     expect(contract).toMatch(/Do not confuse the authenticated user with email senders/);
   });
 
-  it('produces the draft contract regardless of surface, when mode is draft', () => {
+  it('produces Project Chat\'s own, separate draft contract, not the generic Draft with Nora one', () => {
     const contract = buildSurfaceContract('project_chat', 'draft');
-    expect(contract).toMatch(/SURFACE: Draft/);
-    expect(contract).toMatch(/kept separate/);
+    expect(contract).toMatch(/SURFACE: Project Chat, draft mode/);
+    expect(contract).toMatch(/actively pull in and use real project facts/);
+    expect(contract).not.toMatch(/^SURFACE: Draft with Nora/);
+  });
+
+  it('produces the generic Draft with Nora contract for inbox_draft specifically', () => {
+    const contract = buildSurfaceContract('inbox_draft', 'draft');
+    expect(contract).toMatch(/SURFACE: Draft with Nora/);
+    expect(contract).toMatch(/DRAFTING PRIORITY/);
   });
 
   it('falls back to a generic contract for an unrecognised surface', () => {
