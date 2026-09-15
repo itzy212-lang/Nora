@@ -1533,10 +1533,11 @@ function AOCard({
               );
             }
 
-            // S10 countdown — show while S10 served but 104b not yet served
+            // S10 countdown — show while S10 served but 104b not yet served AND no surveyor appointed
             const s10Dd = aoS10(ao);
             const s10Days = daysUntil(s10Dd);
-            if (!isAOAppointment && !!aoS10Served(ao) && !ao104BServed(ao) && s10Dd) {
+            const hasSurveyor = !!(aoSurvName(ao) && ao?.agreed_surveyor);
+            if (!isAOAppointment && !!aoS10Served(ao) && !ao104BServed(ao) && s10Dd && !hasSurveyor) {
               return (
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -3696,6 +3697,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const hadExistingSurveyor = !!(existingAO?.surv_name || existingAO?.surveyorName || existingAO?.surveyor_name);
     if ((currentStatus === 'dissent' || currentStatus === 's10') && hasNewSurveyor && !hadExistingSurveyor) {
       newAO.status = 'surveyor_appointed';
+      // Clean up S10 deadline task — no longer needed once surveyor appointed
+      await deleteDeadlineTask('notice_section10_deadline', newAO);
     }
 
     const updatedAOs = existingAO
@@ -3829,6 +3832,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project.id, project.bo_premise_address]);
 
+  // Delete deadline tasks when they're no longer needed (e.g., surveyor appointed, consent received)
+  const deleteDeadlineTask = useCallback(async (taskType, ao) => {
+    try {
+      if (!ao) return;
+      const aoToken = ao?.id || `AO${ao?.num || ''}`;
+      const { error } = await sb
+        .from('tasks')
+        .delete()
+        .eq('project_id', project.id)
+        .eq('task_type', taskType)
+        .ilike('description', `%AO_REF:${aoToken}%`);
+      
+      if (error) console.warn(`[deleteDeadlineTask] ${taskType} delete failed:`, error.message);
+    } catch (err) {
+      console.warn(`[deleteDeadlineTask] ${taskType} delete error:`, err.message);
+    }
+  }, [project.id, sb]);
 
   const saveNoticeRecord = useCallback(async ({ editingNoticeId = null, ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '' }) => {
     // Calculate next run_number for this project/AO — only relevant
