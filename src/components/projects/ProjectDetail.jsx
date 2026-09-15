@@ -4707,6 +4707,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .update({ status: 'award_served' })
         .eq('id', project.id);
       if (error) throw error;
+      // Fixed 2026-09-15, real, confirmed bug found while checking
+      // the full AO status workflow directly against the code —
+      // exactly the same class of bug as the missing dispatch in
+      // updateAORecord fixed this morning (a68836ce), just in a
+      // different function: this wrote to the database correctly but
+      // never told Redux, so the project list/dashboard kept showing
+      // the project as active — reading stale state — until a full
+      // page reload genuinely re-fetched it.
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, status: 'award_served' } });
       onBack?.(); // Return to project list after marking award served
     } catch (err) {
       console.error('[ProjectDetail] mark award served failed:', err.message);
@@ -4722,6 +4731,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .update({ status: 'active' })
         .eq('id', project.id);
       if (error) throw error;
+      // Same fix as handleMarkAwardServed above — see that comment.
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, status: 'active' } });
       onBack?.(); // Return to list after reactivating
     } catch (err) {
       console.error('[ProjectDetail] reactivate failed:', err.message);
