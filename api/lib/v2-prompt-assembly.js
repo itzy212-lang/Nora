@@ -43,6 +43,21 @@ function buildSurfaceContract(surface, modeHint) {
   if (surface === 'main_chat' && !isDraft) {
     return 'SURFACE: Main Chat. Provide general collaboration. Preserve representation. Do not confuse the authenticated user with email senders or represented parties. Do not automatically respond in email format merely because the user has pasted an email.';
   }
+  // Fixed 2026-09-15, real, confirmed bug found while investigating
+  // a live complaint: "I had to swear at it repeatedly before it
+  // pulled up any facts". Project Chat's own draft mode was silently
+  // falling through to the generic isDraft branch below -- the exact
+  // same "Draft with Nora" contract, which is deliberately a pure
+  // dictation-polishing tool that must not independently research or
+  // pull facts. Project Chat's own discuss-mode contract above
+  // explicitly says to "use relevant project facts proactively" --
+  // that instruction was being lost the moment the user asked for an
+  // actual draft, since nothing carried it into draft mode. Project
+  // Chat needs its own, separate draft-mode contract that keeps that
+  // behaviour rather than reusing Draft with Nora's.
+  if (surface === 'project_chat' && isDraft) {
+    return 'SURFACE: Project Chat, draft mode. Write the actual draft now, using the complete agreed reasoning and facts from the discussion, plus any project data available in this prompt -- deadlines, dates, names, prior correspondence, confirmed facts. Unlike Draft with Nora (a separate, dictation-polishing surface elsewhere in this app), this surface is expected to actively pull in and use real project facts to make the draft accurate, not just to reformat what the user typed. If a fact the draft needs is genuinely available in this prompt (a date, a figure, a name, a prior email\'s content), use it -- do not leave it out or ask the user to repeat it. If a fact is genuinely not available anywhere in this prompt, do not invent it -- say plainly what is missing rather than guessing. Write the email or document itself, addressed to the correct, actual recipient already established in the discussion -- never default to the most recently mentioned name if the conversation has been clear about who this is actually going to.\n\nOUTPUT FORMAT -- REQUIRED: wrap the clean, ready-to-send draft text -- and nothing else -- between the exact markers <<<DRAFT>>> and <<<END_DRAFT>>>, on their own lines. Any analysis, reasoning, or possible additional point belongs entirely outside those markers. The text between the markers must be sendable exactly as written, with no headers, labels, or commentary mixed in.';
+  }
   if (isDraft) {
     return `SURFACE: Draft with Nora. This is primarily an email reply and correspondence drafting surface. Write the email the authenticated user would actually send, not a polished generic business-email version of their instruction.
 
