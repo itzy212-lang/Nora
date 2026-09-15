@@ -128,7 +128,18 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     if (ao?.s104b_served_date || ao?.s104bServedDate) return false;
     const hasSurveyor = !!(ao?.surv_name || ao?.surveyorName || ao?.ao_surveyor_name || ao?.aoSurveyorName || ao?.agreed_surveyor || ao?.agreedSurveyor);
     if (st === 'dissent' && hasSurveyor) return false;
-    if (st === 'dissent' && !hasSurveyor) return true;
+    // Fixed 2026-09-15, on request, following a walkthrough of the full
+    // intended workflow: this went red the instant status was dissent
+    // with no surveyor — day one, not after a real grace period. The
+    // user wants this as an internal 7-day reminder to chase, not an
+    // immediate alert, so it now checks dissent_received_date and only
+    // flags once 7 full days have genuinely passed with no surveyor.
+    if (st === 'dissent' && !hasSurveyor) {
+      const dissentDate = ao?.dissent_received_date || ao?.dissentReceivedDate || '';
+      if (!dissentDate) return false; // no date on record — can't calculate the 7 days, don't flag
+      const daysSinceDissent = Math.floor((now - new Date(dissentDate).getTime()) / 86400000);
+      return daysSinceDissent >= 7;
+    }
     const cd = ao?.consent_deadline || ao?.consentDeadline || '';
     if (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) return true;
     const sd = ao?.s10_deadline || ao?.s10Deadline || '';
@@ -472,6 +483,10 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
             const hasSurv = !!(ao?.surv_name || ao?.surveyorName || ao?.agreed_surveyor);
             const s10Served = !!(ao?.s10_served_date || ao?.s10ServedDate);
             const s104bServed = !!(ao?.s104b_served_date || ao?.s104bServedDate);
+            // Fixed 2026-09-15, on request — see aoIsRed above for the
+            // full reasoning: a real 7-day grace period, not immediate.
+            const dissentDate = ao?.dissent_received_date || ao?.dissentReceivedDate || '';
+            const daysSinceDissent = dissentDate ? Math.floor((now - new Date(dissentDate).getTime()) / 86400000) : null;
 
             let level = null, reason = null, action = null;
 
@@ -483,8 +498,8 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
               level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
             } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && st !== 'consent' && !s10Served) {
               level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';
-            } else if (st === 'dissent' && !hasSurv) {
-              level = 'red'; reason = 'Dissent — no surveyor appointed'; action = 'add_surveyor';
+            } else if (st === 'dissent' && !hasSurv && daysSinceDissent !== null && daysSinceDissent >= 7) {
+              level = 'red'; reason = `Dissent — no surveyor appointed (${daysSinceDissent}d)`; action = 'add_surveyor';
             } else if (sdDays !== null && sdDays >= 0 && sdDays <= 5) {
               level = 'amber'; reason = `Section 10 expires in ${sdDays}d`; action = 's104b';
             } else if (cdDays !== null && cdDays >= 0 && cdDays <= 3 && st !== 'dissent' && st !== 'consent') {
