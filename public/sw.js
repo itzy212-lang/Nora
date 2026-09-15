@@ -7,7 +7,13 @@
 // Bumped 2026-09-15: new project pause feature + "Project Complete"
 // rename, both frontend changes. Bumping so they reach devices
 // promptly rather than relying on a stale cached bundle.
-const CACHE_NAME = 'nora-v13';
+// Nora Service Worker — PWA offline support
+// Bumped 2026-09-15 (second time today): follow-up fix to a real
+// error reported live in the pause feature just shipped — an
+// untested .catch() pattern on the reminder task insert, not used
+// anywhere else in this file. Bumping again so the fix reaches
+// devices promptly.
+const CACHE_NAME = 'nora-v14';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

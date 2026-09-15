@@ -4707,7 +4707,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .eq('id', project.id);
       if (error) throw error;
 
-      await sb.from('tasks').insert([{
+      // Fixed 2026-09-15, real bug reported live: chained .catch()
+      // directly onto the insert call, an untested pattern not used
+      // anywhere else in this file — every other insert here uses
+      // plain await or destructured error handling instead. Matched
+      // that same, already-working convention.
+      const { error: taskError } = await sb.from('tasks').insert([{
         title: `Project paused: check in — ${project.ref || project.bo_premise_address || ''}`,
         description: 'This project was paused 14 days ago. Resume it if it can be, or pause it again if it genuinely still needs more time.',
         due_date: pauseUntilISO,
@@ -4715,7 +4720,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         source: 'manual',
         status: 'open',
         project_id: project.id,
-      }]).catch(e => console.warn('[handlePauseProject] reminder task insert failed:', e.message));
+      }]);
+      if (taskError) console.warn('[handlePauseProject] reminder task insert failed:', taskError.message);
 
       setProject(prev => ({ ...prev, paused_until: pauseUntilISO }));
       dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, paused_until: pauseUntilISO } });
