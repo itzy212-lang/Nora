@@ -3784,20 +3784,31 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   }, [project, dispatch]);
 
   const updateAORecord = useCallback(async (ao, patch) => {
-    const currentAOs = project.aos || [];
-    const updatedAOs = currentAOs.map(item => aoKeyMatches(item, ao)
-      ? { ...item, ...patch, updated_at: new Date().toISOString() }
-      : item
-    );
+    try {
+      const currentAOs = project.aos || [];
+      const updatedAOs = currentAOs.map(item => aoKeyMatches(item, ao)
+        ? { ...item, ...patch, updated_at: new Date().toISOString() }
+        : item
+      );
 
-    await saveAdjoiningOwners(project.id, updatedAOs);
+      console.log('[updateAORecord] Saving AO with patch:', { aoId: ao?.id, aoNum: ao?.num, patch });
+      const { error: saveError } = await saveAdjoiningOwners(project.id, updatedAOs);
+      
+      if (saveError) {
+        console.error('[updateAORecord] saveAdjoiningOwners failed:', saveError.message);
+        return;
+      }
 
-    setProject(prev => ({
-      ...prev,
-      aos: updatedAOs,
-    }));
-    // Dispatch to Redux state so updates persist when navigating away/back
-    dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
+      setProject(prev => ({
+        ...prev,
+        aos: updatedAOs,
+      }));
+      // Dispatch to Redux state so updates persist when navigating away/back
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
+      console.log('[updateAORecord] Successfully saved and dispatched');
+    } catch (err) {
+      console.error('[updateAORecord] Unexpected error:', err.message);
+    }
   }, [project.id, project.aos, dispatch]);
 
   const createProjectTask = useCallback(async ({ title, description, due_date, task_type, ao }) => {
