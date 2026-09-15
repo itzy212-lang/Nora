@@ -3692,7 +3692,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // Writes to the adjoining_owners table (the real source, per
     // yesterday's migration) and the legacy JSON column together,
     // via the shared function — replaces the old direct write here.
-    await saveAdjoiningOwners(project.id, updatedAOs);
+    const { error: saveError } = await saveAdjoiningOwners(project.id, updatedAOs);
+    
+    if (saveError) {
+      console.error('[handleSaveAO] Save failed:', saveError.message);
+      alert(`Failed to save AO: ${saveError.message}`);
+      return;
+    }
 
     setProject(prev => ({
       ...prev,
@@ -3729,9 +3735,13 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 onedrive_folder_url: folderData.web_url || null,
               } : a
             );
-            await saveAdjoiningOwners(project.id, withFolder);
-            setProject(prev => ({ ...prev, aos: withFolder }));
-            dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
+            const { error: folderSaveError } = await saveAdjoiningOwners(project.id, withFolder);
+            if (folderSaveError) {
+              console.warn('[handleSaveAO] Failed to save folder ID:', folderSaveError.message);
+            } else {
+              setProject(prev => ({ ...prev, aos: withFolder }));
+              dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
+            }
           }
         } catch (err) {
           console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);

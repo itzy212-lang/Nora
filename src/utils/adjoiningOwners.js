@@ -77,11 +77,13 @@ export async function saveAdjoiningOwners(projectId, aos) {
   const list = Array.isArray(aos) ? aos : [];
 
   // Table write first — the real, going-forward source.
+  let tableError = null;
   if (list.length) {
     const rows = list.filter(ao => ao?.id).map(ao => toTableRow(ao, projectId));
     if (rows.length) {
-      const { error: tableError } = await sb.from('adjoining_owners').upsert(rows, { onConflict: 'id' });
-      if (tableError) console.warn('[saveAdjoiningOwners] table write failed:', tableError.message);
+      const result = await sb.from('adjoining_owners').upsert(rows, { onConflict: 'id' });
+      tableError = result.error;
+      if (tableError) console.error('[saveAdjoiningOwners] table write failed:', tableError.message);
     }
   }
 
@@ -94,23 +96,29 @@ export async function saveAdjoiningOwners(projectId, aos) {
   // be findable there even though it no longer appears anywhere in
   // the UI. Delete any existing table row for this project not
   // present in the current list, by id.
-  try {
-    const keepIds = list.map(ao => ao?.id).filter(Boolean);
-    let deleteQuery = sb.from('adjoining_owners').delete().eq('project_id', projectId);
-    deleteQuery = keepIds.length ? deleteQuery.not('id', 'in', `(${keepIds.join(',')})`) : deleteQuery;
-    const { error: deleteError } = await deleteQuery;
-    if (deleteError) console.warn('[saveAdjoiningOwners] stale row cleanup failed:', deleteError.message);
-  } catch (err) {
-    console.warn('[saveAdjoiningOwners] stale row cleanup failed:', err.message);
+  if (!tableError) {
+    try {
+      const keepIds = list.map(ao => ao?.id).filter(Boolean);
+      let deleteQuery = sb.from('adjoining_owners').delete().eq('project_id', projectId);
+      deleteQuery = keepIds.length ? deleteQuery.not('id', 'in', `(${keepIds.join(',')})`) : deleteQuery;
+      const { error: deleteError } = await deleteQuery;
+      if (deleteError) console.warn('[saveAdjoiningOwners] stale row cleanup failed:', deleteError.message);
+    } catch (err) {
+      console.warn('[saveAdjoiningOwners] stale row cleanup failed:', err.message);
+    }
   }
 
   // Legacy JSON write — temporary safety net during the transition,
   // not a second source of truth. Kept so existing read sites that
   // haven't been switched over yet don't silently go stale.
-  const { error: jsonError } = await sb.from('projects').update({ aos: list }).eq('id', projectId);
-  if (jsonError) console.warn('[saveAdjoiningOwners] JSON write failed:', jsonError.message);
+  let jsonError = null;
+  if (!tableError) {
+    const result = await sb.from('projects').update({ aos: list }).eq('id', projectId);
+    jsonError = result.error;
+    if (jsonError) console.warn('[saveAdjoiningOwners] JSON write failed:', jsonError.message);
+  }
 
-  return { error: jsonError || null };
+  return { error: tableError || jsonError || null };
 }
 
 // Added 2026-09-09, on request: moved here from Calendar.jsx — the
