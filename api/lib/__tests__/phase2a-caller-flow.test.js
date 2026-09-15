@@ -66,26 +66,20 @@ describe('structural: single Stage 1 pathway (source-scan of api/ely-smart.js)',
     expect(source).not.toContain("|| 'gpt-5.6-luna'");
   });
 
-  it('buildSystemPrompt() is called with stage1Brief bound to the caller-controlled variable, not a fresh generation result', () => {
-    expect(source).toContain('stage1Brief: stage1BriefForPrompt');
-  });
-
-  it('stage1BriefForPrompt is declared and initialised to null, and is never reassigned to a generation result or computeBriefForInjection() output', () => {
-    expect(source).toContain('let stage1BriefForPrompt = null;');
-    // The only two other appearances of the identifier should be: the
-    // comment block referencing it, and the buildSystemPrompt() call site
-    // checked above — never `stage1BriefForPrompt = <something-other-than-null>`.
-    const reassignmentPattern = /stage1BriefForPrompt\s*=\s*(?!null)[^;]+;/g;
-    const suspiciousReassignments = (source.match(reassignmentPattern) || [])
-      .filter((m) => !m.includes('stage1BriefForPrompt = null'));
-    expect(suspiciousReassignments).toEqual([]);
-  });
-
-  it('the caller explicitly handles OFF, SHADOW, and PROMOTED_CANDIDATE — no state falls through unhandled', () => {
-    expect(source).toContain('STAGE1_STATE.OFF');
-    expect(source).toContain('STAGE1_STATE.SHADOW');
-    expect(source).toContain('STAGE1_STATE.PROMOTED_CANDIDATE');
-  });
+  // Removed 2026-09-15: three structural (source-scan) tests
+  // previously sat here — 'buildSystemPrompt() is called with
+  // stage1Brief bound to...', 'stage1BriefForPrompt is declared and
+  // initialised to null...', and 'the caller explicitly handles OFF,
+  // SHADOW, and PROMOTED_CANDIDATE...'. All three checked the actual
+  // V1 calling code (the stage1BriefForPrompt variable, the
+  // buildSystemPrompt() call site, the STAGE1_STATE branch handling)
+  // — that calling code was confirmed genuinely, permanently dead
+  // and removed in this same commit (see the dead-code audit
+  // document from this date). The underlying state-machine logic
+  // these tests were protecting is still covered by the Phase 1
+  // state-machine tests and the logic-equivalence tests above in
+  // this same file, which re-implement and test the decision logic
+  // directly, independent of the now-removed caller's source text.
 
   it('the PROMOTED_CANDIDATE branch is explicitly labelled as blocked, not silently treated as promotion', () => {
     expect(source).toContain('PROMOTED_CANDIDATE_BLOCKED');
@@ -201,9 +195,12 @@ describe('PREFLIGHT CORRECTION — structural: Stage 1 is scheduled via waitUnti
     expect(source).toContain("import { waitUntil } from '@vercel/functions';");
   });
 
-  it('calls waitUntil(runStage1ShadowTask(...)) at the scheduling point', () => {
-    expect(source).toContain('waitUntil(runStage1ShadowTask(stage1Snapshot));');
-  });
+  // Removed 2026-09-15: 'calls waitUntil(runStage1ShadowTask(...))
+  // at the scheduling point' previously sat here — checked the
+  // actual V1 scheduling call site, confirmed genuinely, permanently
+  // dead and removed in this same commit. waitUntil() and
+  // runStage1ShadowTask() themselves are untouched; only the V1
+  // caller that invoked them together is gone.
 
   it('never awaits waitUntil() — the whole point is that scheduling is synchronous and non-blocking', () => {
     expect(source).not.toMatch(/await\s+waitUntil\(/);
@@ -220,33 +217,21 @@ describe('PREFLIGHT CORRECTION — structural: Stage 1 is scheduled via waitUnti
     expect(callerSection).not.toMatch(/await\s+semanticSearchProject\(/);
   });
 
-  it('the immutable snapshot passed to the background task contains only the approved fields', () => {
-    const snapshotBlock = source.slice(
-      source.indexOf('const stage1Snapshot = {'),
-      source.indexOf('waitUntil(runStage1ShadowTask(stage1Snapshot));')
-    );
-    const approvedFields = [
-      'projectId', 'userId', 'surface', 'modeHint', 'projectBundle',
-      'scopedEmailContext', 'selectedEmail', 'chatHistory', 'userPrompt',
-      'representationLock', 'retrievedAuthority', 'diagnosticsState',
-    ];
-    for (const field of approvedFields) {
-      expect(snapshotBlock).toContain(field);
-    }
-    // Must not capture raw request/response objects or a service-role client.
-    expect(snapshotBlock).not.toMatch(/\breq\b/);
-    expect(snapshotBlock).not.toMatch(/\bres\b/);
-    expect(snapshotBlock).not.toContain('getSupabase');
-  });
-
-  it('stage1BriefForPrompt is computed and assigned before the background task is scheduled, and is never reassigned after', () => {
-    const idx = source.indexOf('let stage1BriefForPrompt = null;');
-    const afterSchedule = source.indexOf('waitUntil(runStage1ShadowTask(stage1Snapshot));');
-    expect(idx).toBeGreaterThan(-1);
-    expect(idx).toBeLessThan(afterSchedule);
-    const afterScheduleSection = source.slice(afterSchedule, source.indexOf('const systemPrompt = await buildSystemPrompt({'));
-    expect(afterScheduleSection).not.toMatch(/stage1BriefForPrompt\s*=/);
-  });
+  // Removed 2026-09-15: two structural (source-scan) tests previously
+  // sat here — 'the immutable snapshot passed to the background task
+  // contains only the approved fields' and 'stage1BriefForPrompt is
+  // computed and assigned before the background task is scheduled...'
+  // Both checked the actual calling code inside the V1 execution
+  // block (the stage1Snapshot construction, the waitUntil() call,
+  // the stage1BriefForPrompt variable) — that calling code was
+  // confirmed genuinely, permanently dead and removed in this same
+  // commit (see the dead-code audit document from this date), so
+  // there's nothing left for these two specific tests to check. The
+  // generateStage1Brief/runStage1ShadowTask functions themselves are
+  // untouched and still directly tested elsewhere in this same file
+  // (the logic-equivalence tests above, and the behavioral tests in
+  // phase2a-generate-stage1-brief.test.js) — only the V1 caller that
+  // invoked them as part of a live request is gone.
 });
 
 describe('PREFLIGHT CORRECTION — behavioral: runStage1ShadowTask never rejects', () => {
