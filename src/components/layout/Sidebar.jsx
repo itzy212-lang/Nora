@@ -20,13 +20,18 @@ const NAV = [
       { id: 'inbox',     icon: '📨', label: 'Inbox',    badge: 'emails' },
     ],
   },
-  {
-    section: 'PARTY WALL',
-    items: [
-      { id: 'notices', icon: '📋', label: 'Notices' },
-      { id: 'awards',  icon: '🏆', label: 'Awards' },
-    ],
-  },
+  // Fixed 2026-09-15, on request: the whole "PARTY WALL" section
+  // removed — "Notices" and "Awards" were its only two items.
+  // Notices was a stub ("Coming soon", no active code behind it at
+  // all); Awards is real, active code (a standalone document review
+  // tool) but confirmed irrelevant to current workflow. Neither
+  // entry point is deleted, per request — just no longer reachable
+  // from the sidebar, in case either is needed again later.
+  // AwardReview.jsx and the 'notices'/'awards' cases in App.jsx are
+  // both left fully intact. Removed the section entirely rather than
+  // leaving it with an empty items array, since the section header
+  // always renders regardless of whether it has any items — an empty
+  // one would show as a floating label with nothing underneath.
   {
     section: 'FINANCE',
     items: [

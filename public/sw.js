@@ -13,7 +13,10 @@
 // untested .catch() pattern on the reminder task insert, not used
 // anywhere else in this file. Bumping again so the fix reaches
 // devices promptly.
-const CACHE_NAME = 'nora-v14';
+// Nora Service Worker — PWA offline support
+// Bumped 2026-09-15 (third time today): removed the "PARTY WALL"
+// sidebar section (Notices/Awards) — frontend change.
+const CACHE_NAME = 'nora-v15';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
