@@ -175,19 +175,6 @@ async function verifyBearerToken(req) {
   return user.id;
 }
 
-function inferUserId(body = {}) {
-  // Body-supplied user IDs are no longer used for authentication.
-  // Identity is derived exclusively from the verified bearer token via verifyBearerToken().
-  // This function is retained only for non-auth purposes (e.g. session scoping where
-  // the caller has already verified identity). Returns null rather than a hardcoded fallback.
-  return (
-    body.user_id ||
-    body.userId ||
-    body.currentUser?.id ||
-    body.currentUser?.email ||
-    null
-  );
-}
 
 function compactJson(value, limit = 16000) {
   try {
@@ -2465,15 +2452,6 @@ function detectsCaseReview(prompt = '') {
 }
 
 // ── Invoice intent detection ──────────────────────────────────────────────
-function detectsInvoiceIntent(prompt = '') {
-  const p = prompt.toLowerCase();
-  return (
-    /(raise|create|generate|send|prepare|draft|do|write)/i.test(p) &&
-    /(invoice|bill|fee|charge|payment)/i.test(p)
-  ) ||
-  /(invoice for|bill (them|him|her|the building owner)|invoice (the |)building owner)/i.test(p) ||
-  /(raise an invoice|raise invoice|generate (an |the |)invoice)/i.test(p);
-}
 
 function detectsInvoiceGenerate(prompt = '') {
   const p = prompt.toLowerCase();
@@ -2509,9 +2487,6 @@ function parseInvoiceItems(prompt = '') {
   return items;
 }
 
-function parseInvoiceItemsFromChat(prompt = '') {
-  return parseInvoiceItems(prompt);
-}
 
 function parseBookingIntent(prompt = '') {
   const lower = prompt.toLowerCase();
@@ -2573,14 +2548,6 @@ async function createCalendarEntry({ taskType, title, dueDate, startTime, projec
   return data;
 }
 
-function needsProjectContext(prompt = '') {
-  const lower = String(prompt || '').toLowerCase();
-  return lower.includes('notice') || lower.includes('award') || lower.includes('adjoining owner') ||
-    lower.includes('building owner') || lower.includes('surveyor') || lower.includes('party wall') ||
-    lower.includes('project') || lower.includes('fee') || lower.includes('schedule') ||
-    lower.includes('soc') || lower.includes('who is') || lower.includes('what is the') ||
-    lower.includes('address') || lower.includes('owner') || lower.includes('ref');
-}
 
 function isStatutoryQuestion(prompt = '') {
   const lower = String(prompt || '').toLowerCase();
@@ -2639,136 +2606,8 @@ async function lookupKnowledgeBase(prompt = '') {
 }
 
 // ── Background embed trigger — non-blocking ─────────────────────────────
-async function triggerEmbed(table, recordId) {
-  try {
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nora-d9wy.vercel.app';
-    // Fire and forget — don't await
-    fetch(`${baseUrl}/api/embed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'embed_record', table, record_id: recordId }),
-    }).catch(() => {}); // silent fail
-  } catch {}
-}
 
 // ── Claude case review ────────────────────────────────────────────────────
-async function runCaseReview({ projectId, topic, projectBundle }) {
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_KEY) throw new Error('Missing ANTHROPIC_API_KEY');
-
-  const sb = getSupabase();
-
-  // Load ALL emails for this project — no limit
-  let allEmails = [];
-  if (sb && projectId) {
-    try {
-      const { data } = await sb
-        .from('emails')
-        .select('subject, sender_email, sender_name, sent_at, body, folder, is_sent')
-        .eq('project_id', projectId)
-        .order('sent_at', { ascending: true });
-      allEmails = (data || []).map(e => ({
-        date: e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
-        direction: e.is_sent ? 'Sent' : 'Received',
-        from: e.sender_name || e.sender_email || '',
-        subject: e.subject || '',
-        body: (e.body || '').slice(0, 3000),
-      }));
-    } catch (err) {
-      console.warn('[ely-smart] case review email load error:', err.message);
-    }
-  }
-
-  // Load project chat messages from ai_messages — this is where project chat lives
-  let allBrain = [];
-  if (sb && projectId) {
-    try {
-      const { data } = await sb
-        .from('ai_messages')
-        .select('role, content, created_at, surface')
-        .eq('project_id', projectId)
-        .eq('surface', 'project_chat')
-        .order('created_at', { ascending: true });
-      allBrain = (data || []).map(m => ({
-        date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '',
-        type: m.role === 'user' ? 'Surveyor note' : 'Nora response',
-        content: (m.content || '').slice(0, 2000),
-      }));
-    } catch (err) {
-      console.warn('[ely-smart] case review chat load error:', err.message);
-    }
-  }
-
-  // Filter emails by topic keywords to reduce payload — keep most relevant
-  const topicWords = (topic || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const filterRelevant = (items, contentKey) => {
-    if (!topicWords.length) return items;
-    const scored = items.map(item => {
-      const text = (item[contentKey] || item.subject || item.content || '').toLowerCase();
-      const score = topicWords.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
-      return { ...item, _score: score };
-    });
-    const relevant = scored.filter(i => i._score > 0).sort((a, b) => b._score - a._score);
-    const rest = scored.filter(i => i._score === 0);
-    return [...relevant, ...rest];
-  };
-
-  const filteredEmails = filterRelevant(allEmails, 'body').slice(0, 40);
-  const filteredBrain = filterRelevant(allBrain, 'content').slice(0, 80);
-
-  const emailsText = filteredEmails.length
-    ? filteredEmails.map(e => `[${e.date}] ${e.direction} -- From: ${e.from}\nSubject: ${e.subject}\n${e.body}`).join('\n\n---\n\n')
-    : 'No emails found.';
-
-  const brainText = filteredBrain.length
-    ? filteredBrain.map(m => `[${m.date}] ${m.type}: ${m.content}`).join('\n\n')
-    : 'No notes or chat history found.';
-
-  const projectAddress = projectBundle?.project_raw?.bo_premise_address || projectBundle?.project_raw?.address || '';
-
-  const prompt = `You are assisting a party wall surveyor called Itzik (Square One Consulting) with a case review.
-
-Project: ${projectAddress}
-Topic to investigate: ${topic}
-
-Your task:
-1. Read ALL the correspondence and notes below chronologically
-2. Build a structured timeline of key events relevant to the topic
-3. Identify patterns — delays, contradictions, jurisdictional overreach, billing anomalies, position changes
-4. Extract verbatim quotes from emails that are most relevant — include the date, sender, and exact words
-5. Summarise the strongest arguments Itzik can make based on the evidence
-6. Flag anything that weakens Itzik's position so he is prepared
-
-Be thorough. This is for use in a professional dispute. Accuracy and evidence matter.
-
---- ALL EMAILS (chronological) ---
-${emailsText}
-
---- PROJECT NOTES & CHAT HISTORY ---
-${brainText}`;
-
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      max_completion_tokens: 8000,
-      messages: [
-        { role: 'system', content: 'You are an expert party wall surveyor assistant helping build evidence-based case files. Be precise, factual, and thorough. Use British English.' },
-        { role: 'user', content: prompt },
-      ],
-    }),
-  });
-
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error?.message || 'Case review failed');
-
-  return payload.choices?.[0]?.message?.content || 'No findings returned.';
-}
 
 // ── Fallback for oversized requests — uses gpt-4o ────────────────────────
 async function callClaude(messages = []) {
@@ -2843,66 +2682,7 @@ function extractProperNouns(text = '') {
   return [...new Set(nouns)];
 }
 
-function buildKnownNounSet(projectBundle = null, emailContext = null, chatHistory = []) {
-  const known = new Set();
 
-  // From project data
-  if (projectBundle?.project) {
-    const p = projectBundle.project;
-    const fields = [
-      p.name, p.bo_1_name, p.bo_2_name, p.ao_client_name,
-      p.bos_name, p.bos_firm, p.bo_company, p.bo, p.ref,
-    ];
-    fields.forEach(f => {
-      if (f) String(f).split(/\s+/).forEach(w => known.add(w));
-    });
-  }
-
-  // From adjoining owners
-  if (projectBundle?.adjoining_owners) {
-    projectBundle.adjoining_owners.forEach(ao => {
-      [ao.name, ao.surveyor_name, ao.surveyor_firm, ao.address].forEach(f => {
-        if (f) String(f).split(/\s+/).forEach(w => known.add(w));
-      });
-    });
-  }
-
-  // From email context
-  if (emailContext) {
-    [emailContext.from, emailContext.sender_name, emailContext.from_email,
-     emailContext.subject, emailContext.body, emailContext.threadText].forEach(f => {
-      if (f) String(f)
-        .replace(/<[^>]+>/g, ' ')  // strip email angle brackets
-        .replace(/[^a-zA-Z\s]/g, ' ')  // strip punctuation
-        .split(/\s+/)
-        .filter(w => w.length > 1)
-        .forEach(w => known.add(w));
-    });
-  }
-
-  // From chat history
-  chatHistory.forEach(m => {
-    if (m.content) String(m.content).split(/\s+/).forEach(w => known.add(w));
-  });
-
-  return known;
-}
-
-function findUnknownNouns(prompt = '', knownNouns = new Set()) {
-  const candidates = extractProperNouns(prompt);
-  return candidates.filter(noun => {
-    // Check if this word (or a close match) appears in the known set
-    // Strip possessives from both sides before comparing
-    const lc = noun.replace(/'s$/i, '').toLowerCase();
-    for (const known of knownNouns) {
-      const klc = String(known).replace(/'s$/i, '').toLowerCase();
-      if (klc.includes(lc) || lc.includes(klc)) {
-        return false;
-      }
-    }
-    return true;
-  });
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
