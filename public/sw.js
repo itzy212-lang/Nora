@@ -3,7 +3,11 @@
 // notepad z-index fix — it now sits below the top bar instead of
 // covering it, per request. Bumping again so this reaches devices
 // promptly.
-const CACHE_NAME = 'nora-v12';
+// Nora Service Worker — PWA offline support
+// Bumped 2026-09-15: new project pause feature + "Project Complete"
+// rename, both frontend changes. Bumping so they reach devices
+// promptly rather than relying on a stale cached bundle.
+const CACHE_NAME = 'nora-v13';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
