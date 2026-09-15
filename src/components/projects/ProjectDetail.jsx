@@ -278,7 +278,7 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
   const s104bServed = !!ao104BServed(ao);
   const awardServed = !!(ao?.award_served_date || ao?.awardServedDate);
   const awardGenerated = !!(ao?.award_generated_at || ao?.awardGeneratedAt || st === 'award');
-  const surveyorAppointed = !!(aoSurvName(ao) && (st === 'dissent' || s104bServed));
+  const surveyorAppointed = !!(aoSurvName(ao) && (st === 'dissent' || st === 's10' || s104bServed));
   const overdue = consentPeriodExpired(ao);
   const s10Deadline = daysUntil(aoS10(ao));
 
@@ -324,6 +324,10 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
   // S10 served — countdown to 104b
   if (s10Served) {
     if (s10Deadline !== null && s10Deadline <= 0) {
+      // S10 deadline expired — check if surveyor appointed
+      if (surveyorAppointed) {
+        return { label: 'Surveyor appointed', colour: '#22c55e', action: null };
+      }
       return { label: 'Serve 10(4)(b)', colour: '#ef4444', action: 'serve_104b' };
     }
     return {
@@ -3685,12 +3689,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       socAgreedDate: form.socDate || existingAO?.socAgreedDate || '',
     };
 
-    // Auto-update status: if AO has dissented and a surveyor is now being appointed,
-    // change status from 'dissent' to 'surveyor_appointed' (green, ready to proceed)
+    // Auto-update status: if AO has dissented OR is in S10 period and a surveyor is now being appointed,
+    // change status to 'surveyor_appointed' (green, ready to proceed)
     const currentStatus = (newAO.status || '').toLowerCase();
     const hasNewSurveyor = (form.surv?.name || '').trim().length > 0;
     const hadExistingSurveyor = !!(existingAO?.surv_name || existingAO?.surveyorName || existingAO?.surveyor_name);
-    if (currentStatus === 'dissent' && hasNewSurveyor && !hadExistingSurveyor) {
+    if ((currentStatus === 'dissent' || currentStatus === 's10') && hasNewSurveyor && !hadExistingSurveyor) {
       newAO.status = 'surveyor_appointed';
     }
 

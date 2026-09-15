@@ -473,7 +473,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
 
             let level = null, reason = null, action = null;
 
-            if (sdDays !== null && sdDays < 0 && !s104bServed) {
+            if (sdDays !== null && sdDays < 0 && !s104bServed && !hasSurv) {
               level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
             } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && !s10Served) {
               level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';
