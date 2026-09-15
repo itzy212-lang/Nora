@@ -77,14 +77,15 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
           title="Quick reference view"
           style={{
             width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--bg3)',
+            background: '#fff',
             border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, cursor: 'pointer', flexShrink: 0,
-            color: 'var(--text2)',
+            fontSize: 17, fontWeight: 800, fontStyle: 'italic',
+            cursor: 'pointer', flexShrink: 0,
+            color: '#dc2626',
           }}
         >
-          🔍
+          2
         </button>
         <button
           onClick={onOpenNotepad}
