@@ -4424,16 +4424,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
     await updateAORecord(ao, patch);
 
-    // Close any open deadline tasks for this AO when consent or dissent is received
+    // Delete deadline tasks when consent or dissent is received — no need to trigger these anymore
     if (['consent', 'dissent'].includes(status) && sb && project?.id) {
-      const aoId = ao?.id || String(ao?.num || '');
-      if (aoId) {
+      const aoToken = ao?.id || `AO${ao?.num || ''}`;
+      try {
         await sb.from('tasks')
-          .update({ status: 'closed', closed_at: new Date().toISOString() })
+          .delete()
           .eq('project_id', project.id)
-          .eq('ao_id', aoId)
           .in('task_type', ['notice_consent_deadline', 'notice_section10_deadline'])
-          .eq('status', 'open');
+          .ilike('description', `%AO_REF:${aoToken}%`);
+      } catch (err) {
+        console.warn('[handleSetAOStatus] Could not delete deadline tasks:', err?.message || err);
       }
     }
   }, [updateAORecord, project?.id]);
