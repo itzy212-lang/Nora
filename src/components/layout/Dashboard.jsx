@@ -120,6 +120,16 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     return aos.every(ao => !!(ao.award_served_date || ao.awardServedDate || (ao.status || '') === 'complete'));
   };
 
+  // Added 2026-09-15, on request, Option A pause design confirmed
+  // directly: "while it's in pause status, I'm not getting any
+  // dashboard interference from that project" — a separate flag,
+  // never touches any AO's real status. Naturally expires by date
+  // comparison here rather than needing a cron to clear it — once
+  // paused_until has genuinely passed, this simply stops excluding
+  // the project, the same query-based pattern already used for the
+  // to-do list's own rollover.
+  const isProjectPaused = (p) => !!(p.paused_until && new Date(p.paused_until) > new Date());
+
   // Helper — does an AO show as RED on the project list (i.e. needs urgent attention)
   const aoIsRed = (ao) => {
     const st = (ao?.status || '').toLowerCase();
@@ -150,7 +160,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   // Stats
   const activeProjects = projects.filter(p => !isProjectClosed(p)).length;
 
-  const needsAttention = projects.filter(p => !isProjectClosed(p)).reduce((sum, p) =>
+  const needsAttention = projects.filter(p => !isProjectClosed(p) && !isProjectPaused(p)).reduce((sum, p) =>
     sum + (p.aos || []).filter(aoIsRed).length, 0);
 
   const feePipeline = projects
@@ -468,7 +478,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
       {(() => {
         const redAOs = [];
         const amberAOs = [];
-        projects.filter(p => !isProjectClosed(p)).forEach(p => {
+        projects.filter(p => !isProjectClosed(p) && !isProjectPaused(p)).forEach(p => {
           (p.aos || []).forEach(ao => {
             const st = (ao?.status || '').toLowerCase();
             const done = ['consent','complete','award_served','surveyor_appointed'].includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);

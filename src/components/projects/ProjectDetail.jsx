@@ -4683,6 +4683,64 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [sb, project, onBack]);
 
+  // Added 2026-09-15, on request, Option A pause design confirmed
+  // directly: "it just means that while it's in pause status, I'm
+  // not getting any dashboard interference from that project" — a
+  // separate flag only, never touches any AO's real status. Creates
+  // a linked 14-day task (shows in both the calendar and the to-do
+  // list, since they're the same underlying data) as the reminder to
+  // check in — deliberately no separate expiry mechanism needed,
+  // since the dashboard's own paused_until > now check naturally
+  // stops excluding this project once the 14 days genuinely pass,
+  // the same query-based pattern already used for the to-do list's
+  // own daily rollover.
+  const handlePauseProject = useCallback(async () => {
+    if (!window.confirm('Pause this project? Every adjoining owner on it will stop showing on the dashboard until you resume it, or for 14 days.')) return;
+    try {
+      const pauseUntil = new Date();
+      pauseUntil.setDate(pauseUntil.getDate() + 14);
+      const pauseUntilISO = pauseUntil.toISOString().slice(0, 10);
+
+      const { error } = await sb
+        .from('projects')
+        .update({ paused_until: pauseUntilISO })
+        .eq('id', project.id);
+      if (error) throw error;
+
+      await sb.from('tasks').insert([{
+        title: `Project paused: check in — ${project.ref || project.bo_premise_address || ''}`,
+        description: 'This project was paused 14 days ago. Resume it if it can be, or pause it again if it genuinely still needs more time.',
+        due_date: pauseUntilISO,
+        task_type: 'correspondence',
+        source: 'manual',
+        status: 'open',
+        project_id: project.id,
+      }]).catch(e => console.warn('[handlePauseProject] reminder task insert failed:', e.message));
+
+      setProject(prev => ({ ...prev, paused_until: pauseUntilISO }));
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, paused_until: pauseUntilISO } });
+    } catch (err) {
+      console.error('[ProjectDetail] pause project failed:', err.message);
+      alert(err.message || 'Could not pause project.');
+    }
+  }, [sb, project, dispatch]);
+
+  const handleUnpauseProject = useCallback(async () => {
+    try {
+      const { error } = await sb
+        .from('projects')
+        .update({ paused_until: null })
+        .eq('id', project.id);
+      if (error) throw error;
+
+      setProject(prev => ({ ...prev, paused_until: null }));
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, paused_until: null } });
+    } catch (err) {
+      console.error('[ProjectDetail] unpause project failed:', err.message);
+      alert(err.message || 'Could not resume project.');
+    }
+  }, [sb, project, dispatch]);
+
   const handleMarkAwardServed = async () => {
     // Fixed 2026-09-10, real, confirmed problem reported live: this
     // marked the entire project as served in a single click,
@@ -4974,6 +5032,56 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               card itself, matching how each AO card already has its
               own Edit button within the card, rather than sitting
               separately up here under the tabs. */}
+
+          {/* Added 2026-09-15, on request: Option A pause design —
+              a separate flag, never overwrites any AO's real status.
+              While active, this project is entirely excluded from
+              the dashboard's "needs attention" calculation. */}
+          {(!project.paused_until || new Date(project.paused_until) <= new Date()) && project.status !== 'award_served' && project.status !== 'complete' && (
+            <button
+              onClick={handlePauseProject}
+              style={{
+                cursor: 'pointer',
+                borderRadius: 99,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                minHeight: 30,
+                background: '#fffbeb',
+                color: '#b45309',
+                border: '1px solid #fde68a',
+              }}
+            >
+              ⏸ Pause
+            </button>
+          )}
+
+          {project.paused_until && new Date(project.paused_until) > new Date() && (
+            <button
+              onClick={handleUnpauseProject}
+              style={{
+                cursor: 'pointer',
+                borderRadius: 99,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                minHeight: 30,
+                background: '#fffbeb',
+                color: '#b45309',
+                border: '1px solid #fde68a',
+              }}
+            >
+              ▶ Paused until {new Date(project.paused_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — resume
+            </button>
+          )}
+
+          {/* Fixed 2026-09-15, on request: renamed from "Award
+              Served" — with each AO's own award status now handled
+              individually on its own card, a project-level button
+              also saying "Award Served" no longer made sense. Same
+              underlying action and status value (award_served) —
+              only the label changed, so nothing about the actual
+              completion logic is affected. */}
           {project.status !== 'award_served' && project.status !== 'complete' && (
             <button
               onClick={handleMarkAwardServed}
@@ -4989,7 +5097,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 border: '1px solid #bbf7d0',
               }}
             >
-              ✓ Award Served
+              ✓ Project Complete
             </button>
           )}
 
