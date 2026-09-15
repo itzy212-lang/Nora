@@ -47,6 +47,7 @@ function toTableRow(ao, projectId) {
     s10_served_date: ao.s10_served_date || ao.s10ServedDate || null,
     notice_served_date: ao.notice_served_date || ao.noticeServedDate || null,
     dissent_received_date: ao.dissent_received_date || ao.dissentReceivedDate || null,
+    consent_received_date: ao.consent_received_date || ao.consentReceivedDate || null,
     s104b_served_date: ao.s104b_served_date || null,
     award_served_date: ao.award_served_date || ao.awardServedDate || null,
     award_generated_at: ao.award_generated_at || ao.awardGeneratedAt || null,
