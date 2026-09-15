@@ -111,12 +111,13 @@ export async function saveAdjoiningOwners(projectId, aos) {
   // Legacy JSON write — temporary safety net during the transition,
   // not a second source of truth. Kept so existing read sites that
   // haven't been switched over yet don't silently go stale.
+  // CRITICAL FIX 2026-09-15: This MUST happen regardless of table error,
+  // otherwise if the table upsert fails, the JSON fallback never updates
+  // and you get permanently stale data. The JSON is the true safety net.
   let jsonError = null;
-  if (!tableError) {
-    const result = await sb.from('projects').update({ aos: list }).eq('id', projectId);
-    jsonError = result.error;
-    if (jsonError) console.warn('[saveAdjoiningOwners] JSON write failed:', jsonError.message);
-  }
+  const result = await sb.from('projects').update({ aos: list }).eq('id', projectId);
+  jsonError = result.error;
+  if (jsonError) console.warn('[saveAdjoiningOwners] JSON write failed:', jsonError.message);
 
   return { error: tableError || jsonError || null };
 }
