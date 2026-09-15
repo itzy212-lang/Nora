@@ -1677,7 +1677,7 @@ function AOCard({
               is more robust than depending on one date field that
               may or may not be present. */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {!aoS10Served(ao) && (ao.status || '').toLowerCase() !== 'dissent' && (
+            {!aoS10Served(ao) && (ao.status || '').toLowerCase() !== 'dissent' && (ao.status || '').toLowerCase() !== 'consent' && (
               <>
             {/* Fixed 2026-09-10, on request: "Consent" is now the
                 permanent button from the start, not gated behind a
