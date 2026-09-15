@@ -1536,7 +1536,7 @@ function AOCard({
             // S10 countdown — show while S10 served but 104b not yet served AND no surveyor appointed
             const s10Dd = aoS10(ao);
             const s10Days = daysUntil(s10Dd);
-            const hasSurveyor = !!(aoSurvName(ao) && ao?.agreed_surveyor);
+            const hasSurveyor = !!(aoSurvName(ao) || ao?.agreed_surveyor);
             if (!isAOAppointment && !!aoS10Served(ao) && !ao104BServed(ao) && s10Dd && !hasSurveyor) {
               return (
                 <div style={{
