@@ -460,7 +460,7 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
         projects.filter(p => !isProjectClosed(p)).forEach(p => {
           (p.aos || []).forEach(ao => {
             const st = (ao?.status || '').toLowerCase();
-            const done = ['consent','complete','award_served'].includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
+            const done = ['consent','complete','award_served','surveyor_appointed'].includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
             if (done) return;
             const now = Date.now();
             const cd = ao?.consentDeadline || ao?.consent_deadline;

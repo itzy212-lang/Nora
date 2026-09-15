@@ -3685,6 +3685,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       socAgreedDate: form.socDate || existingAO?.socAgreedDate || '',
     };
 
+    // Auto-update status: if AO has dissented and a surveyor is now being appointed,
+    // change status from 'dissent' to 'surveyor_appointed' (green, ready to proceed)
+    const currentStatus = (newAO.status || '').toLowerCase();
+    const hasNewSurveyor = (form.surv?.name || '').trim().length > 0;
+    const hadExistingSurveyor = !!(existingAO?.surv_name || existingAO?.surveyorName || existingAO?.surveyor_name);
+    if (currentStatus === 'dissent' && hasNewSurveyor && !hadExistingSurveyor) {
+      newAO.status = 'surveyor_appointed';
+    }
+
     const updatedAOs = existingAO
       ? currentAOs.map(a => (a.id && existingAO.id ? a.id === existingAO.id : a.num === existingAO.num) ? newAO : a)
       : [...currentAOs, newAO];
