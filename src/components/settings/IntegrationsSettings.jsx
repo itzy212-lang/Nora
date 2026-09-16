@@ -107,10 +107,6 @@ export default function IntegrationsSettings() {
     <div style={{ padding: 20 }}>
       <h2>Email & Storage Integrations</h2>
 
-      <div style={{ padding: 10, marginBottom: 15, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, fontSize: 12, fontFamily: 'monospace' }}>
-        Client ID in use: {import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || 'NOT SET'}
-      </div>
-
       {/* Email Provider */}
       <div style={{ marginBottom: 30, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
         <h3>Email Provider</h3>

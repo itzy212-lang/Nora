@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import axios from 'axios';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -9,137 +8,108 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const ACTIVE_JOBS_FOLDER_NAME = 'Active Jobs';
 
-/**
- * Refresh Google OAuth token if expired
- */
 async function refreshGoogleToken(refreshToken, userId) {
-  try {
-    const response = await axios.post('https://oauth2.googleapis.com/token', {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
       client_id: process.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
       client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
-    });
+    }),
+  });
 
-    const newAccessToken = response.data.access_token;
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.error || 'Token refresh failed');
 
-    // Update token in DB
-    await supabase
-      .from('user_integrations')
-      .update({ google_drive_access_token: newAccessToken })
-      .eq('user_id', userId);
+  const newAccessToken = data.access_token;
 
-    return newAccessToken;
-  } catch (err) {
-    console.error('Token refresh failed:', err.message);
-    throw err;
-  }
+  await supabase
+    .from('user_integrations')
+    .update({ google_drive_access_token: newAccessToken })
+    .eq('user_id', userId);
+
+  return newAccessToken;
 }
 
-/**
- * Find or create the "Active Jobs" folder at Drive root
- */
+async function driveSearch(accessToken, query) {
+  const url = new URL(`${DRIVE_API_BASE}/files`);
+  url.searchParams.set('q', query);
+  url.searchParams.set('spaces', 'drive');
+  url.searchParams.set('fields', 'files(id, webViewLink)');
+  url.searchParams.set('pageSize', '1');
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Drive search failed');
+  return data;
+}
+
+async function driveCreateFolder(accessToken, name, parents) {
+  const url = new URL(`${DRIVE_API_BASE}/files`);
+  url.searchParams.set('fields', 'id, webViewLink');
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      ...(parents ? { parents } : {}),
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Drive folder create failed');
+  return data;
+}
+
 async function getActiveJobsFolder(accessToken, userIntegration) {
-  try {
-    // Check if we already have the Active Jobs folder ID stored
-    if (userIntegration.google_drive_active_jobs_folder_id) {
-      return { id: userIntegration.google_drive_active_jobs_folder_id };
-    }
+  if (userIntegration.google_drive_active_jobs_folder_id) {
+    return { id: userIntegration.google_drive_active_jobs_folder_id };
+  }
 
-    // Search for existing "Active Jobs" folder in Drive root
-    const searchRes = await axios.get(`${DRIVE_API_BASE}/files`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        q: `name='${ACTIVE_JOBS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`,
-        spaces: 'drive',
-        fields: 'files(id)',
-        pageSize: 1,
-      },
-    });
+  const searchData = await driveSearch(
+    accessToken,
+    `name='${ACTIVE_JOBS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`
+  );
 
-    if (searchRes.data.files?.length > 0) {
-      const folderId = searchRes.data.files[0].id;
-      // Store the folder ID for future use
-      await supabase
-        .from('user_integrations')
-        .update({ google_drive_active_jobs_folder_id: folderId })
-        .eq('user_id', userIntegration.user_id);
-      return { id: folderId };
-    }
-
-    // Create "Active Jobs" folder if it doesn't exist
-    const createRes = await axios.post(
-      `${DRIVE_API_BASE}/files`,
-      {
-        name: ACTIVE_JOBS_FOLDER_NAME,
-        mimeType: 'application/vnd.google-apps.folder',
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        params: { fields: 'id' },
-      }
-    );
-
-    const folderId = createRes.data.id;
-    // Store the folder ID
+  if (searchData.files?.length > 0) {
+    const folderId = searchData.files[0].id;
     await supabase
       .from('user_integrations')
       .update({ google_drive_active_jobs_folder_id: folderId })
       .eq('user_id', userIntegration.user_id);
-
     return { id: folderId };
-  } catch (err) {
-    console.error('Get Active Jobs folder failed:', err.message);
-    throw err;
   }
+
+  const created = await driveCreateFolder(accessToken, ACTIVE_JOBS_FOLDER_NAME);
+  await supabase
+    .from('user_integrations')
+    .update({ google_drive_active_jobs_folder_id: created.id })
+    .eq('user_id', userIntegration.user_id);
+
+  return { id: created.id };
 }
 
-/**
- * Find or create a folder by name under a parent
- */
 async function findOrCreateFolder(accessToken, parentFolderId, folderName) {
-  try {
-    // Search for existing folder
-    const searchRes = await axios.get(`${DRIVE_API_BASE}/files`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parentFolderId}' in parents`,
-        spaces: 'drive',
-        fields: 'files(id, webViewLink)',
-        pageSize: 1,
-      },
-    });
+  const searchData = await driveSearch(
+    accessToken,
+    `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parentFolderId}' in parents`
+  );
 
-    if (searchRes.data.files?.length > 0) {
-      const folder = searchRes.data.files[0];
-      return { id: folder.id, webViewLink: folder.webViewLink };
-    }
-
-    // Create folder if it doesn't exist
-    const createRes = await axios.post(
-      `${DRIVE_API_BASE}/files`,
-      {
-        name: folderName,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: [parentFolderId],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        params: { fields: 'id, webViewLink' },
-      }
-    );
-
-    return { id: createRes.data.id, webViewLink: createRes.data.webViewLink };
-  } catch (err) {
-    console.error('Find or create folder failed:', err.message);
-    throw err;
+  if (searchData.files?.length > 0) {
+    const folder = searchData.files[0];
+    return { id: folder.id, webViewLink: folder.webViewLink };
   }
+
+  const created = await driveCreateFolder(accessToken, folderName, [parentFolderId]);
+  return { id: created.id, webViewLink: created.webViewLink };
 }
 
 export default async function handler(req, res) {
@@ -164,7 +134,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing user_id or action' });
     }
 
-    // Get user's Google Drive tokens
     const { data: integration, error: intErr } = await supabase
       .from('user_integrations')
       .select('user_id, google_drive_access_token, google_drive_refresh_token, google_drive_active_jobs_folder_id')
@@ -177,7 +146,6 @@ export default async function handler(req, res) {
 
     let accessToken = integration.google_drive_access_token;
 
-    // Refresh if needed
     if (!accessToken && integration.google_drive_refresh_token) {
       accessToken = await refreshGoogleToken(integration.google_drive_refresh_token, user_id);
     }
@@ -186,16 +154,12 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'No valid Google Drive token' });
     }
 
-    // Handle different actions (matching OneDrive behavior)
     if (action === 'create_project_folder') {
       if (!project_address) {
         return res.status(400).json({ error: 'Missing project_address' });
       }
 
-      // Get or create the "Active Jobs" folder
       const activeJobsFolder = await getActiveJobsFolder(accessToken, integration);
-
-      // Create project folder under Active Jobs
       const projectFolder = await findOrCreateFolder(accessToken, activeJobsFolder.id, project_address);
 
       return res.status(200).json({
@@ -215,7 +179,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing project_folder_id' });
       }
 
-      // Create AO subfolder under the project folder
       const aoFolder = await findOrCreateFolder(accessToken, project_folder_id, subfolderName);
 
       return res.status(200).json({
