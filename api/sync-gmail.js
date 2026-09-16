@@ -205,6 +205,13 @@ async function syncGmailEmails(userId, accessToken) {
   const messagesData = messagesText ? JSON.parse(messagesText) : {};
   if (!messagesRes.ok) throw new Error(messagesData.error?.message || 'Failed to list messages');
 
+  try {
+    await supabase.from('oauth_debug').insert({
+      event: 'gmail_list_messages',
+      response_data: { query, listUrl: listUrl.toString(), status: messagesRes.status, body: messagesData },
+    });
+  } catch (e) {}
+
   const messageIds = messagesData.messages || [];
   let processed = 0, skipped = 0, failed = 0, threadLinked = 0, partyLinked = 0;
 
