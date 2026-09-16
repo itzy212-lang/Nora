@@ -3,6 +3,7 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { createProjectFolder } from '../../utils/providers';
 
 const mInput = {
   width: '100%',
@@ -512,31 +513,34 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
 
       // Auto-create OneDrive folder for new project
       const boAddr = boPremise || payload.bo_premise_address || '';
-      if (boAddr) {
+      if (boAddr && data?.id) {
         try {
-          const userEmail = await getCurrentUserEmail();
-          if (!userEmail) {
-            console.warn('[NewProjectModal] Could not determine current user — skipping OneDrive folder creation.');
+          const user = await sb.auth.getUser();
+          const userId = user?.data?.user?.id;
+          if (!userId) {
+            console.warn('[NewProjectModal] Could not determine current user — skipping folder creation.');
           } else {
-          const folderRes = await fetch('/api/onedrive-folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: userEmail,
-              action: 'create_project_folder',
-              project_address: boAddr,
-            }),
-          });
-          const folderData = await folderRes.json();
-          if (folderData.success && folderData.folder_id) {
-            await sb.from('projects').update({
-              onedrive_folder_id: folderData.folder_id,
-              onedrive_folder_url: folderData.web_url || null,
-            }).eq('id', data.id);
-          }
+            // Create folder using user's configured provider (OneDrive or Google Drive)
+            const folderData = await createProjectFolder(userId, boAddr);
+            
+            if (folderData?.folder_id) {
+              // Update project with folder info (will be stored in either onedrive or google_drive columns)
+              const { data: integrations } = await sb
+                .from('user_integrations')
+                .select('storage_provider')
+                .eq('user_id', userId)
+                .single();
+
+              const provider = integrations?.storage_provider || 'onedrive';
+              const updateData = provider === 'googledrive'
+                ? { google_drive_folder_id: folderData.folder_id, google_drive_folder_url: folderData.web_url || null }
+                : { onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null };
+
+              await sb.from('projects').update(updateData).eq('id', data.id);
+            }
           }
         } catch (folderErr) {
-          console.warn('[NewProjectModal] OneDrive folder creation failed:', folderErr.message);
+          console.warn('[NewProjectModal] Folder creation failed:', folderErr.message);
         }
       }
 

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
+import IntegrationsSettings from '../settings/IntegrationsSettings';
 
-const TABS = ['Firm', 'Templates', 'Placeholders', 'Email', 'Invoice', 'Account', 'AI', 'Nora'];
+const TABS = ['Firm', 'Templates', 'Placeholders', 'Email', 'Invoice', 'Account', 'Integrations', 'AI', 'Nora'];
 
 const TEMPLATE_LABELS = {
   loa_bo: 'LoA - Building Owner',
@@ -1159,6 +1160,7 @@ export default function Settings() {
       {activeTab === 'Placeholders' && <PlaceholdersTab />}
       {activeTab === 'Email' && <EmailTab />}
       {activeTab === 'Invoice' && <InvoiceSettings />}
+      {activeTab === 'Integrations' && <IntegrationsSettings />}
       {activeTab === 'Account' && <AccountTab />}
       {activeTab === 'AI' && <AITab />}
       {activeTab === 'Nora' && <NoraTab />}

@@ -6,6 +6,7 @@ import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
+import { syncEmails } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
@@ -2136,9 +2137,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const syncingRef = useRef(false);
 
   // Clear email cache when user changes to prevent old user's emails from showing
+  // Also trigger email sync via configured provider (Gmail or Outlook)
   useEffect(() => {
     if (!state.currentUser) return;
     clearEmailCache().catch(() => {}); // silently clear cache on user change
+    
+    // Trigger email sync in background (don't block UI)
+    syncEmails(state.currentUser.id).catch(err => {
+      console.warn('Email sync failed (non-blocking):', err.message);
+    });
   }, [state.currentUser]);
 
   const loadEmails = useCallback(async ({ force = false, incremental = false, existingOverride = null } = {}) => {

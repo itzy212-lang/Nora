@@ -197,8 +197,35 @@ export default function App() {
       // Register push notifications after login (deferred so it doesn't block)
       setTimeout(() => registerPushNotifications(currentUser.email), 3000);
 
-      // Handle deep link: ?project=PROJECT_ID (from push notification tap)
+      // Handle Google OAuth callback
       const params = new URLSearchParams(window.location.search);
+      const authProvider = params.get('auth');
+      
+      if (authProvider === 'google') {
+        const status = params.get('status');
+        if (status === 'success') {
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          
+          // Store tokens in DB via edge function
+          fetch('/api/store-google-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token,
+              refresh_token,
+              user_id: currentUser.id,
+              provider: 'gmail', // or 'google_drive' — for now assume Gmail since both use same OAuth
+            }),
+          }).catch(err => console.error('Failed to store tokens:', err));
+        } else {
+          console.error('OAuth error:', params.get('error'), params.get('description'));
+        }
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
+      // Handle deep link: ?project=PROJECT_ID (from push notification tap)
       const deepProjectId = params.get('project');
       const deepEmailId = params.get('email');
 
