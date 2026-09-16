@@ -67,23 +67,18 @@ export default function IntegrationsSettings() {
   };
 
   const handleGmailConnect = () => {
-    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    googleAuthUrl.searchParams.append('client_id', import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID);
-    
-    // Redirect to Vercel edge function which handles token exchange
+    const clientId = '642613309080-m414fv82jc4b9vr4tvqpt8plat9cfl29.apps.googleusercontent.com';
     const callbackUri = `${window.location.origin}/api/google-callback`;
-    console.log('🔵 OAuth Debug:', {
-      origin: window.location.origin,
-      callbackUri,
-      clientId: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
-    });
-    googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
     
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.append('client_id', clientId);
+    googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
     googleAuthUrl.searchParams.append('response_type', 'code');
     googleAuthUrl.searchParams.append('scope', 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file');
     googleAuthUrl.searchParams.append('access_type', 'offline');
     googleAuthUrl.searchParams.append('prompt', 'consent');
     
+    console.log('Redirecting to:', googleAuthUrl.toString());
     window.location.href = googleAuthUrl.toString();
   };
 
