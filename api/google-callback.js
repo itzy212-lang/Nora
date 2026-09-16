@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const redirectUri = `${protocol}://${host}/api/google-callback`;
 
+    console.log('[OAuth] Exchanging code for tokens...');
     const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
       code,
       client_id: process.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
@@ -31,11 +32,16 @@ export default async function handler(req, res) {
       grant_type: 'authorization_code',
     });
 
+    console.log('[OAuth] Full token response:', JSON.stringify(tokenResp.data, null, 2));
+
     const accessToken = tokenResp.data.access_token;
     const refreshToken = tokenResp.data.refresh_token;
-    console.log('[OAuth] Step 2: Got tokens', { 
+    console.log('[OAuth] Step 2: Parsed tokens', { 
       accessToken: accessToken ? `${accessToken.slice(0,20)}...` : 'MISSING',
-      refreshToken: refreshToken ? 'yes' : 'no'
+      accessTokenType: typeof accessToken,
+      accessTokenLength: accessToken?.length,
+      refreshToken: refreshToken ? `${refreshToken.slice(0,20)}...` : 'MISSING',
+      refreshTokenType: typeof refreshToken,
     });
 
     const userResp = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -56,22 +62,35 @@ export default async function handler(req, res) {
     console.log('[OAuth] Step 4: Found user:', user.id);
 
     console.log('[OAuth] Step 5: Saving tokens...');
-    console.log('[OAuth] accessToken:', accessToken ? `${accessToken.slice(0,20)}...` : 'NULL');
-    console.log('[OAuth] refreshToken:', refreshToken ? `${refreshToken.slice(0,20)}...` : 'NULL');
+    console.log('[OAuth] About to update with:', {
+      user_id: user.id,
+      email_provider: 'gmail',
+      storage_provider: 'googledrive',
+      gmail_access_token: accessToken ? `${accessToken.slice(0,20)}...` : 'NULL',
+      gmail_refresh_token: refreshToken ? `${refreshToken.slice(0,20)}...` : 'NULL',
+      google_drive_access_token: accessToken ? `${accessToken.slice(0,20)}...` : 'NULL',
+      google_drive_refresh_token: refreshToken ? `${refreshToken.slice(0,20)}...` : 'NULL',
+    });
 
-    const { error: updateError } = await supabase
+    const updatePayload = {
+      email_provider: 'gmail',
+      storage_provider: 'googledrive',
+      gmail_access_token: accessToken,
+      gmail_refresh_token: refreshToken || null,
+      google_drive_access_token: accessToken,
+      google_drive_refresh_token: refreshToken || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('[OAuth] Payload keys:', Object.keys(updatePayload));
+    
+    const { error: updateError, data: updateData } = await supabase
       .from('user_integrations')
-      .update({
-        email_provider: 'gmail',
-        storage_provider: 'googledrive',
-        gmail_access_token: accessToken,
-        gmail_refresh_token: refreshToken || null,
-        google_drive_access_token: accessToken,
-        google_drive_refresh_token: refreshToken || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
+      .update(updatePayload)
+      .eq('user_id', user.id)
+      .select();
 
+    console.log('[OAuth] Update result:', { error: updateError, dataReturned: !!updateData });
     if (updateError) throw updateError;
 
     console.log('[OAuth] Step 6: Success!');
