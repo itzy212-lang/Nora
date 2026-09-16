@@ -21,24 +21,35 @@ describe('V1/V2 routing — structural guarantees', () => {
     expect(matches.length).toBe(1);
   });
 
-  it('the V2 branch returns before any V1 code (buildSystemPrompt / buildMessages) can execute for that request', () => {
+  it('the V2 branch returns on every path — the response, and its own error handler', () => {
+    // Fixed 2026-09-15: buildSystemPrompt/buildMessages (V1's own
+    // prompt/message construction) no longer exist in this file at
+    // all — removed as confirmed, permanently unreachable dead code
+    // once resolveArchitectureVersion() started always returning
+    // 'v2' (d974a675). This test now verifies the same underlying
+    // guarantee a different way: every path inside the V2 branch
+    // itself returns, so there was never a scenario where execution
+    // could fall through to anything after it, V1 or otherwise.
     const idx = source.indexOf("if (v2ArchitectureVersion === 'v2')");
-    const buildSystemPromptCallIdx = source.indexOf('const systemPrompt = await buildSystemPrompt(');
     expect(idx).toBeGreaterThan(-1);
-    expect(buildSystemPromptCallIdx).toBeGreaterThan(idx);
-    const branchBlock = source.slice(idx, buildSystemPromptCallIdx);
-    // Every path inside the v2 branch must return or throw — never fall
-    // through into V1 code.
+    const branchEnd = source.indexOf('\n    }\n', idx);
+    const branchBlock = source.slice(idx, branchEnd);
     expect(branchBlock).toContain('return res.status(200).json(');
     expect(branchBlock).toContain('return res.status(500).json(');
   });
 
-  it('buildSystemPrompt and buildMessages definitions are not inside the V2 pipeline function', () => {
-    const pipelineStart = source.indexOf('async function runV2Pipeline(');
-    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
-    const pipelineBody = source.slice(pipelineStart, pipelineEnd);
-    expect(pipelineBody).not.toContain('async function buildSystemPrompt');
-    expect(pipelineBody).not.toContain('async function buildMessages');
+  it('buildSystemPrompt and buildMessages (V1) no longer exist in this file at all', () => {
+    // Fixed 2026-09-15: supersedes the two previous tests here
+    // ('...definitions are not inside the V2 pipeline function' and
+    // '...still have zero overlap with any V2 diff region') — both
+    // assumed V1's functions still existed somewhere in the file and
+    // checked their position relative to V2. That's no longer the
+    // right question: they were confirmed genuinely dead (only ever
+    // called from the V1 execution path, itself unreachable) and
+    // removed entirely, so the real guarantee now is simply that
+    // neither name is present anywhere in this file any more.
+    expect(source).not.toContain('async function buildSystemPrompt');
+    expect(source).not.toContain('async function buildMessages');
   });
 
   it('runV2Pipeline never references V1-only brain layer names', () => {
@@ -81,17 +92,6 @@ describe('V1/V2 routing — structural guarantees', () => {
     const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
     const pipelineBody = source.slice(pipelineStart, pipelineEnd);
     expect(pipelineBody).toContain('semanticSearchProject(effectiveProjectId, prompt');
-  });
-
-  it('V1 remains completely unmodified: buildSystemPrompt/buildMessages still have zero overlap with any V2 diff region (spec item 8)', () => {
-    // Re-asserts the same structural guarantee already proven above,
-    // specifically after the context-wiring correction's edits.
-    const bspIdx = source.indexOf('async function buildSystemPrompt(');
-    const bmIdx = source.indexOf('async function buildMessages(');
-    const pipelineStart = source.indexOf('async function runV2Pipeline(');
-    const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
-    expect(bspIdx).toBeGreaterThan(pipelineEnd);
-    expect(bmIdx).toBeGreaterThan(pipelineEnd);
   });
 
   // Project-context correction (2026-08-06), spec tests 6 and 7.
