@@ -53,7 +53,7 @@ const ageColour = (days) => {
 
 export default function Dashboard({ onNavigate, onOpenProject }) {
   const { state } = useApp();
-  const { projects = [], leads = [] } = state;
+  const { projects = [], leads = [], currentUser } = state;
 
   const isMobile = window.innerWidth < 768;
 
@@ -71,24 +71,26 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   // Fixed 2026-08-21, on request: leads are now real project records
   // (stage='lead'), not the separate leads table — reading from
   // projects directly, matching the same architecture Leads.jsx uses.
+  // Re-fetch when user changes to prevent data leak.
   useEffect(() => {
-    if (!sb) return;
+    if (!sb || !currentUser) return;
     sb.from('projects').select('*').eq('stage', 'lead').order('created_at', { ascending: false }).then(({ data }) => {
       if (data) setFreshLeads(data);
     });
-  }, []);
+  }, [currentUser]);
 
-  // Load invoices
+  // Load invoices — re-fetch when user changes to avoid data leak
   useEffect(() => {
-    if (!sb) return;
+    if (!sb || !currentUser) return;
     sb.from('invoices').select('*').then(({ data }) => {
       if (data) setInvoices(data);
     });
-  }, []);
+  }, [currentUser]);
 
   // Load inbox emails (inbound, not sent, not draft, last 60 days)
+  // Re-creates when currentUser changes so it re-fetches for new user
   const loadInboxEmails = useCallback(async () => {
-    if (!sb) return;
+    if (!sb || !currentUser) return;
     setEmailsLoading(true);
     try {
       const since = new Date(Date.now() - 60 * 86400000).toISOString();
@@ -107,7 +109,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
     } finally {
       setEmailsLoading(false);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => { loadInboxEmails(); }, [loadInboxEmails]);
 
