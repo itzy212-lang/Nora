@@ -6,18 +6,28 @@ export default function IntegrationsSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [oauthDebug, setOauthDebug] = useState(null);
+
   useEffect(() => {
     loadIntegrations();
 
     // Also check if we just returned from OAuth
     const params = new URLSearchParams(window.location.search);
-    if (params.get('auth') === 'google' && params.get('status') === 'success') {
-      console.log('OAuth success detected, will refresh integrations');
-      // Give the redirect a moment to complete, then reload
-      const timer = setTimeout(() => {
-        loadIntegrations();
-      }, 500);
-      return () => clearTimeout(timer);
+    if (params.get('auth') === 'google') {
+      const status = params.get('status');
+      const debug = params.get('debug');
+      const error = params.get('error');
+      
+      setOauthDebug({ status, debug, error });
+      console.log('OAuth callback detected:', { status, debug, error });
+      
+      if (status === 'success') {
+        // Give the redirect a moment to complete, then reload
+        const timer = setTimeout(() => {
+          loadIntegrations();
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
     }
   }, []);
 
@@ -110,6 +120,22 @@ export default function IntegrationsSettings() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Email & Storage Integrations</h2>
+
+      {oauthDebug && (
+        <div style={{ 
+          padding: 12, 
+          marginBottom: 20, 
+          background: oauthDebug.status === 'error' ? '#fee2e2' : '#dcfce7',
+          border: `1px solid ${oauthDebug.status === 'error' ? '#fca5a5' : '#86efac'}`,
+          borderRadius: 8,
+          fontSize: 12,
+          color: oauthDebug.status === 'error' ? '#7f1d1d' : '#166534'
+        }}>
+          <strong>OAuth Debug ({oauthDebug.status}):</strong>
+          {oauthDebug.error && <div>Error: {oauthDebug.error}</div>}
+          {oauthDebug.debug && <div>Info: {oauthDebug.debug}</div>}
+        </div>
+      )}
 
       {/* Email Provider */}
       <div style={{ marginBottom: 30, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>

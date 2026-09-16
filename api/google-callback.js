@@ -94,10 +94,12 @@ export default async function handler(req, res) {
     if (updateError) throw updateError;
 
     console.log('[OAuth] Step 6: Success!');
-    return res.redirect('/?auth=google&status=success');
+    const debugInfo = `accessToken:${accessToken ? 'yes' : 'NO'},refreshToken:${refreshToken ? 'yes' : 'NO'}`;
+    return res.redirect(`/?auth=google&status=success&debug=${encodeURIComponent(debugInfo)}`);
 
   } catch (error) {
-    console.error('[OAuth] FAILED:', error.message);
-    return res.redirect(`/?auth=google&status=error&error=${encodeURIComponent(error.message)}`);
+    console.error('[OAuth] FAILED:', error.message, error.stack);
+    const errorMsg = `${error.message}${error.response?.status ? ` (${error.response.status})` : ''}`;
+    return res.redirect(`/?auth=google&status=error&error=${encodeURIComponent(errorMsg)}`);
   }
 }
