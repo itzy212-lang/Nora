@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import sb from '../supabaseClient';
+import { useApp } from '../state/appStore';
 
 export function useInvoices() {
+  const { state } = useApp();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,7 +24,7 @@ export function useInvoices() {
     }
   }, []);
 
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  useEffect(() => { fetchInvoices(); }, [fetchInvoices, state.currentUser]);
 
   const createInvoice = async (invoiceData) => {
     const { data, error } = await sb
