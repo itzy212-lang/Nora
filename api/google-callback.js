@@ -41,6 +41,8 @@ export default async function handler(req, res) {
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const REDIRECT_URI = `${protocol}://${host}/api/google-callback`;
 
+    console.log('Google OAuth: Exchanging code for tokens...', { REDIRECT_URI });
+
     // Exchange code for tokens
     const tokenResponse = await axios.post(GOOGLE_TOKEN_URL, {
       code,
@@ -56,42 +58,60 @@ export default async function handler(req, res) {
       throw new Error('No access token in response');
     }
 
-    // Get the user from the access token (to get their user_id)
+    console.log('Google OAuth: Got access token, fetching user info...');
+
+    // Get the user from the access token
     const userRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
     const googleEmail = userRes.data.email;
+    console.log('Google OAuth: User email:', googleEmail);
 
-    // Find the user by email in Supabase
-    const { data: { users }, error: userErr } = await supabase.auth.admin.listUsers();
+    // Find the user by email in Supabase auth
+    const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers();
+    
+    if (listErr) {
+      throw new Error('Failed to list users: ' + listErr.message);
+    }
+
     const authUser = users?.find(u => u.email === googleEmail);
 
     if (!authUser) {
-      throw new Error('User not found in Nora');
+      throw new Error(`User not found in Nora. Expected to find: ${googleEmail}`);
     }
 
-    // Store tokens server-side (DO NOT expose to client)
-    const { error: storeErr } = await supabase
+    console.log('Google OAuth: Found user:', authUser.id);
+
+    // Store tokens using UPSERT (insert if not exists, update if exists)
+    const { data: upsertResult, error: storeErr } = await supabase
       .from('user_integrations')
-      .update({
+      .upsert({
+        user_id: authUser.id,
         gmail_access_token: access_token,
         gmail_refresh_token: refresh_token || null,
         google_drive_access_token: access_token,
         google_drive_refresh_token: refresh_token || null,
         updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', authUser.id);
+      }, {
+        onConflict: 'user_id'
+      });
 
     if (storeErr) {
       throw new Error('Failed to store tokens: ' + storeErr.message);
     }
 
+    console.log('Google OAuth: Tokens stored successfully');
+
     // Redirect back with just a success status (NO tokens in URL)
     return res.redirect(`/?auth=google&status=success`);
 
   } catch (error) {
-    console.error('Google OAuth callback error:', error.message);
+    console.error('Google OAuth callback error:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.data
+    });
     
     return res.redirect(
       `/?auth=google&status=error&error=${encodeURIComponent(error.message)}`
