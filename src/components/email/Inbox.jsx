@@ -2135,6 +2135,12 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
 
   const syncingRef = useRef(false);
 
+  // Clear email cache when user changes to prevent old user's emails from showing
+  useEffect(() => {
+    if (!state.currentUser) return;
+    clearEmailCache().catch(() => {}); // silently clear cache on user change
+  }, [state.currentUser]);
+
   const loadEmails = useCallback(async ({ force = false, incremental = false, existingOverride = null } = {}) => {
     if (!sb) return;
     // Fixed 2026-08-14, real confirmed bug: existingOverride lets a
