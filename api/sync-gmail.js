@@ -184,7 +184,12 @@ async function syncGmailEmails(userId, accessToken) {
     : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const afterEpoch = Math.floor((lastSync.getTime() - 2 * 60 * 1000) / 1000);
-  const query = `after:${afterEpoch}`;
+  // Gmail's after: operator is documented for YYYY/MM/DD; epoch seconds
+  // work in practice but are undocumented and have been unreliable, so
+  // use the documented date format instead.
+  const afterDate = new Date((lastSync.getTime() - 2 * 60 * 1000));
+  const afterDateStr = `${afterDate.getUTCFullYear()}/${String(afterDate.getUTCMonth() + 1).padStart(2, '0')}/${String(afterDate.getUTCDate()).padStart(2, '0')}`;
+  const query = `after:${afterDateStr}`;
 
   const listUrl = new URL(`${GMAIL_API_BASE}/messages`);
   listUrl.searchParams.set('q', query);
@@ -194,7 +199,10 @@ async function syncGmailEmails(userId, accessToken) {
   const messagesRes = await fetch(listUrl.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const messagesData = await messagesRes.json();
+  const messagesText = await messagesRes.text();
+  // Gmail's partial-response (fields=) can return an empty body when there
+  // are zero matches instead of "{}" — guard against that before parsing.
+  const messagesData = messagesText ? JSON.parse(messagesText) : {};
   if (!messagesRes.ok) throw new Error(messagesData.error?.message || 'Failed to list messages');
 
   const messageIds = messagesData.messages || [];
