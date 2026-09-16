@@ -56,30 +56,23 @@ export default async function handler(req, res) {
     console.log('[OAuth] Step 4: Found user:', user.id);
 
     console.log('[OAuth] Step 5: Saving tokens...');
-    const saveData = {
-      user_id: user.id,
-      email_provider: 'gmail',
-      storage_provider: 'googledrive',
-      gmail_access_token: accessToken,
-      gmail_refresh_token: refreshToken || null,
-      google_drive_access_token: accessToken,
-      google_drive_refresh_token: refreshToken || null,
-      updated_at: new Date().toISOString(),
-    };
-    
-    console.log('[OAuth] Upserting with data:', {
-      user_id: saveData.user_id,
-      email_provider: saveData.email_provider,
-      storage_provider: saveData.storage_provider,
-      gmail_access_token: saveData.gmail_access_token ? `${saveData.gmail_access_token.slice(0,20)}...` : 'NULL',
-      google_drive_access_token: saveData.google_drive_access_token ? `${saveData.google_drive_access_token.slice(0,20)}...` : 'NULL',
-    });
+    console.log('[OAuth] accessToken:', accessToken ? `${accessToken.slice(0,20)}...` : 'NULL');
+    console.log('[OAuth] refreshToken:', refreshToken ? `${refreshToken.slice(0,20)}...` : 'NULL');
 
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('user_integrations')
-      .upsert(saveData, { onConflict: 'user_id' });
+      .update({
+        email_provider: 'gmail',
+        storage_provider: 'googledrive',
+        gmail_access_token: accessToken,
+        gmail_refresh_token: refreshToken || null,
+        google_drive_access_token: accessToken,
+        google_drive_refresh_token: refreshToken || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     console.log('[OAuth] Step 6: Success!');
     return res.redirect('/?auth=google&status=success');
