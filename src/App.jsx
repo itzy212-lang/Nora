@@ -204,20 +204,9 @@ export default function App() {
       if (authProvider === 'google') {
         const status = params.get('status');
         if (status === 'success') {
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
-          
-          // Store tokens in DB via edge function
-          fetch('/api/store-google-tokens', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              access_token,
-              refresh_token,
-              user_id: currentUser.id,
-              provider: 'gmail', // or 'google_drive' — for now assume Gmail since both use same OAuth
-            }),
-          }).catch(err => console.error('Failed to store tokens:', err));
+          // Tokens are already stored server-side by google-callback.js
+          // Just need to reload integrations
+          console.log('Google OAuth successful, tokens stored');
         } else {
           console.error('OAuth error:', params.get('error'), params.get('description'));
         }

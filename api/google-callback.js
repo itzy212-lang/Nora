@@ -1,9 +1,14 @@
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const REDIRECT_URI = process.env.NODE_ENV === 'production' 
+const REDIRECT_URI = process.env.VERCEL_ENV === 'production' 
   ? 'https://nora-d9wy.vercel.app/api/google-callback'
   : 'http://localhost:5173/api/google-callback';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req, res) {
   // Handle CORS
@@ -30,7 +35,7 @@ export default async function handler(req, res) {
       const errorDescription = req.query.error_description || 'Authorization failed';
       
       return res.redirect(
-        `/auth-callback?status=error&error=${encodeURIComponent(error)}&description=${encodeURIComponent(errorDescription)}`
+        `/?auth=google&status=error&error=${encodeURIComponent(error)}&description=${encodeURIComponent(errorDescription)}`
       );
     }
 
@@ -49,15 +54,39 @@ export default async function handler(req, res) {
       throw new Error('No access token in response');
     }
 
-    // Redirect to app with tokens in URL (will be handled by app)
-    const params = new URLSearchParams({
-      status: 'success',
-      access_token,
-      refresh_token: refresh_token || '',
-      expires_in,
+    // Get the user from the access token (to get their user_id)
+    const userRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
     });
 
-    return res.redirect(`/?auth=google&${params.toString()}`);
+    const googleEmail = userRes.data.email;
+
+    // Find the user by email in Supabase
+    const { data: { users }, error: userErr } = await supabase.auth.admin.listUsers();
+    const authUser = users?.find(u => u.email === googleEmail);
+
+    if (!authUser) {
+      throw new Error('User not found in Nora');
+    }
+
+    // Store tokens server-side (DO NOT expose to client)
+    const { error: storeErr } = await supabase
+      .from('user_integrations')
+      .update({
+        gmail_access_token: access_token,
+        gmail_refresh_token: refresh_token || null,
+        google_drive_access_token: access_token,
+        google_drive_refresh_token: refresh_token || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', authUser.id);
+
+    if (storeErr) {
+      throw new Error('Failed to store tokens: ' + storeErr.message);
+    }
+
+    // Redirect back with just a success status (NO tokens in URL)
+    return res.redirect(`/?auth=google&status=success`);
 
   } catch (error) {
     console.error('Google OAuth callback error:', error.message);

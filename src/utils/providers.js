@@ -53,19 +53,19 @@ export async function syncEmails(userId) {
 /**
  * Create a project folder using the user's configured storage provider
  */
-export async function createProjectFolder(userId, projectName, parentFolderId = null) {
+export async function createProjectFolder(userId, projectName, options = {}) {
   try {
     const integrations = await getUserIntegrations(userId);
 
     if (integrations.storage_provider === 'googledrive') {
-      // Call Google Drive folder creation
+      // Call Google Drive folder creation with 'create_project_folder' action
       const response = await fetch('/api/create-google-drive-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          folder_name: projectName,
-          parent_folder_id: parentFolderId,
+          action: 'create_project_folder',
+          project_address: projectName,
         }),
       });
 
@@ -82,6 +82,43 @@ export async function createProjectFolder(userId, projectName, parentFolderId = 
     }
   } catch (err) {
     console.error('Project folder creation error:', err);
+    throw err;
+  }
+}
+
+/**
+ * Create an AO subfolder using the user's configured storage provider
+ */
+export async function createAOFolder(userId, projectFolderId, aoAddress) {
+  try {
+    const integrations = await getUserIntegrations(userId);
+
+    if (integrations.storage_provider === 'googledrive') {
+      // Call Google Drive folder creation with 'create_ao_folder' action
+      const response = await fetch('/api/create-google-drive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          action: 'create_ao_folder',
+          project_folder_id: projectFolderId,
+          ao_address: aoAddress,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Google Drive folder creation failed');
+      }
+
+      return response.json();
+    } else {
+      // Fall back to existing OneDrive folder creation
+      console.log('Using OneDrive storage');
+      return { folder_id: null, web_url: null };
+    }
+  } catch (err) {
+    console.error('AO folder creation error:', err);
     throw err;
   }
 }
