@@ -192,7 +192,8 @@ async function syncGmailEmails(userId, accessToken) {
   const query = `after:${afterDateStr}`;
 
   const listUrl = new URL(`${GMAIL_API_BASE}/messages`);
-  listUrl.searchParams.set('maxResults', '5');
+  listUrl.searchParams.set('q', query);
+  listUrl.searchParams.set('maxResults', '50');
   listUrl.searchParams.set('fields', 'messages(id),resultSizeEstimate');
 
   const messagesRes = await fetch(listUrl.toString(), {
