@@ -78,7 +78,7 @@ export default function IntegrationsSettings() {
     googleAuthUrl.searchParams.append('client_id', clientId);
     googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
     googleAuthUrl.searchParams.append('response_type', 'code');
-    googleAuthUrl.searchParams.append('scope', 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file');
+    googleAuthUrl.searchParams.append('scope', 'openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file');
     googleAuthUrl.searchParams.append('access_type', 'offline');
     googleAuthUrl.searchParams.append('prompt', 'consent');
 
