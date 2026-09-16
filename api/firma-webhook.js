@@ -9,13 +9,40 @@ function getSupabase() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-// Verify Firma webhook signature
-function verifySignature(payload, signature, secret) {
-  if (!secret || !signature) return true; // skip if not configured
-  try {
-    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch { return false; }
+// Fixed 2026-09-16, real, confirmed bug found while investigating why
+// signed documents were never coming back: this previously computed
+// the HMAC over the raw payload alone and compared it directly against
+// the full X-Firma-Signature header value. Firma's actual format,
+// confirmed directly against their webhooks documentation, is a
+// structured, timestamped header -- "t=<unix ts>,v1=<hex digest>" --
+// signing "{timestamp}.{raw json body}", not the body alone. The old
+// code would never have matched a real signature; it only ever
+// appeared to work because verification was skipped entirely whenever
+// no secret was configured, which was true this whole time. Also now
+// checks X-Firma-Signature-Old during the 7-day secret-rotation grace
+// period, per the same documentation.
+function verifySignature(payload, signatureHeader, oldSignatureHeader, secret) {
+  if (!secret) return true; // skip if not configured
+  if (!signatureHeader) return false;
+
+  const verifyOne = (header) => {
+    if (!header) return false;
+    const parts = {};
+    header.split(',').forEach(part => {
+      const [key, value] = part.split('=');
+      parts[key] = value;
+    });
+    const { t: timestamp, v1: signature } = parts;
+    if (!timestamp || !signature) return false;
+
+    const signedPayload = `${timestamp}.${payload}`;
+    const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch { return false; }
+  };
+
+  return verifyOne(signatureHeader) || verifyOne(oldSignatureHeader);
 }
 
 // Download signed PDF from Firma
@@ -89,17 +116,27 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return;
 
     const rawBody = JSON.stringify(req.body);
-    const signature = req.headers['x-firma-signature'] || req.headers['x-firma-signature-256'] || '';
+    const signature = req.headers['x-firma-signature'] || '';
+    const signatureOld = req.headers['x-firma-signature-old'] || '';
     const webhookSecret = process.env.FIRMA_WEBHOOK_SECRET || '';
 
-    if (webhookSecret && !verifySignature(rawBody, signature, webhookSecret)) {
+    if (!verifySignature(rawBody, signature, signatureOld, webhookSecret)) {
       console.warn('[firma-webhook] Signature verification failed');
       return;
     }
 
     const event = req.body || {};
-    const eventType = event.event || event.type || '';
-    const signingRequestId = event.signing_request_id || event.data?.signing_request_id || event.id;
+    const eventType = event.type || event.event || req.headers['x-firma-event'] || '';
+    // Fixed 2026-09-16, real bug: the real payload nests this at
+    // data.signing_request.id (signing_request is an object, not a
+    // flat id field) -- confirmed directly against Firma's documented
+    // webhook payload structure. The old paths are kept as fallbacks
+    // in case of payload variation, but the correct one now comes first.
+    const signingRequestId =
+      event.data?.signing_request?.id ||
+      event.signing_request_id ||
+      event.data?.signing_request_id ||
+      event.id;
 
     console.log('[firma-webhook] Event:', eventType, signingRequestId);
 
@@ -162,3 +199,7 @@ export default async function handler(req, res) {
     console.error('[firma-webhook] Error:', err.message);
   }
 }
+
+// Test-only export — does not change production behaviour, the
+// default export (the Vercel handler) is unchanged.
+export { verifySignature };
