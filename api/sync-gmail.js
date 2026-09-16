@@ -205,6 +205,29 @@ async function syncGmailEmails(userId, accessToken) {
   if (!messagesRes.ok) throw new Error(messagesData.error?.message || 'Failed to list messages');
 
   try {
+    const debugIds = (messagesData.messages || []).map(m => m.id);
+    const debugDetails = [];
+    for (const id of debugIds.slice(0, 5)) {
+      const dRes = await fetch(`${GMAIL_API_BASE}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const dData = await dRes.json();
+      debugDetails.push({
+        id,
+        internalDate: dData.internalDate,
+        headers: dData.payload?.headers,
+        labelIds: dData.labelIds,
+      });
+    }
+    await supabase.from('oauth_debug').insert({
+      event: 'gmail_message_details',
+      response_data: { debugDetails },
+    });
+  } catch (e) {
+    await supabase.from('oauth_debug').insert({ event: 'gmail_debug_error', response_data: { message: e.message } });
+  }
+
+  try {
     await supabase.from('oauth_debug').insert({
       event: 'gmail_list_messages',
       response_data: { query, listUrl: listUrl.toString(), status: messagesRes.status, body: messagesData },
