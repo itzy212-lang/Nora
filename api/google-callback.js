@@ -8,111 +8,84 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   const { code } = req.query;
-
   if (!code) {
     const error = req.query.error || 'cancelled';
     return res.redirect(`/?auth=google&status=error&error=${encodeURIComponent(error)}`);
   }
 
   try {
-    // Import inside the function to catch any import errors
     const axios = (await import('axios')).default;
     const { createClient } = await import('@supabase/supabase-js');
 
-    console.log('[OAuth] Starting');
-
+    console.log('[OAuth] Step 1: Exchange code');
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const redirectUri = `${protocol}://${host}/api/google-callback`;
 
-    // Step 1: Exchange code
-    console.log('[OAuth] Exchanging code');
-    let tokenData;
-    try {
-      const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
-        code,
-        client_id: process.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
-        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      });
-      tokenData = tokenResp.data;
-    } catch (err) {
-      throw new Error(`Token exchange failed: ${err.response?.data?.error || err.message}`);
-    }
+    const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
+      code,
+      client_id: process.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
+      client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    });
 
-    const accessToken = tokenData.access_token;
-    console.log('[OAuth] Got token');
+    const accessToken = tokenResp.data.access_token;
+    const refreshToken = tokenResp.data.refresh_token;
+    console.log('[OAuth] Step 2: Got tokens', { 
+      accessToken: accessToken ? `${accessToken.slice(0,20)}...` : 'MISSING',
+      refreshToken: refreshToken ? 'yes' : 'no'
+    });
 
-    // Step 2: Get user
-    console.log('[OAuth] Fetching user');
-    let userData;
-    try {
-      const userResp = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      userData = userResp.data;
-    } catch (err) {
-      throw new Error(`User fetch failed: ${err.message}`);
-    }
+    const userResp = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const googleEmail = userResp.data.email;
+    console.log('[OAuth] Step 3: User email:', googleEmail);
 
-    console.log('[OAuth] Got user:', userData.email);
-
-    // Step 3: Create Supabase client
-    console.log('[OAuth] Creating Supabase client');
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Step 4: Find user
-    console.log('[OAuth] Finding user in auth');
-    let users;
-    try {
-      const result = await supabase.auth.admin.listUsers();
-      if (result.error) throw result.error;
-      users = result.data.users;
-    } catch (err) {
-      throw new Error(`User lookup failed: ${err.message}`);
-    }
+    const result = await supabase.auth.admin.listUsers();
+    if (result.error) throw result.error;
+    const user = result.data.users?.find(u => u.email === googleEmail);
+    if (!user) throw new Error(`User ${googleEmail} not found`);
+    console.log('[OAuth] Step 4: Found user:', user.id);
 
-    const user = users?.find(u => u.email === userData.email);
-    if (!user) {
-      throw new Error(`User ${userData.email} not found. Please sign up first.`);
-    }
+    console.log('[OAuth] Step 5: Saving tokens...');
+    const saveData = {
+      user_id: user.id,
+      email_provider: 'gmail',
+      storage_provider: 'googledrive',
+      gmail_access_token: accessToken,
+      gmail_refresh_token: refreshToken || null,
+      google_drive_access_token: accessToken,
+      google_drive_refresh_token: refreshToken || null,
+      updated_at: new Date().toISOString(),
+    };
+    
+    console.log('[OAuth] Upserting with data:', {
+      user_id: saveData.user_id,
+      email_provider: saveData.email_provider,
+      storage_provider: saveData.storage_provider,
+      gmail_access_token: saveData.gmail_access_token ? `${saveData.gmail_access_token.slice(0,20)}...` : 'NULL',
+      google_drive_access_token: saveData.google_drive_access_token ? `${saveData.google_drive_access_token.slice(0,20)}...` : 'NULL',
+    });
 
-    console.log('[OAuth] Found user:', user.id);
+    const { error } = await supabase
+      .from('user_integrations')
+      .upsert(saveData, { onConflict: 'user_id' });
 
-    // Step 5: Save tokens
-    console.log('[OAuth] Saving tokens');
-    try {
-      const { error } = await supabase.from('user_integrations').upsert({
-        user_id: user.id,
-        email_provider: 'gmail',
-        storage_provider: 'googledrive',
-        gmail_access_token: accessToken,
-        gmail_refresh_token: tokenData.refresh_token || null,
-        google_drive_access_token: accessToken,
-        google_drive_refresh_token: tokenData.refresh_token || null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
+    if (error) throw error;
 
-      if (error) throw error;
-    } catch (err) {
-      throw new Error(`Token save failed: ${err.message}`);
-    }
-
-    console.log('[OAuth] Success!');
+    console.log('[OAuth] Step 6: Success!');
     return res.redirect('/?auth=google&status=success');
 
   } catch (error) {
-    console.error('[OAuth] Error:', error.message, error.stack);
-    const msg = error?.message || 'Unknown error';
-    return res.redirect(`/?auth=google&status=error&error=${encodeURIComponent(msg)}`);
+    console.error('[OAuth] FAILED:', error.message);
+    return res.redirect(`/?auth=google&status=error&error=${encodeURIComponent(error.message)}`);
   }
 }
