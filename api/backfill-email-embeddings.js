@@ -1,11 +1,23 @@
 // api/backfill-email-embeddings.js
 // Recurring repair/recovery backfill of missing embeddings on the emails
-// table. Not the primary ingestion mechanism — sync_outlook never calls
-// anything embedding-related at all (confirmed by reading its source
-// directly, 2026-08-06); this exists to self-heal that gap on a schedule
-// until sync_outlook itself is corrected to queue embedding immediately
-// after insertion (documented follow-up, not implemented in this change
-// per the explicit instruction not to modify sync_outlook here).
+// AND ai_messages tables. Not the primary ingestion mechanism for either —
+// sync_outlook never calls anything embedding-related at all for emails
+// (confirmed by reading its source directly, 2026-08-06), and ai_messages
+// relies entirely on a client-side, fire-and-forget fetch() in useEly.js
+// with no retry and no verification (tied to the browser tab's lifecycle,
+// so a closed tab or a fast navigation silently drops it). This exists to
+// self-heal both gaps on a schedule.
+//
+// Fixed 2026-09-16, real, confirmed gap found live: this file originally
+// covered only the emails table. Checked directly: 0 of 249 recent emails
+// were missing an embedding (confirming emails were never actually the
+// problem), but 568 of 834 recent ai_messages rows (68%) were — every
+// Project Chat conversation and standalone note that never becomes an
+// actual email (a verbal-confirmation note, a discussion) had no safety
+// net at all, which is the real reason repeated manual backfills were
+// needed even after this endpoint was believed to have fixed it. Extended
+// to cover both tables in the same run, same proven concurrency-protected
+// pattern, rather than leaving ai_messages on the fragile client-only path.
 //
 // Security correction (2026-08-07): the previous version checked for a
 // literal, hardcoded header value ('x-nora-manual: true') committed
@@ -98,6 +110,7 @@ export default async function handler(req, res) {
   }
 
   let done = 0, failed = 0, rowsSelected = 0, errorSummary = null;
+  let aiMsgDone = 0, aiMsgFailed = 0, aiMsgRowsSelected = 0;
   try {
     let query = supabase
       .from('emails')
@@ -138,18 +151,60 @@ export default async function handler(req, res) {
         failed++;
       }
     }
+
+    // ai_messages backfill — same pattern, own budget (not shared with
+    // emails), since emails is typically near-empty and ai_messages
+    // currently carries the real, large backlog. content is the text to
+    // embed directly; unlike emails there is no separate subject field.
+    let aiMsgQuery = supabase
+      .from('ai_messages')
+      .select('id, content')
+      .is('embedding', null)
+      .limit(capped);
+    if (project_id) aiMsgQuery = aiMsgQuery.eq('project_id', project_id);
+
+    const { data: aiMsgRows, error: aiMsgFetchErr } = await aiMsgQuery;
+    if (aiMsgFetchErr) throw new Error(aiMsgFetchErr.message);
+    aiMsgRowsSelected = aiMsgRows?.length || 0;
+
+    for (const row of aiMsgRows || []) {
+      try {
+        const text = (row.content || '').slice(0, 4000);
+        if (!text.trim()) { aiMsgFailed++; continue; }
+        const embRes = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8000), dimensions: 1536 }),
+        });
+        const embData = await embRes.json();
+        const embedding = embData.data?.[0]?.embedding;
+        if (embedding) {
+          await supabase.from('ai_messages').update({ embedding }).eq('id', row.id);
+          aiMsgDone++;
+        } else {
+          aiMsgFailed++;
+        }
+      } catch (rowErr) {
+        aiMsgFailed++;
+      }
+    }
   } catch (batchErr) {
     errorSummary = String(batchErr.message || batchErr).slice(0, 500);
   } finally {
     await supabase.from('embedding_backfill_runs').update({
       completed_at: new Date().toISOString(),
-      rows_selected: rowsSelected,
-      rows_embedded: done,
-      rows_failed: failed,
+      rows_selected: rowsSelected + aiMsgRowsSelected,
+      rows_embedded: done + aiMsgDone,
+      rows_failed: failed + aiMsgFailed,
       error_summary: errorSummary,
       duration_ms: Date.now() - t0,
     }).eq('id', runId);
   }
 
-  return res.status(200).json({ ok: true, done, failed, total: rowsSelected, project_id: project_id || 'all' });
+  return res.status(200).json({
+    ok: true,
+    emails: { done, failed, total: rowsSelected },
+    ai_messages: { done: aiMsgDone, failed: aiMsgFailed, total: aiMsgRowsSelected },
+    project_id: project_id || 'all',
+  });
 }
