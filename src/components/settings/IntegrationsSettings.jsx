@@ -67,9 +67,13 @@ export default function IntegrationsSettings() {
   };
 
   const handleGmailConnect = () => {
-    const clientId = '642613309080-m414fv82jc4b9vr4tvqpt8plat9cfl29.apps.googleusercontent.com';
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    if (!clientId) {
+      alert('VITE_GOOGLE_OAUTH_CLIENT_ID is not set in this build. Check Vercel env vars are set for Production and redeploy.');
+      return;
+    }
     const callbackUri = `${window.location.origin}/api/google-callback`;
-    
+
     const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     googleAuthUrl.searchParams.append('client_id', clientId);
     googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
@@ -77,8 +81,7 @@ export default function IntegrationsSettings() {
     googleAuthUrl.searchParams.append('scope', 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file');
     googleAuthUrl.searchParams.append('access_type', 'offline');
     googleAuthUrl.searchParams.append('prompt', 'consent');
-    
-    console.log('Redirecting to:', googleAuthUrl.toString());
+
     window.location.href = googleAuthUrl.toString();
   };
 
@@ -103,6 +106,10 @@ export default function IntegrationsSettings() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Email & Storage Integrations</h2>
+
+      <div style={{ padding: 10, marginBottom: 15, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, fontSize: 12, fontFamily: 'monospace' }}>
+        Client ID in use: {import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || 'NOT SET'}
+      </div>
 
       {/* Email Provider */}
       <div style={{ marginBottom: 30, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
