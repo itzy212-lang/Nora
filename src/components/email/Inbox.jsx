@@ -1827,26 +1827,26 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 500, color: 'var(--text2)' }}>{email.sender_name || email.sender_email}</span>
-            {email.sender_email && email.sender_name && <span> &lt;{email.sender_email}&gt;</span>}
-            {/* Small button to see all recipients */}
+          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {/* Small button to see all recipients — FIRST on left */}
             {(toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0) && (
               <button 
                 onClick={() => setShowRecipientsPopup(true)}
                 title="Show all recipients"
                 style={{ 
                   background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', 
-                  fontSize: 12, padding: '0 4px', fontWeight: 500, flexShrink: 0
+                  fontSize: 16, padding: '0 4px', fontWeight: 500, flexShrink: 0, lineHeight: 1
                 }}
               >
                 👥
               </button>
             )}
-            {/* Fix 1: Full date in preview header */}
-            {email.received_at && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(email.received_at)}</span>}
+            <span style={{ fontWeight: 500, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email.sender_name || email.sender_email}</span>
+            {email.sender_email && email.sender_name && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}> &lt;{email.sender_email}&gt;</span>}
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+            {/* Fix 1: Full date in preview header */}
+            {email.received_at && <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtDate(email.received_at)}</span>}
             <div style={{ position: 'relative' }} ref={dropRef}>
               <button onClick={() => setReplyDropOpen(v => !v)} style={{ padding: '6px 14px', border: '1px solid var(--border)', borderRadius: 99, background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
                 ↩ Reply <span style={{ fontSize: 10, color: 'var(--text3)' }}>▾</span>
@@ -1864,7 +1864,6 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
                 </div>
               )}
             </div>
-
           </div>
         </div>
 
