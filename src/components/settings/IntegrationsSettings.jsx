@@ -8,6 +8,17 @@ export default function IntegrationsSettings() {
 
   useEffect(() => {
     loadIntegrations();
+
+    // Also check if we just returned from OAuth
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth') === 'google' && params.get('status') === 'success') {
+      console.log('OAuth success detected, will refresh integrations');
+      // Give the redirect a moment to complete, then reload
+      const timer = setTimeout(() => {
+        loadIntegrations();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   const loadIntegrations = async () => {
