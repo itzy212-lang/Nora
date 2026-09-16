@@ -19,6 +19,12 @@ import sb from '../supabaseClient';
 // shaped or legacy-JSON-shaped) to the table's real column names.
 // Accepts either naming convention for every dual-named field, since
 // callers may still be passing objects built the old way.
+
+// Helper: PostgreSQL date columns reject empty strings; convert to null
+function toDateOrNull(val) {
+  return (val === '' || val === null || val === undefined) ? null : val;
+}
+
 function toTableRow(ao, projectId) {
   return {
     id: ao.id,
@@ -42,33 +48,27 @@ function toTableRow(ao, projectId) {
     third_surveyor_firm: ao.third_surveyor_firm ?? null,
     onedrive_folder_id: ao.onedrive_folder_id ?? null,
     onedrive_folder_url: ao.onedrive_folder_url ?? null,
-    consent_deadline: ao.consent_deadline ?? ao.consentDeadline ?? null,
-    s10_deadline: ao.s10_deadline ?? ao.s10Deadline ?? null,
-    s10_served_date: ao.s10_served_date ?? ao.s10ServedDate ?? null,
-    notice_served_date: ao.notice_served_date ?? ao.noticeServedDate ?? null,
-    dissent_received_date: ao.dissent_received_date ?? ao.dissentReceivedDate ?? null,
-    consent_received_date: ao.consent_received_date ?? ao.consentReceivedDate ?? null,
-    s104b_served_date: ao.s104b_served_date ?? null,
-    award_served_date: ao.award_served_date ?? ao.awardServedDate ?? null,
-    award_generated_at: ao.award_generated_at ?? ao.awardGeneratedAt ?? null,
-    award_deadline: ao.award_deadline ?? ao.awardDeadline ?? null,
-    soc_agreed_date: (ao.soc_agreed_date && String(ao.soc_agreed_date).trim()) || 
-                     (ao.soc_date && String(ao.soc_date).trim()) || 
-                     (ao.socDate && String(ao.socDate).trim()) || 
-                     (ao.socAgreedDate && String(ao.socAgreedDate).trim()) || null,
-    schedule_of_condition_date: (ao.schedule_of_condition_date && String(ao.schedule_of_condition_date).trim()) || 
-                                (ao.scheduleOfConditionDate && String(ao.scheduleOfConditionDate).trim()) || 
-                                (ao.schedule_of_conditions_date && String(ao.schedule_of_conditions_date).trim()) || 
-                                (ao.scheduleOfConditionsDate && String(ao.scheduleOfConditionsDate).trim()) || null,
+    consent_deadline: toDateOrNull(ao.consent_deadline ?? ao.consentDeadline),
+    s10_deadline: toDateOrNull(ao.s10_deadline ?? ao.s10Deadline),
+    s10_served_date: toDateOrNull(ao.s10_served_date ?? ao.s10ServedDate),
+    notice_served_date: toDateOrNull(ao.notice_served_date ?? ao.noticeServedDate),
+    dissent_received_date: toDateOrNull(ao.dissent_received_date ?? ao.dissentReceivedDate),
+    consent_received_date: toDateOrNull(ao.consent_received_date ?? ao.consentReceivedDate),
+    s104b_served_date: toDateOrNull(ao.s104b_served_date),
+    award_served_date: toDateOrNull(ao.award_served_date ?? ao.awardServedDate),
+    award_generated_at: toDateOrNull(ao.award_generated_at ?? ao.awardGeneratedAt),
+    award_deadline: toDateOrNull(ao.award_deadline ?? ao.awardDeadline),
+    soc_agreed_date: toDateOrNull(ao.soc_agreed_date ?? ao.soc_date ?? ao.socDate ?? ao.socAgreedDate),
+    schedule_of_condition_date: toDateOrNull(ao.schedule_of_condition_date ?? ao.scheduleOfConditionDate ?? ao.schedule_of_conditions_date ?? ao.scheduleOfConditionsDate),
     soc_status: ao.soc_status ?? null,
     soc_required: !!ao.soc_required,
     soc_task_id: ao.soc_task_id ?? null,
     third_surveyor_phone: ao.third_surveyor_phone ?? null,
     security_amount: ao.security_amount ?? null,
     section_11_amount: ao.section_11_amount ?? null,
-    response_deadline: ao.response_deadline ?? ao.responseDeadline ?? null,
+    response_deadline: toDateOrNull(ao.response_deadline ?? ao.responseDeadline),
     sections_served: ao.sections_served ?? null,
-    intention_date: ao.intention_date ?? null,
+    intention_date: toDateOrNull(ao.intention_date),
     intention_noted: !!ao.intention_noted,
     agreed_surveyor: !!ao.agreed_surveyor,
     appointed_by_me: !!ao.appointed_by_me,
