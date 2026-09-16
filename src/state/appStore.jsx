@@ -87,9 +87,9 @@ applyTheme(savedTheme);
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_USER':
-      // When user changes, reset emails to force fresh RLS-scoped query
-      // Fixes: confirmation link showing previous user's emails
-      return { ...state, currentUser: action.payload, emails: [], emailsLoadedAt: null };
+      // When user changes, reset all user-scoped data to force fresh RLS-scoped queries
+      // Fixes: confirmation link showing previous user's data
+      return { ...state, currentUser: action.payload, emails: [], leads: [], projects: [], emailsLoadedAt: null };
 
     case 'SET_CURRENT_PROJECT':
       return { ...state, currentProject: action.payload };
