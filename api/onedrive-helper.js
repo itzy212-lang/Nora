@@ -12,21 +12,20 @@ function getSupabase() {
 export async function getValidMicrosoftToken(userId) {
   if (!userId) return null;
   const sb = getSupabase();
-  // Single-user system: try exact match first, fall back to any outlook account
-  let { data: account } = await sb
+  // Fixed 2026-09-16, real, confirmed cross-account leak: matches the
+  // exact same bug already fixed for email sending (9a455c93) --
+  // "single-user system: try exact match first, fall back to any
+  // outlook account" meant any user without their own connected
+  // OneDrive would silently use whichever account happened to be
+  // first in the table. Requires an exact match now; returns null if
+  // this specific user hasn't connected their own account, exactly
+  // as the email-sending fix already does — no silent fallback.
+  const { data: account } = await sb
     .from('email_accounts')
     .select('*')
     .eq('provider', 'outlook')
     .eq('user_id', userId)
     .maybeSingle();
-  if (!account) {
-    const { data: fallback } = await sb
-      .from('email_accounts')
-      .select('*')
-      .eq('provider', 'outlook')
-      .maybeSingle();
-    account = fallback;
-  }
 
   if (!account || account.reconnect_required) return null;
 

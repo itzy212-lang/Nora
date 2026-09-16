@@ -27,6 +27,7 @@
 
 import { useState } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 const DEFAULTS = { num_aos: 2, fee_notice: 107, fee_soc: 500, fee_agreed: 950, fee_separate: 950, discount_mode: '25' };
 
@@ -67,12 +68,15 @@ export default function PartyWallLeadQuote({ project, onAccept, onBack, onProjec
       // out just because it was still a lead when the address was
       // first filled in.
       if (addressChanged) {
-        if (project.onedrive_folder_id) {
+        const userEmail = await getCurrentUserEmail();
+        if (!userEmail) {
+          console.warn('[PartyWallLeadQuote] Could not determine current user — skipping OneDrive folder rename/creation.');
+        } else if (project.onedrive_folder_id) {
           fetch('/api/onedrive-folder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'rename_folder',
               folder_id: project.onedrive_folder_id,
               new_name: detailsForm.bo_premise_address,
@@ -83,7 +87,7 @@ export default function PartyWallLeadQuote({ project, onAccept, onBack, onProjec
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'create_project_folder',
               project_address: detailsForm.bo_premise_address,
             }),

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useInvoices } from '../../hooks/useInvoices';
 import InvoiceModal from './InvoiceModal';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 const fmt = (n) => `£${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
@@ -36,6 +37,8 @@ export default function Accounting({ projects = [], settings = {}, onOpenCompose
 
   const handleDownload = async (inv) => {
     try {
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) { alert('Could not determine your account — please refresh and try again.'); return; }
       const res = await fetch('/api/generate-invoice-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -43,7 +46,7 @@ export default function Accounting({ projects = [], settings = {}, onOpenCompose
           invoice: inv,
           invoice_id: inv.id,
           project_id: inv.project_id,
-          user_id: 'help@sq1consulting.co.uk',
+          user_id: userEmail,
         }),
       });
       const data = await res.json().catch(() => ({}));

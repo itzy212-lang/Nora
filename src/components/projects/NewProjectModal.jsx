@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const mInput = {
@@ -513,11 +514,15 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
       const boAddr = boPremise || payload.bo_premise_address || '';
       if (boAddr) {
         try {
+          const userEmail = await getCurrentUserEmail();
+          if (!userEmail) {
+            console.warn('[NewProjectModal] Could not determine current user — skipping OneDrive folder creation.');
+          } else {
           const folderRes = await fetch('/api/onedrive-folder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'create_project_folder',
               project_address: boAddr,
             }),
@@ -528,6 +533,7 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
               onedrive_folder_id: folderData.folder_id,
               onedrive_folder_url: folderData.web_url || null,
             }).eq('id', data.id);
+          }
           }
         } catch (folderErr) {
           console.warn('[NewProjectModal] OneDrive folder creation failed:', folderErr.message);

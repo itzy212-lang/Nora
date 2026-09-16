@@ -3,6 +3,7 @@ import { useApp } from '../../state/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from './NewProjectModal';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 function getProjectColour(project) {
@@ -385,6 +386,12 @@ export default function ProjectList({ onOpenProject }) {
     setSyncResult(null);
     try {
       const sb = (await import('../../supabaseClient')).default;
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) {
+        setSyncResult({ error: 'Could not determine your account — please refresh and try again.' });
+        setSyncing(false);
+        return;
+      }
       const { data: projects } = await sb
         .from('projects')
         .select('id, bo_premise_address, onedrive_folder_id, aos');
@@ -402,7 +409,7 @@ export default function ProjectList({ onOpenProject }) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                user_id: 'help@sq1consulting.co.uk',
+                user_id: userEmail,
                 action: 'create_project_folder',
                 project_address: project.bo_premise_address,
               }),
@@ -440,7 +447,7 @@ export default function ProjectList({ onOpenProject }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  user_id: 'help@sq1consulting.co.uk',
+                  user_id: userEmail,
                   action: 'create_ao_folder',
                   project_folder_id: folderId,
                   ao_address: aoAddress,

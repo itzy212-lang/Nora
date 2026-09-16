@@ -378,7 +378,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'API2PDF_API_KEY not configured' });
   }
 
-  const { invoice, project_id, invoice_id } = req.body || {};
+  const { invoice, project_id, invoice_id, user_id } = req.body || {};
 
   if (!invoice) {
     return res.status(400).json({ error: 'No invoice provided' });
@@ -442,13 +442,13 @@ export default async function handler(req, res) {
     if (uploadError) throw uploadError;
 
     // Upload to OneDrive (non-blocking — failure does not affect invoice generation)
-    if (projectId) {
+    if (projectId && user_id) {
       try {
         const folderInfo = await getProjectFolderInfo(projectId);
         const folderId = folderInfo?.onedrive_folder_id;
         if (folderId) {
           const odResult = await uploadToOneDrive({
-            userId: 'help@sq1consulting.co.uk',
+            userId: user_id,
             folderId,
             fileName,
             buffer,

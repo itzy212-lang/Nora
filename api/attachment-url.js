@@ -3,14 +3,17 @@
 import { getValidMicrosoftToken } from './onedrive-helper.js';
 
 export default async function handler(req, res) {
-  const { email_id, att_id, filename, content_type } = req.query;
+  const { email_id, att_id, filename, content_type, user_id } = req.query;
 
   if (!email_id || !att_id) {
     return res.status(400).json({ error: 'email_id and att_id required' });
   }
+  if (!user_id) {
+    return res.status(400).json({ error: 'user_id required' });
+  }
 
   try {
-    const token = await getValidMicrosoftToken('help@sq1consulting.co.uk');
+    const token = await getValidMicrosoftToken(user_id);
     if (!token) return res.status(401).send('Microsoft authentication required. Please reconnect your email in Settings.');
 
     const graphUrl = `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(email_id)}/attachments/${encodeURIComponent(att_id)}/$value`;

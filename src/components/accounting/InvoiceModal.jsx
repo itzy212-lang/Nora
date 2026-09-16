@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 const DEFAULT_ITEMS = [{ description: '', qty: 1, unitPrice: '', total: 0 }];
 
@@ -164,6 +165,9 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
 
       markInvoiceNumberUsed(savedInvoice?.invoice_number || form.invoice_number);
 
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+
       const pdfResponse = await fetch('/api/generate-invoice-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,7 +181,7 @@ export default function InvoiceModal({ invoice, initialData = {}, nextNumber, se
           },
           invoice_id: savedInvoice?.id,
           project_id: originalProjectId,
-          user_id: 'help@sq1consulting.co.uk',
+          user_id: userEmail,
         }),
       });
 

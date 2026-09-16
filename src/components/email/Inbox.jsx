@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
@@ -1548,6 +1549,8 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
   const saveSelected = async () => {
     if (!projectFolderId) { setError('This project has no OneDrive folder configured yet.'); return; }
     setError('');
+    const userEmail = await getCurrentUserEmail();
+    if (!userEmail) { setError('Could not determine your account — please refresh and try again.'); return; }
     for (const id of selected) {
       const att = realAttachments.find(a => a.id === id);
       if (!att) continue;
@@ -1560,7 +1563,7 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
       const upRes = await fetch('/api/onedrive-upload', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: 'help@sq1consulting.co.uk',
+          user_id: userEmail,
           folder_id: projectFolderId,
           filename: base.filename || att.filename,
           content_base64: base.content_base64,
@@ -1693,15 +1696,18 @@ function AttachmentChip({ att }) {
   const shortName = (att.filename || 'File').length > 20 ? (att.filename || 'File').slice(0, 20) + '…' : (att.filename || 'File');
   const canOpen = !!(att.email_external_id && att.attachment_external_id);
 
-  const handleOpen = (e) => {
+  const handleOpen = async (e) => {
     e.stopPropagation();
     e.preventDefault();
     if (!canOpen) return;
+    const userEmail = await getCurrentUserEmail();
+    if (!userEmail) { alert('Could not determine your account — please refresh and try again.'); return; }
     const params = new URLSearchParams({
       email_id: att.email_external_id,
       att_id: att.attachment_external_id,
       filename: att.filename || 'attachment',
       content_type: att.content_type || '',
+      user_id: userEmail,
     });
     window.open(`/api/attachment-url?${params}`, '_blank');
   };

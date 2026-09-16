@@ -14,6 +14,7 @@ import { buildBOLOAPlaceholders, buildAOLOAPlaceholders, buildLOAFileName, build
 import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 
@@ -3326,18 +3327,20 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const folderId = selectedFolderId || rootFolderId;
     setOneDriveLoading(true);
     setOneDriveError(null);
-    fetch('/api/onedrive-folder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: 'help@sq1consulting.co.uk',
-        action: 'get_folder_contents',
-        project_folder_id: folderId,
-      }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
+    getCurrentUserEmail().then(userEmail => {
+      if (!userEmail) { setOneDriveError('Could not determine your account — please refresh and try again.'); setOneDriveLoading(false); return; }
+      fetch('/api/onedrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userEmail,
+          action: 'get_folder_contents',
+          project_folder_id: folderId,
+        }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
           const items = data.items || [];
           setOneDriveFiles(items);
           // When loading root, extract subfolders for pills
@@ -3350,6 +3353,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       })
       .catch(err => setOneDriveError(err.message))
       .finally(() => setOneDriveLoading(false));
+    });
   }, [tab, project?.onedrive_folder_id, selectedFolderId, oneDriveRefresh]);
 
   const handleGenerateBOLOA = useCallback(async () => {
@@ -3610,13 +3614,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (addressChanged) {
       try {
         const { data: { session } } = await sb.auth.getSession();
+        const userEmail = session?.user?.email;
+        if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
         const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
         if (project.onedrive_folder_id) {
           await fetch('/api/onedrive-folder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeader },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'rename_folder',
               folder_id: project.onedrive_folder_id,
               new_name: payload.bo_premise_address,
@@ -3627,7 +3633,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHeader },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'create_project_folder',
               project_address: payload.bo_premise_address,
             }),
@@ -3748,11 +3754,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const projectFolderId = project.onedrive_folder_id || data?.onedrive_folder_id;
       if (aoAddress && projectFolderId) {
         try {
+          const userEmail = await getCurrentUserEmail();
+          if (!userEmail) {
+            console.warn('[ProjectDetail] Could not determine current user — skipping AO OneDrive folder creation.');
+          } else {
           const folderRes = await fetch('/api/onedrive-folder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              user_id: 'help@sq1consulting.co.uk',
+              user_id: userEmail,
               action: 'create_ao_folder',
               project_folder_id: projectFolderId,
               ao_address: aoAddress,
@@ -3775,6 +3785,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               setProject(prev => ({ ...prev, aos: withFolder }));
               dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
             }
+          }
           }
         } catch (err) {
           console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);
@@ -4669,17 +4680,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 ? pack.ao?.onedrive_folder_id
                 : project?.onedrive_folder_id;
               if (folderId) {
+                const userEmail = await getCurrentUserEmail();
+                if (!userEmail) {
+                  console.warn('[ProjectDetail] Could not determine current user — falling back to local download instead of OneDrive save.');
+                  downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
+                } else {
                 await fetch('/api/onedrive-upload', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    user_id: 'help@sq1consulting.co.uk',
+                    user_id: userEmail,
                     folder_id: folderId,
                     filename: pack.fileName,
                     content_base64: pack.pdf_b64,
                     content_type: 'application/pdf',
                   }),
                 });
+                }
               } else {
                 downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
               }
@@ -5709,7 +5726,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                           btn.disabled = true;
                           btn.textContent = '…';
                           try {
-                            const res = await fetch(`/api/onedrive-download?item_id=${encodeURIComponent(f.id)}`);
+                            const userEmail = await getCurrentUserEmail();
+                            if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+                            const res = await fetch(`/api/onedrive-download?item_id=${encodeURIComponent(f.id)}&user_id=${encodeURIComponent(userEmail)}`);
                             const data = await res.json();
                             if (!res.ok || !data.base64) throw new Error(data.error || 'Download failed');
                             onOpenComposer?.({

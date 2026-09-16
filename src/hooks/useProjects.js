@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
+import { getCurrentUserEmail } from '../utils/getCurrentUserEmail';
 
 export function useProjects() {
   const { state, dispatch } = useApp();
@@ -180,11 +181,15 @@ export function useProjects() {
     const alreadyHasFolder = projectData.onedrive_folder_id || data?.onedrive_folder_id;
     if (boAddress && !alreadyHasFolder) {
       try {
+        const userEmail = await getCurrentUserEmail();
+        if (!userEmail) {
+          console.warn('[useProjects] Could not determine current user — skipping OneDrive folder creation.');
+        } else {
         const folderRes = await fetch('/api/onedrive-folder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: 'help@sq1consulting.co.uk',
+            user_id: userEmail,
             action: 'create_project_folder',
             project_address: boAddress,
           }),
@@ -195,6 +200,7 @@ export function useProjects() {
             onedrive_folder_id: folderData.folder_id,
             onedrive_folder_url: folderData.web_url || null,
           }).eq('id', data.id);
+        }
         }
       } catch (folderErr) {
         console.warn('[saveProject] OneDrive folder creation failed:', folderErr.message);

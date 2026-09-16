@@ -8,9 +8,10 @@ export default async function handler(req, res) {
 
   const { item_id, user_id } = req.query;
   if (!item_id) return res.status(400).json({ error: 'item_id required' });
+  if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
   try {
-    const token = await getValidMicrosoftToken(user_id || 'help@sq1consulting.co.uk');
+    const token = await getValidMicrosoftToken(user_id);
     if (!token) return res.status(401).json({ error: 'Microsoft authentication required' });
 
     // Fetch file metadata first (to get mime type and name)

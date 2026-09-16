@@ -2835,10 +2835,25 @@ export default async function handler(req, res) {
         if (saveErr) throw new Error(saveErr.message);
 
         // Generate PDF
+        // Fixed 2026-09-16, real multi-user bug: previously hardcoded
+        // to a single account here. verifyBearerToken() only returns
+        // the UUID (used everywhere else in this file), not the
+        // email that OneDrive's own account lookup is keyed by — a
+        // small, local lookup here rather than changing that shared
+        // function's return shape, which many other call sites depend on.
+        let userEmailForPdf = null;
+        try {
+          const sbAuth = getSupabase();
+          const { data: authUser } = await sbAuth.auth.admin.getUserById(userId);
+          userEmailForPdf = authUser?.user?.email || null;
+        } catch (emailLookupErr) {
+          console.warn('[ely-smart] Could not resolve user email for invoice PDF:', emailLookupErr.message);
+        }
+
         const pdfRes = await fetch(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/generate-invoice-pdf`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoice: savedInvoice, invoice_id: savedInvoice.id, project_id: projectId, user_id: 'help@sq1consulting.co.uk' }),
+          body: JSON.stringify({ invoice: savedInvoice, invoice_id: savedInvoice.id, project_id: projectId, user_id: userEmailForPdf }),
         });
 
         const pdfData = await pdfRes.json().catch(() => ({}));

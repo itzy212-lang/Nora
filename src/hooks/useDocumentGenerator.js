@@ -1,6 +1,7 @@
 // src/hooks/useDocumentGenerator.js
 import { useCallback, useMemo } from 'react';
 import sb from '../supabaseClient';
+import { getCurrentUserEmail } from '../utils/getCurrentUserEmail';
 
 async function loadTemplate(templateKey) {
   if (!templateKey) {
@@ -57,7 +58,8 @@ export default function useDocumentGenerator() {
       const enrichedMergeData = { ...(mergeData || {}) };
 
       if (projectId) enrichedMergeData.project_id = projectId;
-      enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
+      enrichedMergeData.user_id = await getCurrentUserEmail();
+      if (!enrichedMergeData.user_id) throw new Error('Could not determine your account — please refresh and try again.');
 
       const response = await fetch('/api/generate-doc', {
         method: 'POST',
@@ -133,7 +135,8 @@ export default function useDocumentGenerator() {
       const enrichedMergeData = { ...(mergeData || {}) };
 
       if (projectId) enrichedMergeData.project_id = projectId;
-      enrichedMergeData.user_id = 'help@sq1consulting.co.uk';
+      enrichedMergeData.user_id = await getCurrentUserEmail();
+      if (!enrichedMergeData.user_id) throw new Error('Could not determine your account — please refresh and try again.');
 
       const genResponse = await fetch('/api/generate-doc', {
         method: 'POST',

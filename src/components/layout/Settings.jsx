@@ -713,7 +713,7 @@ function AccountTab() {
       return;
     }
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/microsoft-oauth-callback`);
-    const scope = encodeURIComponent('https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access');
+    const scope = encodeURIComponent('https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Files.ReadWrite https://graph.microsoft.com/User.Read offline_access');
     const state = encodeURIComponent(currentUser?.email || currentUser?.id || '');
     const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
     window.open(authUrl, 'ms-oauth', 'width=520,height=680');

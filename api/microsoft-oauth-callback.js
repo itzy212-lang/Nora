@@ -73,7 +73,7 @@ export default async function handler(req, res) {
         grant_type: 'authorization_code',
         code,
         redirect_uri: REDIRECT_URI,
-        scope: 'offline_access Mail.ReadWrite Mail.Send User.Read',
+        scope: 'offline_access Mail.ReadWrite Mail.Send Files.ReadWrite User.Read',
       }),
     });
     const tokenData = await tokenRes.json();

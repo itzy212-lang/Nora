@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
 const INSERT_OPTIONS = [
@@ -357,10 +358,13 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       : project?.onedrive_folder_id;
     if (!folderId) throw new Error('No OneDrive folder is recorded for this adjoining owner or project.');
 
+    const userEmail = await getCurrentUserEmail();
+    if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+
     const uploadRes = await fetch('/api/onedrive-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: 'help@sq1consulting.co.uk', folder_id: folderId, filename: pack.fileName, content_base64: pack.pdf_b64, content_type: 'application/pdf' }),
+      body: JSON.stringify({ user_id: userEmail, folder_id: folderId, filename: pack.fileName, content_base64: pack.pdf_b64, content_type: 'application/pdf' }),
     });
     const uploadData = await uploadRes.json().catch(() => ({}));
     if (!uploadRes.ok || uploadData?.success === false) throw new Error(uploadData?.error || 'Could not save the PDF to OneDrive.');

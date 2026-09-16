@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { useApp } from '../../state/appStore';
 import DualAIReviewOverlay from '../shared/DualAIReviewOverlay';
 import WeeklyMinutes from '../minutes/WeeklyMinutes';
@@ -197,15 +198,17 @@ function DocumentsTab({ project, subs, card }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadFiles = () => {
+  const loadFiles = async () => {
     if (!project.onedrive_folder_id) { setLoading(false); return; }
     setLoading(true);
     setError(null);
+    const userEmail = await getCurrentUserEmail();
+    if (!userEmail) { setError('Could not determine your account — please refresh and try again.'); setLoading(false); return; }
     fetch('/api/onedrive-folder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: 'help@sq1consulting.co.uk',
+        user_id: userEmail,
         action: 'get_folder_contents',
         project_folder_id: project.onedrive_folder_id,
       }),
@@ -2423,12 +2426,15 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                           // one. Now creates one if missing, renames if
                           // it already exists.
                           if (addressChanged) {
-                            if (project.onedrive_folder_id) {
+                            const userEmail = await getCurrentUserEmail();
+                            if (!userEmail) {
+                              console.warn('[PMProjectDetail] Could not determine current user — skipping OneDrive folder rename/creation.');
+                            } else if (project.onedrive_folder_id) {
                               fetch('/api/onedrive-folder', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                  user_id: 'help@sq1consulting.co.uk',
+                                  user_id: userEmail,
                                   action: 'rename_folder',
                                   folder_id: project.onedrive_folder_id,
                                   new_name: detailsForm.site_address,
@@ -2439,7 +2445,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                  user_id: 'help@sq1consulting.co.uk',
+                                  user_id: userEmail,
                                   action: 'create_project_folder',
                                   project_address: detailsForm.site_address,
                                 }),

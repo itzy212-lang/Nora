@@ -17,6 +17,7 @@
 
 import { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 export default function SaveToOneDriveOverlay({
   projectId,
@@ -90,11 +91,17 @@ export default function SaveToOneDriveOverlay({
     setError('');
 
     try {
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) {
+        setError('Could not determine your account — please refresh and try again.');
+        setSaving(false);
+        return;
+      }
       const res = await fetch('/api/onedrive-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: 'help@sq1consulting.co.uk',
+          user_id: userEmail,
           folder_id: selectedFolderId,
           filename: fileName,
           content_base64: fileBase64,
