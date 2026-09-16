@@ -2,9 +2,6 @@ import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const REDIRECT_URI = process.env.VERCEL_ENV === 'production' 
-  ? 'https://nora-d9wy.vercel.app/api/google-callback'
-  : 'http://localhost:5173/api/google-callback';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -38,6 +35,11 @@ export default async function handler(req, res) {
         `/?auth=google&status=error&error=${encodeURIComponent(error)}&description=${encodeURIComponent(errorDescription)}`
       );
     }
+
+    // Dynamically construct redirect URI from request origin
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const REDIRECT_URI = `${protocol}://${host}/api/google-callback`;
 
     // Exchange code for tokens
     const tokenResponse = await axios.post(GOOGLE_TOKEN_URL, {
