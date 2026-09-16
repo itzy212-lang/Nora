@@ -1011,19 +1011,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     if (!to.trim() || !htmlBody.trim()) return;
     setSending(true);
     try {
-      const outgoingBodyWithSignature = includeSignature && signatureHtml
-        ? `${htmlBody}<br><br>${signatureHtml}`
-        : htmlBody;
-
-      // Fixed 2026-08-19, on request: real, confirmed gap, not a
-      // broken feature — a reply never actually included the message
-      // being replied to. The thread WAS shown, but only as a
-      // collapsible reference panel in this compose UI, for the
-      // sender to read while writing — it was never appended to the
-      // actual email sent to the recipient. Every normal email client
-      // quotes the message being replied to; this now does the same,
-      // for both reply and reply-all (forward already gets full
-      // context a different, standard way, so this is skipped there).
+      // Build the quoted thread/forward content
       const quotedThread = (!isForward && email) ? (() => {
         const dateStr = email.received_at
           ? new Date(email.received_at).toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -1037,7 +1025,9 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
           + `</div>`;
       })() : '';
 
-      const outgoingBody = outgoingBodyWithSignature + quotedThread;
+      // Signature goes ABOVE quoted content (after user's reply text, before the original email)
+      const signatureBlock = includeSignature && signatureHtml ? `<br><br>${signatureHtml}` : '';
+      const outgoingBody = htmlBody + signatureBlock + quotedThread;
 
       await onSend({ to, cc, subject, body: outgoingBody, replyToId: email?.id, includeSignature, createTask, attachments });
       setSending(false);
@@ -1226,6 +1216,49 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 }}
               />
             </div>
+
+            {/* Quoted email preview (what you're replying to or forwarding) */}
+            {email && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12 }}>
+                <div style={{ width: 52, fontSize: 12, fontWeight: 600, color: 'var(--text3)', flexShrink: 0, textAlign: 'right', paddingTop: 8 }}>
+                  {isForward ? 'Forward' : 'Reply to'}
+                </div>
+                <div style={{ flex: 1, background: 'var(--bg3)', borderRadius: 8, border: '1px solid var(--border)', padding: '12px', fontSize: 12, color: 'var(--text)', lineHeight: 1.6, maxHeight: 240, overflowY: 'auto' }}>
+                  <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                      {email.sender_name || email.sender_email}
+                    </div>
+                    {email.sender_email && email.sender_name && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+                        &lt;{email.sender_email}&gt;
+                      </div>
+                    )}
+                    {email.received_at && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+                        {new Date(email.received_at).toLocaleString('en-GB', { 
+                          day: 'numeric', month: 'long', year: 'numeric', 
+                          hour: '2-digit', minute: '2-digit' 
+                        })}
+                      </div>
+                    )}
+                    {(email.to_emails || email.to_email || email.cc_emails) && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        <span style={{ fontWeight: 500 }}>To: </span>
+                        {[
+                          ...(Array.isArray(email.to_emails) ? email.to_emails.map(r => typeof r === 'string' ? r : r.email) : [email.to_email].filter(Boolean)),
+                          ...(email.cc_emails ? (Array.isArray(email.cc_emails) ? email.cc_emails.map(r => typeof r === 'string' ? r : r.email) : email.cc_emails.split(',').map(e => e.trim())) : [])
+                        ].filter(Boolean).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{email.subject}</div>
+                  <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text3)' }}>
+                    {stripHtml(email.body || email.body_preview || '').slice(0, 400)}
+                    {(email.body || email.body_preview || '').length > 400 && '…'}
+                  </div>
+                </div>
+              </div>
+            )}
             {firmSettings && includeSignature && signatureHtml && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ width: 52, flexShrink: 0 }} />
@@ -1735,6 +1768,7 @@ function AttachmentChip({ att }) {
 
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [attachments, setAttachments] = useState([]);
+  const [showRecipients, setShowRecipients] = useState(false);
 
   useEffect(() => {
     if (!email?.id || !sb) { setAttachments([]); return; }
@@ -1773,6 +1807,19 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 
   const isHtml = isHtmlEmail(email.body || '');
 
+  // Parse recipients from email — to_emails can be string, array, or null
+  const parseRecipients = (field) => {
+    if (!field) return [];
+    if (Array.isArray(field)) return field.map(r => typeof r === 'string' ? r : r.email || r);
+    if (typeof field === 'string') return field.split(',').map(e => e.trim()).filter(Boolean);
+    return [];
+  };
+
+  const toRecipients = parseRecipients(email.to_emails || email.to_email);
+  const ccRecipients = parseRecipients(email.cc_emails);
+  const bccRecipients = parseRecipients(email.bcc_emails);
+  const hasRecipients = toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0;
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
       {showSavePopup && <SaveAttachmentPopup email={email} attachments={attachments} onDismiss={() => setShowSavePopup(false)} />}
@@ -1807,6 +1854,30 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 
           </div>
         </div>
+
+        {/* Recipients section (To, CC, BCC) */}
+        {hasRecipients && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)' }}>
+            {toRecipients.length > 0 && (
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>To: </span>
+                <span>{toRecipients.join(', ')}</span>
+              </div>
+            )}
+            {ccRecipients.length > 0 && (
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>CC: </span>
+                <span>{ccRecipients.join(', ')}</span>
+              </div>
+            )}
+            {bccRecipients.length > 0 && (
+              <div>
+                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>BCC: </span>
+                <span>{bccRecipients.join(', ')}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {attachments.length > 0 && (
         <div style={{
@@ -2923,7 +2994,7 @@ if (syncErr) throw syncErr;
               </span>
             </div>
           )}
-          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
 
           {/* Auto-draft panel */}
           {autoDraft && (
