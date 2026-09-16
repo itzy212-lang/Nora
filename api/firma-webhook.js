@@ -85,18 +85,34 @@ async function savePdfToStorage(sb, projectId, pdfBuffer, filename) {
   }
 }
 
-// Upload to OneDrive via Nora's existing onedrive-upload endpoint
-async function saveToOneDrive(projectId, pdfBuffer, filename, baseUrl) {
+// Upload to OneDrive via Nora's existing onedrive-upload endpoint.
+// Fixed 2026-09-16, real, confirmed bug: this previously sent
+// { project_id, file_name, file_base64, mime_type } -- none of which
+// match what api/onedrive-upload.js actually requires
+// (user_id, folder_id, filename, content_base64, content_type,
+// confirmed directly by reading its own validation check). Every call
+// would have failed with a 400 every single time, independent of
+// anything else in this file. user_id hardcoded to match the same,
+// existing pattern used everywhere else in the app today
+// (ProjectDetail.jsx) -- OneDrive is not genuinely per-user yet
+// anywhere in this codebase; fixing that properly is separate, larger
+// work, not something to solve inside this one webhook.
+async function saveToOneDrive(folderId, pdfBuffer, filename, baseUrl) {
+  if (!folderId) {
+    console.warn('[firma-webhook] No OneDrive folder configured for this project/AO — skipping OneDrive save (Supabase storage copy is still saved).');
+    return;
+  }
   try {
     const base64 = pdfBuffer.toString('base64');
     const res = await fetch(`${baseUrl}/api/onedrive-upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        project_id: projectId,
-        file_name: filename,
-        file_base64: base64,
-        mime_type: 'application/pdf',
+        user_id: 'help@sq1consulting.co.uk',
+        folder_id: folderId,
+        filename,
+        content_base64: base64,
+        content_type: 'application/pdf',
       }),
     });
     if (!res.ok) {
@@ -148,10 +164,15 @@ export default async function handler(req, res) {
     const apiKey = process.env.FIRMA_API_KEY;
     const now = new Date().toISOString();
 
-    // Find the project/AO by signing_request_id
+    // Find the project/AO by signing_request_id. Fetches
+    // onedrive_folder_id on both — an AO signing request should land
+    // in that specific AO's own subfolder (matching the existing
+    // save-target pattern already used elsewhere in the app,
+    // ProjectDetail.jsx), falling back to the project-level folder if
+    // that particular AO doesn't have its own folder configured.
     const [projectResult, aoResult] = await Promise.all([
-      sb.from('projects').select('id, ref, bo_premise_address').eq('bo_loa_signing_request_id', signingRequestId).single(),
-      sb.from('adjoining_owners').select('id, project_id, name').eq('loa_signing_request_id', signingRequestId).single(),
+      sb.from('projects').select('id, ref, bo_premise_address, onedrive_folder_id').eq('bo_loa_signing_request_id', signingRequestId).single(),
+      sb.from('adjoining_owners').select('id, project_id, name, onedrive_folder_id').eq('loa_signing_request_id', signingRequestId).single(),
     ]);
 
     const isBO = !projectResult.error && projectResult.data;
@@ -167,6 +188,18 @@ export default async function handler(req, res) {
     const address = isBO ? (projectResult.data.bo_premise_address || 'Property') : (aoResult.data.name || 'AO');
     const filename = `LOA - ${address} - Signed.pdf`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+    // Resolve the correct OneDrive folder: the AO's own subfolder for
+    // an AO signing request (matching ProjectDetail.jsx's existing
+    // save-target pattern), the project-level folder for a BO one. The
+    // BO project query above is filtered by signing_request_id, so it
+    // won't have loaded the project's own folder in the AO case — a
+    // separate, direct-by-id lookup covers that fallback.
+    let onedriveFolderId = isBO ? projectResult.data.onedrive_folder_id : aoResult.data.onedrive_folder_id;
+    if (isAO && !onedriveFolderId) {
+      const { data: projectForFolder } = await sb.from('projects').select('onedrive_folder_id').eq('id', projectId).single();
+      onedriveFolderId = projectForFolder?.onedrive_folder_id || null;
+    }
+
     // Download signed PDF
     const pdfResult = apiKey ? await downloadSignedPdf(signingRequestId, apiKey) : null;
     let pdfUrl = null;
@@ -177,7 +210,7 @@ export default async function handler(req, res) {
 
       // Save to OneDrive
       const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nora-d9wy.vercel.app';
-      await saveToOneDrive(projectId, pdfResult.buffer, filename, baseUrl);
+      await saveToOneDrive(onedriveFolderId, pdfResult.buffer, filename, baseUrl);
     }
 
     // Update Supabase with signed status
