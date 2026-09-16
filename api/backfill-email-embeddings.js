@@ -116,6 +116,7 @@ export default async function handler(req, res) {
       .from('emails')
       .select('id, subject, body, body_preview')
       .is('embedding', null)
+      .order('received_at', { ascending: false, nullsFirst: false })
       .limit(capped);
     if (project_id) query = query.eq('project_id', project_id);
 
@@ -156,10 +157,18 @@ export default async function handler(req, res) {
     // emails), since emails is typically near-empty and ai_messages
     // currently carries the real, large backlog. content is the text to
     // embed directly; unlike emails there is no separate subject field.
+    // Fixed 2026-09-16, real gap found immediately after this went live:
+    // no ordering meant the query worked through the (much larger than
+    // expected — 3,220 all-time, not the 568 first measured against a
+    // 14-day window) backlog in an arbitrary order, with no guarantee
+    // recent rows were prioritised over months-old ones. Most recent
+    // first, so this week's data becomes searchable well before the
+    // historical backlog is fully caught up, not after.
     let aiMsgQuery = supabase
       .from('ai_messages')
       .select('id, content')
       .is('embedding', null)
+      .order('created_at', { ascending: false })
       .limit(capped);
     if (project_id) aiMsgQuery = aiMsgQuery.eq('project_id', project_id);
 
