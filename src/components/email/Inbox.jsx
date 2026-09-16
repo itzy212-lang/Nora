@@ -2153,7 +2153,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     } catch (err) { console.error('loadEmails:', err); }
     if (!doIncremental) setLoading(false);
     if (doIncremental) setCheckingForUpdates(false);
-  }, [folder, state.emails, state.emailsLoadedAt]);
+  }, [folder, state.currentUser, state.emails, state.emailsLoadedAt]);
 
   // Fixed 2026-08-14, on request: this is the actual end-goal piece —
   // a full app close wipes state.emails entirely (it's just React
@@ -2261,7 +2261,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       }
     })();
     return () => { cancelled = true; };
-  }, [folder]);
+  }, [folder, state.currentUser]);
 
   // Auto-sync every 3 minutes — only if not already syncing
   useEffect(() => {
