@@ -63,6 +63,11 @@ export default function IntegrationsSettings() {
     
     // Redirect to Vercel edge function which handles token exchange
     const callbackUri = `${window.location.origin}/api/google-callback`;
+    console.log('🔵 OAuth Debug:', {
+      origin: window.location.origin,
+      callbackUri,
+      clientId: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
+    });
     googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
     
     googleAuthUrl.searchParams.append('response_type', 'code');
