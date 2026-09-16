@@ -3707,10 +3707,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       third_surveyor_phone: form.third?.phone || '',
 
       // Added 2026-09-03, on request: the manual SOC date field above.
-      soc_agreed_date: form.socDate || existingAO?.soc_agreed_date || '',
-      soc_date: form.socDate || existingAO?.soc_date || '',
-      socDate: form.socDate || existingAO?.socDate || '',
-      socAgreedDate: form.socDate || existingAO?.socAgreedDate || '',
+      soc_agreed_date: (form.socDate && form.socDate.trim()) || existingAO?.soc_agreed_date || null,
+      soc_date: (form.socDate && form.socDate.trim()) || existingAO?.soc_date || null,
+      socDate: (form.socDate && form.socDate.trim()) || existingAO?.socDate || null,
+      socAgreedDate: (form.socDate && form.socDate.trim()) || existingAO?.socAgreedDate || null,
     };
 
     // Auto-update status: if AO has dissented OR is in S10 period and a surveyor is now being appointed,
