@@ -1768,7 +1768,7 @@ function AttachmentChip({ att }) {
 
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   const [attachments, setAttachments] = useState([]);
-  const [showRecipients, setShowRecipients] = useState(false);
+  const [showRecipientsPopup, setShowRecipientsPopup] = useState(false);
 
   useEffect(() => {
     if (!email?.id || !sb) { setAttachments([]); return; }
@@ -1827,11 +1827,24 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 500, color: 'var(--text2)' }}>{email.sender_name || email.sender_email}</span>
             {email.sender_email && email.sender_name && <span> &lt;{email.sender_email}&gt;</span>}
+            {/* Small button to see all recipients */}
+            {(toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0) && (
+              <button 
+                onClick={() => setShowRecipientsPopup(true)}
+                title="Show all recipients"
+                style={{ 
+                  background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', 
+                  fontSize: 12, padding: '0 4px', fontWeight: 500, flexShrink: 0
+                }}
+              >
+                👥
+              </button>
+            )}
             {/* Fix 1: Full date in preview header */}
-            {email.received_at && <span style={{ marginLeft: 10 }}>{fmtDate(email.received_at)}</span>}
+            {email.received_at && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(email.received_at)}</span>}
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
             <div style={{ position: 'relative' }} ref={dropRef}>
@@ -1855,27 +1868,49 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           </div>
         </div>
 
-        {/* Recipients section (To, CC, BCC) */}
-        {hasRecipients && (
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)' }}>
-            {toRecipients.length > 0 && (
-              <div style={{ marginBottom: 4 }}>
-                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>To: </span>
-                <span>{toRecipients.join(', ')}</span>
-              </div>
-            )}
-            {ccRecipients.length > 0 && (
-              <div style={{ marginBottom: 4 }}>
-                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>CC: </span>
-                <span>{ccRecipients.join(', ')}</span>
-              </div>
-            )}
-            {bccRecipients.length > 0 && (
-              <div>
-                <span style={{ fontWeight: 500, color: 'var(--text2)' }}>BCC: </span>
-                <span>{bccRecipients.join(', ')}</span>
-              </div>
-            )}
+        {/* Recipients popup modal */}
+        {showRecipientsPopup && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setShowRecipientsPopup(false)}>
+            <div 
+              style={{ background: 'var(--bg)', borderRadius: 12, padding: 16, maxWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--text)' }}>Email Recipients</div>
+              
+              {toRecipients.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, wordBreak: 'break-word' }}>
+                    {toRecipients.map((r, i) => <div key={i}>{r}</div>)}
+                  </div>
+                </div>
+              )}
+              
+              {ccRecipients.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>CC</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, wordBreak: 'break-word' }}>
+                    {ccRecipients.map((r, i) => <div key={i}>{r}</div>)}
+                  </div>
+                </div>
+              )}
+              
+              {bccRecipients.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>BCC</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, wordBreak: 'break-word' }}>
+                    {bccRecipients.map((r, i) => <div key={i}>{r}</div>)}
+                  </div>
+                </div>
+              )}
+
+              <button 
+                onClick={() => setShowRecipientsPopup(false)}
+                style={{ marginTop: 12, width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>
