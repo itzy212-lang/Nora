@@ -3685,12 +3685,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       status: existingAO?.status || (role === 'AO' ? 'appointed_ao' : 'details_added'),
       appointed_by_me: existingAO?.appointed_by_me || role === 'AO',
 
-      notice_served_date: existingAO?.notice_served_date || null,
-      noticeServedDate: existingAO?.noticeServedDate || null,
-      consent_deadline: existingAO?.consent_deadline || null,
-      consentDeadline: existingAO?.consentDeadline || null,
-      s10_deadline: existingAO?.s10_deadline || null,
-      s10Deadline: existingAO?.s10Deadline || null,
+      notice_served_date: existingAO?.notice_served_date || '',
+      noticeServedDate: existingAO?.noticeServedDate || '',
+      consent_deadline: existingAO?.consent_deadline || '',
+      consentDeadline: existingAO?.consentDeadline || '',
+      s10_deadline: existingAO?.s10_deadline || '',
+      s10Deadline: existingAO?.s10Deadline || '',
 
       surv_name: form.surv?.name || '',
       surveyorName: form.surv?.name || '',
