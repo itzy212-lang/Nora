@@ -1141,7 +1141,14 @@ export default function MainChat({ onOpenComposer, onClose }) {
 
   const handleSaveToMemory = async (proposal, msgId) => {
     try {
-      const userId = state.currentUser?.id || state.currentUser?.email || 'itzy212@gmail.com';
+      const userId = state.currentUser?.id || state.currentUser?.email;
+      // Fixed 2026-09-17: previously fell back to a hardcoded
+      // identity if currentUser was missing — same class of bug as
+      // the SOC/OneDrive/useEly fixes. Fails closed instead.
+      if (!userId) {
+        console.warn('[MainChat] save to memory skipped — no logged-in user id');
+        return;
+      }
       const res = await fetch('/api/save-user-brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

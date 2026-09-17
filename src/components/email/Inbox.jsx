@@ -916,12 +916,20 @@ ${threadText}`;
 
 // ── Reply Overlay ─────────────────────────────────────────────────────────────
 function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody, prefillTo, prefillSubject }) {
+  const { state } = useApp();
   const isForward = mode === 'forward';
   const [to, setTo]           = useState(isForward ? (prefillTo || '') : (prefillTo || email?.sender_email || ''));
   const [cc, setCc]           = useState(mode === 'replyAll'
     ? (() => {
         // Build CC list from all recipients — exclude sender and own email only
-        const ownEmails = ['help@sq1consulting.co.uk', 'itzik@sq1consulting.co.uk', 'itzy212@gmail.com'];
+        // Fixed 2026-09-17: previously a hardcoded list of three
+        // addresses (help@sq1consulting.co.uk, itzik@sq1consulting.co.uk,
+        // itzy212@gmail.com) — same class of bug as the
+        // SOC/OneDrive/useEly fixes. For any other user, none of
+        // their own addresses were ever excluded from reply-all CC,
+        // so they'd end up CC'ing themselves. Now uses the actual
+        // logged-in user.
+        const ownEmails = [state.currentUser?.email].filter(Boolean).map(e => e.toLowerCase());
         const senderEmail = (email?.sender_email || email?.from_email || '').toLowerCase();
         // Parse recipients — cc_emails can be string, array, or null
         const parseCCField = (field) => {
@@ -939,7 +947,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
             const lower = (e || '').toLowerCase();
             return lower
               && lower !== senderEmail
-              && !ownEmails.some(own => lower === own || lower.includes('sq1consulting'));
+              && !ownEmails.includes(lower);
           })
           .filter((e, i, arr) => arr.indexOf(e) === i) // dedupe
           .join(', ');
@@ -2567,7 +2575,14 @@ if (syncErr) throw syncErr;
         body: emailBody,
         is_sent: true,
         is_read: true,
-        sender_email: 'help@sq1consulting.co.uk',
+        // Fixed 2026-09-17: previously hardcoded sender_email to
+        // 'help@sq1consulting.co.uk' unconditionally — every sent
+        // email, from any user, was recorded in the database as sent
+        // by that one account. Same class of bug as the
+        // SOC/OneDrive/useEly fixes. Now uses the actual logged-in
+        // user, matching the identity already used a few lines above
+        // for the real Microsoft send call.
+        sender_email: state.currentUser?.email || state.currentUser?.id || null,
         to_email: to,
         thread_id: replyToId || null,
         // Fixed 2026-09-03, real, severe, confirmed bug found while
@@ -2706,7 +2721,13 @@ if (syncErr) throw syncErr;
           email_id: email.id,
           subject: email.subject || '(No subject)',
           body: emailBody,
-          direction: email.direction || (email.sender_email === 'help@sq1consulting.co.uk' ? 'sent' : 'received'),
+          // Fixed 2026-09-17: previously compared against a hardcoded
+          // 'help@sq1consulting.co.uk' to guess direction — same
+          // class of bug as the SOC/OneDrive/useEly fixes, and the
+          // same fix already applied to the Inbox own-sender filter
+          // earlier tonight (commit 61f42170). Uses the actual
+          // logged-in user now.
+          direction: email.direction || (email.sender_email === state.currentUser?.email ? 'sent' : 'received'),
           from_address: email.sender_email || email.sender_name || '',
           to_address: email.to_email || '',
           received_at: email.received_at || email.created_at,

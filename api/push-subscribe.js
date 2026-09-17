@@ -31,8 +31,20 @@ export default async function handler(req, res) {
     // real columns are p256dh/auth). The two existing subscription
     // rows have correct data from before this drifted; any new
     // subscription attempt from here would have failed outright.
+    //
+    // Fixed 2026-09-17: user_id also previously fell back to a
+    // hardcoded 'help@sq1consulting.co.uk' whenever the frontend
+    // didn't send one — same class of bug as the SOC/OneDrive/useEly
+    // fixes, and the direct cause of a separate bug already fixed
+    // (send-email-push.js broadcasting every new email to every
+    // subscriber with no ownership filter). The frontend
+    // (usePushNotifications.js) now refuses to call this at all
+    // without a real user id; this is defense-in-depth.
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
     const { error } = await sb.from('push_subscriptions').upsert({
-      user_id: user_id || 'help@sq1consulting.co.uk',
+      user_id,
       endpoint: subscription.endpoint,
       p256dh: subscription.keys?.p256dh || '',
       auth: subscription.keys?.auth || '',

@@ -79,6 +79,17 @@ export async function registerPushNotifications(userId) {
     }
 
     // Save to API
+    // Fixed 2026-09-17: previously fell back to a hardcoded identity
+    // if userId was missing — same class of bug as the
+    // SOC/OneDrive/useEly fixes. The one caller (App.jsx) always
+    // passes the real logged-in user's email, so this is
+    // defense-in-depth: refuse to register a push subscription under
+    // a guessed identity rather than silently attributing it to one
+    // fixed account.
+    if (!userId) {
+      console.warn('[push] No userId supplied — refusing to register under a guessed identity');
+      return false;
+    }
     const res = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -90,7 +101,7 @@ export async function registerPushNotifications(userId) {
             auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))),
           },
         },
-        user_id: userId || 'help@sq1consulting.co.uk',
+        user_id: userId,
       }),
     });
 

@@ -339,8 +339,17 @@ export function useEmails() {
         subject: subject || '(No subject)',
         body,
         body_preview: (body || '').slice(0, 300),
-        sender_name: 'Square One Consulting',
-        sender_email: 'help@sq1consulting.co.uk',
+        // Fixed 2026-09-17: sender_email previously hardcoded to
+        // 'help@sq1consulting.co.uk' unconditionally — every sent
+        // email, from any user, was recorded as sent by that one
+        // account, same class of bug as the SOC/OneDrive/useEly
+        // fixes. sender_name previously hardcoded to 'Square One
+        // Consulting' too — every user's sent mail displayed your
+        // firm's name regardless of who actually sent it. Both now
+        // use the actual logged-in user, matching the identity
+        // already used above for the real Microsoft send call.
+        sender_name: state.currentUser?.email || 'Sent',
+        sender_email: userId || state.currentUser?.email || state.currentUser?.id || null,
         to_emails: toList.map(e => ({ name: e, email: e })),
         cc_emails: ccList.map(e => ({ name: e, email: e })),
         sent_at: sentAt,

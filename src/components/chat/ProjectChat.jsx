@@ -137,12 +137,17 @@ function safeFileName(name = 'file') {
 }
 
 function getUserId(state = {}) {
+  // Fixed 2026-09-17: previously fell back to a hardcoded identity —
+  // same class of bug as the SOC/OneDrive/useEly fixes. Returns null
+  // now so the one caller (the file-upload handler below) can fail
+  // closed instead of silently attributing an upload to the wrong
+  // account.
   return (
     state.user?.id ||
     state.user?.email ||
     state.currentUser?.id ||
     state.currentUser?.email ||
-    'itzy212@gmail.com'
+    null
   );
 }
 
@@ -586,6 +591,15 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
     event.target.value = '';
 
     if (!files.length || uploading) return;
+
+    // Fixed 2026-09-17: getUserId() used to silently fall back to a
+    // hardcoded identity here — every upload would have been
+    // attributed to that account if currentUser was ever missing.
+    // Fail closed instead: surface a clear error, upload nothing.
+    if (!getUserId(state)) {
+      setUploadError('Could not identify the logged-in user — please refresh and try again.');
+      return;
+    }
 
     setUploading(true);
     setUploadError('');

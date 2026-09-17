@@ -187,11 +187,18 @@ function mapDbMessagesToUiMessages(messages = []) {
 // logic directly, rather than duplicate or rebuild it.
 export async function createAiSession({ userId, projectId, surface, mode = 'discuss', title = 'New chat', sessionType = 'chat' }) {
   if (!sb) return null;
+  // Fixed 2026-09-17: previously fell back to a hardcoded identity
+  // ('itzy212@gmail.com') if userId was missing — same class of bug
+  // as the SOC/OneDrive fixes. Fails closed instead.
+  if (!userId) {
+    console.warn('[useEly] createAiSession: no userId supplied — refusing to guess an owner');
+    return null;
+  }
 
   const { data, error } = await sb
     .from('ai_sessions')
     .insert([{
-      user_id: userId || 'itzy212@gmail.com',
+      user_id: userId,
       project_id: projectId || null,
       title,
       auto_title: title,
@@ -229,6 +236,12 @@ export async function createAiSession({ userId, projectId, surface, mode = 'disc
 
 export async function saveAiMessage({ sessionId, userId, projectId, surface, role, content, model, messageType }) {
   if (!sb || !sessionId || !content) return null;
+  // Same fix as createAiSession above — fail closed rather than
+  // guessing an owner.
+  if (!userId) {
+    console.warn('[useEly] saveAiMessage: no userId supplied — refusing to guess an owner');
+    return null;
+  }
 
   const dbRole = role === 'ely' ? 'assistant' : role;
 
@@ -238,7 +251,7 @@ export async function saveAiMessage({ sessionId, userId, projectId, surface, rol
       session_id: sessionId,
       role: dbRole,
       content: String(content || ''),
-      user_id: userId || 'itzy212@gmail.com',
+      user_id: userId,
       project_id: projectId || null,
       // Fixed 2026-09-03, same real bug as createAiSession above —
       // surface must always reflect where the conversation actually
@@ -293,10 +306,23 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
     });
   }, [state.currentUser?.id, state.currentUser?.email]);
 
+  // Fixed 2026-09-17, real, confirmed bug — same class as the SOC and
+  // OneDrive identity bugs fixed earlier: this fell back to a
+  // hardcoded 'itzy212@gmail.com' whenever state.currentUser was
+  // missing, and that value then flowed, as a normal non-falsy
+  // userId, into every read/write below (session queries, RPC calls,
+  // createAiSession/saveAiMessage) — bypassing those functions' own
+  // `userId || 'itzy212@gmail.com'` fallback entirely, since they
+  // only trigger on a falsy value and this always produced a
+  // seemingly-valid one. In real usage state.currentUser is reliably
+  // populated (this hook only ever renders once someone is logged
+  // in), so this was always a dormant risk rather than something
+  // observed firing — same shape as the others, fixed the same way:
+  // fail closed instead of guessing an identity.
   const userId =
     state.currentUser?.id ||
     state.currentUser?.email ||
-    'itzy212@gmail.com';
+    null;
 
   const resolveCurrentProject = useCallback((explicitProjectId = null) => {
     const projects = state.projects || [];
@@ -382,7 +408,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
       state.selectedProject?.id ||
       null;
 
-    if (!sb || !targetProjectId) {
+    if (!sb || !targetProjectId || !userId) {
       setProjectSessions([]);
       return [];
     }
@@ -411,7 +437,7 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
   }, [projectId, state.currentProject?.id, state.selectedProject?.id, userId]);
 
   const refreshGlobalSessions = useCallback(async () => {
-    if (!sb) {
+    if (!sb || !userId) {
       setGlobalSessions([]);
       return [];
     }
@@ -490,8 +516,8 @@ export function useEly({ surface = 'main_chat', projectId = null } = {}) {
       state.selectedProject?.id ||
       null;
 
-    if (!actualSessionId || !actualProjectId) {
-      throw new Error('Missing chat session or project to link.');
+    if (!actualSessionId || !actualProjectId || !userId) {
+      throw new Error('Missing chat session, project, or user to link.');
     }
 
     const { data, error: rpcError } = await sb.rpc('link_ai_session_to_project', {

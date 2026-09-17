@@ -132,7 +132,15 @@ export default async function handler(req, res) {
 
     const projectId = firstField(fields.project_id, '');
     const sessionId = firstField(fields.session_id, '');
-    const userId = firstField(fields.user_id, 'itzy212@gmail.com');
+    // Fixed 2026-09-17: previously fell back to a hardcoded identity
+    // if the frontend didn't send one — same class of bug as the
+    // SOC/OneDrive/useEly fixes. The frontend caller (ProjectChat.jsx)
+    // now refuses to call this endpoint at all without a real user
+    // id, so this is a defense-in-depth check, not the primary fix.
+    const userId = firstField(fields.user_id, '');
+    if (!userId) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
     const projectRef = firstField(fields.project_ref, '');
     const originalName = uploaded.originalFilename || 'uploaded-file';
     const mimeType = uploaded.mimetype || 'application/octet-stream';
