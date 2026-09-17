@@ -3783,13 +3783,42 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     if (!existingAO) {
       const aoAddress = form.premise || '';
       const projectFolderId = project.onedrive_folder_id || project.google_drive_folder_id;
+      // Temporary diagnostic logging (2026-09-17) — writes directly to
+      // a database table (bypassing the currently-unreliable Vercel
+      // log viewer) so the exact failure point is visible after the
+      // next test, instead of guessing again. Safe to remove once
+      // this is actually resolved.
+      try {
+        await sb.from('oauth_debug').insert({
+          event: 'ao_folder_debug',
+          response_data: {
+            aoAddress,
+            projectOnedriveId: project.onedrive_folder_id,
+            projectGoogleDriveId: project.google_drive_folder_id,
+            projectFolderId,
+            step: 'start',
+          },
+        });
+      } catch (e) {}
       if (aoAddress && projectFolderId) {
         try {
           const userEmail = await getCurrentUserEmail();
+          try {
+            await sb.from('oauth_debug').insert({
+              event: 'ao_folder_debug',
+              response_data: { step: 'got_user_email', userEmail: userEmail || null },
+            });
+          } catch (e) {}
           if (!userEmail) {
             console.warn('[ProjectDetail] Could not determine current user — skipping AO storage folder creation.');
           } else {
             const folderData = await createAOFolder(userEmail, projectFolderId, aoAddress);
+            try {
+              await sb.from('oauth_debug').insert({
+                event: 'ao_folder_debug',
+                response_data: { step: 'createAOFolder_result', folderData },
+              });
+            } catch (e) {}
             if (folderData?.success && folderData?.folder_id) {
               // Fixed 2026-09-17, real, confirmed bug reported live —
               // this hardcoded onedrive_folder_id/onedrive_folder_url
@@ -3823,6 +3852,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           }
         } catch (err) {
           console.warn('[handleSaveAO] AO storage folder creation failed:', err.message);
+          try {
+            await sb.from('oauth_debug').insert({
+              event: 'ao_folder_debug',
+              response_data: { step: 'caught_error', message: err.message, stack: err.stack?.slice(0, 500) },
+            });
+          } catch (e) {}
         }
       }
     }
