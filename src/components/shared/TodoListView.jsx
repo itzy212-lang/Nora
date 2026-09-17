@@ -158,7 +158,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
   const sortedKeys = Object.keys(groups).sort();
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>←</button>
         <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#111827' }}>✅ To-do list</div>
@@ -171,7 +171,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
         <button onClick={onCloseAll} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: '0 2px', lineHeight: 1 }}>×</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px' }}>
         {loading ? (
           <div style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: 40 }}>Loading…</div>
         ) : sortedKeys.length === 0 ? (

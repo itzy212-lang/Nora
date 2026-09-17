@@ -234,7 +234,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
             </div>
 
             {/* Notes list */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px' }}>
               {/* Added 2026-09-13, on request: a permanent, un-deletable
                   to-do list — always the first card, top-left,
                   regardless of how many other notes exist. This is
