@@ -3,6 +3,98 @@ import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { uploadDocument } from '../../utils/providers';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Fixed 2026-09-17, real, confirmed bug reported live with a
+// screenshot: the mobile page preview relies on a browser feature,
+// not app code — desktop's iframe (unchanged, further down) hands
+// off to Chrome/Edge's own built-in PDF viewer via a #page=N
+// fragment, which that viewer understands. Mobile browsers don't
+// have that same built-in viewer wired up the same way, so the
+// iframe just showed the phone's own generic "can't preview this,
+// here's an Open button" fallback card instead — exactly what was
+// screenshotted. Desktop is untouched; this renders the page as a
+// real image via pdf.js instead, which works identically regardless
+// of platform since it doesn't depend on any browser's native PDF
+// support at all.
+//
+// Loaded via dynamic import() rather than a static one, and only
+// inside this one mobile-only component — pdf.js is a large library
+// that every single user would otherwise pay for in the main bundle
+// on every page load, including everyone on desktop who never hits
+// this code path at all.
+let pdfjsLibPromise = null;
+function loadPdfjs() {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import('pdfjs-dist').then(mod => {
+      mod.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      return mod;
+    });
+  }
+  return pdfjsLibPromise;
+}
+
+function MobilePdfPage({ pdfUrl, pageNumber }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [rendering, setRendering] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask = null;
+    setRendering(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const pdfjsLib = await loadPdfjs();
+        if (cancelled) return;
+        const doc = await pdfjsLib.getDocument(pdfUrl).promise;
+        if (cancelled) return;
+        const page = await doc.getPage(pageNumber);
+        if (cancelled) return;
+
+        const containerWidth = containerRef.current?.clientWidth || 360;
+        const baseViewport = page.getViewport({ scale: 1 });
+        // Render at device pixel ratio for a sharp result on phone
+        // screens, scaled to fill the available width.
+        const scale = (containerWidth / baseViewport.width) * (window.devicePixelRatio || 1);
+        const viewport = page.getViewport({ scale });
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+
+        renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport });
+        await renderTask.promise;
+        if (!cancelled) setRendering(false);
+      } catch (err) {
+        if (!cancelled && err?.name !== 'RenderingCancelledException') {
+          console.warn('[NoticeReviewModal] Mobile PDF page render failed:', err.message);
+          setError(err.message || 'Could not render this page.');
+          setRendering(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (renderTask) renderTask.cancel();
+    };
+  }, [pdfUrl, pageNumber]);
+
+  return (
+    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 8, boxSizing: 'border-box' }}>
+      {rendering && <div style={{ color: '#475569', fontSize: 13, padding: 14 }}>Loading page…</div>}
+      {error && <div style={{ color: '#ef4444', fontSize: 13, padding: 14 }}>{error}</div>}
+      <canvas ref={canvasRef} style={{ display: rendering || error ? 'none' : 'block', borderRadius: 4, boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+    </div>
+  );
+}
 
 const INSERT_OPTIONS = [
   { value: 'after_last', label: 'After last page' },
@@ -523,7 +615,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
               </div>
               <div style={{ flex: 1, background: '#d1d5db', overflow: 'hidden', position: 'relative' }}>
                 {generating && <div style={{ position: 'absolute', inset: 0, background: 'rgba(209,213,219,0.8)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: 13, color: '#475569' }}>Updating PDF…</div></div>}
-                {viewerUrl ? <iframe key={viewerUrl} src={viewerUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Notice preview" /> : !generating && <div style={{ color: '#ef4444', fontSize: 13, padding: 14 }}>PDF could not be loaded.</div>}
+                {pdfUrl ? <MobilePdfPage key={`${pdfUrl}-${currentPageIdx}`} pdfUrl={pdfUrl} pageNumber={currentPageIdx + 1} /> : !generating && <div style={{ color: '#ef4444', fontSize: 13, padding: 14 }}>PDF could not be loaded.</div>}
               </div>
             </>
           )}
