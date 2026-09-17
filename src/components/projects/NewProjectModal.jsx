@@ -537,6 +537,19 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
                 : { onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null };
 
               await sb.from('projects').update(updateData).eq('id', data.id);
+              // Fixed 2026-09-17, real, confirmed bug found by
+              // tracing the actual code path start to finish: this
+              // wrote the folder id to the database but never updated
+              // the local `data` object handed off to open the new
+              // project — so the in-memory project everything renders
+              // from was missing google_drive_folder_id/
+              // onedrive_folder_id from the moment the project screen
+              // first opened, even though the database had it
+              // correctly. Adding an AO straight after checks
+              // project.google_drive_folder_id from that stale
+              // in-memory copy, finds nothing, and silently skips
+              // creating its subfolder — no error, nothing logged.
+              Object.assign(data, updateData);
             }
           }
         } catch (folderErr) {

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
-import { getCurrentUserEmail } from '../utils/getCurrentUserEmail';
+import { createProjectFolder } from '../utils/providers';
 
 export function useProjects() {
   const { state, dispatch } = useApp();
@@ -183,34 +183,43 @@ export function useProjects() {
       .single();
     if (error) throw error;
 
-    // Create OneDrive folder if not already created
+    // Create a project folder if one doesn't already exist.
+    // Fixed 2026-09-17, real, confirmed bug found by tracing this
+    // exact code path — two separate issues, same shape as the ones
+    // already fixed tonight in NewProjectModal.jsx/ProjectDetail.jsx:
+    //
+    // 1. This called /api/onedrive-folder directly, unconditionally —
+    //    correct for OneDrive, silently a no-op for a Google Drive
+    //    account (no error, folder just never gets created).
+    // 2. The folder id was saved to the database but never merged
+    //    back into the local `data` object this function returns —
+    //    so whatever uses the returned project (e.g. opening it
+    //    immediately after) got a copy missing the folder id, even
+    //    though the database had it correctly. Adding an AO right
+    //    after would check that stale in-memory copy, find nothing,
+    //    and silently skip creating its own subfolder — exactly the
+    //    reported symptom, just via a second, separate save path.
     const boAddress = projectData.address || projectData.bo_premise_address || '';
-    const alreadyHasFolder = projectData.onedrive_folder_id || data?.onedrive_folder_id;
+    const alreadyHasFolder = projectData.onedrive_folder_id || projectData.google_drive_folder_id || data?.onedrive_folder_id || data?.google_drive_folder_id;
     if (boAddress && !alreadyHasFolder) {
       try {
-        const userEmail = await getCurrentUserEmail();
-        if (!userEmail) {
-          console.warn('[useProjects] Could not determine current user — skipping OneDrive folder creation.');
+        const { data: { user } } = await sb.auth.getUser();
+        const userId = user?.id;
+        if (!userId) {
+          console.warn('[useProjects] Could not determine current user — skipping storage folder creation.');
         } else {
-        const folderRes = await fetch('/api/onedrive-folder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userEmail,
-            action: 'create_project_folder',
-            project_address: boAddress,
-          }),
-        });
-        const folderData = await folderRes.json();
-        if (folderData.success && folderData.folder_id) {
-          await sb.from('projects').update({
-            onedrive_folder_id: folderData.folder_id,
-            onedrive_folder_url: folderData.web_url || null,
-          }).eq('id', data.id);
-        }
+          const folderData = await createProjectFolder(userId, boAddress);
+          if (folderData?.success && folderData?.folder_id) {
+            const isDrive = folderData.provider === 'googledrive';
+            const updateData = isDrive
+              ? { google_drive_folder_id: folderData.folder_id, google_drive_folder_url: folderData.web_url || null }
+              : { onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null };
+            await sb.from('projects').update(updateData).eq('id', data.id);
+            Object.assign(data, updateData);
+          }
         }
       } catch (folderErr) {
-        console.warn('[saveProject] OneDrive folder creation failed:', folderErr.message);
+        console.warn('[saveProject] Storage folder creation failed:', folderErr.message);
       }
     }
 
