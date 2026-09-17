@@ -50,13 +50,10 @@ function MobilePdfPage({ pdfUrl, pageNumber }) {
       try {
         const pdfjsLib = await loadPdfjs();
         if (cancelled) return;
-        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_start', pdfUrl, pageNumber } }); } catch (e) {}
         const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
         if (cancelled) return;
-        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_ok', numPages: doc.numPages } }); } catch (e) {}
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
-        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getPage_ok' } }); } catch (e) {}
 
         const containerWidth = containerRef.current?.clientWidth || 360;
         const baseViewport = page.getViewport({ scale: 1 });
@@ -74,10 +71,8 @@ function MobilePdfPage({ pdfUrl, pageNumber }) {
 
         renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport });
         await renderTask.promise;
-        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'render_ok' } }); } catch (e) {}
         if (!cancelled) setRendering(false);
       } catch (err) {
-        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'caught_error', message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) } }); } catch (e) {}
         if (!cancelled && err?.name !== 'RenderingCancelledException') {
           console.warn('[NoticeReviewModal] Mobile PDF page render failed:', err.message);
           setError(err.message || 'Could not render this page.');
@@ -338,7 +333,16 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfs: pageList.map((page, index) => ({ b64: page.b64, name: page.label || `Page ${index + 1}` })) }),
       }),
-      30000,
+      // Fixed 2026-09-17, real, confirmed bug found via direct
+      // evidence (debug logging): this endpoint is configured in
+      // vercel.json with maxDuration: 120 — the server is allowed to
+      // keep working on a large/complex PDF for up to two minutes.
+      // The 30s client timeout was cutting it off well before the
+      // server itself would have given up, on exactly the kind of
+      // large file (architectural drawings, heavy embedded images)
+      // where it's needed most. Matched to slightly over the
+      // server's own allowance rather than guessed.
+      125000,
       'Rebuilding the PDF'
     );
     const data = await response.json();
@@ -435,12 +439,6 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const handleAttachConfirm = useCallback(async ({ file, position }) => {
     setShowAttach(false);
     setGenerating(true);
-    // Temporary diagnostic logging (2026-09-17) — writes directly to
-    // the database so the exact failure point is visible after one
-    // real test, instead of guessing again. Safe to remove once this
-    // is actually resolved.
-    const dlog = async (step, extra = {}) => { try { await sb.from('oauth_debug').insert({ event: 'attach_pdf_debug', response_data: { step, fileName: file?.name, fileSize: file?.size, position, ...extra } }); } catch (e) {} };
-    await dlog('start');
     try {
       const attachB64 = await withTimeout(new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -448,7 +446,6 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         reader.onerror = () => reject(new Error('Could not read the selected file'));
         reader.readAsDataURL(file);
       }), 30000, 'Reading the selected file');
-      await dlog('file_read_ok', { b64Length: attachB64?.length });
 
       const splitRes = await withTimeout(
         fetch('/api/split-pdf', {
@@ -456,13 +453,20 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
         }),
-        30000,
+        // Fixed 2026-09-17, real, confirmed bug found via direct
+        // evidence (debug logging showed the exact failure): this
+        // endpoint is configured in vercel.json with maxDuration: 60
+        // — the server can keep processing a large PDF for up to a
+        // minute. The 30s client timeout was cutting it off before
+        // the server had a fair chance, confirmed live on a 7.5MB
+        // architectural drawing PDF that needed more than 30s but
+        // less than 60. Matched to slightly over the server's own
+        // allowance.
+        65000,
         'Splitting the attached PDF'
       );
-      await dlog('split_fetch_ok', { status: splitRes.status });
       const split = await splitRes.json();
       if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not split the attached PDF');
-      await dlog('split_parsed_ok', { pageCount: split.pages.length });
 
       const stamp = Date.now();
       const attachedPages = split.pages.map((page, index) => ({
@@ -475,17 +479,13 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       }));
       const next = [...pages];
       next.splice(Math.min(next.length, position + 1), 0, ...attachedPages);
-      await dlog('before_merge', { nextLength: next.length });
       await mergePageList(next);
-      await dlog('merge_ok');
       setPages(next);
       setCurrentPageIdx(Math.min(next.length - 1, position + 1));
       setSelectedPageIds(new Set());
     } catch (err) {
-      await dlog('caught_error', { message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) });
       alert(`Attach failed: ${err.message}`);
     } finally {
-      await dlog('finally');
       setGenerating(false);
     }
   }, [mergePageList, pages]);
