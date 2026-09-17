@@ -140,11 +140,67 @@ function btn(variant, disabled = false) {
   return base;
 }
 
-function base64ToObjectUrl(b64) {
+function base64ToBytes(b64) {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  return bytes;
+}
+
+function bytesToBase64(bytes) {
+  // Chunked to avoid call-stack limits from spreading a very large
+  // typed array into String.fromCharCode at once (a real risk for
+  // the multi-MB files this is built for).
+  let binary = '';
+  const chunkSize = 32768;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToObjectUrl(b64) {
+  return URL.createObjectURL(new Blob([base64ToBytes(b64)], { type: 'application/pdf' }));
+}
+
+// Fixed 2026-09-17, real, confirmed bug found via direct evidence:
+// a 7.5MB attached PDF failed with "Request Entity Too Large" from
+// Vercel's own infrastructure — a fixed ~4.5MB request body limit on
+// serverless functions, entirely separate from and not overridable
+// by this project's own api.bodyParser.sizeLimit config. No client
+// timeout or server maxDuration value fixes this; the payload simply
+// can't cross the network as one request once it's over that size.
+// Splitting and merging PDFs client-side instead, using pdf-lib
+// (already a project dependency, isomorphic — works the same in the
+// browser as it already does server-side in split-pdf.js/
+// merge-pdfs-b64.js) avoids sending the file over the network for
+// this step at all, which is the only fix that actually removes the
+// limit rather than working around it.
+async function splitPdfClientSide(base64) {
+  const { PDFDocument } = await import('pdf-lib');
+  const srcDoc = await PDFDocument.load(base64ToBytes(base64), { ignoreEncryption: true });
+  const pageCount = srcDoc.getPageCount();
+  const pages = [];
+  for (let i = 0; i < pageCount; i += 1) {
+    const singleDoc = await PDFDocument.create();
+    const [copiedPage] = await singleDoc.copyPages(srcDoc, [i]);
+    singleDoc.addPage(copiedPage);
+    const bytes = await singleDoc.save();
+    pages.push({ b64: bytesToBase64(bytes), page_num: i + 1 });
+  }
+  return pages;
+}
+
+async function mergePdfsClientSide(pageList) {
+  const { PDFDocument } = await import('pdf-lib');
+  const mergedDoc = await PDFDocument.create();
+  for (const page of pageList) {
+    const srcDoc = await PDFDocument.load(base64ToBytes(page.b64), { ignoreEncryption: true });
+    const copiedPages = await mergedDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+    copiedPages.forEach(p => mergedDoc.addPage(p));
+  }
+  const bytes = await mergedDoc.save();
+  return bytesToBase64(bytes);
 }
 
 function safeFileName(value) {
@@ -327,27 +383,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
   const mergePageList = useCallback(async (pageList) => {
     if (!pageList.length) throw new Error('The pack must contain at least one page');
-    const response = await withTimeout(
-      fetch('/api/merge-pdfs-b64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfs: pageList.map((page, index) => ({ b64: page.b64, name: page.label || `Page ${index + 1}` })) }),
-      }),
-      // Fixed 2026-09-17, real, confirmed bug found via direct
-      // evidence (debug logging): this endpoint is configured in
-      // vercel.json with maxDuration: 120 — the server is allowed to
-      // keep working on a large/complex PDF for up to two minutes.
-      // The 30s client timeout was cutting it off well before the
-      // server itself would have given up, on exactly the kind of
-      // large file (architectural drawings, heavy embedded images)
-      // where it's needed most. Matched to slightly over the
-      // server's own allowance rather than guessed.
-      125000,
-      'Rebuilding the PDF'
-    );
-    const data = await response.json();
-    if (!response.ok || !data?.pdf_b64) throw new Error(data?.error || 'Could not rebuild the PDF');
-    replacePreview(data.pdf_b64);
+    const mergedB64 = await mergePdfsClientSide(pageList);
+    replacePreview(mergedB64);
   }, [replacePreview]);
 
   useEffect(() => {
@@ -447,31 +484,13 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         reader.readAsDataURL(file);
       }), 30000, 'Reading the selected file');
 
-      const splitRes = await withTimeout(
-        fetch('/api/split-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
-        }),
-        // Fixed 2026-09-17, real, confirmed bug found via direct
-        // evidence (debug logging showed the exact failure): this
-        // endpoint is configured in vercel.json with maxDuration: 60
-        // — the server can keep processing a large PDF for up to a
-        // minute. The 30s client timeout was cutting it off before
-        // the server had a fair chance, confirmed live on a 7.5MB
-        // architectural drawing PDF that needed more than 30s but
-        // less than 60. Matched to slightly over the server's own
-        // allowance.
-        65000,
-        'Splitting the attached PDF'
-      );
-      const split = await splitRes.json();
-      if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not split the attached PDF');
+      const splitPages = await splitPdfClientSide(attachB64);
+      if (!splitPages.length) throw new Error('Could not split the attached PDF');
 
       const stamp = Date.now();
-      const attachedPages = split.pages.map((page, index) => ({
+      const attachedPages = splitPages.map((page, index) => ({
         id: `attachment-${stamp}-${index}`,
-        label: split.pages.length === 1 ? file.name : `${file.name} — page ${page.page_num}`,
+        label: splitPages.length === 1 ? file.name : `${file.name} — page ${page.page_num}`,
         source: 'attachment',
         fileName: file.name,
         b64: page.b64,
