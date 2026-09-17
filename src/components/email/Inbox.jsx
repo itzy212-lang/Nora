@@ -11,6 +11,24 @@ import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hoo
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
 
+// Added 2026-09-17, same defense-in-depth reasoning as the email
+// query timeout above (and the IndexedDB connection fix before that):
+// this app has multiple separate call sites that invoke sync_outlook
+// and simply `await` it with no timeout at all. Any one of them
+// hanging — a stalled Supabase Edge Function, a stuck network
+// request, the same class of "auth/session gets stuck with no
+// thrown error" issue already found once tonight — reproduces the
+// exact same "stuck on Loading forever, zero console errors"
+// symptom, just from a different call site. One shared, timeout-
+// guarded wrapper instead of four separate unguarded calls, so this
+// can't recur from a spot that wasn't fixed individually.
+async function invokeSyncOutlookWithTimeout(timeoutMs = 15000) {
+  return Promise.race([
+    sb.functions.invoke('sync_outlook', { body: {} }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Outlook sync timed out')), timeoutMs)),
+  ]);
+}
+
 function BookingOverlay({ booking, onConfirm, onClose }) {
   const [form, setForm] = useState({
     title: booking.title || '',
@@ -1988,6 +2006,11 @@ function isBriefContent(text = '') {
 export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
+  // Added 2026-09-17, alongside the loading-hang fixes above: a real
+  // failure here previously only ever logged to the console — anyone
+  // not looking at DevTools just saw an empty inbox with no
+  // explanation why. Now shown directly in the UI.
+  const [inboxLoadError, setInboxLoadError] = useState('');
   const [selectedEmail, setSelectedEmail]= useState(null);
   // Fixed 2026-09-12, real, confirmed bug: App.jsx's email
   // notification deep-link already dispatched SET_SELECTED_EMAIL_ID,
@@ -2204,6 +2227,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       : null;
 
     if (!doIncremental) setLoading(true);
+    setInboxLoadError('');
     // Added 2026-08-14, on request: a visible signal specifically for
     // an incremental 'check for what's new since last time' pass —
     // covers every path that calls loadEmails({ incremental: true }),
@@ -2248,7 +2272,20 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         if (ownEmail) q = q.neq('sender_email', ownEmail);
       }
       if (doIncremental && newestDate) q = q.gt('received_at', newestDate).limit(50);
-      const { data, error } = await q;
+      // Fixed 2026-09-17, defense-in-depth alongside the IndexedDB
+      // fix above: this is the actual live Supabase query, and it had
+      // no timeout at all — if the client's internal auth/session
+      // state ever gets stuck (a known class of issue: a stalled
+      // token refresh can silently block every subsequent request
+      // with no error thrown at all), this would hang exactly like
+      // the cache read did, with the same 'stuck on Loading forever,
+      // zero console errors' signature. Capped at 15s; past that it
+      // throws a clear, visible error instead of hanging silently —
+      // caught below same as any other failure.
+      const { data, error } = await Promise.race([
+        q,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Email query timed out after 15s — your session may need refreshing (try logging out and back in)')), 15000)),
+      ]);
       if (error) throw error;
 
       let newEmails = data || [];
@@ -2300,7 +2337,14 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         saveCachedEmails(newEmails); // persist the full load — added 2026-08-14
       }
       dispatch({ type: 'SET_EMAILS_LOADED_AT', payload: Date.now() });
-    } catch (err) { console.error('loadEmails:', err); }
+    } catch (err) {
+      console.error('loadEmails:', err);
+      // Shown for a genuine full load's failure, not a background
+      // incremental check — a routine "check for anything new" pass
+      // failing shouldn't nag the user with an error banner over
+      // what's already showing correctly.
+      if (!doIncremental) setInboxLoadError(err?.message || 'Could not load your inbox.');
+    }
     if (!doIncremental) setLoading(false);
     if (doIncremental) setCheckingForUpdates(false);
   }, [folder, state.currentUser, state.emails, state.emailsLoadedAt]);
@@ -2337,7 +2381,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
           try {
             if (!syncingRef.current) {
               syncingRef.current = true;
-              await sb.functions.invoke('sync_outlook', { body: {} });
+              await invokeSyncOutlookWithTimeout();
               syncingRef.current = false;
             }
           } catch (err) {
@@ -2411,7 +2455,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         try {
           if (!syncingRef.current) {
             syncingRef.current = true;
-            await sb.functions.invoke('sync_outlook', { body: {} });
+            await invokeSyncOutlookWithTimeout();
             syncingRef.current = false;
           }
         } catch (err) {
@@ -2432,7 +2476,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (syncingRef.current) return; // prevent overlap
       syncingRef.current = true;
       try {
-        const { data, error } = await sb.functions.invoke('sync_outlook', { body: {} });
+        const { data, error } = await invokeSyncOutlookWithTimeout();
         if (!error && data?.newEmails > 0) {
           await loadEmails({ incremental: true });
           // Chain auto-draft immediately after sync — eliminates up to 15 min delay
@@ -2540,7 +2584,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     syncingRef.current = true;
     setSyncing(true);
     try {
-      const { data: result, error: syncErr } = await sb.functions.invoke('sync_outlook', { body: {} });
+      const { data: result, error: syncErr } = await invokeSyncOutlookWithTimeout();
 if (syncErr) throw syncErr;
       await new Promise(r => setTimeout(r, 1000));
       try { await sb.rpc('match_emails_to_projects') } catch(_) {}
@@ -3049,6 +3093,15 @@ if (syncErr) throw syncErr;
         >
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+            : inboxLoadError
+            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--red, #c0392b)', fontSize: 13 }}>
+                Could not load your inbox: {inboxLoadError}
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={() => loadEmails({ force: true })} style={{ padding: '5px 14px', borderRadius: 99, fontSize: 12.5, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', fontWeight: 500 }}>
+                    Try again
+                  </button>
+                </div>
+              </div>
             : isSearching
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>Searching…</div>
             : filtered.length === 0
