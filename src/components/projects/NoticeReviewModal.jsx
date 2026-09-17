@@ -50,7 +50,7 @@ function MobilePdfPage({ pdfUrl, pageNumber }) {
       try {
         const pdfjsLib = await loadPdfjs();
         if (cancelled) return;
-        const doc = await pdfjsLib.getDocument(pdfUrl).promise;
+        const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
         if (cancelled) return;
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
