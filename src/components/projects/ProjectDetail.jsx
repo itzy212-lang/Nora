@@ -3714,13 +3714,30 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       socAgreedDate: (form.socDate && form.socDate.trim()) || existingAO?.socAgreedDate || null,
     };
 
-    // Auto-update status: if AO has dissented OR is in S10 period and a surveyor is now being appointed,
-    // change status to 'surveyor_appointed' (green, ready to proceed)
+    // Fixed 2026-09-17, real, confirmed bug reported live, diagnosed
+    // by reading back the original design session for this status
+    // chain (2026-07-01): "Surveyor appointed" was never meant to be
+    // a stored status value at all — it's a DERIVED label, computed
+    // by getAOStatusMeta purely from (status === 'dissent' AND a
+    // surveyor name is present). The design deliberately keeps
+    // status as 'dissent' throughout that whole branch so the
+    // dissent/consent buttons and "note intention" correctly stay
+    // hidden. This code overwrote newAO.status to the literal string
+    // 'surveyor_appointed' — a value getAOStatusMeta's status chain
+    // has never recognised at any point since that design was built.
+    // Once status became that string, every one of the chain's real
+    // checks (dissent, s10, s104b, consent) stopped matching, so it
+    // fell all the way through to the lowest fallback and displayed
+    // "Notice served" instead — which also meant whatever hid the
+    // consent/dissent buttons during dissent (keyed off the real
+    // status) no longer applied, so they reappeared too. Leaving
+    // status untouched here is the actual fix — getAOStatusMeta
+    // already derives "Surveyor appointed" correctly from the
+    // surveyor name alone, exactly as designed.
     const currentStatus = (newAO.status || '').toLowerCase();
     const hasNewSurveyor = (form.surv?.name || '').trim().length > 0;
     const hadExistingSurveyor = !!(existingAO?.surv_name || existingAO?.surveyorName || existingAO?.surveyor_name);
     if ((currentStatus === 'dissent' || currentStatus === 's10') && hasNewSurveyor && !hadExistingSurveyor) {
-      newAO.status = 'surveyor_appointed';
       // Clean up S10 deadline task — no longer needed once surveyor appointed
       await deleteDeadlineTask('notice_section10_deadline', newAO);
     }
