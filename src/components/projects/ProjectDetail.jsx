@@ -3802,17 +3802,32 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       } catch (e) {}
       if (aoAddress && projectFolderId) {
         try {
-          const userEmail = await getCurrentUserEmail();
+          const { data: { user } } = await sb.auth.getUser();
+          const userId = user?.id;
+          // Fixed 2026-09-17, real, confirmed bug — found via direct
+          // database evidence, not a guess: this used to pass the
+          // user's EMAIL (getCurrentUserEmail()) into createAOFolder,
+          // but user_integrations.user_id is a UUID-typed column
+          // (confirmed: querying it with an email string throws a
+          // Postgres type error outright). createAOFolder's internal
+          // provider lookup could never match on an email, silently
+          // fell through to its default fallback (storage_provider:
+          // 'onedrive'), and then failed with "No Outlook account
+          // found" — visible directly in the diagnostic log from the
+          // live failing attempt. The project-level folder creation
+          // (NewProjectModal.jsx) already correctly uses the UUID for
+          // this exact same lookup, which is why it always worked;
+          // this call just never matched that pattern.
           try {
             await sb.from('oauth_debug').insert({
               event: 'ao_folder_debug',
-              response_data: { step: 'got_user_email', userEmail: userEmail || null },
+              response_data: { step: 'got_user_email', userId: userId || null },
             });
           } catch (e) {}
-          if (!userEmail) {
+          if (!userId) {
             console.warn('[ProjectDetail] Could not determine current user — skipping AO storage folder creation.');
           } else {
-            const folderData = await createAOFolder(userEmail, projectFolderId, aoAddress);
+            const folderData = await createAOFolder(userId, projectFolderId, aoAddress);
             try {
               await sb.from('oauth_debug').insert({
                 event: 'ao_folder_debug',
