@@ -3791,12 +3791,25 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           } else {
             const folderData = await createAOFolder(userEmail, projectFolderId, aoAddress);
             if (folderData?.success && folderData?.folder_id) {
-              // Save folder ID into the AO's entry in the aos array
+              // Fixed 2026-09-17, real, confirmed bug reported live —
+              // this hardcoded onedrive_folder_id/onedrive_folder_url
+              // as the field names to save the result under,
+              // regardless of which provider actually created the
+              // folder. createAOFolder correctly created the AO's
+              // Google Drive subfolder (confirmed: API returned 200
+              // success with a real folder_id) but the id then got
+              // written to a field name nothing reads for a Drive
+              // folder — so from the UI's perspective, no subfolder
+              // ever appeared to exist. createAOFolder now reports
+              // which provider it actually used; save under the
+              // matching field instead of guessing.
+              const isDrive = folderData.provider === 'googledrive';
               const withFolder = updatedAOs.map(a =>
                 a.id === newAO.id ? {
                   ...a,
-                  onedrive_folder_id: folderData.folder_id,
-                  onedrive_folder_url: folderData.web_url || null,
+                  ...(isDrive
+                    ? { google_drive_folder_id: folderData.folder_id, google_drive_folder_url: folderData.web_url || null }
+                    : { onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null }),
                 } : a
               );
               const { error: folderSaveError } = await saveAdjoiningOwners(project.id, withFolder);

@@ -72,6 +72,13 @@ export function useProjects() {
             third_surveyor_firm: ao.third_surveyor_firm,
             onedrive_folder_id: ao.onedrive_folder_id,
             onedrive_folder_url: ao.onedrive_folder_url,
+            // Fixed 2026-09-17, same real bug as the write side
+            // (adjoiningOwners.js's toTableRow) — select('*') already
+            // pulls these columns now that they exist, but this
+            // explicit mapping back into the in-memory AO shape was
+            // still dropping them, same as the write side was.
+            google_drive_folder_id: ao.google_drive_folder_id,
+            google_drive_folder_url: ao.google_drive_folder_url,
             consent_deadline: ao.consent_deadline,
             consentDeadline: ao.consent_deadline,
             s10_deadline: ao.s10_deadline,

@@ -48,6 +48,19 @@ function toTableRow(ao, projectId) {
     third_surveyor_firm: ao.third_surveyor_firm ?? null,
     onedrive_folder_id: ao.onedrive_folder_id ?? null,
     onedrive_folder_url: ao.onedrive_folder_url ?? null,
+    // Fixed 2026-09-17, real, confirmed bug reported live and
+    // diagnosed down to the database schema: the real adjoining_owners
+    // table (this function's write target, the "going-forward source"
+    // per the comment at the top of this file) had no
+    // google_drive_folder_id/google_drive_folder_url columns at all —
+    // only OneDrive's. So even once the frontend correctly created
+    // the Drive subfolder and set these fields on the AO object, this
+    // fixed column mapping silently dropped them before they ever
+    // reached the table; only the legacy JSON column (projects.aos)
+    // retained them, which nothing authoritative reads from anymore.
+    // Columns added via migration; mapped here now.
+    google_drive_folder_id: ao.google_drive_folder_id ?? null,
+    google_drive_folder_url: ao.google_drive_folder_url ?? null,
     consent_deadline: toDateOrNull(ao.consent_deadline ?? ao.consentDeadline),
     s10_deadline: toDateOrNull(ao.s10_deadline ?? ao.s10Deadline),
     s10_served_date: toDateOrNull(ao.s10_served_date ?? ao.s10ServedDate),

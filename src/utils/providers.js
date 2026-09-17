@@ -74,7 +74,17 @@ export async function createProjectFolder(userId, projectName, options = {}) {
         throw new Error(errData.error || 'Google Drive folder creation failed');
       }
 
-      return response.json();
+      // Fixed 2026-09-17, real, confirmed bug found live: the caller
+      // (ProjectDetail.jsx's handleSaveAO) has no other way to know
+      // which provider's endpoint actually created this folder, and
+      // was hardcoding onedrive_folder_id as the field to save the
+      // result under regardless — so a Google Drive folder's real id
+      // was never written to the field anything actually reads
+      // (google_drive_folder_id), and nothing was written under
+      // onedrive_folder_id either in a way any code expects. Now
+      // tells the caller explicitly.
+      const result = await response.json();
+      return { ...result, provider: 'googledrive' };
     } else {
       // Fixed 2026-09-17, real, confirmed bug: this branch used to be
       // a stub — 'console.log("Using OneDrive storage")' and a bare
@@ -98,7 +108,8 @@ export async function createProjectFolder(userId, projectName, options = {}) {
         throw new Error(errData.error || 'OneDrive folder creation failed');
       }
 
-      return response.json();
+      const result = await response.json();
+      return { ...result, provider: 'onedrive' };
     }
   } catch (err) {
     console.error('Project folder creation error:', err);
@@ -131,7 +142,11 @@ export async function createAOFolder(userId, projectFolderId, aoAddress) {
         throw new Error(errData.error || 'Google Drive folder creation failed');
       }
 
-      return response.json();
+      // Same fix as createProjectFolder above — tell the caller which
+      // provider actually created this, so it saves the result under
+      // the right field.
+      const result = await response.json();
+      return { ...result, provider: 'googledrive' };
     } else {
       // Fixed 2026-09-17, same real bug as createProjectFolder above —
       // this was a stub that never called the real OneDrive endpoint.
@@ -151,7 +166,8 @@ export async function createAOFolder(userId, projectFolderId, aoAddress) {
         throw new Error(errData.error || 'OneDrive folder creation failed');
       }
 
-      return response.json();
+      const result = await response.json();
+      return { ...result, provider: 'onedrive' };
     }
   } catch (err) {
     console.error('AO folder creation error:', err);
