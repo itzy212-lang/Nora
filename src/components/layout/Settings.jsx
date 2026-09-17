@@ -1080,49 +1080,41 @@ function NoraTab() {
         </div>
       )}
 
-      <UserBrainSection />
+      <UserBrainV2Section />
     </div>
   );
 }
 
-// Fixed 2026-09-17, on request: previously there was no way for any
-// user — including the account this was originally set up for — to
-// view or edit their own AI drafting preferences at all. The only
-// way this data had ever been set was by writing directly to the
-// database during development. Writing voice and sign-off ship with
-// a sensible, generic default for every new user; everything else
-// (fee structure, personal preferences, banned phrases, a gold-
-// standard example email) starts blank, since none of it has a
-// sensible universal default. Saving writes both the structured
-// fields AND rebuilds brain_content from them — get_ely_brain_v2
-// (the actual function the AI calls) only ever reads brain_content
-// directly, never the structured columns on their own, confirmed
-// directly in its source before building this.
-const BRAIN_DEFAULTS = {
-  writing_voice: 'Write in a natural, professional voice — direct, warm and human, without sounding corporate, legalistic or like an AI. Prefer plain, natural wording over stock phrases, and avoid over-formal correspondence unless it is genuinely needed. The finished draft should read as though a real person thought it through and wrote it themselves.',
-  sign_off: 'Kind regards,',
-  fee_structure: '',
-  personal_preferences: '',
-  banned_phrases: '',
-  gold_standard_email: '',
-};
-
-function buildBrainContent(fields) {
-  const sections = [
-    ['Writing voice', fields.writing_voice],
-    ['Sign-off', fields.sign_off],
-    ['Fee structure', fields.fee_structure],
-    ['Personal preferences', fields.personal_preferences],
-    ['Banned phrases', fields.banned_phrases],
-    ['Gold standard email — use this as the reference for tone and style', fields.gold_standard_email],
-  ];
-  return sections
-    .filter(([, value]) => (value || '').trim())
-    .map(([heading, value]) => `## ${heading}\n\n${value.trim()}`)
-    .join('\n\n');
-}
-
-function UserBrainSection() {
+// Fixed 2026-09-17, real, confirmed correction — the first version of
+// this built against user_brain (V1), which turned out to be the
+// wrong table: resolveArchitectureVersion (v2-operating-system.js) is
+// hardcoded to 'v2' for every user, permanently, as of 15 September —
+// V1 is left in place but nothing reads it any more. The live pipeline
+// (runV2Pipeline, resolveEffectiveVoice) reads user_brain_v2's
+// structured columns directly at request time — confirmed in
+// v2-voice-resolution.js before rebuilding this. No brain_content
+// rebuilding needed here the way V1 required — V2 assembles its
+// prompt from the columns themselves.
+//
+// Also dropped the gold-standard-email field the first version had:
+// V2 already has a real, working, actively-used gold standard example
+// system (ai_drafting_examples, checked directly — two active rows,
+// genuinely queried by the live pipeline) — it's just shared across
+// every user rather than personal, unlike everything else here. A
+// second, personal field for the same concept would have been
+// redundant, so left out rather than built for its own sake.
+//
+// Left blank, not pre-filled, for a new user: unlike V1, the V2
+// pipeline already layers in a real platform-wide default voice
+// automatically (ai_instruction_sets, name='default_voice_profile_v2',
+// checked directly — active, real content) whenever voice_content is
+// empty. Pre-filling the field with a snapshot of that default text
+// would be worse than leaving it blank — a snapshot goes stale the
+// moment the platform default is later improved, whereas an empty
+// field keeps inheriting it live. Placeholder text (not an actual
+// value) shows a sensible starting point instead.
+function UserBrainV2Section() {
+  const BLANK = { identity_content: '', voice_content: '', sign_off: '', fee_structure_content: '', banned_phrases: '' };
   const [fields, setFields] = React.useState(null);
   const [userId, setUserId] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -1134,19 +1126,14 @@ function UserBrainSection() {
       const { data: { user } } = await sb.auth.getUser();
       if (!user?.id) { setError('Could not determine your account.'); return; }
       setUserId(user.id);
-      const { data } = await sb.from('user_brain').select('*').eq('user_id', user.id).maybeSingle();
-      if (data) {
-        setFields({
-          writing_voice: data.writing_voice ?? BRAIN_DEFAULTS.writing_voice,
-          sign_off: data.sign_off ?? BRAIN_DEFAULTS.sign_off,
-          fee_structure: data.fee_structure ?? '',
-          personal_preferences: data.personal_preferences ?? '',
-          banned_phrases: data.banned_phrases ?? '',
-          gold_standard_email: data.gold_standard_email ?? '',
-        });
-      } else {
-        setFields({ ...BRAIN_DEFAULTS });
-      }
+      const { data } = await sb.from('user_brain_v2').select('*').eq('user_id', user.id).maybeSingle();
+      setFields(data ? {
+        identity_content: data.identity_content ?? '',
+        voice_content: data.voice_content ?? '',
+        sign_off: data.sign_off ?? '',
+        fee_structure_content: data.fee_structure_content ?? '',
+        banned_phrases: data.banned_phrases ?? '',
+      } : { ...BLANK });
     })();
   }, []);
 
@@ -1154,28 +1141,14 @@ function UserBrainSection() {
     if (!userId || !fields) return;
     setSaving(true);
     setError('');
-    const payload = {
-      user_id: userId,
-      writing_voice: fields.writing_voice,
-      sign_off: fields.sign_off,
-      fee_structure: fields.fee_structure,
-      personal_preferences: fields.personal_preferences,
-      banned_phrases: fields.banned_phrases,
-      gold_standard_email: fields.gold_standard_email,
-      brain_content: buildBrainContent(fields),
-      updated_at: new Date().toISOString(),
-    };
-    const { error: err } = await sb.from('user_brain').upsert(payload, { onConflict: 'user_id' });
+    const payload = { user_id: userId, ...fields, updated_at: new Date().toISOString() };
+    const { error: err } = await sb.from('user_brain_v2').upsert(payload, { onConflict: 'user_id' });
     setSaving(false);
-    if (err) {
-      setError(err.message || 'Could not save.');
-    } else {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }
+    if (err) setError(err.message || 'Could not save.');
+    else { setSaved(true); setTimeout(() => setSaved(false), 2000); }
   };
 
-  const field = (key, label, desc, rows = 4) => (
+  const field = (key, label, desc, placeholder, rows = 4) => (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
       {desc && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>{desc}</div>}
@@ -1183,6 +1156,7 @@ function UserBrainSection() {
         value={fields[key]}
         onChange={e => setFields(prev => ({ ...prev, [key]: e.target.value }))}
         rows={rows}
+        placeholder={placeholder}
         style={{
           width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13,
           borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)',
@@ -1196,19 +1170,18 @@ function UserBrainSection() {
     <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Your Nora brain</div>
       <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
-        How Nora drafts and speaks on your behalf, specifically. Writing voice and sign-off start with a sensible default — edit them to sound like you. Everything else is entirely yours to fill in.
+        How Nora drafts and speaks on your behalf, specifically. Leave anything blank to use Nora's sensible defaults — whatever you add here is layered on top as your own personal preference, not a replacement.
       </div>
 
       {!fields ? (
         <div style={{ fontSize: 13, color: 'var(--text3)' }}>{error || 'Loading…'}</div>
       ) : (
         <>
-          {field('writing_voice', 'Writing voice', 'How Nora should sound — tone, formality, sentence style.')}
-          {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 1)}
-          {field('fee_structure', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 8)}
-          {field('personal_preferences', 'Personal preferences', 'Anything else specific to how you like things written — spelling conventions, terms you prefer, formatting habits.', 5)}
-          {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 5)}
-          {field('gold_standard_email', 'Gold standard email', 'Paste in a real email of yours that you consider a good example of your own voice — Nora uses this as a direct reference when drafting.', 8)}
+          {field('identity_content', 'Identity', 'Who you are and how Nora should refer to you and your practice.', 'e.g. "The user is Jane Smith of ABC Surveying. Write on behalf of Jane unless the context identifies another sender."', 3)}
+          {field('voice_content', 'Writing voice', 'How Nora should sound — tone, formality, sentence style. Leave blank to use Nora\'s standard voice.', 'e.g. "Direct, warm, conversational — avoid corporate or legalistic phrasing."', 4)}
+          {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 'e.g. "Kind regards,"', 1)}
+          {field('fee_structure_content', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 'e.g. notice fees, schedule of condition fees, dissent options...', 8)}
+          {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 'e.g. "duly, for the avoidance of doubt, I trust this finds you well"', 4)}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 }}>
             {error && <div style={{ fontSize: 12, color: 'var(--red, #dc2626)' }}>{error}</div>}
@@ -1230,6 +1203,7 @@ function UserBrainSection() {
     </div>
   );
 }
+
 
 function AITab() {
   const [status, setStatus] = useState(null); // null | 'running' | 'done' | 'error'
