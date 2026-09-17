@@ -1079,6 +1079,154 @@ function NoraTab() {
           {saving ? 'Saving…' : '✓ Saved'}
         </div>
       )}
+
+      <UserBrainSection />
+    </div>
+  );
+}
+
+// Fixed 2026-09-17, on request: previously there was no way for any
+// user — including the account this was originally set up for — to
+// view or edit their own AI drafting preferences at all. The only
+// way this data had ever been set was by writing directly to the
+// database during development. Writing voice and sign-off ship with
+// a sensible, generic default for every new user; everything else
+// (fee structure, personal preferences, banned phrases, a gold-
+// standard example email) starts blank, since none of it has a
+// sensible universal default. Saving writes both the structured
+// fields AND rebuilds brain_content from them — get_ely_brain_v2
+// (the actual function the AI calls) only ever reads brain_content
+// directly, never the structured columns on their own, confirmed
+// directly in its source before building this.
+const BRAIN_DEFAULTS = {
+  writing_voice: 'Write in a natural, professional voice — direct, warm and human, without sounding corporate, legalistic or like an AI. Prefer plain, natural wording over stock phrases, and avoid over-formal correspondence unless it is genuinely needed. The finished draft should read as though a real person thought it through and wrote it themselves.',
+  sign_off: 'Kind regards,',
+  fee_structure: '',
+  personal_preferences: '',
+  banned_phrases: '',
+  gold_standard_email: '',
+};
+
+function buildBrainContent(fields) {
+  const sections = [
+    ['Writing voice', fields.writing_voice],
+    ['Sign-off', fields.sign_off],
+    ['Fee structure', fields.fee_structure],
+    ['Personal preferences', fields.personal_preferences],
+    ['Banned phrases', fields.banned_phrases],
+    ['Gold standard email — use this as the reference for tone and style', fields.gold_standard_email],
+  ];
+  return sections
+    .filter(([, value]) => (value || '').trim())
+    .map(([heading, value]) => `## ${heading}\n\n${value.trim()}`)
+    .join('\n\n');
+}
+
+function UserBrainSection() {
+  const [fields, setFields] = React.useState(null);
+  const [userId, setUserId] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    (async () => {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user?.id) { setError('Could not determine your account.'); return; }
+      setUserId(user.id);
+      const { data } = await sb.from('user_brain').select('*').eq('user_id', user.id).maybeSingle();
+      if (data) {
+        setFields({
+          writing_voice: data.writing_voice ?? BRAIN_DEFAULTS.writing_voice,
+          sign_off: data.sign_off ?? BRAIN_DEFAULTS.sign_off,
+          fee_structure: data.fee_structure ?? '',
+          personal_preferences: data.personal_preferences ?? '',
+          banned_phrases: data.banned_phrases ?? '',
+          gold_standard_email: data.gold_standard_email ?? '',
+        });
+      } else {
+        setFields({ ...BRAIN_DEFAULTS });
+      }
+    })();
+  }, []);
+
+  const save = async () => {
+    if (!userId || !fields) return;
+    setSaving(true);
+    setError('');
+    const payload = {
+      user_id: userId,
+      writing_voice: fields.writing_voice,
+      sign_off: fields.sign_off,
+      fee_structure: fields.fee_structure,
+      personal_preferences: fields.personal_preferences,
+      banned_phrases: fields.banned_phrases,
+      gold_standard_email: fields.gold_standard_email,
+      brain_content: buildBrainContent(fields),
+      updated_at: new Date().toISOString(),
+    };
+    const { error: err } = await sb.from('user_brain').upsert(payload, { onConflict: 'user_id' });
+    setSaving(false);
+    if (err) {
+      setError(err.message || 'Could not save.');
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  const field = (key, label, desc, rows = 4) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
+      {desc && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>{desc}</div>}
+      <textarea
+        value={fields[key]}
+        onChange={e => setFields(prev => ({ ...prev, [key]: e.target.value }))}
+        rows={rows}
+        style={{
+          width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13,
+          borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)',
+          color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
+        }}
+      />
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Your Nora brain</div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
+        How Nora drafts and speaks on your behalf, specifically. Writing voice and sign-off start with a sensible default — edit them to sound like you. Everything else is entirely yours to fill in.
+      </div>
+
+      {!fields ? (
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>{error || 'Loading…'}</div>
+      ) : (
+        <>
+          {field('writing_voice', 'Writing voice', 'How Nora should sound — tone, formality, sentence style.')}
+          {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 1)}
+          {field('fee_structure', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 8)}
+          {field('personal_preferences', 'Personal preferences', 'Anything else specific to how you like things written — spelling conventions, terms you prefer, formatting habits.', 5)}
+          {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 5)}
+          {field('gold_standard_email', 'Gold standard email', 'Paste in a real email of yours that you consider a good example of your own voice — Nora uses this as a direct reference when drafting.', 8)}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 }}>
+            {error && <div style={{ fontSize: 12, color: 'var(--red, #dc2626)' }}>{error}</div>}
+            {saved && <div style={{ fontSize: 12, color: 'var(--green)' }}>✓ Saved</div>}
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
+                cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
