@@ -2212,8 +2212,14 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (folder === 'Inbox') {
         q = q.or('folder.eq.inbox,folder.is.null')
              .not('is_draft', 'is', true)
-             .not('is_sent', 'is', true)
-             .neq('sender_email', 'help@sq1consulting.co.uk');
+             .not('is_sent', 'is', true);
+        // Exclude the logged-in user's own address, generically — not
+        // hardcoded to one firm's email. This is what actually makes
+        // "hide my own sent mail from Inbox" correct across every user
+        // rather than just the one account this was originally written
+        // for; a fixed string here silently misfires for anyone else.
+        const ownEmail = state.currentUser?.email;
+        if (ownEmail) q = q.neq('sender_email', ownEmail);
       }
       if (doIncremental && newestDate) q = q.gt('received_at', newestDate).limit(50);
       const { data, error } = await q;
