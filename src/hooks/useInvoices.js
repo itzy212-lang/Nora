@@ -27,9 +27,19 @@ export function useInvoices() {
   useEffect(() => { fetchInvoices(); }, [fetchInvoices, state.currentUser]);
 
   const createInvoice = async (invoiceData) => {
+    // Fixed 2026-09-17, real, confirmed bug: invoices.user_id is a
+    // uuid column with a real RLS insert policy requiring
+    // auth.uid() = user_id, but no caller of createInvoice (across
+    // InvoiceModal.jsx, Accounting.jsx, App.jsx) ever actually
+    // included user_id in the payload, and the column has no
+    // database-level default to fill it in — every insert has been
+    // sending user_id as implicitly NULL, which can never satisfy
+    // auth.uid() = user_id, so every invoice save has been failing
+    // with "new row violates row-level security policy". Fixed at
+    // the source rather than in each caller, so this can't recur.
     const { data, error } = await sb
       .from('invoices')
-      .insert([invoiceData])
+      .insert([{ ...invoiceData, user_id: invoiceData.user_id || state.currentUser?.id }])
       .select()
       .single();
     if (error) throw error;
