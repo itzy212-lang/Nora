@@ -52,7 +52,7 @@ export default async function handler(req, res) {
 
     const { data: emails, error } = await supabase
       .from('emails')
-      .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction')
+      .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction, user_id')
       .eq('direction', 'incoming')
       .eq('is_draft', false)
       .gte('received_at', since)
@@ -60,6 +60,45 @@ export default async function handler(req, res) {
       .limit(20);
 
     if (error) throw error;
+
+    // Fixed 2026-09-17, real, confirmed bug — flagged explicitly in
+    // the to-do list handoff brief as a known, not-yet-fixed gap: the
+    // follow-up reminder task below hardcoded user_id to Itzik's own
+    // UUID unconditionally, regardless of whose inbox the email
+    // actually arrived in. For a single-user account this was
+    // invisible; for a second real user, every one of their AI
+    // holding-reply follow-ups would land in Itzik's to-do list
+    // instead of their own.
+    //
+    // emails.user_id is stored inconsistently across accounts — some
+    // rows hold the real auth UUID, others hold the plain email
+    // address (confirmed directly: help@sq1consulting.co.uk's own
+    // emails store the email string, not its UUID) — so it can't be
+    // used as tasks.user_id (a UUID column) as-is. auth.users is the
+    // one reliable source mapping either form to the real UUID,
+    // checked directly against both real accounts before writing
+    // this. Resolved once per run via the admin API (small, fixed
+    // number of real users — a full listUsers() and cache is simpler
+    // and more robust here than trying to guess which columns are
+    // safe to query directly across every account's differently-shaped
+    // rows) rather than once per email.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ownerIdCache = new Map();
+    let authUsersList = null;
+    async function resolveOwnerUserId(rawUserId) {
+      if (!rawUserId) return null;
+      if (UUID_RE.test(rawUserId)) return rawUserId;
+      if (ownerIdCache.has(rawUserId)) return ownerIdCache.get(rawUserId);
+      if (!authUsersList) {
+        const { data, error: listErr } = await supabase.auth.admin.listUsers();
+        if (listErr) { console.warn('[cron-auto-draft] Could not list users to resolve owner:', listErr.message); return null; }
+        authUsersList = data?.users || [];
+      }
+      const match = authUsersList.find(u => (u.email || '').toLowerCase() === rawUserId.toLowerCase());
+      const resolved = match?.id || null;
+      ownerIdCache.set(rawUserId, resolved);
+      return resolved;
+    }
 
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
@@ -421,30 +460,35 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // it, rather than relying on him remembering unprompted.
         if (draftNeedsFollowup) {
           try {
-            const today = new Date();
-            const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-            const reminderTitle = 'Follow up: ' + (email.subject || 'email reply awaiting confirmation');
-            for (const day of [today, tomorrow]) {
-              const dateStr = day.toISOString().split('T')[0];
-              await supabase.from('tasks').insert({
-                title: reminderTitle,
-                description: 'Nora sent a holding reply that needs a real follow-up — confirm the details and get back to them.',
-                due_date: dateStr,
-                // Fixed 2026-09-13, on request: task_type now uses the
-                // real to-do list categorisation (email/call/
-                // correspondence, not a one-off 'follow_up' type) so
-                // this shows up correctly in the to-do list. source:
-                // 'assistant' marks it as AI-generated for the
-                // green-text distinction agreed on.
-                task_type: 'email',
-                source: 'assistant',
-                status: 'open',
-                project_id: email.project_id || null,
-                linked_email_message_id: email.id,
-                user_id: '3bd1f331-e8ce-477a-8a5d-c5dcdd901434',
-              }).catch(e => console.warn('[cron-auto-draft] Follow-up reminder insert failed:', e.message));
+            const ownerUserId = await resolveOwnerUserId(email.user_id);
+            if (!ownerUserId) {
+              console.warn('[cron-auto-draft] Could not resolve owner for email', email.id, '— skipping follow-up reminder rather than guessing.');
+            } else {
+              const today = new Date();
+              const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+              const reminderTitle = 'Follow up: ' + (email.subject || 'email reply awaiting confirmation');
+              for (const day of [today, tomorrow]) {
+                const dateStr = day.toISOString().split('T')[0];
+                await supabase.from('tasks').insert({
+                  title: reminderTitle,
+                  description: 'Nora sent a holding reply that needs a real follow-up — confirm the details and get back to them.',
+                  due_date: dateStr,
+                  // Fixed 2026-09-13, on request: task_type now uses the
+                  // real to-do list categorisation (email/call/
+                  // correspondence, not a one-off 'follow_up' type) so
+                  // this shows up correctly in the to-do list. source:
+                  // 'assistant' marks it as AI-generated for the
+                  // green-text distinction agreed on.
+                  task_type: 'email',
+                  source: 'assistant',
+                  status: 'open',
+                  project_id: email.project_id || null,
+                  linked_email_message_id: email.id,
+                  user_id: ownerUserId,
+                }).catch(e => console.warn('[cron-auto-draft] Follow-up reminder insert failed:', e.message));
+              }
+              console.log('[cron-auto-draft] Created follow-up reminders for', email.id, '-> owner', ownerUserId);
             }
-            console.log('[cron-auto-draft] Created follow-up reminders for', email.id);
           } catch (reminderErr) {
             console.warn('[cron-auto-draft] Follow-up reminder creation failed:', reminderErr.message);
           }
