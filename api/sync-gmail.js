@@ -32,7 +32,6 @@ async function refreshGoogleToken(refreshToken, userId) {
 }
 
 function parseEmailAddress(headerValue) {
-  // "Name <email@domain.com>" or just "email@domain.com"
   if (!headerValue) return { name: '', email: '' };
   const match = headerValue.match(/^(.*?)\s*<(.+)>$/);
   if (match) {
@@ -183,10 +182,9 @@ async function syncGmailEmails(userId, accessToken) {
     ? new Date(account.gmail_last_synced_at)
     : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  const afterEpoch = Math.floor((lastSync.getTime() - 2 * 60 * 1000) / 1000);
-  // Gmail's after: operator is documented for YYYY/MM/DD; epoch seconds
-  // work in practice but are undocumented and have been unreliable, so
-  // use the documented date format instead.
+  // Gmail's after: operator is documented for YYYY/MM/DD; epoch
+  // seconds work in practice but are undocumented and were unreliable
+  // when tried, so use the documented date format instead.
   const afterDate = new Date((lastSync.getTime() - 2 * 60 * 1000));
   const afterDateStr = `${afterDate.getUTCFullYear()}/${String(afterDate.getUTCMonth() + 1).padStart(2, '0')}/${String(afterDate.getUTCDate()).padStart(2, '0')}`;
   const query = `after:${afterDateStr}`;
@@ -204,36 +202,6 @@ async function syncGmailEmails(userId, accessToken) {
   // are zero matches instead of "{}" — guard against that before parsing.
   const messagesData = messagesText ? JSON.parse(messagesText) : {};
   if (!messagesRes.ok) throw new Error(messagesData.error?.message || 'Failed to list messages');
-
-  try {
-    const debugIds = (messagesData.messages || []).map(m => m.id);
-    const debugDetails = [];
-    for (const id of debugIds.slice(0, 5)) {
-      const dRes = await fetch(`${GMAIL_API_BASE}/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const dData = await dRes.json();
-      debugDetails.push({
-        id,
-        internalDate: dData.internalDate,
-        headers: dData.payload?.headers,
-        labelIds: dData.labelIds,
-      });
-    }
-    await supabase.from('oauth_debug').insert({
-      event: 'gmail_message_details',
-      response_data: { debugDetails },
-    });
-  } catch (e) {
-    await supabase.from('oauth_debug').insert({ event: 'gmail_debug_error', response_data: { message: e.message } });
-  }
-
-  try {
-    await supabase.from('oauth_debug').insert({
-      event: 'gmail_list_messages',
-      response_data: { query, listUrl: listUrl.toString(), status: messagesRes.status, body: messagesData },
-    });
-  } catch (e) {}
 
   const messageIds = messagesData.messages || [];
   let processed = 0, skipped = 0, failed = 0, threadLinked = 0, partyLinked = 0;
@@ -332,21 +300,44 @@ async function syncGmailEmails(userId, accessToken) {
     .update({ gmail_last_synced_at: new Date().toISOString() })
     .eq('user_id', userId);
 
-  // Trigger the same cross-provider auto-link pass Outlook uses
-  try {
-    await fetch(`${supabaseUrl}/functions/v1/auto-link-emails`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${supabaseServiceKey}`,
-      },
-      body: '{}',
-    });
-  } catch (err) {
-    console.warn('auto-link-emails trigger failed (non-fatal):', err.message);
+  return { processed, skipped, failed, threadLinked, partyLinked };
+}
+
+// Extracted 2026-09-17 so the same real sync logic can be called both
+// on-demand (this file's handler, triggered by opening/refreshing
+// Inbox) and from a background cron looping over every connected
+// account (cron-sync-gmail.js), matching how sync_outlook already
+// works — a real gap this closes: until now there was no periodic
+// background sync for Gmail at all, only Outlook.
+export async function syncOneGmailAccount(userId) {
+  const { data: integration, error: intErr } = await supabase
+    .from('user_integrations')
+    .select('gmail_access_token, gmail_refresh_token')
+    .eq('user_id', userId)
+    .single();
+
+  if (intErr || !integration) {
+    return { ok: false, error: 'Gmail not connected' };
   }
 
-  return { processed, skipped, failed, threadLinked, partyLinked };
+  let accessToken = integration.gmail_access_token;
+
+  if (integration.gmail_refresh_token) {
+    // Always refresh — Gmail access tokens are short-lived (1hr) and
+    // we don't currently track expiry, so refresh proactively.
+    try {
+      accessToken = await refreshGoogleToken(integration.gmail_refresh_token, userId);
+    } catch (err) {
+      console.warn(`[syncOneGmailAccount] token refresh failed for ${userId}, trying existing token:`, err.message);
+    }
+  }
+
+  if (!accessToken) {
+    return { ok: false, error: 'No valid Gmail token' };
+  }
+
+  const result = await syncGmailEmails(userId, accessToken);
+  return { ok: true, ...result };
 }
 
 export default async function handler(req, res) {
@@ -371,33 +362,32 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing user_id' });
     }
 
-    const { data: integration, error: intErr } = await supabase
-      .from('user_integrations')
-      .select('gmail_access_token, gmail_refresh_token')
-      .eq('user_id', user_id)
-      .single();
+    const result = await syncOneGmailAccount(user_id);
 
-    if (intErr || !integration) {
-      return res.status(404).json({ error: 'Gmail not connected' });
+    if (!result.ok) {
+      const status = result.error === 'Gmail not connected' ? 404
+        : result.error === 'No valid Gmail token' ? 401 : 500;
+      return res.status(status).json({ error: result.error });
     }
 
-    let accessToken = integration.gmail_access_token;
-
-    if (integration.gmail_refresh_token) {
-      // Always refresh — Gmail access tokens are short-lived (1hr) and
-      // we don't currently track expiry, so refresh proactively.
-      try {
-        accessToken = await refreshGoogleToken(integration.gmail_refresh_token, user_id);
-      } catch (err) {
-        console.warn('Token refresh failed, trying existing token:', err.message);
-      }
+    // Trigger the same cross-provider auto-link pass Outlook uses.
+    // Kept here (on-demand path) rather than inside
+    // syncOneGmailAccount, since the background cron
+    // (cron-sync-gmail.js) calls this once after its whole loop
+    // instead of once per account — matching sync_outlook's own
+    // pattern exactly.
+    try {
+      await fetch(`${supabaseUrl}/functions/v1/auto-link-emails`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: '{}',
+      });
+    } catch (err) {
+      console.warn('auto-link-emails trigger failed (non-fatal):', err.message);
     }
-
-    if (!accessToken) {
-      return res.status(401).json({ error: 'No valid Gmail token' });
-    }
-
-    const result = await syncGmailEmails(user_id, accessToken);
 
     return res.status(200).json({
       success: true,

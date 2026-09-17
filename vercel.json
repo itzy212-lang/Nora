@@ -94,6 +94,9 @@
     },
     "api/cron-push-notify.js": {
       "maxDuration": 60
+    },
+    "api/cron-sync-gmail.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -104,6 +107,10 @@
     {
       "path": "/api/cron-push-notify",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron-sync-gmail",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
