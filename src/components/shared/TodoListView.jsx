@@ -10,7 +10,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import sb from '../../supabaseClient';
 
-const TODO_TYPES = ['call', 'email', 'correspondence'];
+// Fixed 2026-09-17, real, confirmed gap found live: TaskEditModal.jsx
+// (the per-project task editor) offers a richer set of task types
+// than this list ever accounted for — including 'todo' ("General
+// task", its own default selection), 'surveyor_response', and
+// 'award_draft' — genuine go-do-this items, not calendar events
+// (meeting/site_visit/soc) or auto-tracked deadlines
+// (notice_consent_deadline/notice_section10_deadline/email_action,
+// correctly still excluded, all shown elsewhere as AO card badges).
+// These three were simply never added here, so anything created as
+// one — including every task left at this modal's own default —
+// was invisible in the one place meant to show it. A backfill also
+// found 24 real tasks from a May bulk import with no task_type set
+// at all, predating this whole categorisation scheme entirely.
+const TODO_TYPES = ['call', 'email', 'correspondence', 'todo', 'surveyor_response', 'award_draft'];
 
 // Fixed 2026-09-13, on request: colour is about who/what created the
 // task, not the task type itself — an assistant-generated email
