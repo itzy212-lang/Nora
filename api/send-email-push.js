@@ -59,16 +59,44 @@ export default async function handler(req, res) {
 
     const { data: email } = await sb
       .from('emails')
-      .select('id, subject, sender_name, sender_email')
+      .select('id, subject, sender_name, sender_email, user_id')
       .eq('id', email_id)
       .maybeSingle();
     if (!email) return res.status(404).json({ error: 'Email not found' });
 
+    // The emails.user_id column holds a mix of representations
+    // (auth UUID for some rows, plain email address for others,
+    // occasionally null on legacy rows) while push_subscriptions.user_id
+    // is always the plain email address (see usePushNotifications.js).
+    // Previously this queried ALL active subscriptions with no
+    // ownership filter at all — every new email, from any user's
+    // connected mailbox, was pushed to every logged-in device. Only
+    // looked safe so far because there has only ever been one real
+    // subscriber; it would leak across accounts the moment a second
+    // user connects. Resolve to the owner's actual email first so we
+    // can target only their subscriptions.
+    let ownerEmail = null;
+    if (email.user_id) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(email.user_id);
+      if (isUuid) {
+        const { data: userData } = await sb.auth.admin.getUserById(email.user_id);
+        ownerEmail = userData?.user?.email || null;
+      } else {
+        ownerEmail = email.user_id;
+      }
+    }
+
+    if (!ownerEmail) {
+      console.warn('[send-email-push] Could not resolve owner for email', email_id, '- skipping to avoid a cross-user broadcast');
+      return res.status(200).json({ ok: true, sent: 0, message: 'Could not resolve email owner' });
+    }
+
     const { data: subscriptions } = await sb
       .from('push_subscriptions')
       .select('*')
-      .eq('is_active', true);
-    if (!subscriptions?.length) return res.status(200).json({ ok: true, sent: 0, message: 'No active subscriptions' });
+      .eq('is_active', true)
+      .ilike('user_id', ownerEmail);
+    if (!subscriptions?.length) return res.status(200).json({ ok: true, sent: 0, message: 'No active subscriptions for this user' });
 
     const payload = JSON.stringify({
       title: `📧 ${email.sender_name || email.sender_email || 'New email'}`,
