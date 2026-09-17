@@ -1365,18 +1365,37 @@ export default async function handler(req, res) {
 
     projectMeta.inspection_date = await getSocDate(project_id, projectMeta.ao_id, selectedAO);
 
-    const { data: template, error: templateError } = await supabase
-      .from('document_templates')
-      .select('html_template, renderer_config')
-      .eq('template_key', 'soc')
-      .eq('is_active', true)
-      .single();
+    // Resolve the SOC template: the caller's own private override if
+    // they have one, otherwise the shared system default
+    // (owner_user_id IS NULL). Same per-user template isolation fix
+    // as useDocumentGenerator.js's loadTemplate() on the frontend.
+    let template = null;
+    if (socUserId) {
+      const { data: ownTemplate } = await supabase
+        .from('document_templates')
+        .select('html_template, renderer_config')
+        .eq('template_key', 'soc')
+        .eq('owner_user_id', socUserId)
+        .eq('is_active', true)
+        .maybeSingle();
+      template = ownTemplate || null;
+    }
+    if (!template) {
+      const { data: defaultTemplate, error: templateError } = await supabase
+        .from('document_templates')
+        .select('html_template, renderer_config')
+        .eq('template_key', 'soc')
+        .is('owner_user_id', null)
+        .eq('is_active', true)
+        .single();
 
-    if (templateError || !template) {
-      return res.status(500).json({
-        error: 'SOC template missing from document_templates',
-        details: templateError?.message,
-      });
+      if (templateError || !defaultTemplate) {
+        return res.status(500).json({
+          error: 'SOC template missing from document_templates',
+          details: templateError?.message,
+        });
+      }
+      template = defaultTemplate;
     }
 
     const config = template.renderer_config || {};

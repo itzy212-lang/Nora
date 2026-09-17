@@ -89,22 +89,53 @@ function ImageAssetBlock({ title, description, value, inputRef, onUpload, onClea
 }
 
 function TemplatesTab() {
+  const { state } = useApp();
+  const currentUserEmail = state.currentUser?.email || state.currentUser?.id || null;
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(null);
+  const [resetting, setResetting] = useState(null);
   const [message, setMessage] = useState('');
   const fileInputRef = useRef(null);
   const activeKey = useRef(null);
 
-  useEffect(() => { loadTemplates(); }, []);
+  useEffect(() => { loadTemplates(); }, [currentUserEmail]);
 
+  // Fixed 2026-09-17, real, confirmed multi-user bug: this table used
+  // to have exactly one row per template_key, shared and overwritable
+  // by every user of the app — every user's "Replace" silently
+  // overwrote the same file everyone else was using. document_templates
+  // now has an owner_user_id column: NULL rows are the shared system
+  // default (your existing SQ1 templates), non-null rows are a
+  // specific user's own private override, enforced by RLS so no user
+  // can read or write another user's override. This loads both sets
+  // and merges them per template_key so a user sees their own version
+  // if they have one, otherwise the system default.
   const loadTemplates = async () => {
     setLoading(true);
     try {
-      const { data } = await sb.from('document_templates')
-        .select('template_key, label, filename, file_size, generation_mode, is_active, updated_at')
+      const { data: defaults } = await sb.from('document_templates')
+        .select('template_key, label, filename, file_size, generation_mode, is_active, updated_at, owner_user_id')
+        .is('owner_user_id', null)
         .order('label');
-      setTemplates(data || []);
+
+      let own = [];
+      if (currentUserEmail) {
+        const { data: ownData } = await sb.from('document_templates')
+          .select('template_key, label, filename, file_size, generation_mode, is_active, updated_at, owner_user_id')
+          .eq('owner_user_id', currentUserEmail)
+          .order('label');
+        own = ownData || [];
+      }
+
+      const ownByKey = new Map(own.map(t => [t.template_key, t]));
+      const merged = (defaults || []).map(def => ownByKey.get(def.template_key) || def);
+      // Any own override for a key that doesn't have a system default row
+      for (const t of own) {
+        if (!merged.some(m => m.template_key === t.template_key)) merged.push(t);
+      }
+
+      setTemplates(merged);
     } catch (err) {
       console.error(err);
     }
@@ -113,10 +144,15 @@ function TemplatesTab() {
 
   const handleDownload = async (tpl) => {
     try {
-      const { data } = await sb.from('document_templates')
+      // owner_user_id is nullable — .eq() with a JS null would not
+      // match NULL rows in PostgREST, so branch on .is() vs .eq().
+      let query = sb.from('document_templates')
         .select('file_b64, filename, mime_type')
-        .eq('template_key', tpl.template_key)
-        .single();
+        .eq('template_key', tpl.template_key);
+      query = tpl.owner_user_id == null
+        ? query.is('owner_user_id', null)
+        : query.eq('owner_user_id', tpl.owner_user_id);
+      const { data } = await query.single();
       if (!data?.file_b64) { alert('No file stored for this template.'); return; }
       const mime = data.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       const binary = atob(data.file_b64);
@@ -135,6 +171,7 @@ function TemplatesTab() {
   };
 
   const handleReplaceClick = (key) => {
+    if (!currentUserEmail) { setMessage('❌ Could not determine your account — please refresh and try again.'); return; }
     activeKey.current = key;
     fileInputRef.current.value = '';
     fileInputRef.current.click();
@@ -142,13 +179,14 @@ function TemplatesTab() {
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !activeKey.current) return;
+    if (!file || !activeKey.current || !currentUserEmail) return;
     setUploading(activeKey.current);
     setMessage('');
     try {
       const b64 = await fileToBase64(file);
       const payload = {
         template_key: activeKey.current,
+        owner_user_id: currentUserEmail,
         label: TEMPLATE_LABELS[activeKey.current] || activeKey.current,
         file_b64: b64,
         filename: file.name,
@@ -159,19 +197,47 @@ function TemplatesTab() {
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await sb
-        .from('document_templates')
-        .upsert(payload, {
-          onConflict: 'template_key',
-        });
+      // upsert() can't target the (template_key, owner_user_id) partial
+      // unique index directly — Postgres requires ON CONFLICT to repeat
+      // a partial index's WHERE clause, which Supabase-js can't express.
+      // Explicit check-then-insert/update instead, scoped to this user's
+      // own row only — this is also what makes "Replace" write to your
+      // own private row rather than the shared system default.
+      const { data: existing } = await sb.from('document_templates')
+        .select('id')
+        .eq('template_key', activeKey.current)
+        .eq('owner_user_id', currentUserEmail)
+        .maybeSingle();
+
+      const { error } = existing
+        ? await sb.from('document_templates').update(payload).eq('id', existing.id)
+        : await sb.from('document_templates').insert(payload);
 
       if (error) throw error;
-      setMessage(`✅ ${file.name} uploaded successfully`);
+      setMessage(`✅ ${file.name} uploaded successfully — this is your own private version, only you will see it`);
       loadTemplates();
     } catch (err) {
       setMessage(`❌ Upload failed: ${err.message}`);
     }
     setUploading(null);
+  };
+
+  const handleResetToDefault = async (key) => {
+    if (!currentUserEmail) return;
+    setResetting(key);
+    setMessage('');
+    try {
+      const { error } = await sb.from('document_templates')
+        .delete()
+        .eq('template_key', key)
+        .eq('owner_user_id', currentUserEmail);
+      if (error) throw error;
+      setMessage('✅ Reverted to the system default template');
+      loadTemplates();
+    } catch (err) {
+      setMessage(`❌ Reset failed: ${err.message}`);
+    }
+    setResetting(null);
   };
 
   if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading templates...</div>;
@@ -183,7 +249,7 @@ function TemplatesTab() {
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Document Templates</div>
         <div style={{ fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.5 }}>
-          These are the DOCX templates used to generate notices, awards and letters. Click <strong>Replace</strong> to upload a new version. The existing template is overwritten. Click <strong>Download</strong> to get a copy of the current file.
+          These are the DOCX templates used to generate notices, awards and letters. <strong>Replace</strong> uploads your own private version — only your account will use it; other users still see the standard Nora template. <strong>Download</strong> gets a copy of whichever version you're currently using.
         </div>
       </div>
 
@@ -196,14 +262,24 @@ function TemplatesTab() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {Object.entries(TEMPLATE_LABELS).map(([key, defaultLabel]) => {
           const tpl = templates.find(t => t.template_key === key);
+          const isCustom = !!tpl?.owner_user_id;
           const isUploading = uploading === key;
+          const isResetting = resetting === key;
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: tpl ? 'var(--blue-bg)' : 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
                 {tpl ? '📄' : '⬜'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{tpl?.label || defaultLabel}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                  {tpl?.label || defaultLabel}
+                  {isCustom && (
+                    <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--blue)', background: 'var(--blue-bg)', borderRadius: 99, padding: '2px 8px' }}>YOUR VERSION</span>
+                  )}
+                  {tpl && !isCustom && (
+                    <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--text3)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 99, padding: '2px 8px' }}>SYSTEM DEFAULT</span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
                   {tpl ? `${tpl.filename} . ${fmtSize(tpl.file_size)} . Updated ${fmtDate(tpl.updated_at)}` : 'No file uploaded yet'}
                 </div>
@@ -214,6 +290,11 @@ function TemplatesTab() {
                     ⬇ Download
                   </button>
                 )}
+                {isCustom && (
+                  <button onClick={() => handleResetToDefault(key)} disabled={isResetting} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontWeight: 500 }}>
+                    {isResetting ? 'Reverting…' : '↺ Use system default'}
+                  </button>
+                )}
                 <button onClick={() => handleReplaceClick(key)} disabled={isUploading} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
                   {isUploading ? 'Uploading...' : tpl ? '↑ Replace' : '↑ Upload'}
                 </button>
@@ -221,13 +302,20 @@ function TemplatesTab() {
             </div>
           );
         })}
-        {templates.filter(t => !TEMPLATE_LABELS[t.template_key]).map(tpl => (
+        {templates.filter(t => !TEMPLATE_LABELS[t.template_key]).map(tpl => {
+          const isCustom = !!tpl.owner_user_id;
+          return (
           <div key={tpl.template_key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
             <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--blue-bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
               📄
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{tpl.label || tpl.template_key}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                {tpl.label || tpl.template_key}
+                {isCustom && (
+                  <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--blue)', background: 'var(--blue-bg)', borderRadius: 99, padding: '2px 8px' }}>YOUR VERSION</span>
+                )}
+              </div>
               <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
                 {tpl.filename} · {fmtSize(tpl.file_size)} · Updated {fmtDate(tpl.updated_at)}
               </div>
@@ -236,12 +324,18 @@ function TemplatesTab() {
               <button onClick={() => handleDownload(tpl)} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', fontWeight: 500 }}>
                 ⬇ Download
               </button>
+              {isCustom && (
+                <button onClick={() => handleResetToDefault(tpl.template_key)} disabled={resetting === tpl.template_key} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontWeight: 500 }}>
+                  {resetting === tpl.template_key ? 'Reverting…' : '↺ Use system default'}
+                </button>
+              )}
               <button onClick={() => handleReplaceClick(tpl.template_key)} disabled={uploading === tpl.template_key} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
                 {uploading === tpl.template_key ? 'Uploading...' : '↑ Replace'}
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

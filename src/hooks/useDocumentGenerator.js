@@ -3,15 +3,41 @@ import { useCallback, useMemo } from 'react';
 import sb from '../supabaseClient';
 import { getCurrentUserEmail } from '../utils/getCurrentUserEmail';
 
-async function loadTemplate(templateKey) {
+// Resolves a template for the given user: their own private override
+// if they've uploaded one, otherwise the system default (the row with
+// no owner). This is the real fix for the multi-user template
+// isolation gap — previously there was exactly one row per
+// template_key, shared and overwritable by every user on the
+// platform, with your own SQ1 templates in that single shared slot.
+async function loadTemplate(templateKey, userEmail) {
   if (!templateKey) {
     throw new Error('No template key supplied');
   }
 
+  // Your own override, if you have one.
+  if (userEmail) {
+    const { data: ownData, error: ownError } = await sb
+      .from('document_templates')
+      .select('template_key,label,filename,file_b64,is_active,owner_user_id')
+      .eq('template_key', templateKey)
+      .eq('owner_user_id', userEmail)
+      .eq('is_active', true)
+      .limit(1);
+
+    if (ownError) {
+      throw new Error(`Unable to load template "${templateKey}": ${ownError.message}`);
+    }
+    if (ownData?.[0]?.file_b64) {
+      return ownData[0];
+    }
+  }
+
+  // Fall back to the system default (owner_user_id IS NULL).
   const { data, error } = await sb
     .from('document_templates')
-    .select('template_key,label,filename,file_b64,is_active')
+    .select('template_key,label,filename,file_b64,is_active,owner_user_id')
     .eq('template_key', templateKey)
+    .is('owner_user_id', null)
     .eq('is_active', true)
     .limit(1);
 
@@ -54,12 +80,14 @@ export default function useDocumentGenerator() {
     try {
       console.log('[generateDocument] start', { templateKey, fileName, projectId, outputAs });
 
-      const template = await loadTemplate(templateKey);
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+
+      const template = await loadTemplate(templateKey, userEmail);
       const enrichedMergeData = { ...(mergeData || {}) };
 
       if (projectId) enrichedMergeData.project_id = projectId;
-      enrichedMergeData.user_id = await getCurrentUserEmail();
-      if (!enrichedMergeData.user_id) throw new Error('Could not determine your account — please refresh and try again.');
+      enrichedMergeData.user_id = userEmail;
 
       const response = await fetch('/api/generate-doc', {
         method: 'POST',
@@ -131,12 +159,14 @@ export default function useDocumentGenerator() {
     signers,
   }) => {
     try {
-      const template = await loadTemplate(templateKey);
+      const userEmail = await getCurrentUserEmail();
+      if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+
+      const template = await loadTemplate(templateKey, userEmail);
       const enrichedMergeData = { ...(mergeData || {}) };
 
       if (projectId) enrichedMergeData.project_id = projectId;
-      enrichedMergeData.user_id = await getCurrentUserEmail();
-      if (!enrichedMergeData.user_id) throw new Error('Could not determine your account — please refresh and try again.');
+      enrichedMergeData.user_id = userEmail;
 
       const genResponse = await fetch('/api/generate-doc', {
         method: 'POST',

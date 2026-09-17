@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import sb from '../../supabaseClient';
 import { useEly } from '../../hooks/useEly';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 const box={background:'var(--bg)',border:'1px solid var(--border)',borderRadius:14,padding:16,marginBottom:14};
 const input={width:'100%',boxSizing:'border-box',padding:'9px 11px',border:'1px solid var(--border)',borderRadius:8,background:'var(--bg)',color:'var(--text)',fontSize:13};
@@ -230,8 +231,26 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
     setGeneratingAgreement(true);
     setError('');
     try{
-      const {data:tpl,error:tplErr}=await sb.from('document_templates')
-        .select('file_b64').eq('template_key','mediation_agreement').maybeSingle();
+      // Resolve the mediation agreement template: the user's own
+      // private override if they have one, otherwise the shared
+      // system default (owner_user_id IS NULL). Same per-user
+      // template isolation fix as useDocumentGenerator.js.
+      const userEmail = await getCurrentUserEmail();
+      let tpl = null, tplErr = null;
+      if (userEmail) {
+        const ownResult = await sb.from('document_templates')
+          .select('file_b64').eq('template_key', 'mediation_agreement')
+          .eq('owner_user_id', userEmail).maybeSingle();
+        tpl = ownResult.data;
+        tplErr = ownResult.error;
+      }
+      if (!tpl?.file_b64) {
+        const defaultResult = await sb.from('document_templates')
+          .select('file_b64').eq('template_key', 'mediation_agreement')
+          .is('owner_user_id', null).maybeSingle();
+        tpl = defaultResult.data;
+        tplErr = tplErr || defaultResult.error;
+      }
       if(tplErr)throw tplErr;
       if(!tpl?.file_b64){setError("No mediation agreement template uploaded yet — add one in Settings > Templates first.");return;}
 
