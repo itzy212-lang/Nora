@@ -50,13 +50,13 @@ function MobilePdfPage({ pdfUrl, pageNumber }) {
       try {
         const pdfjsLib = await loadPdfjs();
         if (cancelled) return;
-        try { sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_start', pdfUrl, pageNumber } }); } catch (e) {}
+        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_start', pdfUrl, pageNumber } }); } catch (e) {}
         const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
         if (cancelled) return;
-        try { sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_ok', numPages: doc.numPages } }); } catch (e) {}
+        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getDocument_ok', numPages: doc.numPages } }); } catch (e) {}
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
-        try { sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getPage_ok' } }); } catch (e) {}
+        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'getPage_ok' } }); } catch (e) {}
 
         const containerWidth = containerRef.current?.clientWidth || 360;
         const baseViewport = page.getViewport({ scale: 1 });
@@ -74,10 +74,10 @@ function MobilePdfPage({ pdfUrl, pageNumber }) {
 
         renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport });
         await renderTask.promise;
-        try { sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'render_ok' } }); } catch (e) {}
+        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'render_ok' } }); } catch (e) {}
         if (!cancelled) setRendering(false);
       } catch (err) {
-        try { sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'caught_error', message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) } }); } catch (e) {}
+        try { await sb.from('oauth_debug').insert({ event: 'mobile_pdf_debug', response_data: { step: 'caught_error', message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) } }); } catch (e) {}
         if (!cancelled && err?.name !== 'RenderingCancelledException') {
           console.warn('[NoticeReviewModal] Mobile PDF page render failed:', err.message);
           setError(err.message || 'Could not render this page.');
@@ -439,8 +439,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     // the database so the exact failure point is visible after one
     // real test, instead of guessing again. Safe to remove once this
     // is actually resolved.
-    const dlog = (step, extra = {}) => { try { sb.from('oauth_debug').insert({ event: 'attach_pdf_debug', response_data: { step, fileName: file?.name, fileSize: file?.size, position, ...extra } }); } catch (e) {} };
-    dlog('start');
+    const dlog = async (step, extra = {}) => { try { await sb.from('oauth_debug').insert({ event: 'attach_pdf_debug', response_data: { step, fileName: file?.name, fileSize: file?.size, position, ...extra } }); } catch (e) {} };
+    await dlog('start');
     try {
       const attachB64 = await withTimeout(new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -448,7 +448,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         reader.onerror = () => reject(new Error('Could not read the selected file'));
         reader.readAsDataURL(file);
       }), 30000, 'Reading the selected file');
-      dlog('file_read_ok', { b64Length: attachB64?.length });
+      await dlog('file_read_ok', { b64Length: attachB64?.length });
 
       const splitRes = await withTimeout(
         fetch('/api/split-pdf', {
@@ -459,10 +459,10 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         30000,
         'Splitting the attached PDF'
       );
-      dlog('split_fetch_ok', { status: splitRes.status });
+      await dlog('split_fetch_ok', { status: splitRes.status });
       const split = await splitRes.json();
       if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not split the attached PDF');
-      dlog('split_parsed_ok', { pageCount: split.pages.length });
+      await dlog('split_parsed_ok', { pageCount: split.pages.length });
 
       const stamp = Date.now();
       const attachedPages = split.pages.map((page, index) => ({
@@ -475,17 +475,17 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       }));
       const next = [...pages];
       next.splice(Math.min(next.length, position + 1), 0, ...attachedPages);
-      dlog('before_merge', { nextLength: next.length });
+      await dlog('before_merge', { nextLength: next.length });
       await mergePageList(next);
-      dlog('merge_ok');
+      await dlog('merge_ok');
       setPages(next);
       setCurrentPageIdx(Math.min(next.length - 1, position + 1));
       setSelectedPageIds(new Set());
     } catch (err) {
-      dlog('caught_error', { message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) });
+      await dlog('caught_error', { message: err?.message, name: err?.name, stack: err?.stack?.slice(0, 500) });
       alert(`Attach failed: ${err.message}`);
     } finally {
-      dlog('finally');
+      await dlog('finally');
       setGenerating(false);
     }
   }, [mergePageList, pages]);
