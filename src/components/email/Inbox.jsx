@@ -6,7 +6,7 @@ import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails, isCacheReconciledFor, markCacheReconciled } from '../../utils/emailCache';
-import { syncEmails } from '../../utils/providers';
+import { syncEmails, getUserIntegrations } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
@@ -2613,6 +2613,15 @@ if (syncErr) throw syncErr;
   const handleSendReply = async ({ to, cc, subject, body: emailBody, replyToId, attachments = [], createTask = false }) => {
     if (!sb) return;
 
+    // Fixed 2026-09-17, on request: this always called
+    // send_email_via_microsoft (Outlook) unconditionally — no
+    // Gmail-send capability existed at all before tonight, only
+    // Gmail sync. Same fix as useEmails.js's sendEmail: detect the
+    // account's actual provider and route accordingly.
+    const resolvedUserId = state.currentUser?.id || null;
+    const integrations = resolvedUserId ? await getUserIntegrations(resolvedUserId) : { email_provider: 'outlook' };
+    const isGmail = integrations.email_provider === 'gmail';
+
     const funcPayload = {
       // Fixed 2026-09-12, real, confirmed bug: this edge function
       // previously had no way to know which Nora user was sending —
@@ -2620,8 +2629,12 @@ if (syncErr) throw syncErr;
       // first in the whole table, meaning every user's sent email
       // would have gone out through the same, single account
       // regardless of who actually connected what. Now identifies
-      // the correct account explicitly.
-      user_id: state.currentUser?.email || state.currentUser?.id || null,
+      // the correct account explicitly. The Gmail function expects
+      // the real UUID (matches user_integrations.user_id); the
+      // Outlook one expects the email (matches email_accounts.user_id's
+      // existing convention) — kept as two separate values rather
+      // than assuming one format works for both.
+      user_id: isGmail ? resolvedUserId : (state.currentUser?.email || state.currentUser?.id || null),
       to_email: to,
       cc_email: cc || null,
       subject: subject,
@@ -2630,14 +2643,16 @@ if (syncErr) throw syncErr;
       attachments,
     };
 
-    const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
+    const { data, error } = await sb.functions.invoke(isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft', {
       body: funcPayload,
     });
 
     if (error || data?.error) {
       const msg = error?.message || data?.error || 'Unknown error';
       if (msg.includes('401') || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('expired')) {
-        throw new Error('Your Microsoft account connection has expired. Go to Settings → Email → Reconnect, then try again.');
+        throw new Error(isGmail
+          ? 'Your Gmail account connection has expired. Go to Settings → Email → Reconnect, then try again.'
+          : 'Your Microsoft account connection has expired. Go to Settings → Email → Reconnect, then try again.');
       }
       throw new Error('Could not send email: ' + msg);
     }

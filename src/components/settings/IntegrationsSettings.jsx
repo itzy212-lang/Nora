@@ -78,7 +78,13 @@ export default function IntegrationsSettings() {
     googleAuthUrl.searchParams.append('client_id', clientId);
     googleAuthUrl.searchParams.append('redirect_uri', callbackUri);
     googleAuthUrl.searchParams.append('response_type', 'code');
-    googleAuthUrl.searchParams.append('scope', 'openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file');
+    // Fixed 2026-09-17, on request: added gmail.send so this
+    // connection can actually send mail, not just read it — sending
+    // was never built before tonight, only sync. Existing connections
+    // need to reconnect for this wider scope to take effect; Google
+    // doesn't retroactively grant a new scope to an already-issued
+    // refresh token.
+    googleAuthUrl.searchParams.append('scope', 'openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.file');
     googleAuthUrl.searchParams.append('access_type', 'offline');
     googleAuthUrl.searchParams.append('prompt', 'consent');
 

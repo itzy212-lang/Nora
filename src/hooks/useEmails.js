@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useApp } from '../state/appStore';
 import sb from '../supabaseClient';
 import { saveCachedEmails } from '../utils/emailCache';
+import { getUserIntegrations } from '../utils/providers';
 
 // ── Brain helpers ──────────────────────────────────────────────────────────
 
@@ -312,16 +313,43 @@ export function useEmails() {
         .filter(Boolean)
         .join(', ');
 
-    const { data, error } = await sb.functions.invoke('send_email_via_microsoft', {
-      body: {
-        to_email: normaliseRecipients(to),
-        cc_email: cc ? normaliseRecipients(cc) : null,
-        subject: subject || '(No subject)',
-        body,
-        user_id: userId || state.currentUser?.email || state.currentUser?.id || null,
-        attachments: normalisedAttachments,
-      },
-    });
+    const { data, error } = await (async () => {
+      // Fixed 2026-09-17, on request: this always called
+      // send_email_via_microsoft (Outlook) unconditionally — there
+      // was no Gmail-send capability at all before tonight, only
+      // Gmail sync. Provider detection needs the real auth UUID
+      // (user_integrations.user_id is UUID-typed, same lesson as
+      // several other provider lookups fixed tonight) — userId here
+      // is often an email (EmailComposer.jsx passes
+      // currentUser?.email), so resolved separately rather than
+      // reused directly.
+      const resolvedUserId = state.currentUser?.id || null;
+      const integrations = resolvedUserId ? await getUserIntegrations(resolvedUserId) : { email_provider: 'outlook' };
+
+      if (integrations.email_provider === 'gmail') {
+        return sb.functions.invoke('send_email_via_gmail', {
+          body: {
+            to_email: normaliseRecipients(to),
+            cc_email: cc ? normaliseRecipients(cc) : null,
+            subject: subject || '(No subject)',
+            body,
+            user_id: resolvedUserId,
+            attachments: normalisedAttachments,
+          },
+        });
+      }
+
+      return sb.functions.invoke('send_email_via_microsoft', {
+        body: {
+          to_email: normaliseRecipients(to),
+          cc_email: cc ? normaliseRecipients(cc) : null,
+          subject: subject || '(No subject)',
+          body,
+          user_id: userId || state.currentUser?.email || state.currentUser?.id || null,
+          attachments: normalisedAttachments,
+        },
+      });
+    })();
 
     if (error || data?.error) {
       const message = error?.message || data?.error || 'Email send failed';
