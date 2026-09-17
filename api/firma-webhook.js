@@ -92,14 +92,27 @@ async function savePdfToStorage(sb, projectId, pdfBuffer, filename) {
 // (user_id, folder_id, filename, content_base64, content_type,
 // confirmed directly by reading its own validation check). Every call
 // would have failed with a 400 every single time, independent of
-// anything else in this file. user_id hardcoded to match the same,
-// existing pattern used everywhere else in the app today
-// (ProjectDetail.jsx) -- OneDrive is not genuinely per-user yet
-// anywhere in this codebase; fixing that properly is separate, larger
-// work, not something to solve inside this one webhook.
-async function saveToOneDrive(folderId, pdfBuffer, filename, baseUrl) {
+// anything else in this file.
+//
+// Fixed again 2026-09-17, real cross-account bug: user_id was
+// hardcoded to 'help@sq1consulting.co.uk' here, meaning every signed
+// LOA from any project, for any account, uploaded through one
+// person's OneDrive regardless of whose project it actually
+// belonged to. onedrive-helper.js's getValidMicrosoftToken() already
+// requires an exact userId match with no fallback (fixed the same
+// day) — the gap was entirely on this caller's side, passing the
+// wrong identity in to begin with. Now takes the real owner
+// (projects.user_id, resolved at the call site) and skips the
+// OneDrive save entirely — same fail-closed pattern used in
+// generate-doc.js — rather than guessing whose account to use if
+// that's ever missing.
+async function saveToOneDrive(folderId, pdfBuffer, filename, baseUrl, userId) {
   if (!folderId) {
     console.warn('[firma-webhook] No OneDrive folder configured for this project/AO — skipping OneDrive save (Supabase storage copy is still saved).');
+    return;
+  }
+  if (!userId) {
+    console.warn('[firma-webhook] No project owner found — skipping OneDrive save rather than guessing an account (Supabase storage copy is still saved).');
     return;
   }
   try {
@@ -108,7 +121,7 @@ async function saveToOneDrive(folderId, pdfBuffer, filename, baseUrl) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: 'help@sq1consulting.co.uk',
+        user_id: userId,
         folder_id: folderId,
         filename,
         content_base64: base64,
@@ -208,9 +221,11 @@ export default async function handler(req, res) {
       // Save to Supabase storage
       pdfUrl = await savePdfToStorage(sb, projectId, pdfResult.buffer, filename);
 
-      // Save to OneDrive
+      // Save to OneDrive — using the actual project owner's account,
+      // not a hardcoded one (see saveToOneDrive's comment above).
+      const { data: projectOwner } = await sb.from('projects').select('user_id').eq('id', projectId).maybeSingle();
       const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nora-d9wy.vercel.app';
-      await saveToOneDrive(onedriveFolderId, pdfResult.buffer, filename, baseUrl);
+      await saveToOneDrive(onedriveFolderId, pdfResult.buffer, filename, baseUrl, projectOwner?.user_id || null);
     }
 
     // Update Supabase with signed status
