@@ -165,15 +165,39 @@ export default function App() {
       ? Math.max(...invoices.map(i => parseInt(i.invoice_number, 10) || 0)) + 1
       : 1601);
 
+  const currentUserIdRef = useRef(null);
+  useEffect(() => { currentUserIdRef.current = state.currentUser?.id || null; }, [state.currentUser]);
+
   useEffect(() => {
     if (!sb) { setAuthChecked(true); return; }
     sb.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) dispatch({ type: 'SET_USER', payload: session.user });
       setAuthChecked(true);
     });
+    // Fixed 2026-09-17, real, confirmed bug — this was the actual
+    // cause of navigating between screens (e.g. Inbox -> Invoicing ->
+    // Inbox) appearing to wipe and reload everything, not just email:
+    // Supabase's onAuthStateChange fires for far more than a real
+    // login — TOKEN_REFRESHED (a routine background refresh, roughly
+    // hourly, also on tab focus/reconnect), USER_UPDATED, and others
+    // all carry a session and were treated identically to a genuine
+    // sign-in. SET_USER's reducer case unconditionally resets emails,
+    // leads, projects and emailsLoadedAt to empty — correct behavior
+    // for an actual account switch, wrong for "the same person's
+    // token quietly refreshed in the background." Now only dispatches
+    // when the user has genuinely changed (or on the very first
+    // dispatch, when there's nothing yet to preserve anyway). Reads
+    // the latest known user from a ref (kept in sync above) rather
+    // than depending on state.currentUser directly, so this listener
+    // doesn't need to resubscribe every time the user changes.
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-      if (session?.user) dispatch({ type: 'SET_USER', payload: session.user });
-      else if (event === 'SIGNED_OUT') dispatch({ type: 'SET_USER', payload: null });
+      if (session?.user) {
+        if (session.user.id !== currentUserIdRef.current) {
+          dispatch({ type: 'SET_USER', payload: session.user });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        dispatch({ type: 'SET_USER', payload: null });
+      }
     });
     return () => subscription.unsubscribe();
   }, [dispatch]);

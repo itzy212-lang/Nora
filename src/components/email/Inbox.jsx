@@ -1982,6 +1982,17 @@ function isBriefContent(text = '') {
 }
 
 
+// Tracks which user's cache has already been reconciled *this page
+// load* — module-level, so it survives Inbox mounting/unmounting as
+// you navigate between screens (Inbox -> Invoicing -> Inbox), but
+// naturally resets on an actual full page load. This is what makes
+// "clear the cache when the user changes" mean what it says: logging
+// out (which already does its own explicit clearEmailCache() call in
+// Settings.jsx, plus triggers a full reload that resets this) then
+// logging in as someone else is the only time this should ever fire
+// — not every time the same person navigates back to Inbox.
+let lastReconciledUserKey = null;
+
 export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
@@ -2144,12 +2155,30 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
 
   const syncingRef = useRef(false);
 
-  // Clear email cache when user changes to prevent old user's emails from showing
-  // Also trigger email sync via configured provider (Gmail or Outlook)
+  // Fixed 2026-09-17, real, confirmed bug — this was the actual cause
+  // of the Inbox reloading everything on every single visit, not just
+  // on a genuine user change: this effect's dependency was
+  // state.currentUser (an object), and Inbox unmounts/remounts every
+  // time you navigate away and back (e.g. to Invoicing and back) —
+  // useEffect always fires on mount regardless of whether the
+  // dependency's value actually changed, so this cleared the cache
+  // on every single visit to Inbox, for the same person, every time.
+  // The comment said "on user change" but nothing here ever actually
+  // checked whether the user had changed since last time. Now only
+  // clears when lastReconciledUserKey genuinely differs from the
+  // current user — true the first time this user is seen this page
+  // load, false on every subsequent Inbox remount for the same
+  // person, exactly matching "only when you log out" (logout already
+  // clears explicitly itself, in Settings.jsx, and its full page
+  // reload resets this module-level tracker regardless).
   useEffect(() => {
     if (!state.currentUser) return;
-    clearEmailCache().catch(() => {}); // silently clear cache on user change
-    
+    const userKey = state.currentUser.email || state.currentUser.id;
+    if (lastReconciledUserKey !== userKey) {
+      lastReconciledUserKey = userKey;
+      clearEmailCache().catch(() => {});
+    }
+
     // Trigger email sync in background (don't block UI)
     syncEmails(state.currentUser.id).catch(err => {
       console.warn('Email sync failed (non-blocking):', err.message);
