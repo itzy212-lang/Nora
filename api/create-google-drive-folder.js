@@ -146,8 +146,26 @@ export default async function handler(req, res) {
 
     let accessToken = integration.google_drive_access_token;
 
-    if (!accessToken && integration.google_drive_refresh_token) {
-      accessToken = await refreshGoogleToken(integration.google_drive_refresh_token, user_id);
+    // Fixed 2026-09-17, real, confirmed bug found via server logs
+    // (500: "Request had invalid authentication credentials" from
+    // Google) — this only ever refreshed when the access token was
+    // completely missing, never when it had simply expired. Google
+    // access tokens expire roughly hourly; there's no expires_at
+    // column tracking that (checked — doesn't exist), so there's no
+    // way to know it's stale without trying it. Same gap already
+    // found and fixed the same way in sync-gmail.js's
+    // syncOneGmailAccount tonight: refresh proactively whenever a
+    // refresh_token is available, rather than waiting for the access
+    // token to be absent. This was a pre-existing gap in this file
+    // specifically — not something introduced by anything else
+    // touched tonight — that simply hadn't been hit yet because the
+    // token was still fresh during earlier testing today.
+    if (integration.google_drive_refresh_token) {
+      try {
+        accessToken = await refreshGoogleToken(integration.google_drive_refresh_token, user_id);
+      } catch (err) {
+        console.warn('[create-google-drive-folder] token refresh failed, trying existing token:', err.message);
+      }
     }
 
     if (!accessToken) {
