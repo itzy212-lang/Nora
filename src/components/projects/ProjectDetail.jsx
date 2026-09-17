@@ -3751,7 +3751,19 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // Auto-create OneDrive subfolder for new AOs and save folder ID back
     if (!existingAO) {
       const aoAddress = form.premise || '';
-      const projectFolderId = project.onedrive_folder_id || data?.onedrive_folder_id;
+      // Fixed 2026-09-17, real, confirmed bug reported live: 'data'
+      // was never defined anywhere in this function — leftover from
+      // handleSaveProjectEdit just above, which genuinely has a local
+      // `data` variable for this exact pattern; copy-pasted here
+      // without adjusting for this function's own scope. This threw
+      // a ReferenceError on every single new AO added, but only
+      // *after* the AO had already been saved successfully (the save
+      // itself, above, completes first) — so it looked like "the
+      // error pops up but it saves anyway", which is exactly what was
+      // happening: the save always worked, only this later, unrelated
+      // OneDrive-folder step crashed. project.onedrive_folder_id is
+      // already the correct source here.
+      const projectFolderId = project.onedrive_folder_id;
       if (aoAddress && projectFolderId) {
         try {
           const userEmail = await getCurrentUserEmail();
