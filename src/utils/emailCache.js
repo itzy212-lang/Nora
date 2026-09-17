@@ -38,16 +38,36 @@ function openDB() {
   });
 }
 
+// Added 2026-09-17, real, confirmed bug — reported live as Inbox
+// stuck permanently on "Loading..." with no console error at all (a
+// hung, never-settling promise, not a thrown exception). Nothing in
+// the old code ever closed an IndexedDB connection after use, so
+// every single cache operation across a session left its connection
+// open indefinitely — enough of those piling up, combined with a
+// forced Service Worker update mid-session (visible in the report,
+// "Update on reload" was active in DevTools), can leave a later
+// transaction queued forever behind one that never completes, since
+// IndexedDB serializes transactions on the same store across
+// connections. Every function below now goes through this wrapper,
+// which closes its connection when done — win or lose — instead of
+// leaking it.
+async function withDB(fn) {
+  const db = await openDB();
+  try {
+    return await fn(db);
+  } finally {
+    db.close();
+  }
+}
+
 export async function loadCachedEmails() {
   try {
-    const db = await openDB();
-    return await new Promise((resolve, reject) => {
+    return await withDB(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.getAll();
+      const req = tx.objectStore(STORE_NAME).getAll();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
-    });
+    }));
   } catch {
     return []; // cache unavailable — caller falls back to a real fetch
   }
@@ -56,14 +76,13 @@ export async function loadCachedEmails() {
 export async function saveCachedEmails(emails) {
   if (!emails || !emails.length) return;
   try {
-    const db = await openDB();
-    await new Promise((resolve, reject) => {
+    await withDB(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       emails.forEach(e => store.put(e));
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
-    });
+    }));
     await enforceCacheBound();
   } catch (err) {
     console.error('[emailCache] save failed:', err);
@@ -82,19 +101,20 @@ export async function saveCachedEmails(emails) {
 // fields, which would wipe out subject/sender/body/etc.
 export async function updateCachedEmail(id, patch) {
   try {
-    const db = await openDB();
-    const existing = await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).get(id);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-    if (!existing) return; // not cached — nothing to update, the next full/incremental load will pick up the real state
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put({ ...existing, ...patch });
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
+    await withDB(async (db) => {
+      const existing = await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get(id);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+      if (!existing) return; // not cached — nothing to update, the next full/incremental load will pick up the real state
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put({ ...existing, ...patch });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
     });
   } catch (err) {
     console.error('[emailCache] update failed:', err);
@@ -108,14 +128,13 @@ export async function updateCachedEmail(id, patch) {
 export async function deleteCachedEmails(ids) {
   if (!ids || !ids.length) return;
   try {
-    const db = await openDB();
-    await new Promise((resolve, reject) => {
+    await withDB(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       ids.forEach(id => store.delete(id));
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
-    });
+    }));
   } catch (err) {
     console.error('[emailCache] delete failed:', err);
   }
@@ -123,31 +142,32 @@ export async function deleteCachedEmails(ids) {
 
 async function enforceCacheBound() {
   try {
-    const db = await openDB();
-    const count = await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).count();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    if (count <= MAX_CACHED_EMAILS) return;
+    await withDB(async (db) => {
+      const count = await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      if (count <= MAX_CACHED_EMAILS) return;
 
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      const index = store.index('received_at');
-      let toDelete = count - MAX_CACHED_EMAILS;
-      const cursorReq = index.openCursor(); // ascending = oldest first
-      cursorReq.onsuccess = () => {
-        const cursor = cursorReq.result;
-        if (cursor && toDelete > 0) {
-          store.delete(cursor.primaryKey);
-          toDelete -= 1;
-          cursor.continue();
-        }
-      };
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const index = store.index('received_at');
+        let toDelete = count - MAX_CACHED_EMAILS;
+        const cursorReq = index.openCursor(); // ascending = oldest first
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (cursor && toDelete > 0) {
+            store.delete(cursor.primaryKey);
+            toDelete -= 1;
+            cursor.continue();
+          }
+        };
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
     });
   } catch (err) {
     console.error('[emailCache] eviction failed:', err);
@@ -156,14 +176,13 @@ async function enforceCacheBound() {
 
 export async function getNewestCachedReceivedAt() {
   try {
-    const db = await openDB();
-    return await new Promise((resolve, reject) => {
+    return await withDB(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const index = tx.objectStore(STORE_NAME).index('received_at');
       const req = index.openCursor(null, 'prev'); // descending = newest first
       req.onsuccess = () => resolve(req.result ? req.result.value.received_at : null);
       req.onerror = () => reject(req.error);
-    });
+    }));
   } catch {
     return null;
   }
@@ -171,13 +190,12 @@ export async function getNewestCachedReceivedAt() {
 
 export async function clearEmailCache() {
   try {
-    const db = await openDB();
-    await new Promise((resolve, reject) => {
+    await withDB(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       tx.objectStore(STORE_NAME).clear();
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
-    });
+    }));
   } catch (err) {
     console.error('[emailCache] clear failed:', err);
   }

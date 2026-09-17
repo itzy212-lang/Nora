@@ -2155,14 +2155,6 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // useEffect always fires on mount regardless of whether the
   // dependency's value actually changed, so this cleared the cache
   // on every single visit to Inbox, for the same person, every time.
-  // The comment said "on user change" but nothing here ever actually
-  // checked whether the user had changed since last time. Now only
-  // clears when lastReconciledUserKey genuinely differs from the
-  // current user — true the first time this user is seen this page
-  // load, false on every subsequent Inbox remount for the same
-  // person, exactly matching "only when you log out" (logout already
-  // clears explicitly itself, in Settings.jsx, and its full page
-  // reload resets this module-level tracker regardless).
   // Fixed 2026-09-17, real, confirmed bug — persisted in localStorage
   // (via isCacheReconciledFor/markCacheReconciled, emailCache.js) so
   // this correctly survives a genuine page reload, not only Inbox
@@ -2363,7 +2355,20 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       // yet, not because the inbox was actually empty. Now shows a
       // real loading state for this window specifically.
       setLoading(true);
-      const cached = await loadCachedEmails();
+      // Fixed 2026-09-17, real, confirmed bug — reported live as
+      // Inbox stuck permanently on "Loading..." with zero console
+      // errors: a hung IndexedDB promise (root cause: connections
+      // never being closed, fixed in emailCache.js) left this await
+      // never settling either way, so setLoading(false) below never
+      // ran. This is the safety net on top of that real fix: cap how
+      // long the cache read gets to block the UI at all — if it
+      // hasn't resolved in 4s, proceed as if the cache were empty
+      // (falls through to a genuine fetch below) rather than leaving
+      // the person staring at a spinner forever, regardless of cause.
+      const cached = await Promise.race([
+        loadCachedEmails(),
+        new Promise(resolve => setTimeout(() => resolve([]), 4000)),
+      ]);
       if (cancelled) return;
       setLoading(false);
       if (cached.length > 0) {
