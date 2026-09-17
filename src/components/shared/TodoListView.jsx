@@ -39,11 +39,28 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
   const [projects, setProjects] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [userId, setUserId] = useState(null);
 
   const load = useCallback(async () => {
     if (!sb) return;
     setLoading(true);
     try {
+      // Fixed 2026-09-17, real, confirmed cross-user leak reported
+      // live: this list — deliberately shared, per its own comment at
+      // the top of this file, "a filtered view over the same tasks
+      // table the calendar already uses" — was showing every user's
+      // manually-created tasks mixed together. The screen itself is
+      // meant to stay universal (anyone can open it); the individual
+      // items inside it were never meant to be. tasks.user_id already
+      // exists, was just never read from here.
+      const { data: { user } } = await sb.auth.getUser();
+      const uid = user?.id || null;
+      setUserId(uid);
+      if (!uid) {
+        console.warn('[TodoListView] Could not determine current user — showing nothing rather than someone else\'s tasks.');
+        setTasks([]);
+        return;
+      }
       const todayStr = new Date().toISOString().slice(0, 10);
       // Fixed 2026-09-13, on request: "today" means every incomplete
       // task due today or earlier (so nothing overdue silently
@@ -65,6 +82,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
       const { data, error } = await sb
         .from('tasks')
         .select('id, title, description, task_type, source, due_date, status, completed_at, project_id, linked_email_message_id')
+        .eq('user_id', uid)
         .in('task_type', TODO_TYPES)
         .order('due_date', { ascending: true })
         .limit(300);
@@ -101,7 +119,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
     const updates = nowComplete
       ? { status: 'complete', completed_at: new Date().toISOString() }
       : { status: 'open', completed_at: null };
-    await sb.from('tasks').update(updates).eq('id', task.id);
+    await sb.from('tasks').update(updates).eq('id', task.id).eq('user_id', userId);
     window.dispatchEvent(new Event('nora:task-added')); // same signal Calendar listens for — completing a task should remove it from Calendar's view too
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
   };
@@ -201,6 +219,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
 
       {showAdd && (
         <AddTaskInline
+          userId={userId}
           onClose={() => setShowAdd(false)}
           onCreated={() => { setShowAdd(false); load(); }}
         />
@@ -214,7 +233,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
 // requires a specific project already in context — this view is
 // global, across every project, so a task here may or may not have
 // one at all.
-function AddTaskInline({ onClose, onCreated }) {
+function AddTaskInline({ userId, onClose, onCreated }) {
   const [title, setTitle] = useState('');
   const [taskType, setTaskType] = useState('call');
   const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
@@ -238,6 +257,10 @@ function AddTaskInline({ onClose, onCreated }) {
 
   const handleSave = async () => {
     if (!title.trim()) return;
+    if (!userId) {
+      console.warn('[AddTaskInline] Could not determine current user — not saving.');
+      return;
+    }
     setSaving(true);
     try {
       await sb.from('tasks').insert([{
@@ -247,6 +270,7 @@ function AddTaskInline({ onClose, onCreated }) {
         due_date: dueDate,
         status: 'open',
         project_id: selectedProject?.id || null,
+        user_id: userId,
       }]);
       // Fixed 2026-09-17, same real gap found and fixed in
       // ProjectDetail.jsx: nothing told Calendar a task had been

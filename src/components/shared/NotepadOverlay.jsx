@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import TodoListView from './TodoListView';
+import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 
 const COLORS = [
   { id: 'default',  bg: '#ffffff', border: '#e5e7eb' },
@@ -44,12 +45,26 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
   const activeNoteId = useRef(null);
   const titleRef = useRef(null);
   const contentRef = useRef(null);
+  const userEmailRef = useRef(null);
 
   const loadNotes = useCallback(async () => {
     if (!sb) return;
+    // Fixed 2026-09-17, real, confirmed cross-user leak reported
+    // live: every note was visible, editable, and deletable by every
+    // user — the notes table has always had a user_id column, it was
+    // simply never read from or written to anywhere in this file.
+    const userEmail = await getCurrentUserEmail();
+    userEmailRef.current = userEmail;
+    if (!userEmail) {
+      console.warn('[Notepad] Could not determine current user — showing no notes rather than someone else\'s.');
+      setNotes([]);
+      setLoading(false);
+      return;
+    }
     const { data } = await sb
       .from('notes')
       .select('*')
+      .eq('user_id', userEmail)
       .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false })
       .limit(100);
@@ -62,7 +77,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
   const saveNote = useCallback(async (id, fields) => {
     if (!sb || !id) return;
     setSaving(true);
-    await sb.from('notes').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id);
+    await sb.from('notes').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userEmailRef.current);
     setSaving(false);
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...fields } : n));
   }, []);
@@ -90,10 +105,14 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
       alert('Supabase not available');
       return;
     }
+    if (!userEmailRef.current) {
+      alert('Could not determine your account — please refresh and try again.');
+      return;
+    }
     try {
       const { data, error } = await sb
         .from('notes')
-        .insert({ title: '', content: '', color: 'default' })
+        .insert({ title: '', content: '', color: 'default', user_id: userEmailRef.current })
         .select()
         .single();
       if (error) throw error;
@@ -126,7 +145,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
 
   const handleTogglePin = async (noteId, pinned, e) => {
     e.stopPropagation();
-    await sb.from('notes').update({ pinned: !pinned }).eq('id', noteId);
+    await sb.from('notes').update({ pinned: !pinned }).eq('id', noteId).eq('user_id', userEmailRef.current);
     setNotes(prev => prev.map(n => n.id === noteId ? { ...n, pinned: !pinned } : n)
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)));
   };
@@ -134,7 +153,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
   const deleteNote = useCallback(async () => {
     if (!activeNoteId.current || !sb) return;
     if (!window.confirm('Delete this note?')) return;
-    await sb.from('notes').delete().eq('id', activeNoteId.current);
+    await sb.from('notes').delete().eq('id', activeNoteId.current).eq('user_id', userEmailRef.current);
     setNotes(prev => prev.filter(n => n.id !== activeNoteId.current));
     setMode('list');
   }, []);
@@ -145,7 +164,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
       saveNote(activeNoteId.current, { title, content, color });
     } else if (activeNoteId.current && !title && !content) {
       // Delete empty note silently
-      sb.from('notes').delete().eq('id', activeNoteId.current);
+      sb.from('notes').delete().eq('id', activeNoteId.current).eq('user_id', userEmailRef.current);
       setNotes(prev => prev.filter(n => n.id !== activeNoteId.current));
     }
     setMode('list');

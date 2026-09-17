@@ -4598,6 +4598,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // anywhere else in this file — every other insert here uses
       // plain await or destructured error handling instead. Matched
       // that same, already-working convention.
+      // Fixed 2026-09-17, real gap caught while scoping the to-do
+      // list to per-user tasks: this task type (correspondence) is
+      // exactly what the to-do list now filters by user_id — without
+      // setting it here, this reminder would silently never appear
+      // in anyone's list at all, contradicting this function's own
+      // comment above ("shows in both the calendar and the to-do
+      // list").
+      const { data: { user: pauseUser } } = await sb.auth.getUser();
       const { error: taskError } = await sb.from('tasks').insert([{
         title: `Project paused: check in — ${project.ref || project.bo_premise_address || ''}`,
         description: 'This project was paused 14 days ago. Resume it if it can be, or pause it again if it genuinely still needs more time.',
@@ -4606,6 +4614,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         source: 'manual',
         status: 'open',
         project_id: project.id,
+        user_id: pauseUser?.id || null,
       }]);
       if (taskError) console.warn('[handlePauseProject] reminder task insert failed:', taskError.message);
       else window.dispatchEvent(new Event('nora:task-added'));
