@@ -3,6 +3,8 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
 import IntegrationsSettings from '../settings/IntegrationsSettings';
+import { clearEmailCache } from '../../utils/emailCache';
+import { unregisterPushNotifications } from '../../hooks/usePushNotifications';
 
 const TABS = ['Firm', 'Templates', 'Placeholders', 'Email', 'Invoice', 'Account', 'Integrations', 'AI', 'Nora'];
 
@@ -874,7 +876,25 @@ function AccountTab() {
         })}
       </div>
 
-      <button onClick={async () => { if (sb) { await sb.auth.signOut(); window.location.reload(); } }}
+      <button onClick={async () => {
+          if (sb) {
+            // Fixed 2026-09-17, real, confirmed multi-user gap on
+            // shared devices: neither the local email cache
+            // (IndexedDB) nor this device's push subscription were
+            // torn down on logout — the cache only ever got cleared
+            // reactively, once a *different* user's session mounted
+            // and detected the change, leaving a window where a
+            // freshly-logged-out device could still show the
+            // previous person's cached inbox contents, or still
+            // receive a push notification meant for them, right up
+            // until someone else actually logged in. Both explicitly
+            // torn down here instead, before sign-out even completes.
+            await clearEmailCache().catch(() => {});
+            await unregisterPushNotifications().catch(() => {});
+            await sb.auth.signOut();
+            window.location.reload();
+          }
+        }}
         style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600, textAlign: 'center' }}>
         Log out
       </button>
