@@ -5,7 +5,7 @@ import { toHtml, cleanSignOff } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
-import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails } from '../../utils/emailCache';
+import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails, isCacheReconciledFor, markCacheReconciled } from '../../utils/emailCache';
 import { syncEmails } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
@@ -1982,17 +1982,9 @@ function isBriefContent(text = '') {
 }
 
 
-// Tracks which user's cache has already been reconciled *this page
-// load* — module-level, so it survives Inbox mounting/unmounting as
-// you navigate between screens (Inbox -> Invoicing -> Inbox), but
-// naturally resets on an actual full page load. This is what makes
-// "clear the cache when the user changes" mean what it says: logging
-// out (which already does its own explicit clearEmailCache() call in
-// Settings.jsx, plus triggers a full reload that resets this) then
-// logging in as someone else is the only time this should ever fire
-// — not every time the same person navigates back to Inbox.
-let lastReconciledUserKey = null;
-
+// Real, persistent local storage for the email inbox — survives a
+// full app close, unlike the in-memory-only React state that existed
+// before this.
 export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
@@ -2171,11 +2163,16 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // person, exactly matching "only when you log out" (logout already
   // clears explicitly itself, in Settings.jsx, and its full page
   // reload resets this module-level tracker regardless).
+  // Fixed 2026-09-17, real, confirmed bug — persisted in localStorage
+  // (via isCacheReconciledFor/markCacheReconciled, emailCache.js) so
+  // this correctly survives a genuine page reload, not only Inbox
+  // remounting from in-app navigation — see that file's comment for
+  // the full story of why a plain in-memory tracker wasn't enough.
   useEffect(() => {
     if (!state.currentUser) return;
     const userKey = state.currentUser.email || state.currentUser.id;
-    if (lastReconciledUserKey !== userKey) {
-      lastReconciledUserKey = userKey;
+    if (!isCacheReconciledFor(userKey)) {
+      markCacheReconciled(userKey);
       clearEmailCache().catch(() => {});
     }
 

@@ -182,3 +182,37 @@ export async function clearEmailCache() {
     console.error('[emailCache] clear failed:', err);
   }
 }
+
+// Added 2026-09-17, real, confirmed bug: Inbox.jsx used to decide
+// "has the cache been reconciled for the current user yet" with a
+// plain module-level variable. That survives Inbox unmounting and
+// remounting from in-app navigation (switching screens within a
+// still-loaded page), but resets on any genuine page reload — which
+// on mobile happens routinely when the browser/PWA backgrounds the
+// tab and later discards it, not just on an actual logout. That
+// reset made every such reload look like "a new user", triggering a
+// full cache clear on exactly the case the persistent cache exists
+// to survive. localStorage persists across real reloads (until
+// explicitly cleared, e.g. at logout), which is what this needs.
+const RECONCILED_USER_KEY = 'nora_email_cache_reconciled_user';
+
+export function isCacheReconciledFor(userKey) {
+  if (!userKey) return false;
+  try {
+    return localStorage.getItem(RECONCILED_USER_KEY) === userKey;
+  } catch {
+    return false;
+  }
+}
+
+export function markCacheReconciled(userKey) {
+  try {
+    localStorage.setItem(RECONCILED_USER_KEY, userKey);
+  } catch {}
+}
+
+export function clearReconciledCacheMarker() {
+  try {
+    localStorage.removeItem(RECONCILED_USER_KEY);
+  } catch {}
+}

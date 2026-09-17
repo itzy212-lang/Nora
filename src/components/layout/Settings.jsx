@@ -3,7 +3,7 @@ import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import InvoiceSettings from '../accounting/InvoiceSettings';
 import IntegrationsSettings from '../settings/IntegrationsSettings';
-import { clearEmailCache } from '../../utils/emailCache';
+import { clearEmailCache, clearReconciledCacheMarker } from '../../utils/emailCache';
 import { unregisterPushNotifications } from '../../hooks/usePushNotifications';
 
 const TABS = ['Firm', 'Templates', 'Placeholders', 'Email', 'Invoice', 'Account', 'Integrations', 'AI', 'Nora'];
@@ -890,6 +890,7 @@ function AccountTab() {
             // until someone else actually logged in. Both explicitly
             // torn down here instead, before sign-out even completes.
             await clearEmailCache().catch(() => {});
+            clearReconciledCacheMarker();
             await unregisterPushNotifications().catch(() => {});
             await sb.auth.signOut();
             window.location.reload();
