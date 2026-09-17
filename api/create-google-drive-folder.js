@@ -112,6 +112,71 @@ async function findOrCreateFolder(accessToken, parentFolderId, folderName) {
   return { id: created.id, webViewLink: created.webViewLink };
 }
 
+async function driveUploadFile(accessToken, { parentFolderId, filename, buffer, mimeType }) {
+  const metadata = { name: filename, parents: [parentFolderId] };
+
+  // Simple multipart upload for anything reasonably sized (covers
+  // every document this app generates — notices, awards, LOAs are
+  // all well under this). Resumable upload for anything larger,
+  // matching the same size-based branching onedrive-upload.js already
+  // uses (simple PUT vs chunked session).
+  if (buffer.length <= 5 * 1024 * 1024) {
+    const boundary = 'nora_upload_' + Math.random().toString(36).slice(2);
+    const metadataPart = Buffer.from(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`
+    );
+    const filePartHeader = Buffer.from(
+      `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`
+    );
+    const closing = Buffer.from(`\r\n--${boundary}--`);
+    const body = Buffer.concat([metadataPart, filePartHeader, buffer, closing]);
+
+    const res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,name',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'Drive upload failed');
+    return { id: data.id, webViewLink: data.webViewLink, name: data.name };
+  }
+
+  // Resumable upload for larger files.
+  const startRes = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,name',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType,
+      },
+      body: JSON.stringify(metadata),
+    }
+  );
+  if (!startRes.ok) {
+    const errData = await startRes.json().catch(() => ({}));
+    throw new Error(errData.error?.message || 'Drive resumable upload session failed to start');
+  }
+  const uploadUrl = startRes.headers.get('location');
+  if (!uploadUrl) throw new Error('Drive did not return a resumable upload URL');
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType, 'Content-Length': String(buffer.length) },
+    body: buffer,
+  });
+  const putData = await putRes.json();
+  if (!putRes.ok) throw new Error(putData.error?.message || 'Drive resumable upload failed');
+  return { id: putData.id, webViewLink: putData.webViewLink, name: putData.name };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -128,7 +193,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { user_id, action, folder_name, project_address, ao_address, project_folder_id } = req.body;
+    const { user_id, action, folder_name, project_address, ao_address, project_folder_id, filename, content_base64, content_type } = req.body;
 
     if (!user_id || !action) {
       return res.status(400).json({ error: 'Missing user_id or action' });
@@ -203,6 +268,33 @@ export default async function handler(req, res) {
         success: true,
         folder_id: aoFolder.id,
         web_url: aoFolder.webViewLink,
+      });
+    }
+
+    if (action === 'upload_file') {
+      if (!project_folder_id) {
+        return res.status(400).json({ error: 'Missing project_folder_id (the parent Drive folder to upload into)' });
+      }
+      if (!filename || !content_base64) {
+        return res.status(400).json({ error: 'Missing filename or content_base64' });
+      }
+
+      const buffer = Buffer.from(content_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      const sanitisedName = String(filename).replace(/[\\/:*?"<>|]/g, '-').trim();
+      const mimeType = content_type || 'application/octet-stream';
+
+      const uploaded = await driveUploadFile(accessToken, {
+        parentFolderId: project_folder_id,
+        filename: sanitisedName,
+        buffer,
+        mimeType,
+      });
+
+      return res.status(200).json({
+        success: true,
+        item_id: uploaded.id,
+        web_url: uploaded.webViewLink,
+        name: uploaded.name,
       });
     }
 

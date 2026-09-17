@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { uploadDocument } from '../../utils/providers';
 
 const INSERT_OPTIONS = [
   { value: 'after_last', label: 'After last page' },
@@ -353,21 +354,29 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
   const finalise104b = useCallback(async ({ pack, action }) => {
     const ao = pack.ao;
+    // Fixed 2026-09-17, real, confirmed bug found while starting the
+    // document-saving work properly, same class as several others
+    // fixed tonight: this only ever checked onedrive_folder_id, and
+    // called /api/onedrive-upload directly — silently a hard failure
+    // ("No OneDrive folder is recorded") for any Google Drive
+    // account, since the folder id it needed lives in
+    // google_drive_folder_id instead. Google Drive had no file-upload
+    // capability at all until now (only folder creation existed) —
+    // built alongside this fix. Now goes through the provider-aware
+    // uploadDocument() (providers.js), matching the same pattern
+    // already established for folder creation.
     const folderId = pack.saveTarget === 'ao_folder'
-      ? (ao?.onedrive_folder_id || project?.onedrive_folder_id)
-      : project?.onedrive_folder_id;
-    if (!folderId) throw new Error('No OneDrive folder is recorded for this adjoining owner or project.');
+      ? (ao?.onedrive_folder_id || ao?.google_drive_folder_id || project?.onedrive_folder_id || project?.google_drive_folder_id)
+      : (project?.onedrive_folder_id || project?.google_drive_folder_id);
+    if (!folderId) throw new Error('No storage folder is recorded for this adjoining owner or project.');
 
+    const { data: { user } } = await sb.auth.getUser();
+    const userId = user?.id;
     const userEmail = await getCurrentUserEmail();
-    if (!userEmail) throw new Error('Could not determine your account — please refresh and try again.');
+    if (!userId || !userEmail) throw new Error('Could not determine your account — please refresh and try again.');
 
-    const uploadRes = await fetch('/api/onedrive-upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userEmail, folder_id: folderId, filename: pack.fileName, content_base64: pack.pdf_b64, content_type: 'application/pdf' }),
-    });
-    const uploadData = await uploadRes.json().catch(() => ({}));
-    if (!uploadRes.ok || uploadData?.success === false) throw new Error(uploadData?.error || 'Could not save the PDF to OneDrive.');
+    const uploadData = await uploadDocument(userId, userEmail, folderId, pack.fileName, pack.pdf_b64, 'application/pdf');
+    if (!uploadData?.success) throw new Error(uploadData?.error || 'Could not save the PDF to storage.');
 
     if (typeof currentEntry?.onConfirm === 'function') {
       await currentEntry.onConfirm();

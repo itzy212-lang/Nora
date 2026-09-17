@@ -176,6 +176,68 @@ export async function createAOFolder(userId, projectFolderId, aoAddress) {
 }
 
 /**
+ * Upload a generated document (notice, award, LOA PDF, etc.) into the
+ * user's configured storage provider, into an existing folder there.
+ * Needs both identifiers because the two providers' upload endpoints
+ * are keyed differently: OneDrive's (onedrive-upload.js) matches
+ * email_accounts.user_id, which stores plain email for existing
+ * accounts; Google Drive's (create-google-drive-folder.js) matches
+ * user_integrations.user_id, a real UUID — same dual-identifier
+ * pattern already handled for folder creation above.
+ */
+export async function uploadDocument(userId, userEmail, folderId, fileName, contentBase64, mimeType) {
+  try {
+    const integrations = await getUserIntegrations(userId);
+
+    if (integrations.storage_provider === 'googledrive') {
+      const response = await fetch('/api/create-google-drive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          action: 'upload_file',
+          project_folder_id: folderId,
+          filename: fileName,
+          content_base64: contentBase64,
+          content_type: mimeType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Google Drive upload failed');
+      }
+
+      const result = await response.json();
+      return { ...result, provider: 'googledrive' };
+    } else {
+      const response = await fetch('/api/onedrive-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userEmail,
+          folder_id: folderId,
+          filename: fileName,
+          content_base64: contentBase64,
+          content_type: mimeType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'OneDrive upload failed');
+      }
+
+      const result = await response.json();
+      return { ...result, provider: 'onedrive' };
+    }
+  } catch (err) {
+    console.error('Document upload error:', err);
+    throw err;
+  }
+}
+
+/**
  * Check if user has Gmail configured and connected
  */
 export async function hasGmailConnected(userId) {

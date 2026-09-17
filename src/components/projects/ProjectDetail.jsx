@@ -15,7 +15,7 @@ import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
-import { createAOFolder } from '../../utils/providers';
+import { createAOFolder, uploadDocument } from '../../utils/providers';
 import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 
@@ -4733,7 +4733,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         <NoticeReviewModal
           aoQueue={reviewQueue.aoQueue}
           project={reviewQueue.project}
-          onComplete={async (packs) => {
+          onComplete={async (packs, action) => {
             setReviewQueue(null);
             const rq = reviewQueue; // capture before null
             const attachments = [];
@@ -4779,35 +4779,69 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                 }
               }
 
-              // Upload PDF to OneDrive
+              // Fixed 2026-09-17, real, confirmed bug found while
+              // starting the document-saving work properly, same
+              // class as several others fixed tonight: only checked
+              // onedrive_folder_id. For a Google Drive project this
+              // was never null-safe-guarded into the "no folder"
+              // branch either — it silently fell back to a local
+              // download instead of actually saving to that Drive
+              // folder, even though a perfectly valid one existed.
+              // Now checks both, and goes through the provider-aware
+              // uploadDocument() (providers.js) instead of calling
+              // OneDrive directly.
               const folderId = pack.saveTarget === 'ao_folder'
-                ? pack.ao?.onedrive_folder_id
-                : project?.onedrive_folder_id;
+                ? (pack.ao?.onedrive_folder_id || pack.ao?.google_drive_folder_id || project?.onedrive_folder_id || project?.google_drive_folder_id)
+                : (project?.onedrive_folder_id || project?.google_drive_folder_id);
               if (folderId) {
+                const { data: { user: saveUser } } = await sb.auth.getUser();
                 const userEmail = await getCurrentUserEmail();
-                if (!userEmail) {
-                  console.warn('[ProjectDetail] Could not determine current user — falling back to local download instead of OneDrive save.');
+                if (!saveUser?.id || !userEmail) {
+                  console.warn('[ProjectDetail] Could not determine current user — falling back to local download instead of storage save.');
                   downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
                 } else {
-                await fetch('/api/onedrive-upload', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    user_id: userEmail,
-                    folder_id: folderId,
-                    filename: pack.fileName,
-                    content_base64: pack.pdf_b64,
-                    content_type: 'application/pdf',
-                  }),
-                });
+                  try {
+                    await uploadDocument(saveUser.id, userEmail, folderId, pack.fileName, pack.pdf_b64, 'application/pdf');
+                  } catch (uploadErr) {
+                    console.warn('[ProjectDetail] Storage save failed, falling back to local download:', uploadErr.message);
+                    downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
+                  }
                 }
               } else {
                 downloadB64File(pack.pdf_b64, pack.fileName, 'application/pdf');
               }
-              attachments.push({ fileName: pack.fileName, pdf_b64: pack.pdf_b64 });
+              attachments.push({ fileName: pack.fileName, pdf_b64: pack.pdf_b64, ao: pack.ao });
             }
-            // TODO: open email composer pre-filled with BO email + all PDF attachments
-            alert(`${packs.length} notice pack(s) ready. Email to building owner prepared.`);
+            // Fixed 2026-09-17, real, confirmed bug reported live:
+            // "Save & Email" never actually did anything beyond this
+            // alert — the attachments were gathered into the array
+            // above but nothing ever opened a composer with them, no
+            // matter which button was pressed. Matches the working
+            // pattern already used for the 10(4)(b) flow: one compose
+            // event per pack, addressed to that AO (or their
+            // surveyor), with the generated PDF attached.
+            if (action === 'save_email') {
+              attachments.forEach(att => {
+                const ao = att.ao;
+                const surveyorEmail = ao?.surv_email || ao?.surveyorEmail || '';
+                const aoEmail = ao?.email || ao?.ao_email || '';
+                const to = surveyorEmail || aoEmail;
+                const cc = surveyorEmail && aoEmail && surveyorEmail.toLowerCase() !== aoEmail.toLowerCase() ? aoEmail : '';
+                window.dispatchEvent(new CustomEvent('ely:open-project-composer', {
+                  detail: {
+                    mode: 'compose',
+                    projectId: project?.id,
+                    to,
+                    cc,
+                    subject: `${project?.bo_premise_address || 'Notice'} — ${ao?.premise || ao?.address || ''}`.trim(),
+                    aoAddresses: [ao?.premise || ao?.address || ''].filter(Boolean),
+                    attachments: [{ name: att.fileName, type: 'application/pdf', contentType: 'application/pdf', contentBytes: att.pdf_b64, source: 'generated' }],
+                  },
+                }));
+              });
+            } else {
+              alert(`${packs.length} notice pack(s) saved.`);
+            }
           }}
           onBack={() => {
             // Reopen NoticeServingModal with original form data
