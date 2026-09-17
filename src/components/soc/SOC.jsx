@@ -106,7 +106,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const initRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'init_session', project_id: projectId, ao_id: aoId, ao_address: aoAddr, force_new: forceNew }),
+      body: JSON.stringify({
+        action: 'init_session',
+        project_id: projectId,
+        ao_id: aoId,
+        ao_address: aoAddr,
+        force_new: forceNew,
+        user_id: state.currentUser?.id || state.currentUser?.email,
+      }),
     });
     if (!initRes.ok) {
       console.error('[SOC] init_session HTTP error:', initRes.status);
@@ -158,9 +165,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     }
 
     return initData.session_id;
-
-    return initData.session_id;
-  }, [projectId]);
+  }, [projectId, state.currentUser]);
 
   // ── Load session history for sidebar ────────────────────────────────────
   const loadSessionHistory = useCallback(async () => {
@@ -328,7 +333,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const saveRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save_note', session_id: newSessionId || socSessionId, content: userContent, project_id: projectId || null }),
+      body: JSON.stringify({
+        action: 'save_note',
+        session_id: newSessionId || socSessionId,
+        content: userContent,
+        project_id: projectId || null,
+        user_id: state.currentUser?.id || state.currentUser?.email,
+      }),
     });
     if (saveRes.ok) {
       // Detect note type for acknowledgement
@@ -354,7 +365,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       console.error('[SOC] save_note failed:', err);
       setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
     }
-  }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex]);
+  }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex, state.currentUser]);
 
   const handleMicToggle = useCallback(() => {
     if (isRecording) {
@@ -596,6 +607,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           ao_premise_address: selectedAOAddress,
           ao_service_address: selectedAO?.service_address || selectedAO?.serviceAddress || selectedAO?.reg_addr || selectedAOAddress || '',
           force_reextract: true,
+          user_id: state.currentUser?.id || state.currentUser?.email,
         }),
       });
 
@@ -668,7 +680,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setProcessing(false);
       setProcessingStatus('');
     }
-  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, socType, stopRecording, textInput, dualAIEnabled]);
+  }, [messages, projectId, selectedAO, selectedAOAddress, selectedAOIndex, socSessionId, socType, stopRecording, textInput, dualAIEnabled, state.currentUser]);
 
   const renderSocData = useCallback(async (socData) => {
     const res = await fetch('/api/generate-soc', {
@@ -681,6 +693,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         ao_name: aoName(selectedAO),
         ao_address: selectedAOAddress,
         ao_premise_address: selectedAOAddress,
+        user_id: state.currentUser?.id || state.currentUser?.email,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -720,7 +733,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     }
     if (data.report_id) setReportId(data.report_id);
     return data.preview_html;
-  }, [projectId, selectedAO, selectedAOIndex, selectedAOAddress]);
+  }, [projectId, selectedAO, selectedAOIndex, selectedAOAddress, state.currentUser]);
 
   // ── Get re-rendered HTML from current edited sections ───────────────────
   const getRenderedHtml = useCallback(async () => {

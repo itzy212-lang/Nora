@@ -83,11 +83,19 @@ export default async function handler(req, res) {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { action, project_id, ao_id, ao_address, session_id, content, force_new } = req.body;
+    const { action, project_id, ao_id, ao_address, session_id, content, force_new, user_id } = req.body;
 
     // Init or find session for this project+AO
     if (action === 'init_session') {
       if (!project_id || !ao_id) return res.status(400).json({ error: 'project_id and ao_id required' });
+      // Real, confirmed bug: this previously hardcoded
+      // 'itzy212@gmail.com' unconditionally for every SOC session
+      // created here, regardless of who was actually using the app —
+      // every user's SOC session was attributed to one account. Now
+      // uses the real caller's id (added to the SOC.jsx request
+      // body); fails with a clear 400 rather than guessing an owner
+      // if it's ever missing.
+      if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
       // Find existing — unless force_new is set, in which case always create fresh
       if (!force_new) {
@@ -109,7 +117,7 @@ export default async function handler(req, res) {
       const { data: created, error } = await supabase
         .from('ai_sessions')
         .insert({
-          user_id: 'itzy212@gmail.com',
+          user_id: user_id,
           project_id,
           ao_id: String(ao_id),
           session_type: 'soc',
@@ -134,6 +142,7 @@ export default async function handler(req, res) {
         content,
         project_id: project_id || null,
         surface: 'soc',
+        user_id: user_id || null,
       });
 
       // Update last_message_at on session

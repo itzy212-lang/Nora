@@ -1312,7 +1312,18 @@ export default async function handler(req, res) {
       ao_service_address,
       structured_data,
       final_soc_data,
+      user_id,
     } = req.body || {};
+
+    // Real, confirmed bug: this previously hardcoded 'itzy212@gmail.com'
+    // unconditionally for every ai_sessions/ai_messages row this
+    // endpoint writes, regardless of who was actually generating the
+    // SOC — every user's SOC chat activity was attributed to one
+    // account. user_id now comes from the actual authenticated caller
+    // (added to the SOC.jsx request body); fails closed (skips the
+    // project-chat save, doesn't guess an owner) rather than falling
+    // back to a hardcoded identity if it's ever missing.
+    const socUserId = user_id || null;
 
     // Validate ao_id — Supabase expects a UUID; sanitise to null if invalid
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1524,6 +1535,9 @@ export default async function handler(req, res) {
     }
 
     // Save raw notes to project chat so they're accessible later
+    if (!socUserId) {
+      console.warn('[generate-soc] No user_id on request — skipping project chat save rather than guessing an owner');
+    } else {
     try {
       const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       const aoLabel = ao_name || ao_names || '';
@@ -1536,7 +1550,7 @@ export default async function handler(req, res) {
         .select('id')
         .eq('project_id', project_id)
         .eq('session_type', 'soc_notes')
-        .eq('user_id', 'itzy212@gmail.com')
+        .eq('user_id', socUserId)
         .like('auto_title', `%${aoKey}%`)
         .limit(1);
 
@@ -1546,7 +1560,7 @@ export default async function handler(req, res) {
         const { data: newSession } = await supabase
           .from('ai_sessions')
           .insert([{
-            user_id: 'itzy212@gmail.com',
+            user_id: socUserId,
             project_id: project_id,
             title: chatTitle,
             auto_title: chatTitle,
@@ -1563,23 +1577,12 @@ export default async function handler(req, res) {
         await supabase.from('ai_sessions').update({ title: chatTitle, auto_title: chatTitle }).eq('id', chatSessionId);
       }
 
-      const sessionData = chatSessionId ? { id: chatSessionId } : null        .insert([{
-          user_id: 'itzy212@gmail.com',
-          project_id: project_id,
-          title: chatTitle,
-          auto_title: chatTitle,
-          surface: 'project_chat',
-          session_type: 'soc_notes',
-          context_scope: 'project',
-          metadata: {
-            source: 'soc_generator',
-            report_id: report_id || null,
-            ao_name: aoLabel || null,
-            created_from: 'generate-soc',
-          },
-        }])
-        .select('id')
-        .single();
+      // Note: a broken duplicate insert used to live here (a ternary
+      // whose false-branch called .insert() on `null`, which would
+      // throw and get silently swallowed by the catch below whenever
+      // chatSessionId was falsy) — removed; the session is already
+      // created/found above.
+      const sessionData = chatSessionId ? { id: chatSessionId } : null;
 
       if (sessionData?.id) {
         await supabase
@@ -1591,13 +1594,14 @@ export default async function handler(req, res) {
             project_id: project_id,
             surface: 'project_chat',
             source_type: 'soc_notes',
-            user_id: 'itzy212@gmail.com',
+            user_id: socUserId,
           }]);
 
         console.log('[generate-soc] raw notes saved to project chat session:', sessionData.id);
       }
     } catch (chatSaveError) {
       console.warn('[generate-soc] project chat save skipped:', chatSaveError.message);
+    }
     }
 
     return res.status(200).json({
