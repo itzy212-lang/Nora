@@ -209,6 +209,13 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
                         <div style={{
                           fontSize: 13.5, color: colourFor(task), fontWeight: 500,
                           textDecoration: complete ? 'line-through' : 'none',
+                          // Fixed 2026-09-17, on request: strikethrough line
+                          // itself should always be red, regardless of the
+                          // task's own text colour (which stays whatever
+                          // colourFor gives it) — same thickness/style,
+                          // just the line colour overridden separately from
+                          // the text colour it'd otherwise inherit.
+                          textDecorationColor: complete ? '#dc2626' : undefined,
                         }}>
                           {task.title}
                         </div>
