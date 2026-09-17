@@ -103,6 +103,26 @@ const INSERT_OPTIONS = [
   { value: 'after_number', label: 'After page…' },
 ];
 
+// Fixed 2026-09-17, real, confirmed bug reported live: attaching a
+// PDF "went through the process" (file picked, Insert tapped) but
+// nothing was ever actually added, and the "+ Add page" button then
+// stayed permanently disabled afterward. No error alert appeared —
+// which rules out anything actually throwing, and points instead at
+// a promise that simply never settles either way, same shape as
+// several unguarded-hang bugs already found and fixed elsewhere
+// tonight (Inbox loading). Three real candidates for that hang here,
+// none of which had a timeout: the FileReader read, and the two
+// network calls (split-pdf, merge-pdfs-b64) — any one of them
+// silently never resolving leaves `generating` stuck true forever,
+// which is exactly what a permanently-disabled button (disabled=
+// {generating}) looks like from the outside.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+  ]);
+}
+
 function btn(variant, disabled = false) {
   const base = {
     padding: '8px 18px',
@@ -307,11 +327,15 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
   const mergePageList = useCallback(async (pageList) => {
     if (!pageList.length) throw new Error('The pack must contain at least one page');
-    const response = await fetch('/api/merge-pdfs-b64', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdfs: pageList.map((page, index) => ({ b64: page.b64, name: page.label || `Page ${index + 1}` })) }),
-    });
+    const response = await withTimeout(
+      fetch('/api/merge-pdfs-b64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfs: pageList.map((page, index) => ({ b64: page.b64, name: page.label || `Page ${index + 1}` })) }),
+      }),
+      30000,
+      'Rebuilding the PDF'
+    );
     const data = await response.json();
     if (!response.ok || !data?.pdf_b64) throw new Error(data?.error || 'Could not rebuild the PDF');
     replacePreview(data.pdf_b64);
@@ -407,18 +431,22 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     setShowAttach(false);
     setGenerating(true);
     try {
-      const attachB64 = await new Promise((resolve, reject) => {
+      const attachB64 = await withTimeout(new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result).split(',')[1]);
         reader.onerror = () => reject(new Error('Could not read the selected file'));
         reader.readAsDataURL(file);
-      });
+      }), 30000, 'Reading the selected file');
 
-      const splitRes = await fetch('/api/split-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
-      });
+      const splitRes = await withTimeout(
+        fetch('/api/split-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdf_b64: attachB64, filename: file.name }),
+        }),
+        30000,
+        'Splitting the attached PDF'
+      );
       const split = await splitRes.json();
       if (!splitRes.ok || !split?.pages?.length) throw new Error(split?.error || 'Could not split the attached PDF');
 
