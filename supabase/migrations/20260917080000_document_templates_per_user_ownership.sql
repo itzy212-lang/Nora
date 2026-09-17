@@ -14,6 +14,13 @@
 
 ALTER TABLE document_templates ADD COLUMN IF NOT EXISTS owner_user_id text;
 
+-- A pre-existing plain UNIQUE(template_key) constraint (from before
+-- per-user ownership existed) blocks having more than one row per
+-- template_key at all, which conflicts with this design entirely —
+-- dropped in favour of the two partial indexes below, which express
+-- the actual invariants correctly.
+ALTER TABLE document_templates DROP CONSTRAINT IF EXISTS document_templates_template_key_key;
+
 CREATE UNIQUE INDEX IF NOT EXISTS document_templates_system_default_unique
   ON document_templates (template_key) WHERE owner_user_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS document_templates_owner_unique

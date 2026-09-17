@@ -1,0 +1,44 @@
+-- Repository record of an already-applied one-time data backfill
+-- (2026-09-17), run directly against Supabase as part of adopting
+-- document_templates' new per-user ownership (see migration
+-- 20260917080000). Not idempotent — re-running the INSERT below
+-- would violate document_templates_owner_unique, since it's already
+-- been applied. Recorded here for history, not for replay.
+--
+-- Context: before this, every existing template (system default,
+-- owner_user_id NULL) WAS help@sq1consulting.co.uk's actual working
+-- template — their own logo, their own signature. Making the shared
+-- slot genuinely generic (stripping that branding out) would have
+-- silently stripped it from their own account too, since they had no
+-- separate private copy to fall back to. This copies every current
+-- system-default template into a private row owned by
+-- help@sq1consulting.co.uk (their confirmed working account — the
+-- test account used elsewhere this session, itzy212@gmail.com, is a
+-- separate account and was NOT given a copy), so their own document
+-- generation is unaffected once the system defaults are later
+-- replaced with de-branded versions.
+--
+-- is_comparison_standard deliberately NOT copied (left false on the
+-- new rows) — it marks the one canonical row used as an AI drafting
+-- quality benchmark, a system-wide concept that shouldn't proliferate
+-- onto a private copy, and copying it verbatim would have violated
+-- idx_document_templates_comparison_standard (at most one row per
+-- template_key may have it set).
+
+-- INSERT INTO document_templates (
+--   template_key, label, filename, file_b64, file_size, uploaded_at,
+--   description, storage_path, mime_type, placeholders, template_rules,
+--   is_active, generation_mode, html_template, renderer_code,
+--   renderer_config, extracted_text, is_comparison_standard, owner_user_id,
+--   updated_at
+-- )
+-- SELECT
+--   template_key, label, filename, file_b64, file_size, uploaded_at,
+--   description, storage_path, mime_type, placeholders, template_rules,
+--   is_active, generation_mode, html_template, renderer_code,
+--   renderer_config, extracted_text,
+--   false,
+--   'help@sq1consulting.co.uk',
+--   now()
+-- FROM document_templates
+-- WHERE owner_user_id IS NULL;
