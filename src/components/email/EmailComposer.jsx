@@ -272,7 +272,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
     if (!userEmail) { alert('No logged-in user found. Please log in first.'); return; }
 
     setSending(true);
-    setStatus('Sending via Outlook...');
+    setStatus('Sending...');
 
     try {
       // Body is already HTML from contentEditable — just append signature
