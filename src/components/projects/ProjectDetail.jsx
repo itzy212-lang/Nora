@@ -3893,6 +3893,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       }]).select('id').single();
 
       if (error) throw error;
+      // Fixed 2026-09-17, real, confirmed bug reported live: serving
+      // a notice creates this deadline task directly in the database
+      // with nothing telling Calendar to refresh — Calendar only
+      // reloads on this specific event (nora:task-added, see its own
+      // file) or a genuine full app reload. Inbox.jsx's booking
+      // feature already correctly fires this after creating a task;
+      // this — the actual notice-serving deadline task, arguably the
+      // most important one — never did.
+      window.dispatchEvent(new Event('nora:task-added'));
       return data;
     } catch (err) {
       console.warn('Could not create task:', err?.message || err);
@@ -3913,6 +3922,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         .ilike('description', `%AO_REF:${aoToken}%`);
       
       if (error) console.warn(`[deleteDeadlineTask] ${taskType} delete failed:`, error.message);
+      else window.dispatchEvent(new Event('nora:task-added')); // same signal Calendar listens for — reused here since it just means "tasks changed, reload"
     } catch (err) {
       console.warn(`[deleteDeadlineTask] ${taskType} delete error:`, err.message);
     }
@@ -4548,6 +4558,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         project_id: project.id,
       }]);
       if (taskError) console.warn('[handlePauseProject] reminder task insert failed:', taskError.message);
+      else window.dispatchEvent(new Event('nora:task-added'));
 
       setProject(prev => ({ ...prev, paused_until: pauseUntilISO }));
       dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, paused_until: pauseUntilISO } });

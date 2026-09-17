@@ -102,6 +102,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
       ? { status: 'complete', completed_at: new Date().toISOString() }
       : { status: 'open', completed_at: null };
     await sb.from('tasks').update(updates).eq('id', task.id);
+    window.dispatchEvent(new Event('nora:task-added')); // same signal Calendar listens for — completing a task should remove it from Calendar's view too
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
   };
 
@@ -247,6 +248,10 @@ function AddTaskInline({ onClose, onCreated }) {
         status: 'open',
         project_id: selectedProject?.id || null,
       }]);
+      // Fixed 2026-09-17, same real gap found and fixed in
+      // ProjectDetail.jsx: nothing told Calendar a task had been
+      // created here either.
+      window.dispatchEvent(new Event('nora:task-added'));
       onCreated();
     } catch (err) {
       console.warn('[AddTaskInline] save failed:', err.message);

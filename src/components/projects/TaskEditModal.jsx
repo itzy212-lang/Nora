@@ -98,6 +98,11 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
         if (err) throw err;
         saved = data;
       }
+      // Fixed 2026-09-17, same real gap found and fixed in
+      // ProjectDetail.jsx and TodoListView.jsx: nothing told Calendar
+      // a task had been created or edited here either — covers both
+      // a new task and a due-date change on an existing one.
+      window.dispatchEvent(new Event('nora:task-added'));
 
       if (form.task_type === 'soc' && project && form.ao_id) {
         await syncSocToAO(project, form.ao_id, {
@@ -122,6 +127,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
       await syncSocToAO(project, task.ao_id, { clear: true });
     }
     await sb.from('tasks').delete().eq('id', task.id);
+    window.dispatchEvent(new Event('nora:task-added')); // same signal Calendar listens for — reused here since it just means "tasks changed, reload"
     onDeleted(task.id);
   };
 
