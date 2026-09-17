@@ -76,9 +76,29 @@ export async function createProjectFolder(userId, projectName, options = {}) {
 
       return response.json();
     } else {
-      // Fall back to existing OneDrive folder creation
-      console.log('Using OneDrive storage');
-      return { folder_id: null, web_url: null };
+      // Fixed 2026-09-17, real, confirmed bug: this branch used to be
+      // a stub — 'console.log("Using OneDrive storage")' and a bare
+      // { folder_id: null, web_url: null } return, never actually
+      // calling the real OneDrive endpoint at all. Every caller using
+      // this abstraction for a OneDrive user silently got back nulls
+      // instead of a real folder. Now genuinely calls it, matching
+      // the same request shape the Google Drive branch above uses.
+      const response = await fetch('/api/onedrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          action: 'create_project_folder',
+          project_address: projectName,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'OneDrive folder creation failed');
+      }
+
+      return response.json();
     }
   } catch (err) {
     console.error('Project folder creation error:', err);
@@ -113,9 +133,25 @@ export async function createAOFolder(userId, projectFolderId, aoAddress) {
 
       return response.json();
     } else {
-      // Fall back to existing OneDrive folder creation
-      console.log('Using OneDrive storage');
-      return { folder_id: null, web_url: null };
+      // Fixed 2026-09-17, same real bug as createProjectFolder above —
+      // this was a stub that never called the real OneDrive endpoint.
+      const response = await fetch('/api/onedrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          action: 'create_ao_folder',
+          project_folder_id: projectFolderId,
+          ao_address: aoAddress,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'OneDrive folder creation failed');
+      }
+
+      return response.json();
     }
   } catch (err) {
     console.error('AO folder creation error:', err);

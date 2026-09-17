@@ -15,6 +15,7 @@ import { buildNoticePlaceholders } from '../../utils/buildNoticePlaceholders';
 import { buildAwardPlaceholders } from '../../utils/buildAwardPlaceholders';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
+import { createAOFolder } from '../../utils/providers';
 import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 
@@ -3748,59 +3749,50 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // own copy of this project.
     dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: updatedAOs } });
 
-    // Auto-create OneDrive subfolder for new AOs and save folder ID back
+    // Auto-create a storage subfolder for new AOs and save folder ID back.
+    // Fixed 2026-09-17, real, confirmed bug reported live: this always
+    // called /api/onedrive-folder directly, unconditionally — correct
+    // for an Outlook/OneDrive account, but silently a no-op for a
+    // Gmail/Google Drive account, since project.onedrive_folder_id is
+    // never set for a project whose folder was created via Google
+    // Drive (it's in project.google_drive_folder_id instead). No
+    // error, just quietly never created a folder — exactly the gap
+    // flagged earlier tonight ("wire up AO folder creation for Google
+    // Drive") and now hit directly. Uses the provider-aware
+    // createAOFolder() (providers.js) instead, which was already
+    // built for exactly this but wasn't wired in here yet — and whose
+    // own OneDrive branch was, until just now, itself an unfinished
+    // stub that never called the real endpoint either.
     if (!existingAO) {
       const aoAddress = form.premise || '';
-      // Fixed 2026-09-17, real, confirmed bug reported live: 'data'
-      // was never defined anywhere in this function — leftover from
-      // handleSaveProjectEdit just above, which genuinely has a local
-      // `data` variable for this exact pattern; copy-pasted here
-      // without adjusting for this function's own scope. This threw
-      // a ReferenceError on every single new AO added, but only
-      // *after* the AO had already been saved successfully (the save
-      // itself, above, completes first) — so it looked like "the
-      // error pops up but it saves anyway", which is exactly what was
-      // happening: the save always worked, only this later, unrelated
-      // OneDrive-folder step crashed. project.onedrive_folder_id is
-      // already the correct source here.
-      const projectFolderId = project.onedrive_folder_id;
+      const projectFolderId = project.onedrive_folder_id || project.google_drive_folder_id;
       if (aoAddress && projectFolderId) {
         try {
           const userEmail = await getCurrentUserEmail();
           if (!userEmail) {
-            console.warn('[ProjectDetail] Could not determine current user — skipping AO OneDrive folder creation.');
+            console.warn('[ProjectDetail] Could not determine current user — skipping AO storage folder creation.');
           } else {
-          const folderRes = await fetch('/api/onedrive-folder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: userEmail,
-              action: 'create_ao_folder',
-              project_folder_id: projectFolderId,
-              ao_address: aoAddress,
-            }),
-          });
-          const folderData = await folderRes.json();
-          if (folderData.success && folderData.folder_id) {
-            // Save folder ID into the AO's entry in the aos array
-            const withFolder = updatedAOs.map(a =>
-              a.id === newAO.id ? {
-                ...a,
-                onedrive_folder_id: folderData.folder_id,
-                onedrive_folder_url: folderData.web_url || null,
-              } : a
-            );
-            const { error: folderSaveError } = await saveAdjoiningOwners(project.id, withFolder);
-            if (folderSaveError) {
-              console.warn('[handleSaveAO] Failed to save folder ID:', folderSaveError.message);
-            } else {
-              setProject(prev => ({ ...prev, aos: withFolder }));
-              dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
+            const folderData = await createAOFolder(userEmail, projectFolderId, aoAddress);
+            if (folderData?.success && folderData?.folder_id) {
+              // Save folder ID into the AO's entry in the aos array
+              const withFolder = updatedAOs.map(a =>
+                a.id === newAO.id ? {
+                  ...a,
+                  onedrive_folder_id: folderData.folder_id,
+                  onedrive_folder_url: folderData.web_url || null,
+                } : a
+              );
+              const { error: folderSaveError } = await saveAdjoiningOwners(project.id, withFolder);
+              if (folderSaveError) {
+                console.warn('[handleSaveAO] Failed to save folder ID:', folderSaveError.message);
+              } else {
+                setProject(prev => ({ ...prev, aos: withFolder }));
+                dispatch({ type: 'UPDATE_PROJECT', payload: { id: project.id, aos: withFolder } });
+              }
             }
           }
-          }
         } catch (err) {
-          console.warn('[handleSaveAO] OneDrive AO folder creation failed:', err.message);
+          console.warn('[handleSaveAO] AO storage folder creation failed:', err.message);
         }
       }
     }
