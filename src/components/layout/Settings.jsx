@@ -1085,36 +1085,29 @@ function NoraTab() {
   );
 }
 
-// Fixed 2026-09-17, real, confirmed correction — the first version of
-// this built against user_brain (V1), which turned out to be the
-// wrong table: resolveArchitectureVersion (v2-operating-system.js) is
-// hardcoded to 'v2' for every user, permanently, as of 15 September —
-// V1 is left in place but nothing reads it any more. The live pipeline
-// (runV2Pipeline, resolveEffectiveVoice) reads user_brain_v2's
-// structured columns directly at request time — confirmed in
-// v2-voice-resolution.js before rebuilding this. No brain_content
-// rebuilding needed here the way V1 required — V2 assembles its
-// prompt from the columns themselves.
-//
-// Also dropped the gold-standard-email field the first version had:
-// V2 already has a real, working, actively-used gold standard example
-// system (ai_drafting_examples, checked directly — two active rows,
-// genuinely queried by the live pipeline) — it's just shared across
-// every user rather than personal, unlike everything else here. A
-// second, personal field for the same concept would have been
-// redundant, so left out rather than built for its own sake.
-//
-// Left blank, not pre-filled, for a new user: unlike V1, the V2
-// pipeline already layers in a real platform-wide default voice
-// automatically (ai_instruction_sets, name='default_voice_profile_v2',
-// checked directly — active, real content) whenever voice_content is
-// empty. Pre-filling the field with a snapshot of that default text
-// would be worse than leaving it blank — a snapshot goes stale the
-// moment the platform default is later improved, whereas an empty
-// field keeps inheriting it live. Placeholder text (not an actual
-// value) shows a sensible starting point instead.
+// Fixed 2026-09-17, on direct instruction, correcting my own earlier
+// reasoning here: fields start genuinely pre-populated for a new
+// user, not blank — "it means the user has a brain to start with,
+// and then they can modify it." voice_content and banned_phrases are
+// pre-filled with the platform's own actual default text (pulled
+// directly from ai_instruction_sets, name='default_voice_profile_v2'
+// — not written fresh here), sign_off with "Kind regards," matching
+// what that same default text already assumes. identity_content and
+// fee_structure_content stay blank — a name, a company, a price list
+// have no sensible generic version the way a writing style does.
+const V2_DEFAULTS = {
+  identity_content: '',
+  voice_content: `Write as an experienced professional speaking naturally to another professional. The writing should feel: conversational, friendly, warm, approachable, confident, measured, practical, commercially sensible. The recipient should feel they are communicating with a real person, not reading a carefully constructed corporate letter. Professional does not mean formal — avoid sounding like a solicitor, corporate adviser or AI assistant unless expressly asked for that style. The finished correspondence should feel as though the writer considered the issue carefully and then explained it naturally in their own words.
+
+Prefer natural conversational wording over stock phrases — "I think...", "In my view...", "I'd suggest...", "That said...", "Just let me know..." — as examples of tone, not fixed templates.
+
+Use UK English. Do not use long dashes or em dashes.`,
+  sign_off: 'Kind regards,',
+  fee_structure_content: '',
+  banned_phrases: `duly, accordingly (unless genuinely necessary), for the avoidance of doubt, notwithstanding the foregoing, in this regard, at this juncture, please be advised, I trust this clarifies, I would be grateful if, kindly confirm, pursuant to, I write further to, we refer to, I look forward to hearing from you, please do not hesitate to contact me, I hope this finds you well, I trust this meets your requirements.`,
+};
+
 function UserBrainV2Section() {
-  const BLANK = { identity_content: '', voice_content: '', sign_off: '', fee_structure_content: '', banned_phrases: '' };
   const [fields, setFields] = React.useState(null);
   const [userId, setUserId] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -1128,12 +1121,12 @@ function UserBrainV2Section() {
       setUserId(user.id);
       const { data } = await sb.from('user_brain_v2').select('*').eq('user_id', user.id).maybeSingle();
       setFields(data ? {
-        identity_content: data.identity_content ?? '',
-        voice_content: data.voice_content ?? '',
-        sign_off: data.sign_off ?? '',
-        fee_structure_content: data.fee_structure_content ?? '',
-        banned_phrases: data.banned_phrases ?? '',
-      } : { ...BLANK });
+        identity_content: data.identity_content ?? V2_DEFAULTS.identity_content,
+        voice_content: data.voice_content ?? V2_DEFAULTS.voice_content,
+        sign_off: data.sign_off ?? V2_DEFAULTS.sign_off,
+        fee_structure_content: data.fee_structure_content ?? V2_DEFAULTS.fee_structure_content,
+        banned_phrases: data.banned_phrases ?? V2_DEFAULTS.banned_phrases,
+      } : { ...V2_DEFAULTS });
     })();
   }, []);
 
@@ -1148,7 +1141,7 @@ function UserBrainV2Section() {
     else { setSaved(true); setTimeout(() => setSaved(false), 2000); }
   };
 
-  const field = (key, label, desc, placeholder, rows = 4) => (
+  const field = (key, label, desc, rows = 4) => (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
       {desc && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>{desc}</div>}
@@ -1156,7 +1149,6 @@ function UserBrainV2Section() {
         value={fields[key]}
         onChange={e => setFields(prev => ({ ...prev, [key]: e.target.value }))}
         rows={rows}
-        placeholder={placeholder}
         style={{
           width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13,
           borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)',
@@ -1170,18 +1162,18 @@ function UserBrainV2Section() {
     <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Your Nora brain</div>
       <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
-        How Nora drafts and speaks on your behalf, specifically. Leave anything blank to use Nora's sensible defaults — whatever you add here is layered on top as your own personal preference, not a replacement.
+        How Nora drafts and speaks on your behalf, specifically. Writing voice, sign-off and banned phrases start pre-filled with sensible defaults — edit them however you like. Identity and fee structure are entirely yours to fill in.
       </div>
 
       {!fields ? (
         <div style={{ fontSize: 13, color: 'var(--text3)' }}>{error || 'Loading…'}</div>
       ) : (
         <>
-          {field('identity_content', 'Identity', 'Who you are and how Nora should refer to you and your practice.', 'e.g. "The user is Jane Smith of ABC Surveying. Write on behalf of Jane unless the context identifies another sender."', 3)}
-          {field('voice_content', 'Writing voice', 'How Nora should sound — tone, formality, sentence style. Leave blank to use Nora\'s standard voice.', 'e.g. "Direct, warm, conversational — avoid corporate or legalistic phrasing."', 4)}
-          {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 'e.g. "Kind regards,"', 1)}
-          {field('fee_structure_content', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 'e.g. notice fees, schedule of condition fees, dissent options...', 8)}
-          {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 'e.g. "duly, for the avoidance of doubt, I trust this finds you well"', 4)}
+          {field('identity_content', 'Identity', 'Who you are and how Nora should refer to you and your practice.', 3)}
+          {field('voice_content', 'Writing voice', 'How Nora should sound — tone, formality, sentence style.', 6)}
+          {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 1)}
+          {field('fee_structure_content', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 8)}
+          {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 4)}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 }}>
             {error && <div style={{ fontSize: 12, color: 'var(--red, #dc2626)' }}>{error}</div>}
@@ -1203,6 +1195,7 @@ function UserBrainV2Section() {
     </div>
   );
 }
+
 
 
 function AITab() {
