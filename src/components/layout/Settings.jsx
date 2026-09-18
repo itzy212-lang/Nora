@@ -1095,6 +1095,324 @@ function NoraTab() {
 // what that same default text already assumes. identity_content and
 // fee_structure_content stay blank — a name, a company, a price list
 // have no sensible generic version the way a writing style does.
+const SOC_GOLD_STANDARD_DEFAULT = `EXAMPLES — SQUARE ONE SCHEDULE OF CONDITION STANDARD
+
+FACTUAL FIDELITY EXAMPLES — apply these rules in every observation
+
+──────────────────────────────────────────────────────
+EXAMPLE A — Directional measurement preservation
+
+Raw dictation:
+"from the utility room wall running towards the rear approximately 1.8m has been larder units"
+
+Correct output:
+"Larder units extend approximately 1.8m from the utility room wall towards the rear elevation."
+action: "Record only"
+
+Incorrect (do not produce):
+"Larder units are approximately 1.8m high." — WRONG: axis changed from horizontal distance to vertical height.
+"Larder units of approximately 1.8m in height." — WRONG: same error.
+"Larder units are installed against the party wall, extending approximately 1.8m from the utility room wall towards the rear elevation." — WRONG if the party wall relationship was not stated in the dictation: adds an inferred positional relationship.
+
+──────────────────────────────────────────────────────
+EXAMPLE B — Preserving awkward dictated wording rather than adding formal precision
+
+Raw dictation:
+"there's a crack above the door maybe 200 mil going up, it kind of goes up and maybe a bit to the side"
+
+Correct output:
+"A crack was noted above the door, extending approximately 200mm upward and then slightly to one side."
+action: "Record pre-existing defect"
+
+Incorrect (do not produce):
+"A vertical hairline crack extends approximately 200mm from the door architrave, consistent with shrinkage movement." — WRONG: width invented ("hairline"), element invented ("architrave"), cause invented ("shrinkage"), and the diagonal component was dropped entirely.
+
+──────────────────────────────────────────────────────
+EXAMPLE C — Refusing to infer or classify where dictation is unclear
+
+Raw dictation:
+"the flank wall brickwork, can't really see it properly, something going on at the bottom"
+
+Correct output:
+"The brickwork to the flank wall was not clearly visible. [UNCLEAR: an unidentified condition was dictated at low level — please confirm]"
+action: "Record only"
+
+Incorrect (do not produce):
+"Perished pointing was noted to the lower courses of the flank wall brickwork with evidence of moisture ingress." — WRONG: defect type, material condition, moisture and extent were invented.
+"Some deterioration was noted at low level." — WRONG: deterioration is an unsupported defect classification.
+
+──────────────────────────────────────────────────────
+=====================================================
+
+PREFERRED TERMINOLOGY — always use these terms where applicable:
+
+- "Plaster and emulsion finish" — standard phrasing for painted plaster (walls/ceilings). NOT "plaster paint finish" or generic "paint finish".
+- "Segmental brick arch" — a curved brick arch spanning an opening, bricks laid on edge following the curve, as opposed to a flat/horizontal lintel.
+- "Perished pointing" — for loose, crumbling, or missing mortar pointing. NOT "loose and friable mortar" or "missing pointing".
+- "Perished brickwork" / "localised perished brickwork" — for deteriorated, crumbling, or flaking brick faces. NOT "spalling" or "localised spalling".
+- "Stepped crack" — a crack that follows the mortar joints in a zig-zag pattern rather than running straight through brick or render.
+- "Slight inward lean" / "slight outward lean" — for masonry (parapets, walls, piers) showing a lean out of true.
+- "Render appeared blown at [location]" — for render that has detached/hollowed from the substrate.
+- "Not visible from ground level" — standard limitation phrase when an element could not be inspected due to height/access.
+- "Detailed inspection limited by vantage point" — standard limitation phrase for hard-to-reach elements (chimneys, high-level roofwork) that were visible but not closely inspectable.
+- "Inspection was partially restricted by stored contents" — for cupboards/storage areas where full inspection was not possible.
+- Do NOT use "heavily weathered and over-rendered" or similar vague weathering descriptions — be specific (perished, blown, spalled-equivalent perished brickwork, etc.) rather than generic.
+
+---
+
+EXAMPLE 1 — Painted plaster wall, no defects
+
+Raw: "party wall plaster finish painted no visible defects"
+Required row:
+"The party wall has a painted plaster finish. No visible defects were noted at the time of inspection."
+
+---
+
+EXAMPLE 2 — Wallpaper-lined party wall, no defects
+
+Raw: "party wall wallpaper lined finish no defects"
+Required row:
+"The party wall has a wallpaper-lined finish. No visible defects were noted at the time of inspection."
+
+---
+
+EXAMPLE 3 — Plasterboard ceiling with skim, no defects
+
+Raw: "ceiling plasterboard skim no visible defects"
+Required row:
+"The ceiling is formed in plasterboard with a plaster skim finish. No visible defects were noted at the time of inspection."
+
+---
+
+EXAMPLE 4 — Perished brickwork and mortar pointing
+
+Raw: "brickwork on the flank wall looks perished, pointing eroded in places, especially lower section"
+Required row:
+"Localised sections of perished brickwork and eroded mortar pointing were noted to the lower section of the flank wall."
+
+---
+
+EXAMPLE 5 — Pebble-dash render with cracking
+
+Raw: "pebble dash finish to the upper section, few hairline cracks running vertically, render looks a bit perished in places"
+Required row:
+"The upper section of the elevation has a pebble-dash render finish. Localised sections of perished render and isolated vertical hairline cracks were noted."
+
+---
+
+EXAMPLE 6 — Complex crack route
+
+Raw: "crack starts at the bottom left corner of the window, goes diagonally down, then turns vertical when it gets to the brick course below, runs about 300mm total before it stops"
+Required row:
+"A crack was noted originating from the lower left-hand corner of the window opening and extending diagonally downwards before changing direction and continuing vertically within the brickwork below. The crack extended approximately 300mm in total before terminating."
+
+---
+
+EXAMPLE 7 — Window test, satisfactory
+
+Raw: "UPVC window tested opens and closes no sticking no jamming"
+Required row:
+"The UPVC window was tested and operated satisfactorily without sticking, binding or jamming."
+
+---
+
+EXAMPLE 8 — Window test, partial binding
+
+Raw: "window opens but sticks on the frame, can't open it fully past the frame"
+Required row:
+"The opening leaf was tested and opened partially but bound against the frame, preventing it from opening fully."
+
+---
+
+EXAMPLE 9 — Party wall concealed behind fitted wardrobes
+
+Raw: "party wall is behind floor to ceiling wardrobes, can't see it, accessible in the corner, no defects in the corner section"
+Required row:
+"The party wall is substantially concealed behind fitted floor-to-ceiling wardrobes. A limited section remained visible within the corner and was inspected, with no visible defects noted to the accessible area at the time of inspection."
+
+---
+
+EXAMPLE 10 — Historic water staining, dry at inspection, remote from works
+
+Raw: "some staining on the ceiling looks like old water ingress, dry now, remote from the works"
+Required row:
+"Localised staining, appearing historic in nature, was noted to the ceiling finish. The affected area appeared dry at the time of inspection. Although remote from the proposed notifiable works, this was recorded for scheduling purposes only."
+
+---
+
+EXAMPLE 11 — Skirting open joint with route
+
+Raw: "open joint along top of skirting where it meets the party wall, runs from the door frame to the rear elevation wall"
+Required row:
+"An open joint was noted along the junction between the upper edge of the timber skirting and the party wall, extending from the door frame to the rear elevation wall."
+
+---
+
+EXAMPLE 12 — Bathroom grout and silicone
+
+Raw: "grout around the bath looks perished, silicone at the base of the bath has an open joint along its full length"
+Required row:
+"Localised sections of perished grout were noted around the bath surround. An open joint was noted in the silicone seal at the base of the bath, extending along its full length."
+
+---
+
+EXAMPLE 13 — Photograph-only area
+
+Raw: "loft room is remote from the works, just photographed it, didn't do a full schedule"
+Required row:
+"The loft room is remote from the proposed notifiable works and was documented photographically only."
+
+---
+
+EXAMPLE 14 — Explicit correction, crack classification not stated
+
+Raw: "crack runs from the left-hand corner, sorry, I mean the right-hand corner, diagonally up about 400mm"
+Required row:
+"A crack was noted at the right-hand corner, extending diagonally upwards for approximately 400mm."
+
+Note: "hairline" not used — not stated in dictation and no measurement supports classification.
+
+---
+
+EXAMPLE 15 — Implicit rear outrigger correction
+
+Raw: "starting in the rear extension, rear outrigger, no visible defects noted along the party wall"
+Resolved section: Ground Floor Rear Outrigger. "Rear extension" was a false start — discarded.
+Required row:
+"The party wall within the ground-floor rear outrigger was inspected. No visible defects were noted at the time of inspection."
+
+---
+
+EXAMPLE 16 — Complex bifurcating crack with branching
+
+Raw: "top right corner of the Velux window, crack goes up about 250mm then splits, one branch goes horizontal to the dormer cheek, another traces into the reveal along the head and down the right-hand side to the frame"
+Required row:
+"At the top right-hand corner of the Velux window, a hairline crack extends approximately 250mm upward toward the ridge before bifurcating. One branch extends horizontally toward the dormer cheek, continuing to the junction with the pitched roof slope. A second branch traces into the Velux reveal, running along the junction of the head and right-hand side reveal and terminating at the frame abutment."
+Action: Record pre-existing defect. To be monitored during and following notifiable works.
+
+---
+
+EXAMPLE 17 — Multiple crack runs on chimney breast, numbered sequence
+
+Raw: "chimney breast cracks — vertical diagonal from top left down toward mirror, vertical right of mirror going up branching toward front, two horizontals from behind mirror toward wardrobe with vertical branch down, horizontal left of mirror branching up and down"
+Required row:
+"A complex pattern of cracking is recorded to the face of the chimney breast: (i) a vertical and diagonal crack extending from the top left-hand corner downward toward the mirror fitting; (ii) a vertical crack to the right of the mirror, extending upward and branching toward the front elevation; (iii) two horizontal cracks extending from behind the mirror toward the fitted wardrobe, with a vertical branch extending downward; and (iv) a further horizontal crack to the left of the mirror, with branches extending both upward and downward."
+Action: Record pre-existing defect. Extent photographically recorded.
+
+---
+
+EXAMPLE 18 — Party wall concealed behind wardrobes, chimney breast obscured
+
+Raw: "party wall behind full height fitted wardrobes, chimney breast behind them too, base of chimney breast behind a chest of drawers, no access"
+Required row:
+"The party wall within this room is fully concealed behind full-height fitted wardrobes. The central chimney breast appears to have been partially concealed, with its base obscured by a chest of drawers. No direct inspection of the party wall face was possible in these areas."
+Action: Record only. Access restricted.
+
+---
+
+EXAMPLE 19 — Crack in proximity to works, monitor action
+
+Raw: "vertical crack in plaster about a metre from the party wall, full height floor to ceiling, looks like shrinkage not structural but near the works"
+Required row:
+"A vertical crack is present in the plaster finish approximately 1.0m from the party wall, extending full height from floor level to ceiling. The crack is consistent with shrinkage or restraint cracking and does not appear to be of structural significance. It is, however, in proximity to the proposed notifiable works and should be monitored."
+Action: Record pre-existing defect. Monitor during and following works.
+
+---
+
+EXAMPLE 20 — Historic ceiling staining, dry at inspection
+
+Raw: "ceiling staining looks historic, dry when I inspected, not ongoing"
+Required row:
+"Localised staining, appearing historic in nature, was noted to the ceiling finish. The affected area appeared dry at the time of inspection. No visible evidence of ongoing water ingress was noted at the time of inspection."
+Action: Record pre-existing defect.
+
+---
+
+EXAMPLE 21 — ACTION COLUMN RULES (mandatory)
+
+"Record only" — conditions with no defect; elements remote from works; general finishes in good condition.
+"Record pre-existing defect" — any crack, open joint, staining, deterioration, or operational issue.
+"Record pre-existing defect. Monitor during works." — defects in proximity to the proposed notifiable works.
+"Record pre-existing defect. Nature and extent to be re-assessed post-works." — defects where post-works comparison is needed.
+"Record — not tested" — elements that could not be tested (locked, fixed, inaccessible).
+"Further investigation required" — items requiring specialist input before works commence.
+NEVER use "Record only" for a defect.
+
+---
+
+COMPLETE REFERENCE DOCUMENT — SQUARE ONE SCHEDULE OF CONDITIONS GOLD STANDARD
+This is a complete Schedule of Conditions prepared by Square One Consulting. This represents the required standard of writing, structure, terminology, action column differentiation, crack description, and professional presentation. Study it in full before drafting any output.
+
+PROPERTY: 61 Cissbury Ring South, London N12 7BG (Adjoining Owner: Andrew David Rose & Nicole Louise Rose)
+WORKS AT: 59 Cissbury Ring South, London N12 7BG (Building Owner: Somani Portfolio Ltd)
+DATE OF INSPECTION: Tuesday 22nd April 2026
+PROPOSED WORKS: Loft conversion; construction of a new single-storey rear extension with new foundations within 3 metres of the Adjoining Owners' property; removal of chimney breasts; cutting into the flank wall for the purpose of installing a weathering detail.
+
+SECTION: Front Elevation
+FE-01 | The subject property forms part of a semi-detached pair, linked to the Building Owner's property at No. 59. The party wall is slightly raised above the Building Owner's roof level, with lead flashing tucked down the abutment and lapped beneath the Building Owner's roof covering. The arrangement appeared weathertight at the time of inspection. | Record only
+FE-02 | The external facing brickwork is in generally good condition throughout the front elevation. No significant structural defects or widespread deterioration were observed. | Record only
+FE-03 | To the front bay window, spanning ground to first floor level, a discrete area of missing pointing is present in a vertical alignment, centrally positioned within the bay. The void is approximately equivalent in extent to one full brick in size. No associated cracking or displacement of surrounding masonry is evident. | Record pre-existing defect. Monitor during works.
+FE-04 | The roof covering appears in good condition and is assessed to be relatively recently renewed, exhibiting only minor and isolated areas of moss growth. No lifting, slippage or displacement of roof tiles is noted. | Record only
+FE-05 | A shared central chimney stack is present at the ridge. The lead flashing to the Building Owner's side of the stack appears in good condition, with no visible lifting, displacement or deterioration at the time of inspection. | Record only
+
+SECTION: Loft Space
+LS-01 | The dormer cheek is constructed of plasterboard fixed to a timber frame. The structural member at ridge level is formed in timber; no steel beam is present at this location. | Record only
+LS-02 | At the junction between the bulkhead and the dormer cheek, a vertical hairline crack is present, extending approximately 1.0-1.1 metres downward from the corner. The crack is consistent with differential movement at the interface of two separate elements. | Record pre-existing defect
+LS-03 | At the underside of the timber member supporting the central light fitting, where it meets the dormer cheek on the Building Owner's side, a slight open joint is visible along the line of abutment. | Record pre-existing defect
+LS-04 | To the front elevation side of the ridge, at its junction with the roof slope, a faint hairline crack extends downward along the face of the dormer cheek for a distance of approximately 1.5 metres, dissipating toward the eaves level. | Record pre-existing defect
+LS-05 | At the top right-hand corner of the Velux window (the corner in closest proximity to the Building Owner's side), a vertical hairline crack extends approximately 250mm upward toward the ridge. The crack then bifurcates, with a horizontal branch extending toward the dormer cheek and continuing to the junction with the pitched roof slope. The crack is traced internally into the Velux reveal, running along the junction of the head and right-hand side reveal, terminating at the frame abutment. Refer to photographs. | Record pre-existing defect. To be monitored during and following notifiable works.
+LS-06 | To the rear dormer, which comprises a central sliding door flanked by fixed glazed panes, intermittent vertical cracking is noted at the junction between the fixed pane closest to the Building Owner's side and the dormer cheek. Additional cracking is present along the head of the glazing where it meets the ceiling, extending continuously across the sliding door and adjacent fixed glazing. | Record pre-existing defect
+LS-07 | At the base of the fixed glazed pane closest to the Building Owner's side, at its junction with the sliding door frame, a pronounced crack and open joint is present. This crack tapers from a notably wider opening at low level to a hairline at mid-height, becoming intermittent as it continues toward the head of the frame. | Record pre-existing defect. Nature and extent to be re-assessed post-works.
+LS-08 | Within the front eaves void, the line of the party wall is not visible owing to the presence of boarding and plasterboard lining. No defects are noted to the visible elements within this void and the general condition appears satisfactory. | Record only. Inaccessible area noted.
+LS-09 | Ceiling finishes throughout the loft space are generally in good condition. No defects are noted, with the exception of those associated with the Velux window and front roof slope junction as described at LS-04 and LS-05 above. | Record only
+LS-10 | At the top right-hand corner of the loft door architrave, a hairline crack extends vertically to the underside of the dormer bulkhead. This defect is considered remote from the notifiable works and is recorded photographically. | Record only — remote from notifiable works
+
+SECTION: First Floor — Front Bedroom
+FF-01 | The party wall within the front bedroom is fully concealed behind full-height fitted wardrobes with a lined backing to both faces. The central chimney breast appears to have been partially concealed, with its base obscured by a chest of drawers. No direct inspection of the party wall face was possible in these areas. | Record only. Access restricted.
+FF-02 | At the junction between the fitted wardrobes and the presumed chimney breast recess, symmetrical vertical hairline open joints are present on both sides, extending from cornice level down to the underside of the first shelf. The symmetrical nature of this cracking is consistent with differential movement between the chimney breast and flanking elements. | Record pre-existing defect
+FF-03 | To the exposed sections of the chimney breast, widespread faint and intermittent hairline cracking is present throughout. At ceiling level, a continuous open joint and associated crack runs along the full width of the abutment between the chimney breast face and ceiling soffit, extending the full width between the wardrobes. | Record pre-existing defect
+FF-04 | The cracking described at FF-03 continues onto the face of the left-hand fitted wardrobe, extending across toward the front elevation and wrapping around the corner of the unit. | Record pre-existing defect
+FF-05 | To the right-hand side of the chimney breast, a similar pattern of cracking is present along the ceiling junction, extending across the ceiling plane toward the wall abutting the rear bedroom. A vertical open joint is noted at the junction of the fitted wardrobe and the flanking wall. | Record pre-existing defect
+FF-06 | To the wall abutting the rear bedroom, a complex crack pattern is recorded: a horizontal hairline crack approximately 350mm in length at mid-height; branching upward to ceiling level; and continuing downward to socket level, with further multiple hairline branches radiating from the socket position. A diagonal crack extends from the vertical crack at approximately 1.0m above finished floor level, tracking toward a picture location on the adjacent wall. | Record pre-existing defect. Pattern to be photographically monitored.
+FF-07 | Additional cracking is present around the picture location and radiator, including cracks which extend behind the fittings and re-emerge, forming an arching crack pattern which tracks toward the door opening. The full extent of cracking in these areas is partially obscured by furnishings. | Record pre-existing defect. Refer to photographs.
+FF-08 | To the MDF face above the doors of the left-hand fitted wardrobe unit, open joints are present at panel junctions. A crack is noted at the top left-hand corner and along the ceiling junction extending approximately 350mm. | Record pre-existing defect
+FF-09 | The front bay window comprises six sections. Open joints are present at the base of each frame where they meet the window cill. The section of the bay window in closest proximity to the Building Owner's property exhibits an open joint extending approximately 80-90mm up the side of the frame. | Record pre-existing defect
+FF-10 | At the internal junction of the bay window reveal and the party wall, intermittent vertical hairline cracking is present. | Record pre-existing defect
+FF-11 | The window casement closest to the Building Owner's side was secured in the locked position at the time of inspection and was not tested for operation. | Record — not tested
+FF-12 | Minor cracking is noted at the window sill (bottom left corner) and above the door opening. These defects are considered remote from the notifiable works and are recorded photographically only. | Record only — remote from notifiable works
+
+SECTION: First Floor — Rear Bedroom
+FR-01 | The chimney breast within the rear bedroom is concealed behind wall finishes. A full-height fitted wardrobe is positioned to the right of the chimney breast and floating shelves with a desk are located to the left. | Record only. Chimney breast concealed — direct inspection not possible.
+FR-02 | Above the uppermost shelf on the party wall, a diagonal hairline crack extends upward toward the ceiling. The crack is consistent with restraint and differential movement at the interface of the party wall and ceiling plane. | Record pre-existing defect
+FR-03 | A complex pattern of cracking is recorded to the face of the chimney breast: (i) a vertical and diagonal crack extending from the top left-hand corner downward toward a mirror fitting; (ii) a vertical crack to the right of the mirror, extending upward and branching toward the front elevation; (iii) two horizontal cracks extending from behind the mirror toward the fitted wardrobe, with a vertical branch extending downward; and (iv) a further horizontal crack to the left of the mirror, with branches extending both upward and downward. The cracking pattern is consistent with long-term thermal movement and differential settlement at the chimney breast. | Record pre-existing defect. Extent photographically recorded.
+FR-04 | At skirting level, along the base of the chimney breast, a horizontal open joint extends approximately 400mm. This is consistent with movement between the chimney breast and the adjacent floor finish. | Record pre-existing defect
+FR-05 | To the wall abutting the front bedroom, a diagonal crack originating approximately 1.0m from the party wall extends downward for approximately 900mm. This crack continues onto the ceiling plane in a quadrant configuration. A secondary crack branches downward toward the adjacent shelving unit. | Record pre-existing defect
+FR-06 | Above the desk, a horizontal crack extends outward from the party wall and branches upward at the far end of the desk. The crack is consistent with restraint cracking at the wall/ceiling junction in proximity to the party wall. | Record pre-existing defect
+FR-07 | To the rear bedroom window: an open joint is present at the base of the frame where it meets the wall, extending onto the adjacent wall surface with associated branching. A diagonal crack is noted at the top left-hand corner, extending toward the ceiling. The MDF window sill exhibits an open joint along its wall abutment, the right-hand end being more pronounced. | Record pre-existing defect
+FR-08 | To the ceiling: staining is visible, indicative of historic water ingress. The affected area was dry at the time of inspection. A zigzag crack extends from the rear wall toward the centre of the ceiling with branching. Two vertical cracks are present above the window opening. A further crack is noted at the top right-hand corner, continuing onto the ceiling plane. A quadrant-shaped crack extends across the ceiling. Refer to photographs for full extent. | Record pre-existing defect. Source of historic water ingress to be investigated if reactivated during works.
+
+SECTION: Ground Floor — Rear Extension
+GR-01 | Full-width sliding doors to the rear elevation open and close without impediment. The locking mechanism operates correctly. No visible defects are noted to the glazing, frames or threshold. | Record only
+GR-02 | A gap and open joint is present between the floor tiling and the base of the sliding door frame along the full width of the threshold. | Record pre-existing defect
+GR-03 | The property has been extended to the rear. Structural beams are present but concealed within the wall and ceiling construction. Technical confirmation is required as to whether sequential excavation and underpinning is necessary in connection with the proposed foundation works; failing this, written confirmation from a suitably qualified Structural Engineer should be provided to the Two Surveyors prior to commencement of notifiable works. | Further investigation required — see Discussion Items
+GR-04 | At the junction of the flank wall and the rear elevation, above the sliding door head, a vertical open joint extends onto the ceiling soffit and continues along the flank wall for approximately 1.5 metres. This defect is in proximity to the proposed notifiable works. | Record pre-existing defect. To be monitored throughout the works.
+GR-05 | No defects are noted to skirting junctions throughout the extension. The decorative finishes are in generally good condition throughout. | Record only
+GR-06 | The wood-effect tiled floor finish is in good condition throughout the area in proximity to the notifiable works. At the far end of the room, remote from the notifiable works, localised lifting of tiles and loss of grout is noted. This is recorded photographically. | Record only — remote defect noted photographically
+
+SECTION: Ground Floor — Front Room
+GF-01 | The floor tiles throughout the front reception room are in good condition. No cracking, lifting or other defects are noted. | Record only
+GF-02 | The chimney breast within the front room is boarded over. No defects are noted to the visible surface of the party wall or the boarded chimney breast face. | Record only. Chimney breast concealed.
+GF-03 | A vertical crack is present in the plaster finish approximately 1.0m from the party wall, extending full height from floor level to ceiling. The crack is consistent with shrinkage or restraint cracking and does not appear to be of structural significance. It is, however, in proximity to the proposed notifiable works and should be monitored. | Record pre-existing defect. Monitor during and following works.
+
+SECTION: External Rear
+ER-01 | The rear extension is externally clad in tongue and groove timber boarding. The cladding is in good condition throughout. No defects, deterioration or displacement are noted. | Record only
+ER-02 | The patio at ground level comprises large-format paving slabs laid to a fall toward a linear drainage channel. The slabs and drainage channel are in generally good condition. | Record only
+ER-03 | At the corner nearest to the sliding doors and flank wall junction, a cracked paving slab is present and an open joint is noted between adjacent slabs. Slight movement of the slabs is detectable at this location. | Record pre-existing defect
+ER-04 | To the rendered face below the patio step, horizontal cracking is present, extending in the direction of the boundary. Localised loss of render has occurred at points along this run, revealing the underlying brickwork substrate. On inspection, the cracking appears confined to the render layer and does not appear to extend into the structural masonry. | Record pre-existing defect. Render layer only — monitor during works.
+ER-05 | No defects are noted to the timber boundary fencing or associated cladding. | Record only
+
+END OF COMPLETE REFERENCE DOCUMENT`;
+
 const V2_DEFAULTS = {
   identity_content: '',
   voice_content: `Write as an experienced professional speaking naturally to another professional. The writing should feel: conversational, friendly, warm, approachable, confident, measured, practical, commercially sensible. The recipient should feel they are communicating with a real person, not reading a carefully constructed corporate letter. Professional does not mean formal — avoid sounding like a solicitor, corporate adviser or AI assistant unless expressly asked for that style. The finished correspondence should feel as though the writer considered the issue carefully and then explained it naturally in their own words.
@@ -1105,6 +1423,7 @@ Use UK English. Do not use long dashes or em dashes.`,
   sign_off: 'Kind regards,',
   fee_structure_content: '',
   banned_phrases: `duly, accordingly (unless genuinely necessary), for the avoidance of doubt, notwithstanding the foregoing, in this regard, at this juncture, please be advised, I trust this clarifies, I would be grateful if, kindly confirm, pursuant to, I write further to, we refer to, I look forward to hearing from you, please do not hesitate to contact me, I hope this finds you well, I trust this meets your requirements.`,
+  soc_gold_standard: SOC_GOLD_STANDARD_DEFAULT,
 };
 
 function UserBrainV2Section() {
@@ -1113,6 +1432,8 @@ function UserBrainV2Section() {
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
+  const fileInputRef = React.useRef(null);
 
   React.useEffect(() => {
     (async () => {
@@ -1126,6 +1447,7 @@ function UserBrainV2Section() {
         sign_off: data.sign_off ?? V2_DEFAULTS.sign_off,
         fee_structure_content: data.fee_structure_content ?? V2_DEFAULTS.fee_structure_content,
         banned_phrases: data.banned_phrases ?? V2_DEFAULTS.banned_phrases,
+        soc_gold_standard: data.soc_gold_standard ?? V2_DEFAULTS.soc_gold_standard,
       } : { ...V2_DEFAULTS });
     })();
   }, []);
@@ -1139,6 +1461,37 @@ function UserBrainV2Section() {
     setSaving(false);
     if (err) setError(err.message || 'Could not save.');
     else { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+  };
+
+  // Fixed 2026-09-17, on request: lets a user upload a real Schedule
+  // of Condition document, which gets read and dropped straight into
+  // this same field — same destination as pasting text in by hand.
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not read the selected file'));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch('/api/extract-document-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_base64: base64, filename: file.name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Could not read this file.');
+      setFields(prev => ({ ...prev, soc_gold_standard: data.text }));
+    } catch (err) {
+      setError(err.message || 'Upload failed.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const field = (key, label, desc, rows = 4) => (
@@ -1175,7 +1528,38 @@ function UserBrainV2Section() {
           {field('fee_structure_content', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 8)}
           {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 4)}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 }}>
+          <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Schedule of Condition — gold standard</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+              What every SOC observation gets checked against before you see it. Starts as a copy of Nora's own working standard — paste in your own terminology and examples, or upload a real Schedule of Condition and Nora will read the text straight in.
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
+                  background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)',
+                  cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1,
+                }}
+              >
+                {uploading ? 'Reading file…' : '📄 Upload a Schedule of Condition'}
+              </button>
+              <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" onChange={handleFileUpload} style={{ display: 'none' }} />
+            </div>
+            <textarea
+              value={fields.soc_gold_standard}
+              onChange={e => setFields(prev => ({ ...prev, soc_gold_standard: e.target.value }))}
+              rows={10}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13,
+                borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)',
+                color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
             {error && <div style={{ fontSize: 12, color: 'var(--red, #dc2626)' }}>{error}</div>}
             {saved && <div style={{ fontSize: 12, color: 'var(--green)' }}>✓ Saved</div>}
             <button

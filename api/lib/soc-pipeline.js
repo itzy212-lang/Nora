@@ -1,6 +1,13 @@
 // api/lib/soc-pipeline.js
 // SOC pipeline: claim extraction, professional drafting, completeness audit.
 
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export const CLAIM_BATCH_NOTES    = 20;
 export const MAX_CLAIMS_PER_BATCH = 25;
 export const QUALITY_ROW_BATCH    = 15;
@@ -1919,8 +1926,31 @@ export function runCompletenessAudit(draftedResult, claims) {
 }
 
 // ─── Quality audit (async, not in sync pipeline) ──────────────────────────────
-export async function runQualityAudit(draftedResult, apiKey, useV1 = false) {
-  const activeExamples = FEW_SHOT_EXAMPLES_V1; // hardcoded to V1 gold standard
+// Fixed 2026-09-17, on request: the gold standard used here was
+// permanently hardcoded to one shared example for every user
+// (FEW_SHOT_EXAMPLES_V1). Now checks for this specific user's own
+// saved gold standard (user_brain_v2.soc_gold_standard — settable in
+// Settings, either by pasting terminology/examples directly or
+// uploading a real SOC) first, falling back to exactly the same
+// shared constant as before if they don't have one. Every existing
+// user's row was seeded with an exact copy of FEW_SHOT_EXAMPLES_V1 as
+// their starting point, so this is a genuine no-op for anyone who
+// hasn't changed it — same content, same place in the flow, same
+// mechanism; only the source it's read from can now branch per user.
+export async function runQualityAudit(draftedResult, apiKey, useV1 = false, userId = null) {
+  let activeExamples = FEW_SHOT_EXAMPLES_V1;
+  if (userId) {
+    try {
+      const { data } = await supabase
+        .from('user_brain_v2')
+        .select('soc_gold_standard')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (data?.soc_gold_standard?.trim()) activeExamples = data.soc_gold_standard;
+    } catch (e) {
+      console.warn('[soc-pipeline] Could not load per-user gold standard, using shared default:', e.message);
+    }
+  }
   const rows = [];
   for (const s of (draftedResult.sections || []))
     for (const r of (s.rows || []))

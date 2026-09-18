@@ -1045,7 +1045,7 @@ function runCodedFidelityChecks(draftedResult, claims) {
 // ── Main pipeline orchestrator ────────────────────────────────────────────────
 // Calls shared soc-pipeline.js functions in sequence.
 // Uses live persisted claims from DB if available; otherwise runs Stage 1 extraction.
-async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId) {
+async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId, userId) {
   // Load live claims from DB first — unless forceReextract is set
   let claims = [];
   let claimsFromLive = false;
@@ -1180,7 +1180,7 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
   let qualityResult = draftedResult;
   try {
     console.log('[generate-soc] Stage 3: quality audit (Sol)...');
-    qualityResult = await runQualityAudit(draftedResult, apiKey, useV1Standard);
+    qualityResult = await runQualityAudit(draftedResult, apiKey, useV1Standard, userId);
   } catch (e) {
     console.warn('[generate-soc] Stage 3 (quality audit) failed, using unaudited draft:', e.message);
     qualityResult = draftedResult;
@@ -1475,7 +1475,7 @@ export default async function handler(req, res) {
       const projectMetaWithFlag = { ...projectMeta, forceReextract: isRegenerate };
 
       try {
-        dataForRender = await extractStructuredData(notesText, projectMetaWithFlag, apiKey, session_id, project_id, ao_id);
+        dataForRender = await extractStructuredData(notesText, projectMetaWithFlag, apiKey, session_id, project_id, ao_id, socUserId);
       } catch (genErr) {
         if (genErr.message?.startsWith('GENERATION_INCOMPLETE')) {
           // Return structured incomplete response — client shows warning + retry
