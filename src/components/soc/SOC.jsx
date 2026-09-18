@@ -13,6 +13,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [phase, setPhase] = useState(defaultProjectId ? 'recording' : 'setup');
   const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [messages, setMessages] = useState([]);
+  const [showRawNotes, setShowRawNotes] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [textInput, setTextInput] = useState('');
@@ -141,6 +142,24 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           setEditableSections(JSON.parse(JSON.stringify(
             reportData.structured_data.edit_state?.sections || reportData.structured_data.sections || []
           )));
+          // Fixed 2026-09-18, real gap found while building the
+          // "show original notes" feature: reopening an already-
+          // generated report returned early here, before the notes-
+          // history fetch below ever ran — so messages stayed empty
+          // and the new panel would show nothing for exactly the
+          // case it's most needed: coming back to review a report
+          // that's already been generated.
+          try {
+            const notesRes = await fetch('/api/soc-save?session_id=' + initData.session_id);
+            if (notesRes.ok) {
+              const notesData = await notesRes.json();
+              if (notesData.notes?.length) {
+                setMessages(notesData.notes.map(m => ({ id: m.id, role: m.role, content: m.content })));
+              }
+            }
+          } catch (err) {
+            console.warn('[SOC] notes fetch failed (existing report):', err);
+          }
           setPhase('review');
           return initData.session_id;
         }
@@ -1158,6 +1177,40 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           {flaggedCount > 0 && (
             <div style={{ padding: '10px 14px', background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 10, fontSize: 13, color: '#92400e' }}>
               ⚠ {flaggedCount} item{flaggedCount !== 1 ? 's' : ''} highlighted for review — will remain in the report unless edited, reassigned or removed
+            </div>
+          )}
+
+          {/* Fixed 2026-09-18, on request: "I don't have the original
+              note so I can't see what it's referencing... maybe what
+              it should do is give me the original note." Built
+              directly — the raw dictated text was already sitting in
+              this component's own state (built up live as each note
+              is recorded), just never shown anywhere. No backend
+              change needed for this session's own generation; this
+              reads straight from what's already here. */}
+          {messages.some(m => m.role === 'user') && (
+            <div style={{ marginBottom: 4 }}>
+              <button
+                onClick={() => setShowRawNotes(v => !v)}
+                style={{
+                  fontSize: 12.5, fontWeight: 600, color: 'var(--blue, #2563eb)', background: 'none',
+                  border: 'none', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline',
+                }}
+              >
+                {showRawNotes ? '▾ Hide original dictated notes' : '▸ Show original dictated notes'}
+              </button>
+              {showRawNotes && (
+                <div style={{
+                  marginTop: 6, padding: '12px 14px', background: 'var(--bg2, #f7f8fa)', border: '1px solid var(--border)',
+                  borderRadius: 10, fontSize: 13, lineHeight: 1.7, maxHeight: 320, overflowY: 'auto',
+                }}>
+                  {messages.filter(m => m.role === 'user').map((m, i) => (
+                    <div key={m.id || i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                      {m.content}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
