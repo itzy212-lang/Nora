@@ -434,13 +434,19 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
       // extraction call — the one that actually fills in element and
       // location — never got the same treatment. previousNotes is
       // already fetched above; reused directly, no new query needed.
+      // Fixed 2026-09-18, on request: was capped to the last 6 notes
+      // in this section. Widened to the whole room's dictation so far
+      // — "paint a full picture of the room, not just a recent slice
+      // of it" — a single room's notes are realistically never large
+      // enough to need trimming, and something said early in a room
+      // should still be usable context for something said toward the
+      // end of it.
       const recentNotesInSection = (previousNotes || [])
         .filter(n => (n.current_section || n.inferred_section) === (finalSection || inheritedSection))
-        .slice(-6)
         .map(n => `[${n.sequence}] ${n.raw_note}`)
         .join('\n');
       const recentContextBlock = recentNotesInSection
-        ? `RECENT NOTES IN THIS SECTION (use these to resolve references like "the wall", "the same crack", "the opposite end" — do not treat something as ambiguous if an earlier note here already establishes it):\n${recentNotesInSection}\n\n`
+        ? `ALL NOTES DICTATED SO FAR IN THIS ROOM/SECTION (the full picture of this room — use these to resolve references like "the wall", "the same crack", "the opposite end" — do not treat something as ambiguous if an earlier note here already establishes it):\n${recentNotesInSection}\n\n`
         : '';
       const currentSectionCtx = (finalSection ? `CURRENT ACTIVE SECTION: ${finalSection}\n\n` : '') + recentContextBlock;
       const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
