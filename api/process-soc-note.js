@@ -422,7 +422,27 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
 
       // Extract claims for this single note using appropriate model
       const singleNoteText = `[${sequence}] ${note.trim()}`;
-      const currentSectionCtx = finalSection ? `CURRENT ACTIVE SECTION: ${finalSection}\n\n` : '';
+      // Fixed 2026-09-18, real, confirmed bug reported live, from an
+      // actual on-site dictation: this call previously saw only the
+      // single current note, completely isolated — so a note like
+      // "the joint towards the opposite end of the wall" had no way
+      // to know which wall, or what it was the opposite end of,
+      // because whatever note established that reference point
+      // earlier in the same room was never shown to it. The
+      // room-level tracking above (buildSessionState) already solves
+      // this correctly for itself by passing recent notes; this
+      // extraction call — the one that actually fills in element and
+      // location — never got the same treatment. previousNotes is
+      // already fetched above; reused directly, no new query needed.
+      const recentNotesInSection = (previousNotes || [])
+        .filter(n => (n.current_section || n.inferred_section) === (finalSection || inheritedSection))
+        .slice(-6)
+        .map(n => `[${n.sequence}] ${n.raw_note}`)
+        .join('\n');
+      const recentContextBlock = recentNotesInSection
+        ? `RECENT NOTES IN THIS SECTION (use these to resolve references like "the wall", "the same crack", "the opposite end" — do not treat something as ambiguous if an earlier note here already establishes it):\n${recentNotesInSection}\n\n`
+        : '';
+      const currentSectionCtx = (finalSection ? `CURRENT ACTIVE SECTION: ${finalSection}\n\n` : '') + recentContextBlock;
       const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -435,6 +455,7 @@ Return JSON only: {"element": "...", "observation": "Professional SOC wording.",
 Apply speech-to-text corrections: "bugatti wall"→"party wall", "plank wall"→"flank wall", "blank wall"→"flank wall", "v-locks"→"VELUX", "sealing"(ceiling context)→"ceiling", "real evasion wall"→"rear elevation wall", "kitched roof"→"pitched roof", "tarps floor"→"tiled floor", "UPBC"→"UPVC".
 Navigation phrases (continuing the schedule, standing in the room, etc.) become section_transition or contextual — never observations.
 For each factual claim store structured fields, NOT finished prose sentences.
+When recent notes from this same section are provided, use them to resolve what "the wall", "that crack", "the same joint" or similar references actually mean — do not mark element or location as unclear if an earlier note in this section already established it. Only leave element/location genuinely null when nothing in the current note or the provided recent notes identifies it.
 Return JSON only: { "claims": [{ "claim_id":"c-N-M", "source_note_id":N, "note_sequence":N, "claim_sequence":M, "claim_type":"...", "section":"...", "element":"...", "construction":null, "finish":null, "condition":null, "defect_type":null, "location":null, "direction":null, "measurement":null, "extent":null, "operational_result":null, "access_limitation":null, "raw_fragment":"...", "status":"active|superseded|contextual", "amendment_mode":null, "superseded_by":null, "confidence":"high|medium|low" }] }` },
             { role: 'user', content: `${currentSectionCtx}Extract structured factual claims from this note. Use canonical section names (Ground Floor Front Elevation Room / Ground Floor Rear Elevation Room / Ground Floor / Rear Extension / First Floor Rear Bedroom / First Floor Front Elevation Room / External Areas). Return JSON: { "claims": [{ "claim_id": "c-${sequence}-N", "source_note_id": ${sequence}, "note_sequence": ${sequence}, "claim_sequence": N, "claim_type": "...", "section": "...", "element": "...", "location": "...", "content": "...", "confidence": "high|medium|low", "status": "active|superseded|contextual|unresolved", "superseded_by": null, "amendment_mode": null }] }\n\nNOTE: ${note.trim()}` },
           ],
