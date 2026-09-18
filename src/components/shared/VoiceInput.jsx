@@ -80,8 +80,26 @@ function isMobileBrowser() {
   const ua = navigator.userAgent || '';
   const platform = navigator.platform || '';
 
-  return /Android|iPhone|iPad|iPod/i.test(ua)
-    || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  if (platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+
+  // Fixed 2026-09-18, real, confirmed bug reported live: a phone with
+  // "Desktop site" enabled in Chrome reports a desktop-style user
+  // agent, matching none of the above — silently routing genuine
+  // phone dictation to the free browser engine instead of Whisper,
+  // with zero vocabulary priming, zero error shown, and results bad
+  // enough to make a Schedule of Condition actively harder to use
+  // than not having it at all. User-agent claims can be wrong; real
+  // hardware can't. A device with touch-only input (no fine pointer
+  // like a mouse) and a phone-sized viewport is a phone regardless of
+  // what it claims to be.
+  if (typeof window !== 'undefined' && typeof matchMedia === 'function') {
+    const touchOnly = matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const phoneWidth = Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 500;
+    if (touchOnly && phoneWidth) return true;
+  }
+
+  return false;
 }
 
 function getSupportedAudioMimeType() {
