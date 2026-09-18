@@ -159,8 +159,22 @@ export default async function handler(req, res) {
       // processing_status) in the same round trip. This is not the
       // Generation Barrier (Phase D, guards /api/generate-soc itself) —
       // it only makes this one note-save call genuinely synchronous.
-      const baseUrl = process.env.VERCEL_URL
-        ? 'https://' + process.env.VERCEL_URL
+      //
+      // Fixed 2026-09-19: this used process.env.VERCEL_URL, which
+      // resolves to THIS deployment's own per-deployment preview-style
+      // URL (e.g. nora-d9wy-<hash>-<team>.vercel.app) — confirmed
+      // directly, live, that this project's Vercel Authentication (SSO
+      // Protection) blocks that URL even for internal server-to-server
+      // calls, redirecting to vercel.com/sso-api instead of reaching
+      // the handler. fetch() follows that redirect, the response body
+      // is an HTML login page rather than JSON, procRes.json() below
+      // throws, and the catch block below silently reported failure —
+      // meaning process-soc-note was never actually invoked, ever, in
+      // production. Confirmed the custom production domain is NOT
+      // behind that protection (plain 200, correct JSON, no redirect),
+      // so internal calls now target it directly instead.
+      const baseUrl = process.env.VERCEL
+        ? 'https://nora-d9wy.vercel.app'
         : 'http://localhost:3000';
       let processingResult = { ok: false, processing_status: 'failed', live_response: { required: false, type: null, text: null } };
       try {
