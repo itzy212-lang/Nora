@@ -1,518 +1,151 @@
 // api/process-soc-note.js
-// Receives one dictated note during a live SOC inspection.
-// Saves raw note to Supabase immediately.
-// Calls GPT-4o for intelligent classification, section inference, amendment detection
-// and structured acknowledgement.
-// Returns a meaningful response to the surveyor on site.
+//
+// Nora SOC v2, Phase C — the live semantic processor.
+//
+// Rewritten to implement the Live Processing stage defined in the SOC v2
+// specifications: Universal SOC Brain + Live Processing Contract +
+// persistent Inspection State (soc_sections, soc_claims) resolve each
+// dictated note in context, rather than the previous ad-hoc keyword-hint
+// + narrow single-note prompt. Per explicit instruction, this does not
+// replace semantic interpretation with regex/keyword rules — room
+// transitions, returns, corrections, additions and clarification
+// decisions all remain the model's judgment; this file's own job is
+// context assembly and the code-enforced persistence invariants
+// (live-state.js), not reasoning about meaning.
+//
+// Note: this endpoint is now AWAITED synchronously by soc-save.js
+// (previously fire-and-forget) so the real structured response can
+// reach the frontend in the same request — see soc-save.js and SOC.jsx
+// for the other half of this change. This is NOT the Generation Barrier
+// (Phase D, which guards /api/generate-soc itself) — it only makes a
+// single note-save call synchronous end to end.
 
 import { createClient } from '@supabase/supabase-js';
-import {
-  CORRECTION_SIGNALS,
-  SECTION_KEYWORDS,
-  LIVE_NOTE_SYSTEM_PROMPT,
-} from './soc-framework.js';
-import { noteComplexity, modelForComplexity, applySttCorrections, canonicalSection } from './lib/soc-pipeline.js';
+import { loadLiveContext, callLiveSemanticProcessor } from './lib/soc-brain-v2/live-processor.js';
+import { applyLiveProcessingResult } from './lib/soc-brain-v2/live-state.js';
+import { getPendingClarification, setPendingClarification, clearPendingClarification } from './lib/soc-brain-v2/pending-clarification.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// ── Infer likely section from note content ────────────────────────────────
-function inferSectionFromContent(note) {
-  const lower = note.toLowerCase();
-  for (const [section, keywords] of Object.entries(SECTION_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) return section;
-  }
-  return null;
-}
-
-// ── Build session state summary for the GPT prompt ───────────────────────
-function buildSessionState(previousNotes, observations, keywordHint = null, inheritedSection = null) {
-  if (!previousNotes?.length) return 'No notes recorded yet. This is the first note.';
-
-  const hintText = keywordHint
-    ? `\n\nKEYWORD HINT (supporting only -- verify with full context): Subject matter may suggest "${keywordHint}". Use only if consistent with context and physical location. Generic terms (wall, floor, window, door) in many sections must not override context.`
-    : '';
-
-  const currentSectionText = inheritedSection
-    ? `CURRENT ACTIVE SECTION: ${inheritedSection}`
-    : 'CURRENT ACTIVE SECTION: Not yet established.';
-
-  const sections = [...new Set(previousNotes
-    .map(n => n.current_section || n.inferred_section)
-    .filter(Boolean))];
-
-  const activeObs = observations?.filter(o => o.status === 'active') || [];
-
-  const recentNotes = previousNotes.slice(-8).map(n =>
-    `[${n.sequence}]${n.current_section ? ` (${n.current_section})` : ''} ${n.raw_note}`
-  ).join('\n');
-
-  const obsState = activeObs.slice(0, 20).map(o =>
-    `  ${o.id} | ${o.section} | ${o.element || 'element unspecified'} | ${o.observation.slice(0, 100)}`
-  ).join('\n');
-
-  return `${currentSectionText}
-SECTIONS VISITED: ${sections.join(', ') || 'None yet'}
-
-RECENT NOTES (last 8):
-${recentNotes}
-
-ACTIVE OBSERVATIONS (for amendment lookup):
-${obsState || '  None yet.'}${hintText}`;
-}
-
-// ── Generate a stable observation ID ─────────────────────────────────────
-function makeObsId(section, sequence) {
-  const prefix = (section || 'unk')
-    .replace(/[^a-zA-Z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .toLowerCase()
-    .slice(0, 8);
-  return `obs-${prefix}-${String(sequence).padStart(2, '0')}`;
-}
-
-
-// ── Live atomic claim extraction + persistence ────────────────────────────
-// Called non-blocking after every dictated note.
-// Uses gpt-4o-mini (fast, low latency for on-site use).
-
-// ── Call the PostgreSQL RPC for atomic transactional claim processing ─────────
-// The RPC acquires a session-level advisory lock, inserts claims,
-// supersedes amended claims and updates note status in one transaction.
-async function processNoteViaRpc(supabase, {
-  claims, sessionId, noteId, sequence, section,
-  noteType, correctionMode, projectId, aoId,
-}) {
-  const { data, error } = await supabase.rpc('process_soc_note_atomic', {
-    p_session_id:      sessionId,
-    p_note_id:         noteId,
-    p_sequence:        sequence,
-    p_claims:          JSON.stringify(claims),
-    p_section:         section || null,
-    p_note_type:       noteType || 'observation',
-    p_correction_mode: correctionMode || null,
-    p_project_id:      projectId || null,
-    p_ao_id:           aoId || null,
-  });
-  if (error) throw new Error(`RPC process_soc_note_atomic failed: ${error.message}`);
-  return data; // { ok, session_id, note_sequence, claims_inserted, claims_superseded }
-}
-
-
 export default async function handler(req, res) {
-  if (req.method === 'GET') return res.status(200).json({ status: 'ok', endpoint: 'process-soc-note' });
+  if (req.method === 'GET') return res.status(200).json({ status: 'ok', endpoint: 'process-soc-note', version: 'v2-phase-c' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { note, session_id, project_id, ao_id, resolution, force_section, source_note_index } = req.body;
-
-  // ── Direct resolution path — when user resolves an unresolved note from the UI ─
-  // This bypasses normal GPT classification and persists the resolution directly.
-  if (resolution && session_id && note) {
-    const UUID_RE_local = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const safeAoIdLocal = ao_id && UUID_RE_local.test(String(ao_id)) ? ao_id : null;
-
-    const validResolutions = ['allocated', 'contextual', 'site_note', 'award_note', 'excluded'];
-    if (!validResolutions.includes(resolution)) {
-      return res.status(400).json({ error: 'Invalid resolution type' });
-    }
-
-    try {
-      // Update the existing note status if source_note_index is provided
-      if (source_note_index != null) {
-        await supabase.from('soc_notes')
-          .update({ note_status: resolution === 'allocated' ? 'allocated' : resolution })
-          .eq('session_id', session_id)
-          .eq('sequence', source_note_index);
-      }
-
-      // For 'allocated' resolution, send through professional SOC processing
-      if (resolution === 'allocated' && force_section) {
-        // Call GPT to produce professional observation wording
-        const obsId = makeObsId(force_section, source_note_index || Date.now());
-        const processPrompt = `You are a party wall surveyor writing a Schedule of Condition.
-Convert this raw dictated note into a single professional Schedule of Condition observation row.
-Section: ${force_section}
-Raw note: "${note}"
-
-Return JSON only: {"element": "...", "observation": "Professional SOC wording.", "action": "Record only"}`;
-
-        let professionalObs = note;
-        try {
-          const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer \${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o-mini', temperature: 0.1, max_tokens: 200,
-              messages: [{ role: 'user', content: processPrompt }] }),
-          });
-          const gptData = await gptRes.json();
-          const raw = (gptData.choices?.[0]?.message?.content || '').trim()
-            .replace(/^```json\n?/, '').replace(/\n?```$/, '');
-          const parsed = JSON.parse(raw);
-          professionalObs = parsed.observation || note;
-
-          // Create observation in soc_observations
-          await supabase.from('soc_observations').insert({
-            id: obsId, session_id,
-            project_id: project_id || null, ao_id: safeAoIdLocal,
-            section: force_section,
-            element: parsed.element || null,
-            observation: professionalObs,
-            status: 'active',
-            source_note_ids: source_note_index != null ? [source_note_index] : [],
-          });
-        } catch (gptErr) {
-          // If GPT fails, insert raw note — still persists
-          await supabase.from('soc_observations').insert({
-            id: obsId, session_id,
-            project_id: project_id || null, ao_id: safeAoIdLocal,
-            section: force_section, element: null,
-            observation: note, status: 'active',
-            source_note_ids: source_note_index != null ? [source_note_index] : [],
-          }).catch(() => {});
-        }
-      }
-
-      return res.status(200).json({ ok: true, resolution, section: force_section || null });
-    } catch (resErr) {
-      return res.status(500).json({ error: resErr.message || 'Resolution failed' });
-    }
+  const { session_id, project_id, ao_id, content, openai_key } = req.body || {};
+  if (!session_id || !content?.trim()) {
+    return res.status(400).json({ error: 'session_id and content are required' });
   }
+  const apiKey = openai_key || process.env.OPENAI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'No OpenAI API key available' });
 
-  const safeAoId = ao_id && UUID_RE.test(String(ao_id)) ? ao_id : null;
-
-  if (!note?.trim()) return res.status(400).json({ error: 'No note provided' });
-  if (!session_id)   return res.status(400).json({ error: 'No session_id provided' });
+  let noteId = null;
+  let sequence = null;
 
   try {
-    // ── 1. Load previous notes and active observations ────────────────────
-    const [{ data: previousNotes, error: notesErr }, { data: observations, error: obsErr }] =
-      await Promise.all([
-        supabase.from('soc_notes')
-          .select('id, sequence, raw_note, current_section, inferred_section, is_correction, ai_response, note_type, observation_id')
-          .eq('session_id', session_id)
-          .order('sequence', { ascending: true }),
-        supabase.from('soc_observations')
-          .select('id, section, element, observation, status, source_note_ids')
-          .eq('session_id', session_id)
-          .eq('status', 'active'),
-      ]);
+    // ── 1. Determine sequence and save the raw note immediately ──────────
+    // Raw text is saved before any interpretation begins (Pipeline Spec
+    // §3) and is never modified afterward by anything in this handler.
+    const { count } = await supabase
+      .from('soc_notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('session_id', session_id);
+    sequence = (count || 0) + 1;
 
-    if (notesErr) throw notesErr;
+    const { data: noteRow, error: insertError } = await supabase
+      .from('soc_notes')
+      .insert({
+        session_id, project_id: project_id || null, ao_id: ao_id || null,
+        sequence, raw_note: content.trim(),
+        processing_status: 'processing',
+      })
+      .select('id')
+      .single();
+    if (insertError) throw insertError;
+    noteId = noteRow.id;
 
-    const sequence = (previousNotes?.length || 0) + 1;
-    const isCorrection = CORRECTION_SIGNALS.some(s => note.toLowerCase().includes(s));
-    // Keyword inference provides a HINT only — GPT is the primary classifier
-    // Generic terms (window, floor, wall, door) must not cause incorrect allocation
-    const keywordHint = inferSectionFromContent(note);
-    const inheritedSection = previousNotes?.length
-      ? [...previousNotes].reverse().find(n => n.current_section || n.inferred_section)
-        ?.current_section || null
-      : null;
-    // currentSection starts as inherited; GPT will confirm, override or create new section
-    const currentSection = inheritedSection;
+    // ── 2. Assemble context and call the live semantic processor ─────────
+    const context = await loadLiveContext(supabase, { sessionId: session_id });
+    const pendingClarification = await getPendingClarification(supabase, session_id);
 
-    // ── 2. Save raw note immediately ──────────────────────────────────────
-    const { error: insertError } = await supabase.from('soc_notes').insert({
-      session_id,
-      project_id: project_id || null,
-      ao_id: safeAoId,
-      sequence,
-      raw_note: note.trim(),
-      current_section: inheritedSection,
-      inferred_section: keywordHint,
-      is_correction: isCorrection,
-      note_status: 'pending',
-      ai_response: 'Noted.',
+    let modelOutput;
+    try {
+      modelOutput = await callLiveSemanticProcessor({
+        apiKey, context, pendingClarification, noteText: content.trim(),
+      });
+    } catch (modelErr) {
+      // Pipeline Spec §6: a failed semantic-processing call must remain
+      // visible and retryable — not silently disappear while generation
+      // proceeds as though it succeeded.
+      await supabase.from('soc_notes').update({
+        processing_status: 'failed', processing_error: modelErr.message,
+      }).eq('id', noteId);
+      return res.status(200).json({
+        ok: false, note_id: noteId, sequence,
+        processing_status: 'failed', error: modelErr.message,
+        live_response: { required: false, type: null, text: null },
+      });
+    }
+
+    // ── 3. Apply the result — code-enforced persistence layer ────────────
+    const applied = await applyLiveProcessingResult(supabase, {
+      sessionId: session_id, noteId, sequence,
+      projectId: project_id || null, aoId: ao_id || null,
+      modelOutput,
     });
 
-    if (insertError) throw insertError;
-
-    // ── 3. Call GPT-4o for intelligent classification ─────────────────────
-    const sessionState = buildSessionState(previousNotes, observations, keywordHint, inheritedSection);
-    const systemPrompt = LIVE_NOTE_SYSTEM_PROMPT.replace('{{SESSION_STATE}}', sessionState);
-
-    let aiResult = null;
-    let aiResponse = 'Noted.';
-    let noteType = 'observation';
-    let finalSection = currentSection;
-    let observationId = null;
-    let targetObsId = null;
-    let correctionMode = null;
-
-    try {
-      const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-5.6-luna',
-          max_completion_tokens: 300,
-          messages: [
-            { role: 'developer', content: systemPrompt },
-            { role: 'user', content: note },
-          ],
-        }),
+    // ── 4. Pending clarification bookkeeping ──────────────────────────────
+    if (modelOutput.resolves_pending_clarification && pendingClarification) {
+      await clearPendingClarification(supabase, session_id);
+    }
+    const isNewClarification = modelOutput.live_response?.required && modelOutput.live_response?.type === 'clarification';
+    if (isNewClarification) {
+      await setPendingClarification(supabase, session_id, {
+        clarification_id: `clar-${sequence}`,
+        question: modelOutput.live_response.text,
+        source_note_id: noteId,
+        affected_section_id: applied.section_id,
+        created_sequence: sequence,
       });
-
-      const openaiData = await openaiRes.json();
-      const rawContent = openaiData.choices?.[0]?.message?.content?.trim() || '';
-
-      // Parse JSON response
-      try {
-        const jsonStr = rawContent.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-        aiResult = JSON.parse(jsonStr);
-        aiResponse = aiResult.response || 'Noted.';
-        noteType = aiResult.note_type || 'observation';
-        correctionMode = aiResult.correction_mode || null;
-        targetObsId = aiResult.target_observation_id || null;
-
-        // Determine final section
-        if (aiResult.section) {
-          finalSection = aiResult.section;
-        } else if (noteType === 'room_change' && aiResponse.includes('Got it')) {
-          finalSection = aiResponse.replace(/\.\s*Got it\.?/i, '').trim();
-        }
-
-        // Generate observation ID for new observations
-        if (['observation', 'room_change'].includes(noteType) && aiResult.section_action !== 'contextual') {
-          observationId = makeObsId(finalSection, sequence);
-        }
-
-      } catch (parseErr) {
-        // If JSON parse fails, use the raw text as response
-        aiResponse = rawContent.split('\n')[0].slice(0, 200) || 'Noted.';
-      }
-
-    } catch (aiErr) {
-      console.error('[process-soc-note] OpenAI failed — note saved with Noted.:', aiErr.message);
     }
 
-    // ── 4. Update soc_observations — mode-specific correction behaviour ────
-    try {
-      const existing = targetObsId ? observations?.find(o => o.id === targetObsId) : null;
-
-      if ((noteType === 'amendment' || noteType === 'addition') && targetObsId) {
-        const mode = correctionMode || 'replace';
-
-        if (mode === 'replace' && aiResult?.final_observation) {
-          // REPLACE: supersede earlier, create corrected observation
-          await supabase.from('soc_observations')
-            .update({ status: 'superseded' })
-            .eq('id', targetObsId).eq('session_id', session_id);
-          const newObsId = makeObsId(finalSection || 'unknown', sequence);
-          await supabase.from('soc_observations').insert({
-            id: newObsId, session_id,
-            project_id: project_id || null, ao_id: safeAoId,
-            section: finalSection || existing?.section || 'Unknown',
-            element: aiResult.element || existing?.element || null,
-            observation: aiResult.final_observation,
-            status: 'active', supersedes: [targetObsId],
-            source_note_ids: [sequence],
-          });
-          observationId = newObsId;
-
-        } else if (mode === 'supplement') {
-          // SUPPLEMENT: add detail, retain earlier substance, no supersession
-          if (existing) {
-            const newText = aiResult?.final_observation
-              ? existing.observation.trimEnd() + ' ' + aiResult.final_observation
-              : existing.observation;
-            await supabase.from('soc_observations')
-              .update({ observation: newText, source_note_ids: [...(existing.source_note_ids || []), sequence] })
-              .eq('id', targetObsId).eq('session_id', session_id);
-            observationId = targetObsId;
-          }
-
-        } else if (mode === 'qualify' && aiResult?.final_observation) {
-          // QUALIFY: update in place with reconciled qualified observation (not superseded)
-          if (existing) {
-            await supabase.from('soc_observations')
-              .update({ observation: aiResult.final_observation, source_note_ids: [...(existing.source_note_ids || []), sequence] })
-              .eq('id', targetObsId).eq('session_id', session_id);
-            observationId = targetObsId;
-          }
-
-        } else if (mode === 'withdraw') {
-          // WITHDRAW: mark inactive, no replacement
-          await supabase.from('soc_observations')
-            .update({ status: 'withdrawn' })
-            .eq('id', targetObsId).eq('session_id', session_id);
-          observationId = null;
-
-        } else if ((mode === 'correct_measurement' || mode === 'correct_location') && aiResult?.final_observation && existing) {
-          // CORRECT DETAIL: update only affected detail, preserve rest
-          await supabase.from('soc_observations')
-            .update({ observation: aiResult.final_observation, source_note_ids: [...(existing.source_note_ids || []), sequence] })
-            .eq('id', targetObsId).eq('session_id', session_id);
-          observationId = targetObsId;
-
-        } else if (aiResult?.final_observation) {
-          // Fallback replace
-          await supabase.from('soc_observations')
-            .update({ status: 'superseded' })
-            .eq('id', targetObsId).eq('session_id', session_id);
-          const newObsId = makeObsId(finalSection || 'unknown', sequence);
-          await supabase.from('soc_observations').insert({
-            id: newObsId, session_id,
-            project_id: project_id || null, ao_id: safeAoId,
-            section: finalSection || existing?.section || 'Unknown',
-            element: aiResult.element || existing?.element || null,
-            observation: aiResult.final_observation,
-            status: 'active', supersedes: [targetObsId],
-            source_note_ids: [sequence],
-          });
-          observationId = newObsId;
-        }
-
-      } else if (observationId && noteType === 'observation' && finalSection) {
-        // New observation
-        await supabase.from('soc_observations').insert({
-          id: observationId, session_id,
-          project_id: project_id || null, ao_id: safeAoId,
-          section: finalSection,
-          element: aiResult?.element || null,
-          observation: aiResult?.final_observation || note.trim(),
-          status: 'active',
-          source_note_ids: [sequence],
-        });
-      }
-    } catch (obsUpdateErr) {
-      console.warn('[process-soc-note] observation update failed:', obsUpdateErr.message);
-    }
-    // ── 5. Determine note_status ──────────────────────────────────────────
-    let noteStatus = 'allocated';
-    if (noteType === 'unresolved') noteStatus = 'unresolved';
-    else if (noteType === 'incomplete_observation') noteStatus = 'unresolved'; // Added 2026-08-24: same downstream handling as 'unresolved' — still needs follow-up if not resolved live in the moment
-    else if (noteType === 'contextual') noteStatus = 'contextual';
-    else if (noteType === 'site_note') noteStatus = 'site_note';
-    else if (noteType === 'question') noteStatus = 'question';
-    else if (noteType === 'amendment' || noteType === 'addition') noteStatus = 'amended';
-
-    // ── 6. Update note record with AI results ─────────────────────────────
-    await supabase.from('soc_notes')
-      .update({
-        ai_response: aiResponse,
-        current_section: finalSection || inheritedSection,
-        inferred_section: keywordHint,
-        note_type: noteType,
-        note_status: noteStatus,
-        observation_id: observationId,
-        target_observation_ids: targetObsId ? [targetObsId] : null,
-        correction_mode: correctionMode,
-      })
-      .eq('session_id', session_id)
-      .eq('sequence', sequence);
-
-
-    // ── 7. Extract claims (GPT) then persist atomically via RPC ─────────────────
-    // The RPC holds a session-level advisory lock — sequential even across instances.
-    let claimCount = 0;
-    let claimError = null;
-    try {
-      const complexity = noteComplexity(note.trim(), noteType, isCorrection);
-      const model = modelForComplexity(complexity);
-      const maxTokens = complexity === 'high' ? 2000 : 1000;
-
-      // Extract claims for this single note using appropriate model
-      const singleNoteText = `[${sequence}] ${note.trim()}`;
-      // Fixed 2026-09-18, real, confirmed bug reported live, from an
-      // actual on-site dictation: this call previously saw only the
-      // single current note, completely isolated — so a note like
-      // "the joint towards the opposite end of the wall" had no way
-      // to know which wall, or what it was the opposite end of,
-      // because whatever note established that reference point
-      // earlier in the same room was never shown to it. The
-      // room-level tracking above (buildSessionState) already solves
-      // this correctly for itself by passing recent notes; this
-      // extraction call — the one that actually fills in element and
-      // location — never got the same treatment. previousNotes is
-      // already fetched above; reused directly, no new query needed.
-      // Fixed 2026-09-18, on request: was capped to the last 6 notes
-      // in this section. Widened to the whole room's dictation so far
-      // — "paint a full picture of the room, not just a recent slice
-      // of it" — a single room's notes are realistically never large
-      // enough to need trimming, and something said early in a room
-      // should still be usable context for something said toward the
-      // end of it.
-      const recentNotesInSection = (previousNotes || [])
-        .filter(n => (n.current_section || n.inferred_section) === (finalSection || inheritedSection))
-        .map(n => `[${n.sequence}] ${n.raw_note}`)
-        .join('\n');
-      const recentContextBlock = recentNotesInSection
-        ? `ALL NOTES DICTATED SO FAR IN THIS ROOM/SECTION (the full picture of this room — use these to resolve references like "the wall", "the same crack", "the opposite end" — do not treat something as ambiguous if an earlier note here already establishes it):\n${recentNotesInSection}\n\n`
-        : '';
-      const currentSectionCtx = (finalSection ? `CURRENT ACTIVE SECTION: ${finalSection}\n\n` : '') + recentContextBlock;
-      const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          temperature: 0.05,
-          max_tokens: maxTokens,
-          messages: [
-            { role: 'system', content: `You are extracting structured factual claims from a single Party Wall site inspection note.
-Apply speech-to-text corrections: "bugatti wall"→"party wall", "plank wall"→"flank wall", "blank wall"→"flank wall", "v-locks"→"VELUX", "sealing"(ceiling context)→"ceiling", "real evasion wall"→"rear elevation wall", "kitched roof"→"pitched roof", "tarps floor"→"tiled floor", "UPBC"→"UPVC".
-Navigation phrases (continuing the schedule, standing in the room, etc.) become section_transition or contextual — never observations.
-For each factual claim store structured fields, NOT finished prose sentences.
-When recent notes from this same section are provided, use them to resolve what "the wall", "that crack", "the same joint" or similar references actually mean — do not mark element or location as unclear if an earlier note in this section already established it. Only leave element/location genuinely null when nothing in the current note or the provided recent notes identifies it.
-Return JSON only: { "claims": [{ "claim_id":"c-N-M", "source_note_id":N, "note_sequence":N, "claim_sequence":M, "claim_type":"...", "section":"...", "element":"...", "construction":null, "finish":null, "condition":null, "defect_type":null, "location":null, "direction":null, "measurement":null, "extent":null, "operational_result":null, "access_limitation":null, "raw_fragment":"...", "status":"active|superseded|contextual", "amendment_mode":null, "superseded_by":null, "confidence":"high|medium|low" }] }` },
-            { role: 'user', content: `${currentSectionCtx}Extract structured factual claims from this note. Use canonical section names (Ground Floor Front Elevation Room / Ground Floor Rear Elevation Room / Ground Floor / Rear Extension / First Floor Rear Bedroom / First Floor Front Elevation Room / External Areas). Return JSON: { "claims": [{ "claim_id": "c-${sequence}-N", "source_note_id": ${sequence}, "note_sequence": ${sequence}, "claim_sequence": N, "claim_type": "...", "section": "...", "element": "...", "location": "...", "content": "...", "confidence": "high|medium|low", "status": "active|superseded|contextual|unresolved", "superseded_by": null, "amendment_mode": null }] }\n\nNOTE: ${note.trim()}` },
-          ],
-        }),
-      });
-      let noteClaims = [];
-      if (openaiRes.ok) {
-        const oData = await openaiRes.json();
-        const raw = (oData.choices?.[0]?.message?.content || '').replace(/\`\`\`json\n?|\n?\`\`\`/g, '').trim();
-        try { noteClaims = JSON.parse(raw).claims || []; } catch {}
-      }
-
-      if (noteClaims.length > 0) {
-        // Persist atomically via PostgreSQL RPC (advisory lock + transaction)
-        const rpcResult = await processNoteViaRpc(supabase, {
-          claims: noteClaims,
-          sessionId: session_id,
-          noteId: null, // soc_notes.id not tracked here — updates by session+sequence
-          sequence,
-          section: finalSection || null,
-          noteType,
-          correctionMode,
-          projectId: project_id || null,
-          aoId: safeAoId,
-        });
-        claimCount = rpcResult?.claims_inserted || noteClaims.length;
-        console.log(`[process-soc-note] Note ${sequence}: ${claimCount} claims persisted (model=${model})`);
-      }
-    } catch (claimErr) {
-      claimError = claimErr.message;
-      console.warn('[process-soc-note] claim RPC failed for note', sequence, claimErr.message);
-    }
+    // ── 5. Finalise note status and structured response ───────────────────
+    const finalStatus = isNewClarification ? 'clarification_required' : 'processed';
+    await supabase.from('soc_notes').update({
+      processing_status: finalStatus,
+      note_status: modelOutput.claims?.some(c => c.amendment_mode) ? 'amended' : 'allocated',
+      current_section: applied.section_display_name,
+      ai_response: modelOutput.live_response?.required ? modelOutput.live_response.text : null,
+      structured_response: modelOutput.live_response,
+    }).eq('id', noteId);
 
     return res.status(200).json({
-      response: aiResponse,
+      ok: true,
+      note_id: noteId,
       sequence,
-      current_section: finalSection || inheritedSection,
-      inferred_section: keywordHint,
-      note_type: noteType,
-      note_status: noteStatus,
-      observation_id: observationId,
-      is_correction: isCorrection,
-      claims_extracted: claimCount,
-      claim_error: claimError || undefined,
+      processing_status: finalStatus,
+      current_section: applied.section_display_name,
+      section_created: applied.section_created,
+      claims_inserted: applied.claims_inserted,
+      claims_superseded: applied.claims_superseded,
+      live_response: modelOutput.live_response?.required
+        ? modelOutput.live_response
+        : { required: false, type: null, text: null },
     });
 
   } catch (err) {
-    console.error('[process-soc-note] fatal error:', err.message);
-    return res.status(500).json({
-      error: err.message || 'Failed to process note',
-      stack: err.stack?.split('\n').slice(0, 3),
+    console.error('[process-soc-note v2] unhandled error:', err.message, err.stack);
+    if (noteId) {
+      await supabase.from('soc_notes').update({
+        processing_status: 'failed', processing_error: err.message,
+      }).eq('id', noteId).then(null, () => {});
+    }
+    return res.status(200).json({
+      ok: false, note_id: noteId, sequence,
+      processing_status: 'failed', error: err.message,
+      live_response: { required: false, type: null, text: null },
     });
   }
 }

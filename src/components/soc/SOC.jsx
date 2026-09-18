@@ -315,6 +315,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   }, []);
 
   // ── Submit a note — saves directly to ai_messages ───────────────────────
+  const [sendingNote, setSendingNote] = useState(false);
+
   const handleSend = useCallback(async (overrideText) => {
     const userContent = (overrideText ?? textInput).trim();
     if (!userContent) return;
@@ -347,6 +349,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     const msgId = uid();
     setMessages(prev => [...prev, { id: msgId, role: 'user', content: userContent }]);
     setTextInput('');
+    // Fixed 2026-09-19, Phase C: this request now genuinely waits for
+    // live semantic processing (a real model call) rather than
+    // returning near-instantly as it did when process-soc-note.js was
+    // fire-and-forget. Without this, the input gave no feedback during
+    // a now-multi-second wait — a real, if minor, UX regression the
+    // architecture change would otherwise have introduced silently.
+    setSendingNote(true);
 
     // Save via API route (service-role key required)
     const saveRes = await fetch('/api/soc-save', {
@@ -360,30 +369,30 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         user_id: state.currentUser?.id || state.currentUser?.email,
       }),
     });
+    // Fixed 2026-09-19, Phase C, on explicit instruction: this previously
+    // decided what to show the surveyor using client-side regex, guessing
+    // at corrections/room-changes from keywords, defaulting to "Noted ✓"
+    // for everything else — the exact "always acknowledges, driven by
+    // trigger words" behaviour flagged as unwanted. The live semantic
+    // processor now genuinely decides this (Universal SOC Brain +
+    // Live Processing Contract, silent by default per the spec), and its
+    // real answer is what's rendered here — nothing is guessed
+    // client-side any more.
     if (saveRes.ok) {
-      // Detect note type for acknowledgement
-      const noteText = userContent.toLowerCase().trim();
-      const isCorrection = /\b(actually|scratch that|correction|just to amend|just to note on that last|just to note on the last|going back to|to clarify the last|to correct the last|sorry[,\s]+(i mean|that should|the))/i.test(userContent);
-      const isSectionChange = /\b(moving (to|into)|entering (the|into)|starting (the schedule|in|with)|continuing (in|with|the schedule)|now (in|at)|i('m| am) (now |)(in|at))/i.test(userContent);
-      
-      let ack = 'Noted ✓';
-      if (isCorrection) {
-        // Extract what's being corrected
-        const corrText = userContent.replace(/^(actually[,.]?|scratch that[,.]?|correction[,.]?|just to amend[,.]?|just to note on (that |the )?last one[,.]?|sorry[,.]?)/i, '').trim();
-        ack = `Correction noted ✓ — updating: "${corrText.slice(0, 80)}${corrText.length > 80 ? '...' : ''}"`;
-      } else if (isSectionChange) {
-        // Extract section name
-        const secMatch = userContent.match(/(?:moving (?:to|into)|entering (?:the|into)|starting (?:in|with)|continuing (?:in|with)|now (?:in|at))\s+(?:the\s+)?(.{3,50}?)(?:\s*[.,]|$)/i);
-        const secName = secMatch ? secMatch[1].trim() : '';
-        ack = secName ? `Moving to: ${secName} ✓` : 'Section change noted ✓';
+      const body = await saveRes.json().catch(() => ({}));
+      const processing = body.processing;
+      if (processing?.ok === false) {
+        setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Could not process this note. It has been saved and can be retried.' }]);
+      } else if (processing?.live_response?.required && processing.live_response.text) {
+        setMessages(prev => [...prev, { id: msgId + '-resp', role: 'ely', content: processing.live_response.text }]);
       }
-      
-      setMessages(prev => [...prev, { id: msgId + '-ack', role: 'ely', content: ack }]);
+      // required: false (the normal case) — nothing is shown, silently processed.
     } else {
       const err = await saveRes.json().catch(() => ({}));
       console.error('[SOC] save_note failed:', err);
       setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
     }
+    setSendingNote(false);
   }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex, state.currentUser]);
 
   const handleMicToggle = useCallback(() => {
@@ -1502,7 +1511,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             onSend={() => handleSend()}
             onMicToggle={handleMicToggle}
             isRecording={isRecording}
-            disabled={processing}
+            disabled={processing || sendingNote}
+            loading={sendingNote}
             placeholder="Dictate or type an observation…"
             inputRef={inputRef}
           />

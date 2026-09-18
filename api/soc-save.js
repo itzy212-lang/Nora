@@ -152,24 +152,36 @@ export default async function handler(req, res) {
 
       if (error) return res.status(500).json({ error: error.message });
 
-      // Fire process-soc-note non-blocking — stateful per-note processing
-      // This maintains soc_observations live so Generate only needs Terra drafting
+      // Fixed 2026-09-19, Phase C: this call was previously fire-and-forget
+      // — the note was reported saved before live processing had even
+      // started, and the frontend never saw the real outcome. Now awaited,
+      // so the caller gets the actual structured response (live_response,
+      // processing_status) in the same round trip. This is not the
+      // Generation Barrier (Phase D, guards /api/generate-soc itself) —
+      // it only makes this one note-save call genuinely synchronous.
       const baseUrl = process.env.VERCEL_URL
         ? 'https://' + process.env.VERCEL_URL
         : 'http://localhost:3000';
-      fetch(baseUrl + '/api/process-soc-note', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id,
-          project_id: project_id || null,
-          ao_id: req.body.ao_id || null,
-          content,
-          openai_key: process.env.OPENAI_API_KEY,
-        }),
-      }).catch(e => console.warn('[soc-save] process-soc-note fire-and-forget failed:', e.message));
+      let processingResult = { ok: false, processing_status: 'failed', live_response: { required: false, type: null, text: null } };
+      try {
+        const procRes = await fetch(baseUrl + '/api/process-soc-note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id,
+            project_id: project_id || null,
+            ao_id: req.body.ao_id || null,
+            content,
+            openai_key: process.env.OPENAI_API_KEY,
+          }),
+        });
+        processingResult = await procRes.json();
+      } catch (e) {
+        console.warn('[soc-save] process-soc-note call failed:', e.message);
+        processingResult.error = e.message;
+      }
 
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, processing: processingResult });
     }
 
     // Save manually edited preview state
