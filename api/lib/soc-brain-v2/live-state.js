@@ -159,7 +159,17 @@ export async function applyLiveProcessingResult(supabase, {
     p_session_id: sessionId,
     p_note_id: noteId,
     p_sequence: sequence,
-    p_claims: JSON.stringify(claims),
+    // Fixed 2026-09-19: this was JSON.stringify(claims). The Supabase
+    // JS client already serialises a native array/object into JSONB
+    // correctly for a jsonb-typed RPC parameter. Pre-stringifying it
+    // here meant the client sent a JSON *string* containing the array's
+    // text, not the array itself - so Postgres received p_claims as a
+    // jsonb scalar (a string), not a jsonb array, and
+    // jsonb_array_elements(p_claims) correctly rejected it with
+    // "cannot extract elements from a scalar". Confirmed live: every
+    // note reaching this call failed here, after section resolution
+    // (a separate, already-committed write) had already succeeded.
+    p_claims: claims,
     p_section: sectionText,
     p_note_type: hasAmendment ? 'amendment' : (claims.every(c => c.claim_type === 'contextual' || c.claim_type === 'section_declaration') && claims.length ? 'contextual' : 'observation'),
     p_correction_mode: hasAmendment ? (claims.find(c => c.amendment_mode)?.amendment_mode || 'replace') : null,

@@ -149,7 +149,7 @@ describe('applyLiveProcessingResult — Scenario 6/8: correction preserving unaf
     expect(rpcCall.name).toBe('process_soc_note_atomic');
     expect(rpcCall.params.p_correction_mode).toBe('correct_measurement');
     expect(rpcCall.params.p_note_type).toBe('amendment');
-    const sentClaims = JSON.parse(rpcCall.params.p_claims);
+    const sentClaims = rpcCall.params.p_claims;
     expect(sentClaims[0].measurement).toBe('approximately 450mm');
     // Unaffected fields were never stated by the model and correctly
     // stay null on this claim — the RPC's own supersession logic (not
@@ -196,7 +196,7 @@ describe('applyLiveProcessingResult — Scenario 15: duplicate/repeated dictatio
     await applyLiveProcessingResult(supabase, {
       sessionId: 's1', noteId: 'note-10', sequence: 10, projectId: 'p1', aoId: 'ao1', modelOutput,
     });
-    const sentClaims = JSON.parse(supabase._calls.rpc[0].params.p_claims);
+    const sentClaims = supabase._calls.rpc[0].params.p_claims;
     expect(sentClaims[0].claim_type).toBe('excluded');
   });
 });
@@ -234,8 +234,67 @@ describe('applyLiveProcessingResult — claim id generation', () => {
     await applyLiveProcessingResult(supabase, {
       sessionId: 's1', noteId: 'note-4', sequence: 4, projectId: 'p1', aoId: 'ao1', modelOutput,
     });
-    const sentClaims = JSON.parse(supabase._calls.rpc[0].params.p_claims);
+    const sentClaims = supabase._calls.rpc[0].params.p_claims;
     expect(sentClaims[0].claim_id).toBe('c-4-1');
     expect(sentClaims[1].claim_id).toBe('c-4-2');
+  });
+});
+
+// Regression test for a real production bug (2026-09-19): p_claims was
+// being passed through JSON.stringify(claims) before reaching
+// supabase.rpc(). The Supabase JS client already serialises a native
+// array into JSONB correctly on its own — pre-stringifying it meant
+// Postgres received p_claims as a jsonb *string* (scalar), not a jsonb
+// *array*, and jsonb_array_elements(p_claims) failed live in
+// production with "cannot extract elements from a scalar" on every
+// single note, for as long as the live processor had been reachable
+// at all. This was invisible to every other test in this file and to
+// all of Phase B/C's own RPC testing, because that testing called the
+// RPC directly via raw SQL with genuine '[...]'::jsonb literals — a
+// completely different path from the JS client's own parameter
+// serialisation, which is the only place this specific defect could
+// actually occur. This test exists specifically to exercise that path:
+// it asserts the *type* supabase.rpc() actually receives for p_claims,
+// not just its eventual content, so a reintroduced JSON.stringify()
+// here fails a test immediately rather than only failing silently in
+// production.
+describe('applyLiveProcessingResult — p_claims serialisation (regression)', () => {
+  it('passes p_claims to supabase.rpc() as a native array, never as a pre-stringified JSON string', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-1', display_name: 'Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'general_condition', element: 'party wall', condition: 'plaster finish', raw_fragment: 'party wall has a plaster finish', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-1', sequence: 1, projectId: 'p1', aoId: 'ao1', modelOutput,
+    });
+    const p_claims = supabase._calls.rpc[0].params.p_claims;
+    // The specific, exact regression: must be a real array, not a string.
+    expect(typeof p_claims).not.toBe('string');
+    expect(Array.isArray(p_claims)).toBe(true);
+    // A string would also technically satisfy a loose length/truthy
+    // check, so assert on an actual element's shape too - this only
+    // passes for a genuine array of claim objects.
+    expect(p_claims[0]).toMatchObject({ claim_type: 'general_condition', element: 'party wall' });
+  });
+
+  it('every other RPC parameter remains a plain scalar, not independently serialised', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-1', display_name: 'Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'general_condition', raw_fragment: 'x', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-1', sequence: 1, projectId: 'p1', aoId: 'ao1', modelOutput,
+    });
+    const params = supabase._calls.rpc[0].params;
+    for (const key of ['p_session_id', 'p_note_id', 'p_sequence', 'p_section', 'p_note_type', 'p_project_id', 'p_ao_id', 'p_section_id']) {
+      expect(typeof params[key]).not.toBe('undefined');
+      if (params[key] !== null) expect(typeof params[key]).not.toBe('object');
+    }
   });
 });
