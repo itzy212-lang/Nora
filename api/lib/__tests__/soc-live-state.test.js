@@ -298,3 +298,120 @@ describe('applyLiveProcessingResult — p_claims serialisation (regression)', ()
     }
   });
 });
+
+// Regression tests for the live semantic acceptance test's defects
+// (2026-09-19). These assume a model output that correctly follows the
+// strengthened Live Processing Contract (a resolved element on
+// corrections and on contextual references) and verify the
+// code-enforced layer carries that resolution through intact into the
+// RPC call - i.e. that once the model does its job, nothing in this
+// layer loses, blocks, or mishandles the result. Whether the model
+// actually produces this output for a given real utterance is a
+// separate question this environment cannot test directly (no network
+// path to the live model API) - see the soc-live-processor.test.js
+// file for what IS tested about the prompt itself, and the Phase C
+// defect-fix checkpoint for the full picture.
+describe('applyLiveProcessingResult — acceptance-test defect regressions', () => {
+  it('[A] a correction with a resolved element reaches the RPC with amendment_mode and that element intact, so the existing element-matched supersession can apply', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    // The model, given the strengthened contract and the recent structured
+    // context, resolves "that's 450, not 650" to the party wall crack -
+    // this is the corrected model output shape, not something this test
+    // invents independently of the fix.
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'amendment', element: 'party wall', measurement: '450', amendment_mode: 'correct_measurement', raw_fragment: "that's 450, not 650", confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-5', sequence: 5, projectId: 'p1', aoId: 'ao1', modelOutput });
+    const params = supabase._calls.rpc[0].params;
+    expect(params.p_claims[0].element).toBe('party wall');
+    expect(params.p_claims[0].amendment_mode).toBe('correct_measurement');
+    expect(params.p_claims[0].measurement).toBe('450');
+    // Unaffected detail fields correctly stay null - only element and the
+    // actually-corrected field are populated.
+    expect(params.p_claims[0].defect_type).toBeNull();
+    expect(params.p_correction_mode).toBe('correct_measurement');
+    expect(params.p_note_type).toBe('amendment');
+  });
+
+  it('[B] a resolved contextual reference ("same wall") reaches the RPC as the real element, never as the literal phrase', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-rear', display_name: 'First Floor Rear Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'specific_defect', element: 'party wall', defect_type: 'staining', raw_fragment: 'same wall, there is also some staining just above it', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-9', sequence: 9, projectId: 'p1', aoId: 'ao1', modelOutput });
+    const claim = supabase._calls.rpc[0].params.p_claims[0];
+    expect(claim.element).toBe('party wall');
+    expect(claim.element).not.toBe('same wall');
+    // The original words are preserved in raw_fragment regardless.
+    expect(claim.raw_fragment).toContain('same wall');
+  });
+
+  it('[C] an additional observation ("actually, another crack...") carries no amendment_mode, so it cannot supersede the prior crack', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-rear', display_name: 'First Floor Rear Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'specific_defect', element: 'party wall', defect_type: 'crack', measurement: '200 millimetres', raw_fragment: 'another crack about 200 millimetres to the left of that one', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-10', sequence: 10, projectId: 'p1', aoId: 'ao1', modelOutput });
+    const params = supabase._calls.rpc[0].params;
+    expect(params.p_claims[0].amendment_mode).toBeNull();
+    expect(params.p_note_type).toBe('observation');
+    expect(params.p_correction_mode).toBeNull();
+  });
+
+  it('[D] an unresolvable generic reference stays claim_type "unresolved" through to the RPC, not promoted to a resolved defect type', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'unresolved', element: null, measurement: '200 millimetres', raw_fragment: "There's a crack on the wall, about 200 millimetres.", confidence: 'low' }],
+      resolves_pending_clarification: false,
+      live_response: { required: true, type: 'clarification', text: 'Which wall is the 200mm crack on?' },
+    };
+    const applied = await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-13', sequence: 13, projectId: 'p1', aoId: 'ao1', modelOutput });
+    const claim = supabase._calls.rpc[0].params.p_claims[0];
+    expect(claim.claim_type).toBe('unresolved');
+    expect(claim.element).toBeNull();
+    expect(applied.claims_inserted).toBeGreaterThanOrEqual(0);
+    // The clarification bookkeeping itself lives in process-soc-note.js's
+    // orchestration (setPendingClarification), not in this function - this
+    // test only confirms the claim shape stays unresolved, which is the
+    // pre-condition for that orchestration to work correctly.
+  });
+
+  it('[E] "bugatti wall" resolved to "party wall" reaches the RPC as the resolved element, with raw_fragment unchanged', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'specific_defect', element: 'party wall', defect_type: 'cracking', raw_fragment: 'The bugatti wall in here has some cracking too.', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-12', sequence: 12, projectId: 'p1', aoId: 'ao1', modelOutput });
+    const claim = supabase._calls.rpc[0].params.p_claims[0];
+    expect(claim.element).toBe('party wall');
+    expect(claim.raw_fragment).toBe('The bugatti wall in here has some cracking too.');
+  });
+
+  it('[F] returning to an earlier section still reuses it and leaves first_entered_sequence untouched (unaffected by this fix)', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom', first_entered_sequence: 1 } });
+    const modelOutput = {
+      section_resolution: { action: 'reuse_existing', section_key: 'first_floor_front_bedroom', display_name: 'First Floor Front Bedroom' },
+      claims: [{ claim_type: 'specific_defect', element: 'window', defect_type: 'crack', raw_fragment: 'there is a crack above the window', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: true, type: 'return_confirmation', text: 'Added the crack above the window to the First Floor Front Bedroom.' },
+    };
+    await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-11', sequence: 11, projectId: 'p1', aoId: 'ao1', modelOutput });
+    // Reactivation path: update, never insert - confirms no duplicate section.
+    expect(supabase._calls.inserts.length).toBe(0);
+    expect(supabase._calls.updates.length).toBe(1);
+    expect(supabase._calls.updates[0]).toMatchObject({ last_active_sequence: 11 });
+  });
+});

@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.0.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.1.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -79,9 +79,18 @@ CLAIMS — what to extract
 - Every substantive fact in the note becomes one or more claims. A single note may produce zero claims (pure navigation, e.g. "moving into the rear bedroom" alone), one claim, or several.
 - claim_type "section_declaration" is for the navigation statement itself when a note is purely or partly about entering/returning to a section — this is not a defect finding and must never carry defect fields.
 - Use "contextual" for genuine navigation/filler with no factual content of its own.
-- Use "amendment" with the matching amendment_mode when the note corrects a previously stated fact. Only the fields actually being corrected need values; leave everything else null so the disposition/supersession logic can act only on what actually changed. An amendment claim does not need to repeat facts that remain unaffected — those stay as they already were in the earlier claim.
+- Use "amendment" with the matching amendment_mode when the note corrects a previously stated fact. Only the DETAIL fields actually being corrected need values (measurement, direction, condition, etc.) — leave unaffected detail fields null so the disposition/supersession logic can act only on what actually changed. This does NOT extend to element: an amendment claim must always carry a resolved element, identifying which established thing is being corrected, even when the surveyor's own words didn't repeat it. Resolve it from RECENT CONTEXT below — a natural correction like "actually, that's 450, not 650" refers to whatever measurement was most recently on record that 650 could plausibly be correcting; find that entry, and use its element. Without a resolved element, a correction cannot be safely applied and will not take effect.
 - Use "unresolved" for a fragment you genuinely cannot safely interpret — never invent a placeholder value instead.
 - raw_fragment should be the actual words that support this specific claim, not the whole note repeated on every claim.
+
+RESOLVING CONTEXTUAL REFERENCES
+
+The surveyor speaks naturally and will not always name the element being discussed. Words like "same wall", "that one", "it", or a bare "the wall" are contextual references, not element identities in their own right — never persist one of these phrases as the value of element.
+
+- Resolve the reference against RECENT CONTEXT: find the specific established element it plausibly refers to, and put that resolved element in your output's element field — e.g. "same wall" following a claim on element="party wall" resolves to element="party wall".
+- raw_fragment always keeps the surveyor's actual words ("same wall...") unchanged — only the structured element field carries the resolved value. You are recording what was meant, not rewriting what was said.
+- This applies whether the reference is about an existing fact being added to (a second observation about the same element, e.g. staining "just above it") or a fact being corrected (see amendments, above) — in both cases, resolve first, then classify as addition or amendment based on the note's actual meaning, not the other way around.
+- A reference only resolves safely when RECENT CONTEXT gives you ONE clear, specific candidate. If nothing in RECENT CONTEXT plausibly matches, or more than one established element is an equally plausible match and the note gives no way to choose between them, this is NOT a safe resolution — see MATERIAL AMBIGUITY below rather than guessing or falling back to a generic label like "wall".
 
 PENDING CLARIFICATION
 
@@ -93,4 +102,5 @@ LIVE RESPONSE — silent by default
 - required: false is the default and should be true for the large majority of ordinary observations. Do not set it to true merely because something happened — only when responding is genuinely useful.
 - Set required: true only for: a genuine, material clarification question; confirming a correction where confirmation is useful; confirming an unusual reassignment; confirming a return to an earlier section where that confirmation adds value; or answering a direct question the surveyor asked you.
 - When required is true, text must be short, natural, and specific — never a generic acknowledgement like "Noted" or "Got it".
-- A material clarification (type: "clarification") is warranted only where choosing wrongly would change the room, element, defect, location, measurement, measurement axis, direction, construction or condition recorded — not for informal wording or minor ambiguity that can be safely preserved as stated.`;
+- A material clarification (type: "clarification") is warranted only where choosing wrongly would change the room, element, defect, location, measurement, measurement axis, direction, construction or condition recorded — not for informal wording or minor ambiguity that can be safely preserved as stated.
+- This directly includes an unresolved contextual reference (see RESOLVING CONTEXTUAL REFERENCES above): if a generic reference like "the wall" cannot be confidently matched to exactly one established element from RECENT CONTEXT — because nothing plausible is on record, or several equally plausible established elements exist and the note gives no way to choose — do not promote it to a resolved, active claim under a vague label. Ask instead: a short, specific question naming what you need (e.g. "Which wall is the 200mm crack on?"), and mark the claim itself "unresolved" rather than "specific_defect" or any other resolved type, so the fact stays pending rather than becoming a premature property record.`;

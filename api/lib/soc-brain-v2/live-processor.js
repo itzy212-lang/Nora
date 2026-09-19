@@ -36,9 +36,17 @@ export async function loadLiveContext(supabase, { sessionId }) {
 
   let recentNotes = [];
   if (currentSection) {
+    // Fixed 2026-09-19 (acceptance-test defects 1-3): this previously
+    // selected only raw_fragment/content, so the model resolving a
+    // correction or a contextual reference ("same wall", "that one")
+    // only ever saw prior notes as bare prose - never an explicit,
+    // labeled record of which element/defect/measurement each one
+    // actually established. Now selects the full structured shape so
+    // the model has a genuine basis to resolve a referent, not just
+    // English text to infer from.
     const { data } = await supabase
       .from('soc_claims')
-      .select('raw_fragment, content, element, section')
+      .select('claim_id, claim_type, element, defect_type, measurement, direction, construction, finish, condition, raw_fragment, content')
       .eq('session_id', sessionId)
       .eq('section_id', currentSection.id)
       .eq('status', 'active')
@@ -54,10 +62,26 @@ export async function loadLiveContext(supabase, { sessionId }) {
   };
 }
 
+/**
+ * Renders one recent claim as a compact, labeled line for the model:
+ * its established element and the specific facts already on record for
+ * it, alongside the surveyor's original words. This is what makes
+ * resolving "that's 450, not 650" or "same wall" a matter of reading an
+ * explicit prior record rather than re-inferring structure from prose.
+ */
+export function formatRecentClaim(c) {
+  const facts = [c.defect_type, c.measurement, c.direction, c.construction, c.finish, c.condition]
+    .filter(Boolean).join(', ');
+  const label = c.element ? `element="${c.element}"` : (c.claim_type ? `(${c.claim_type})` : '');
+  const factsPart = facts ? ` — ${facts}` : '';
+  const raw = c.raw_fragment || c.content || '';
+  return `- [${c.claim_id}] ${label}${factsPart}${raw ? ` (said: "${raw}")` : ''}`.trim();
+}
+
 function buildUserPrompt({ context, pendingClarification, noteText }) {
   const sectionIndexText = buildSectionIndexText(context.sections, context.currentSection?.id || null);
   const recentContextText = context.recentNotes.length
-    ? context.recentNotes.map(n => `- ${n.raw_fragment || n.content || ''}`.trim()).filter(Boolean).join('\n')
+    ? context.recentNotes.map(formatRecentClaim).filter(Boolean).join('\n')
     : '(no prior notes in the current section yet)';
 
   const pendingText = pendingClarification
@@ -67,7 +91,7 @@ function buildUserPrompt({ context, pendingClarification, noteText }) {
   return [
     `SECTION INDEX:\n${sectionIndexText}`,
     `CURRENT SECTION: ${context.currentSection ? `"${context.currentSection.display_name}" (key: ${context.currentSection.section_key})` : 'none yet — this is the first note'}`,
-    `RECENT CONTEXT FROM THE CURRENT SECTION:\n${recentContextText}`,
+    `RECENT CONTEXT FROM THE CURRENT SECTION — each already-established claim, its resolved element, and the facts on record for it:\n${recentContextText}`,
     pendingText,
     `NEW NOTE:\n"${noteText}"`,
   ].join('\n\n');
