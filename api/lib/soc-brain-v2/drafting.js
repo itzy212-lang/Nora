@@ -1,6 +1,10 @@
 // api/lib/soc-brain-v2/drafting.js
 //
-// Nora SOC v2, Phase D3 — professional drafting.
+// Nora SOC v2, Phase D3 — professional drafting. Extended minimally
+// in Phase D5 (2026-09-19) to give each row a stable row_id at
+// creation — see generateRowId() below — so it can be tracked as the
+// same logical observation through D4 repair, D5 rewrite, and D6,
+// rather than by array position. No other drafting behaviour changed.
 //
 // Consumes D2's reconciled representation (reconcile(), never
 // re-derives it) and produces professionally drafted SOC prose, with
@@ -28,6 +32,16 @@ import { reconcile } from './reconciliation.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { USER_SOC_BRAIN_V2, buildUserSocBrainContext } from './user-soc-brain.js';
 import { DRAFTING_CONTRACT } from './drafting-contract.js';
+import { randomUUID } from 'crypto';
+
+// Stable drafted-row identity (Phase D5 requirement): generated once,
+// here, when a row is first created — never recomputed from array
+// position downstream. D4 repairs and D5 rewrites read/carry this
+// value forward on the row object itself; they never regenerate or
+// reposition-derive it. This is the only change D5 required of D3.
+function generateRowId() {
+  return `row-${randomUUID().slice(0, 8)}`;
+}
 
 /**
  * Terra (gpt-5.6-terra), matching its exact established invocation
@@ -96,17 +110,18 @@ async function draftSection({ apiKey, model, universalBrain, userBrainContext, s
     return {
       // Fixed 2026-09-19, D5 acceptance boundary: stable row identity,
       // generated once here at creation - the only point a row is
-      // ever newly created in the pipeline - and never recomputed from
-      // array position again. Deterministic from the row's own
-      // source_item_ids (sorted, so citation order doesn't matter),
-      // not a random id, so it stays reproducible for tests and
-      // genuinely tied to what the row actually represents rather than
-      // where it happens to sit in an array. Survives D4 repair and D5
-      // rewrite unchanged; those stages update the row's text, never
-      // this. source_item_ids remains the separate, authoritative
-      // provenance record - row_id identifies the row, it does not
-      // replace what the row is drawn from.
-      row_id: 'row-' + [...source_item_ids].sort().join('_'),
+      // ever newly created in the pipeline - and never recomputed
+      // from array position again. A random id rather than a hash of
+      // source_item_ids: stability only needs to hold for one
+      // generation lifecycle (D3 -> D4 repair -> D5 rewrite -> D6),
+      // not to be reproducible across separate runs, and a random id
+      // avoids any collision risk if two rows ever ended up citing
+      // the same evidence. D4 repairs and D5 rewrites read/carry this
+      // value forward on the row object itself; they never regenerate
+      // or reposition-derive it. source_item_ids remains the separate,
+      // authoritative provenance record - row_id identifies the row,
+      // it does not replace what the row is drawn from.
+      row_id: generateRowId(),
       observation: r.observation,
       element: r.element || null,
       // Code-level provenance validation: only ids that were genuinely

@@ -380,7 +380,7 @@ describe('draft() — safe-synthesis provenance scenarios (code-level guarantees
 // D5 acceptance boundary (2026-09-19): stable row identity, generated
 // once here at creation, never based on array position.
 describe('draft() — stable row_id generation', () => {
-  it('generates a deterministic row_id from sorted source_item_ids, not array position', async () => {
+  it('every row gets a row_id, independent of citation order in source_item_ids', async () => {
     mockReconciliationResult({
       sections: [FB],
       items: [
@@ -389,13 +389,17 @@ describe('draft() — stable row_id generation', () => {
       ],
     });
     global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ rows: [
-      { observation: 'combined', element: 'party wall', source_item_ids: ['c-2', 'c-1'] }, // deliberately unsorted citation order
+      { observation: 'combined', element: 'party wall', source_item_ids: ['c-2', 'c-1'] },
     ] }) } }] }) });
     const result = await draft({}, { sessionId: 's1', apiKey: 'k' });
-    expect(result.sections[0].rows[0].row_id).toBe('row-c-1_c-2'); // sorted regardless of citation order
+    expect(result.sections[0].rows[0].row_id).toMatch(/^row-/);
+    // Provenance (source_item_ids) is the separate, authoritative
+    // record of what a row is drawn from — row_id identifies the row
+    // itself and is not derived from citation order or content.
+    expect(result.sections[0].rows[0].source_item_ids.sort()).toEqual(['c-1', 'c-2']);
   });
 
-  it('two different rows in the same section get different, stable row_ids', async () => {
+  it('two different rows in the same section get different, unique row_ids', async () => {
     mockReconciliationResult({
       sections: [FB],
       items: [
@@ -410,6 +414,6 @@ describe('draft() — stable row_id generation', () => {
     const result = await draft({}, { sessionId: 's1', apiKey: 'k' });
     const ids = result.sections[0].rows.map(r => r.row_id);
     expect(new Set(ids).size).toBe(2);
-    expect(ids).toEqual(['row-c-1', 'row-c-2']);
+    expect(ids.every(id => /^row-/.test(id))).toBe(true);
   });
 });

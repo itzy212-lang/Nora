@@ -218,3 +218,29 @@ describe('runQualityAudit — User Brain integration', () => {
     expect(capturedSystem).toContain('Nora User SOC Brain');
   });
 });
+
+describe('runQualityAudit — test 11: section lock is structural, not just prompt-instructed', () => {
+  it('an edit returned for one section can never be applied to a row in a different section', async () => {
+    const RB = { section_id: 'sec-rear', section_name: 'Rear Bedroom' };
+    global.fetch = async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      const sectionName = /SECTION: (.+)/.exec(body.messages[1].content)?.[1];
+      if (sectionName === 'Front Bedroom') {
+        // Model (or a bug) tries to edit a row that actually belongs to Rear Bedroom.
+        return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'pass_with_edits', edits: [{ reference: 'row-rear-1', original: 'Rear bedroom text.', revised: 'Hijacked text.', reason: 'x' }], issues_for_upstream_review: [] }) } }] }) };
+      }
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"status":"pass","edits":[],"issues_for_upstream_review":[]}' } }] }) };
+    };
+    const draftResult = {
+      session_id: 's1',
+      sections: [
+        { ...FB, rows: [{ row_id: 'row-front-1', observation: 'Front bedroom text.', element: 'e', source_item_ids: ['f'] }] },
+        { ...RB, rows: [{ row_id: 'row-rear-1', observation: 'Rear bedroom text.', element: 'e', source_item_ids: ['r'] }] },
+      ],
+      reconciliation_items: [], excluded: [],
+    };
+    const result = await runQualityAudit({}, { sessionId: 's1', draftResult, apiKey: 'k' });
+    // Rear Bedroom's row is untouched - Front Bedroom's call never had it in its reviewableIds.
+    expect(result.sections[1].rows[0].observation).toBe('Rear bedroom text.');
+  });
+});

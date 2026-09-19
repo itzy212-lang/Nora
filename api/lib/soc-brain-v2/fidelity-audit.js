@@ -16,19 +16,16 @@
 // (fidelity-audit-contract.js), called once per section, matching
 // D3's own per-section granularity and section-isolation guarantee.
 //
-// Rows are referenced positionally (section_id + index within that
-// section) rather than requiring D3 to persist a new row id field -
-// deliberately avoids any further change to D3's output schema.
+// Rows are referenced by their stable row_id (Phase D5 requirement,
+// generated once in drafting.js when a row is first created) rather
+// than by array position — a row keeps the same identity through D4
+// repair and D5 rewrite, so findings and audit trails stay correctly
+// attached to the same logical observation even as its text changes.
 
 import { assembleCanonicalGenerationInput } from './generation-input.js';
 import { FIDELITY_AUDIT_CONTRACT } from './fidelity-audit-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 
-// Fixed 2026-09-19, D5 acceptance boundary: rows now carry a stable
-// row_id (generated once in drafting.js, D3) rather than being
-// referenced by array position. The rowRef() positional-reference
-// helper that used to compute this has been removed entirely - every
-// reference below uses row.row_id directly.
 
 // ─── Deterministic checks (code, no model) — a safety net, not the audit itself ───
 
