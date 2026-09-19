@@ -87,6 +87,36 @@ function resolvedContentFor(claim) {
 }
 
 /**
+ * Fixed 2026-09-19, close-out pass: a resolved claim's raw_provenance
+ * previously showed only that claim's own note - so a clarification
+ * answer like "The party wall." carried no visible support for the
+ * measurement it was resolving, and a correction carried no visible
+ * support for the attributes it inherited unchanged from what it
+ * corrected. D4 (correctly, not a defect in D4) could not verify the
+ * resolved fact against evidence it was never shown.
+ *
+ * Generic fix, not tied to clarifications specifically: walks
+ * backward through the supersession chain (any claim whose
+ * superseded_by points at this one is a direct predecessor;
+ * recursing handles corrections-of-corrections and multi-step
+ * clarifications of arbitrary depth) and returns every raw_fragment
+ * along that chain, in chronological order, ending with the claim's
+ * own. This does not change what a claim's resolved_content says -
+ * only what raw evidence is exposed alongside it. A genuinely
+ * unsupported resolved fact is still unsupported once every real
+ * predecessor's raw text is visible - this makes the true evidence
+ * chain inspectable, it does not manufacture support that isn't
+ * there.
+ */
+function buildProvenanceChain(claim, allClaims, visited = new Set()) {
+  if (visited.has(claim.claim_id)) return []; // cycle guard - should not occur, but never loop
+  visited.add(claim.claim_id);
+  const predecessors = allClaims.filter(c => c.superseded_by === claim.claim_id);
+  const predecessorChain = predecessors.flatMap(p => buildProvenanceChain(p, allClaims, visited));
+  return [...predecessorChain, { note_sequence: claim.note_sequence, raw_fragment: claim.raw_fragment, claim_id: claim.claim_id }];
+}
+
+/**
  * Maps every existing Phase C claim (active and superseded) into a
  * reconciliation item. Pure function, no model, no I/O - the
  * canonical input already has everything needed.
@@ -94,6 +124,7 @@ function resolvedContentFor(claim) {
 export function buildDeterministicItems(canonicalInput) {
   const sectionById = new Map(canonicalInput.sections.map(s => [s.id, s]));
   const activeByClaimId = new Map(canonicalInput.claims.active.map(c => [c.claim_id, c]));
+  const allClaims = [...canonicalInput.claims.active, ...canonicalInput.claims.superseded];
 
   const items = [];
 
@@ -108,7 +139,7 @@ export function buildDeterministicItems(canonicalInput) {
       section_name: section?.display_name || claim.section || null,
       element: claim.element,
       resolved_content: resolvedContentFor(claim),
-      raw_provenance: [{ note_sequence: claim.note_sequence, raw_fragment: claim.raw_fragment }],
+      raw_provenance: buildProvenanceChain(claim, allClaims),
       disposition: claim.disposition,
       status: claim.status,
       superseded_by: null,
@@ -132,7 +163,7 @@ export function buildDeterministicItems(canonicalInput) {
       section_name: section?.display_name || claim.section || null,
       element: claim.element,
       resolved_content: resolvedContentFor(claim),
-      raw_provenance: [{ note_sequence: claim.note_sequence, raw_fragment: claim.raw_fragment }],
+      raw_provenance: buildProvenanceChain(claim, allClaims),
       disposition: claim.disposition, // Phase C already sets this to 'superseded'
       status: claim.status,
       superseded_by: claim.superseded_by,

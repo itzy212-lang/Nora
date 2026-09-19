@@ -23,6 +23,7 @@ import { draft } from './drafting.js';
 import { runFidelityAudit, applyRepairs } from './fidelity-audit.js';
 import { runQualityAudit } from './quality-audit.js';
 import { runPostQualityGuard } from './factual-guard.js';
+import { draftSiteNotes } from './site-note-drafting.js';
 import { applyHumanReferenceCodes } from './reference-codes.js';
 
 export const SOC_V2_PIPELINE_VERSION = 'v1.0.0';
@@ -119,15 +120,48 @@ export async function runSocV2Pipeline(supabase, { sessionId, projectId, aoId, a
     rows: s.rows.map(r => ({ ref: r.human_reference, observation: r.observation, action: 'Record only' })),
   }));
 
-  const siteNotesForRender = reconciliation.site_notes.map(sn => ({
+  // Professional site-note wording (close-out pass, fix 2) — routing
+  // itself (which items are site notes) is untouched, accepted
+  // architecture; this only rewrites the text those items carry into
+  // the final output.
+  let draftedSiteNotes = reconciliation.site_notes;
+  try {
+    draftedSiteNotes = await draftSiteNotes(reconciliation.site_notes, { apiKey, model });
+  } catch (err) {
+    console.warn('[production-pipeline] Site note drafting failed, using unpolished text:', err.message);
+  }
+  const siteNotesForRender = draftedSiteNotes.map(sn => ({
     topic: 'general',
-    description: sn.resolved_content,
+    description: sn.professional_text || sn.resolved_content,
   }));
 
   const d6ActionCounts = guardResult.audit_trail.reduce((acc, a) => {
     acc[a.action] = (acc[a.action] || 0) + 1;
     return acc;
   }, {});
+
+  // Close-out pass, fix 3: a full, inspectable audit record for every
+  // row D5 actually changed - row_id, section_id, source_item_ids,
+  // before/after text, the quality reason, D6's decision, and the
+  // final persisted wording. This is audit metadata only - it does
+  // not feed back into or alter D5's or D6's own decisions, which
+  // have already been made by this point; it only makes them
+  // inspectable afterward. No hidden model reasoning is included -
+  // just the structured reason text D5 itself already produced.
+  const d6ByRowId = new Map(guardResult.audit_trail.map(a => [a.row_id, a]));
+  const d5AuditTrail = qualityResult.quality_audit_trail.map(q => {
+    const guard = d6ByRowId.get(q.row_id);
+    return {
+      row_id: q.row_id,
+      section_id: q.section_id,
+      source_item_ids: guard?.source_item_ids || [],
+      before_wording: q.original,
+      after_wording: q.revised,
+      quality_reason: q.reason || null,
+      d6_decision: guard?.action || null,
+      final_wording: guard?.final_wording ?? q.revised,
+    };
+  });
 
   return {
     sections: sectionsForRender,
@@ -154,6 +188,7 @@ export async function runSocV2Pipeline(supabase, { sessionId, projectId, aoId, a
       d4_blocked_row_ids: blockedRowIds,
       d5_changed_count: qualityResult.quality_audit_trail.length,
       d5_issues: qualityResult.issues_for_upstream_review,
+      d5_audit_trail: d5AuditTrail,
       d6_status: guardResult.status,
       d6_accept_d5_count: d6ActionCounts.ACCEPT_D5 || 0,
       d6_revert_to_d4_count: d6ActionCounts.REVERT_TO_D4 || 0,
