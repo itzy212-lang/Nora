@@ -2,11 +2,12 @@ export const config = { maxDuration: 300 };
 
 import { createClient } from '@supabase/supabase-js';
 import {
-  extractAtomicClaims,
   draftFromClaims,
   runQualityAudit,
   runCompletenessAudit,
 } from './lib/soc-pipeline.js';
+import { checkGenerationBarrier } from './lib/soc-brain-v2/generation-barrier.js';
+import { assembleCanonicalGenerationInput } from './lib/soc-brain-v2/generation-input.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1044,60 +1045,60 @@ function runCodedFidelityChecks(draftedResult, claims) {
 
 // ── Main pipeline orchestrator ────────────────────────────────────────────────
 // Calls shared soc-pipeline.js functions in sequence.
-// Uses live persisted claims from DB if available; otherwise runs Stage 1 extraction.
+// Fixed 2026-09-19, Phase D1: this previously used live persisted
+// claims only when forceReextract was NOT set - and forceReextract was
+// always true, because SOC.jsx sends force_reextract: true
+// unconditionally on every Generate click. That meant this branch
+// always ran: DELETE FROM soc_claims for the whole session, then
+// re-extract every note independently, in parallel (Promise.all, no
+// shared state between notes), via a completely different, older
+// extraction function with no awareness of Phase C's resolved
+// sections, targeted corrections, or clarification resolutions.
+// Confirmed root cause, via direct audit, of two real symptoms: a
+// note far from any room name (e.g. resolved via context earlier in
+// the session) landing in the wrong section, since each parallel call
+// has no memory of prior notes; and a resolved clarification
+// reappearing as [UNCLEAR], since the two notes that resolved it
+// (the original ambiguous fragment and its answer) were extracted as
+// disconnected fragments with the resolution between them lost.
+//
+// Generation must be read-only with respect to the accepted Phase C
+// inspection evidence. This now always loads the current, real
+// resolved state directly - never deletes, never re-extracts -
+// regardless of the (now-inert) forceReextract flag. A generation
+// barrier runs first: if any note is still actively processing, any
+// note failed processing, or a live clarification is still
+// unanswered, generation stops safely (GENERATION_INCOMPLETE, the
+// existing, already-frontend-handled response shape) rather than
+// drafting from a session whose evidence-gathering isn't actually
+// finished.
+//
+// This does not yet implement reconciliation (Phase D2) or replace
+// drafting (Phase D3) - draftFromClaims below is unchanged and still
+// receives a plain claims array, now correctly sourced from the real,
+// current soc_claims rather than a destroyed-and-rebuilt approximation
+// of them.
 async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId, userId) {
-  // Load live claims from DB first — unless forceReextract is set
   let claims = [];
   let claimsFromLive = false;
-  const forceReextract = projectMeta?.forceReextract === true;
-  if (sessionId && !forceReextract) {
-    try {
-      const { data: liveClaims } = await supabase
-        .from('soc_claims')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('note_sequence', { ascending: true })   // numeric integer column
-        .order('claim_sequence', { ascending: true });  // numeric integer column
-      if (liveClaims?.length) { claims = liveClaims; claimsFromLive = true; }
-    } catch (e) { console.warn('[generate-soc] Could not load live claims:', e.message); }
-  }
-  if (forceReextract && sessionId) {
-    // On regeneration: process note by note — same as first-time generation
-    // This avoids sending all notes in one massive call which causes timeouts
-    try {
-      // First load all notes for this session
-      const { data: allNotes } = await supabase
-        .from('ai_messages')
-        .select('id, content, created_at')
-        .eq('session_id', sessionId)
-        .eq('surface', 'soc')
-        .eq('role', 'user')
-        .order('created_at', { ascending: true });
+  let canonicalInput = null;
 
-      if (allNotes?.length) {
-        console.log('[generate-soc] Regenerate: processing ' + allNotes.length + ' notes one by one');
-        
-        // Delete existing claims cleanly
-        await supabase.from('soc_claims').delete().eq('session_id', sessionId);
-        
-        // Extract claims in parallel — all notes fired simultaneously, results merged in order
-        console.log('[generate-soc] Regenerate: firing ' + allNotes.length + ' parallel Luna extractions');
-        const claimArrays = await Promise.all(
-          allNotes.map((note, i) =>
-            extractAtomicClaims('[' + (i + 1) + '] ' + note.content, apiKey)
-              .catch(e => { console.warn('[generate-soc] Note ' + (i+1) + ' failed:', e.message); return []; })
-          )
-        );
-        const allClaims = claimArrays.flat();
-        console.log('[generate-soc] Parallel extraction complete: ' + allClaims.length + ' total claims');
-        
-        if (allClaims.length) {
-          claims = allClaims;
-          claimsFromLive = true;
-          console.log('[generate-soc] Regenerate complete: ' + claims.length + ' total claims from ' + allNotes.length + ' notes');
-        }
-      }
-    } catch (e) { console.warn('[generate-soc] Note-by-note regeneration failed:', e.message); }
+  if (sessionId) {
+    const barrier = await checkGenerationBarrier(supabase, sessionId);
+    if (!barrier.ok) {
+      const reasonText = {
+        notes_still_processing: 'one or more notes are still being processed',
+        notes_failed_processing: 'one or more notes failed to process and have not been retried',
+        pending_clarification_unanswered: 'a live clarification question has not been answered yet' + (barrier.pending_clarification?.question ? ` ("${barrier.pending_clarification.question}")` : ''),
+      }[barrier.reason] || barrier.reason;
+      throw new Error(`GENERATION_INCOMPLETE: Cannot generate yet — ${reasonText}. Please wait or resolve this, then try again.`);
+    }
+
+    canonicalInput = await assembleCanonicalGenerationInput(supabase, { sessionId, projectId, aoId });
+    if (canonicalInput.claims.active.length) {
+      claims = canonicalInput.claims.active;
+      claimsFromLive = true;
+    }
   }
 
   // Load live structured observations from soc_observations (maintained per-note by process-soc-note)
