@@ -17,39 +17,52 @@
 //    extraction genuinely didn't capture as its own claim (e.g. "no
 //    visible defects" stated in the same breath as "also plastered",
 //    with only the plastered fact extracted). This DOES need
-//    judgment: is the leftover text a genuine, supported, uncontradicted
-//    fact, or just phrasing/filler already covered by what was
-//    extracted? This contract governs only that judgment call, made
-//    once per note where code has already detected a textual coverage
-//    gap (reconciliation.js, findCoverageGaps) - the model is never
-//    asked to decide FOR EVERY note, only for the specific candidates
-//    code has already identified as incompletely covered.
+//    judgment, and — fixed 2026-09-19, D2 acceptance correction — is
+//    now a genuine per-note semantic completeness check, not a
+//    lexical pre-filter. The model is given the note's COMPLETE raw
+//    text and the COMPLETE set of claims already extracted from it,
+//    and is asked directly whether everything factual in the text is
+//    accounted for. A prior design used word-overlap to decide
+//    per-clause whether to even ask the model at all - confirmed,
+//    directly, to cause a real false negative: a note stating two
+//    facts joined without a comma/period boundary, where one shared
+//    enough vocabulary with an already-captured claim to score above
+//    threshold, silently hid the second, uncaptured fact from ever
+//    reaching this judgment. Every substantive note (any note with at
+//    least one Phase C claim) now gets this check; nothing decides to
+//    skip it based on lexical similarity.
 
-export const RECONCILIATION_CONTRACT_VERSION = 'v1.0.0';
+export const RECONCILIATION_CONTRACT_VERSION = 'v2.0.0';
 
-export const RECONCILIATION_CONTRACT = `RECONCILIATION CONTRACT — raw-evidence recovery judgment
+export const RECONCILIATION_CONTRACT = `RECONCILIATION CONTRACT — per-note evidence completeness check
 
-You are given ONE dictated note's raw text, the resolved section it belongs to, and the claim(s) Phase C's live processor already extracted from it. Code has already determined that this note's raw text is not fully accounted for by those claims — there is leftover text your judgment is needed for.
-
-YOUR ONLY JOB: decide whether the leftover portion of this note states a genuine, supported, uncontradicted fact about the property that deserves its own recovered record — not to re-derive, re-classify, or second-guess the claims that already exist for this note. Those are settled; do not touch them.
+You are given ONE complete dictated note's raw text, the resolved section it belongs to, and every claim Phase C's live processor already extracted from it. Your job is a completeness check: is every genuine factual statement in this note's raw text already accounted for by these claims, or is something missing?
 
 RETURN VALID JSON ONLY, matching exactly:
 {
-  "recoverable": true | false,
-  "recovered_content": "the specific factual statement, in your own words, drawn only from the leftover text" | null,
-  "element": "the element this recovered fact is about — normally the same element the note's existing claim(s) already established, unless the leftover text clearly names a different one" | null,
-  "basis": "a short, specific quote or paraphrase of the exact leftover words that support this" | null
+  "fully_covered": true | false,
+  "recovered": [
+    {
+      "recovered_content": "the specific factual statement, in your own words, drawn only from the note's text",
+      "element": "the element this fact is about — normally the same element the note's existing claim(s) already established, unless the text clearly names a different one",
+      "basis": "a short, specific quote or paraphrase of the exact words in the note that support this"
+    }
+  ]
 }
 
-WHEN TO RECOVER (recoverable: true):
-- The leftover text states a specific, concrete fact (a condition, a defect, an absence of a defect, a measurement, a finish) that is not already represented, even implicitly, by the note's existing claims.
-- The fact is stated plainly and is not contradicted by anything else in this note or by the resolved section's other established facts.
-- Example: existing claim covers "plastered"; leftover text is "no visible defects" — recoverable, a distinct, supported, uncontradicted fact about the same element.
+If fully_covered is true, recovered must be an empty array. If anything is missing, fully_covered is false and recovered lists each missing fact as its own entry.
 
-WHEN NOT TO RECOVER (recoverable: false):
-- The leftover text is filler, hedging, repetition, or restates what the existing claim already means in different words.
-- The leftover text is itself navigational, procedural, or conversational rather than a property fact.
-- The leftover text is genuinely ambiguous about what it refers to, or would require guessing an element, defect type, or measurement not actually stated.
-- When in doubt, do not recover. A missed recovery can be corrected by professional drafting reading the raw transcript directly; a wrongly invented recovery becomes a fabricated fact in the record. Preserve uncertainty rather than invent.
+WHEN SOMETHING IS MISSING (add it to recovered):
+- The note states a specific, concrete fact (a condition, a defect, an absence of a defect, a measurement, a finish, an operational result) that none of the existing claims represent, even implicitly.
+- The fact is stated plainly and is not contradicted by anything else in the note or by the claims themselves.
+- Example: the existing claim covers "plastered"; the note also says "no visible defects" — that is a distinct, supported, uncontradicted fact about the same element and must be recovered, even though it shares no unusual vocabulary that would make it stand out lexically.
+- Two facts joined by "and", by a new clause, or by no punctuation at all are still two separate facts. Do not let one claim's coverage of part of a sentence excuse missing the rest of it.
 
-Do not alter, restate, or comment on the claims you were shown — they are Phase C's resolved state and are not yours to reinterpret. Your output is additive only: a new, clearly separate fact, or nothing.`;
+WHEN NOTHING IS MISSING, or something looks missing but should NOT be recovered:
+- The apparent leftover text is filler, hedging, repetition, or restates what an existing claim already means in different words.
+- The apparent leftover text is itself navigational, procedural, or conversational rather than a property fact.
+- The apparent leftover text is genuinely ambiguous about what it refers to, or would require guessing an element, defect type, or measurement not actually stated.
+- When in doubt about whether something is genuinely a new, distinct fact, do not recover it. A missed recovery can still be corrected later by professional drafting reading the raw transcript directly; a wrongly invented recovery becomes a fabricated fact in the record. Preserve uncertainty rather than invent.
+
+Do not alter, restate, dispute, or comment on the claims you were shown — they are Phase C's resolved state and are not yours to reinterpret, correct, or duplicate. Your output only ever adds a new, clearly separate fact, or nothing at all.`;
+

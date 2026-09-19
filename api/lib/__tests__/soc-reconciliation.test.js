@@ -10,7 +10,7 @@
 // was actually verified.
 
 import { describe, it, expect } from 'vitest';
-import { buildDeterministicItems, classifyExcludedMaterial, findCoverageGaps, isDraftable } from '../soc-brain-v2/reconciliation.js';
+import { buildDeterministicItems, classifyExcludedMaterial, isDraftable, reconcile } from '../soc-brain-v2/reconciliation.js';
 
 const FB = 'sec-front';
 const RB = 'sec-rear';
@@ -98,31 +98,81 @@ describe('classifyExcludedMaterial — conversational material never silently dr
   });
 });
 
-describe('findCoverageGaps — raw-detail recovery candidate detection', () => {
-  it('detects "no visible defects" as uncovered when only "also plastered" was extracted as a claim', () => {
-    const claims = { active: [{ claim_id: 'c-7-1', note_sequence: 7, section_id: RB, element: 'wall abutting the front bedroom', disposition: 'active_evidence', status: 'active', raw_fragment: 'The wall abutting the front bedroom is also plastered' }], superseded: [] };
-    const notes = [{ sequence: 7, raw_note: 'The wall abutting the front bedroom is also plastered, no visible defects.', structured_response: { type: null } }];
-    const gaps = findCoverageGaps({ sections, claims }, notes);
-    expect(gaps.some(g => g.clause.toLowerCase().includes('no visible defects'))).toBe(true);
+describe('reconcile() — false-negative fix: every substantive note is semantically checked, not lexically gated (2026-09-19 correction)', () => {
+  it('calls the completeness model for a note even when a lexical-overlap heuristic would have scored it as fully covered', async () => {
+    // The exact scenario confirmed, directly, to be a real false negative
+    // under the old per-clause word-overlap gate: two facts joined by
+    // "and" with no comma/period boundary, where the first claim's own
+    // vocabulary overlaps enough of the whole sentence to clear a 0.5
+    // per-clause threshold, hiding the second fact from ever reaching a
+    // model. reconcile() must now call the model regardless — there is
+    // no lexical gate left that could suppress this call.
+    let modelCalled = false;
+    global.fetch = async (url, opts) => {
+      modelCalled = true;
+      const body = JSON.parse(opts.body);
+      expect(body.model).toBe('gpt-5.6-terra'); // primary model, per acceptance correction
+      expect(body.messages[0].role).toBe('developer'); // Terra's established invocation pattern
+      expect(body.max_completion_tokens).toBeDefined();
+      expect(body.response_format).toBeUndefined(); // Terra is not called with forced JSON mode anywhere in this codebase
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ fully_covered: false, recovered: [{ recovered_content: 'hairline crack near the door', element: 'party wall', basis: 'shows a hairline crack near the door' }] }) } }] }) };
+    };
+
+    const supabase = {
+      from: (table) => {
+        if (table === 'soc_notes') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [{ sequence: 20, raw_note: 'The party wall has a plaster and emulsion finish and shows a hairline crack near the door', structured_response: { type: null } }], error: null }) }) }) };
+        if (table === 'soc_sections') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [{ id: 'sec-x', section_key: 'x', display_name: 'Test Room', first_entered_sequence: 1 }], error: null }) }) }) };
+        if (table === 'ai_messages') return { select: () => ({ eq: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) }) };
+        if (table === 'soc_claims') return { select: () => ({ eq: () => ({ order: () => ({ order: () => Promise.resolve({ data: [{ claim_id: 'c-x-1', note_sequence: 20, section_id: 'sec-x', status: 'active', disposition: 'active_evidence', element: 'party wall', condition: 'plaster and emulsion finish', raw_fragment: 'The party wall has a plaster and emulsion finish' }], error: null }) }) }) }) };
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+
+    const result = await reconcile(supabase, { sessionId: 's1', apiKey: 'test-key' });
+    expect(modelCalled).toBe(true);
+    const recoveredItem = result.items.find(i => i.recovered);
+    expect(recoveredItem).toBeDefined();
+    expect(recoveredItem.resolved_content).toContain('hairline crack');
+    expect(recoveredItem.draftable).toBe(true);
   });
 
-  it('does not flag a note whose text is fully covered by its claim', () => {
-    const claims = { active: [{ claim_id: 'c-3-1', note_sequence: 3, section_id: FB, element: 'window', disposition: 'active_evidence', status: 'active', raw_fragment: 'The window opened and closed satisfactorily no sticking or binding' }], superseded: [] };
-    const notes = [{ sequence: 3, raw_note: 'The window opened and closed satisfactorily no sticking or binding', structured_response: { type: null } }];
-    const gaps = findCoverageGaps({ sections, claims }, notes);
-    expect(gaps.length).toBe(0);
+  it('falls back to gpt-4o if Terra fails, matching the established drafting fallback pattern', async () => {
+    let calls = [];
+    global.fetch = async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      calls.push(body.model);
+      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ fully_covered: true, recovered: [] }) } }] }) };
+    };
+    const supabase = {
+      from: (table) => {
+        if (table === 'soc_notes') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [{ sequence: 1, raw_note: 'x', structured_response: { type: null } }], error: null }) }) }) };
+        if (table === 'soc_sections') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) };
+        if (table === 'ai_messages') return { select: () => ({ eq: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) }) };
+        if (table === 'soc_claims') return { select: () => ({ eq: () => ({ order: () => ({ order: () => Promise.resolve({ data: [{ claim_id: 'c-1-1', note_sequence: 1, section_id: null, status: 'active', disposition: 'active_evidence', raw_fragment: 'x' }], error: null }) }) }) }) };
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+    await reconcile(supabase, { sessionId: 's1', apiKey: 'test-key' });
+    expect(calls).toEqual(['gpt-5.6-terra', 'gpt-4o']);
   });
+});
 
-  it('skips a direct-question note entirely — nothing to recover from conversational material', () => {
-    const claims = { active: [], superseded: [] };
-    const notes = [{ sequence: 15, raw_note: 'How many rooms have I recorded so far?', structured_response: { type: 'direct_answer' } }];
-    expect(findCoverageGaps({ sections, claims }, notes)).toEqual([]);
-  });
-
-  it('skips a note with zero claims — not this stage\'s concern (it has no state to compare against)', () => {
-    const claims = { active: [], superseded: [] };
-    const notes = [{ sequence: 99, raw_note: 'Some note with no extracted claims at all.', structured_response: { type: null } }];
-    expect(findCoverageGaps({ sections, claims }, notes)).toEqual([]);
+describe('honest incompleteness when no model is available (no apiKey)', () => {
+  it('marks a substantive note as pending judgment rather than fabricating or silently skipping a completeness result', async () => {
+    const supabase = {
+      from: (table) => {
+        if (table === 'soc_notes') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [{ sequence: 1, raw_note: 'x', structured_response: { type: null } }], error: null }) }) }) };
+        if (table === 'soc_sections') return { select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) };
+        if (table === 'ai_messages') return { select: () => ({ eq: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) }) };
+        if (table === 'soc_claims') return { select: () => ({ eq: () => ({ order: () => ({ order: () => Promise.resolve({ data: [{ claim_id: 'c-1-1', note_sequence: 1, section_id: null, status: 'active', disposition: 'active_evidence', raw_fragment: 'x' }], error: null }) }) }) }) };
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+    const result = await reconcile(supabase, { sessionId: 's1' }); // no apiKey
+    const pending = result.items.find(i => i.pending_model_judgment);
+    expect(pending).toBeDefined();
+    expect(pending.disposition).toBe('unresolved');
   });
 });
 

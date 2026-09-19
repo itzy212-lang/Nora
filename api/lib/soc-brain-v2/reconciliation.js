@@ -16,10 +16,22 @@
 //   Disposition, section, status and supersession are Phase C's
 //   resolved decisions - reconciliation does not re-derive or
 //   second-guess them, only represents them.
-// - recoverSupportedRawDetail (inline in reconcile()): the one place a
-//   model is used, and only for notes where a coverage-gap check has
-//   already detected raw text not accounted for by any existing claim
-//   - never asked to redecide anything Phase C already resolved.
+// - checkNoteCompleteness: the one place a model is used - a genuine
+//   per-note semantic completeness check, called for every
+//   substantive note (any note with at least one Phase C claim), with
+//   no lexical pre-filter deciding whether to skip it. Fixed
+//   2026-09-19, D2 acceptance correction: an earlier design used
+//   word-overlap to gate which notes even reached the model, split by
+//   clause. Confirmed, directly and reproducibly, to cause a genuine
+//   false negative: "The party wall has a plaster and emulsion finish
+//   and shows a hairline crack near the door" — two distinct facts
+//   joined by "and", no comma/period boundary — scored as fully
+//   covered by a claim representing only the first fact, because that
+//   claim's own vocabulary overlapped enough of the whole sentence's
+//   words to clear the per-clause threshold. The second fact would
+//   have been silently lost. Word overlap is no longer used to decide
+//   whether to call the model at all; every substantive note gets a
+//   real semantic check.
 //
 // Every substantive raw transcript fragment ends up in exactly one of:
 // items (an existing claim, active or superseded), excluded
@@ -136,72 +148,83 @@ export function classifyExcludedMaterial(notes) {
   return excluded;
 }
 
-function normaliseWords(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-}
-function overlapRatio(clauseWords, fragmentWords) {
-  if (!clauseWords.length) return 1;
-  const fragSet = new Set(fragmentWords);
-  return clauseWords.filter(w => fragSet.has(w)).length / clauseWords.length;
-}
-
-async function callRecoveryModel({ apiKey, model = 'gpt-4o', sectionName, existingClaimsSummary, leftoverClause, noteRaw }) {
-  const userPrompt = [
-    `SECTION: ${sectionName || '(unresolved)'}`,
-    `FULL NOTE TEXT:\n"${noteRaw}"`,
-    `CLAIM(S) ALREADY EXTRACTED FROM THIS NOTE:\n${existingClaimsSummary}`,
-    `LEFTOVER TEXT NOT ACCOUNTED FOR BY THOSE CLAIMS:\n"${leftoverClause}"`,
-  ].join('\n\n');
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: UNIVERSAL_SOC_BRAIN_V2 + '\n\n' + RECONCILIATION_CONTRACT },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Reconciliation recovery model call failed: ${res.status}`);
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content || '{}';
-  return JSON.parse(raw);
+// Diagnostic-only lexical signal — never used to decide whether the
+// completeness model call happens. Kept purely so the reconciliation
+// output can show, for inspection, roughly how much new information a
+// note's recovery step actually added; has no bearing on correctness.
+function wordOverlapSignal(noteText, claims) {
+  const normalise = (s) => (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const noteWords = normalise(noteText);
+  if (!noteWords.length) return 1;
+  const fragWords = new Set(normalise(claims.map(c => c.raw_fragment || c.content || '').join(' ')));
+  return noteWords.filter(w => fragWords.has(w)).length / noteWords.length;
 }
 
 /**
- * Pure text comparison — no model, no judgment about whether leftover
- * text matters, only whether it exists. Splits a note's raw text into
- * clauses and flags any clause with low word-overlap against every
- * claim already extracted from that same note as a candidate for the
- * model's recovery judgment (callRecoveryModel). False positives are
- * expected and harmless — the model is the actual judgment step; this
- * only decides what gets shown to it.
+ * Terra (gpt-5.6-terra) is Nora's established production model for
+ * SOC-related model calls (see draftFromClaims, api/lib/soc-pipeline.js)
+ * - used here as primary, matching its exact existing invocation
+ * pattern rather than inventing a new one: the 'developer' role for
+ * its system message (not 'system' - a real API-level distinction for
+ * this model family), max_completion_tokens (not max_tokens), no
+ * forced response_format (Terra is not called with strict JSON mode
+ * anywhere in this codebase - draftFromClaims relies on prompt
+ * instruction + tolerant parsing instead, which is proven to work
+ * reliably there), and the same gpt-4o fallback on failure already
+ * established for drafting. gpt-4o alone was used in the first D2
+ * draft only because it was this module's own, unexamined default -
+ * not for any technical reason; there is none.
  */
-export function findCoverageGaps(canonicalInput, notes) {
-  const claimsByNote = new Map();
-  for (const c of [...canonicalInput.claims.active, ...canonicalInput.claims.superseded]) {
-    if (!claimsByNote.has(c.note_sequence)) claimsByNote.set(c.note_sequence, []);
-    claimsByNote.get(c.note_sequence).push(c);
+async function callReconciliationModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+  async function attempt(model) {
+    const isTerra = model.startsWith('gpt-5.6');
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        ...(isTerra ? { max_completion_tokens: 4000 } : { max_tokens: 4000, response_format: { type: 'json_object' } }),
+        messages: [
+          { role: isTerra ? 'developer' : 'system', content: systemContent },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`Reconciliation model call failed (${model}): ${res.status}`);
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || '')
+      .replace(/^[`]{3}(?:json)?[\s]*/m, '').replace(/[\s]*[`]{3}$/m, '').trim();
+    return JSON.parse(raw);
   }
 
-  const gaps = [];
-  for (const note of notes) {
-    if (note.structured_response?.type === 'direct_answer') continue;
-    const claims = claimsByNote.get(note.sequence) || [];
-    if (!claims.length) continue;
-    const clauses = (note.raw_note || '').split(/[,.]/).map(s => s.trim()).filter(s => s.length > 3);
-    const fragmentWords = normaliseWords(claims.map(c => c.raw_fragment || c.content || '').join(' '));
-    for (const clause of clauses) {
-      const clauseWords = normaliseWords(clause);
-      if (overlapRatio(clauseWords, fragmentWords) < 0.5) {
-        gaps.push({ note, claims, clause });
-      }
-    }
+  try {
+    return await attempt(primaryModel);
+  } catch (primaryErr) {
+    if (primaryModel === fallbackModel) throw primaryErr;
+    return await attempt(fallbackModel);
   }
-  return gaps;
+}
+
+/**
+ * Genuine per-note semantic completeness check — the model is given
+ * the note's complete raw text and every claim already extracted from
+ * it, and decides directly whether anything factual is missing. No
+ * lexical pre-filter decides whether this runs; every substantive
+ * note (caller: any note with at least one claim) gets it.
+ */
+async function checkNoteCompleteness({ apiKey, model, sectionName, note, claims }) {
+  const userPrompt = [
+    `SECTION: ${sectionName || '(unresolved)'}`,
+    `COMPLETE NOTE TEXT:\n"${note.raw_note}"`,
+    `CLAIM(S) ALREADY EXTRACTED FROM THIS NOTE:\n${claims.map(c => `- ${resolvedContentFor(c)} (raw: "${c.raw_fragment}")`).join('\n')}`,
+  ].join('\n\n');
+
+  return callReconciliationModel({
+    apiKey,
+    systemContent: UNIVERSAL_SOC_BRAIN_V2 + '\n\n' + RECONCILIATION_CONTRACT,
+    userPrompt,
+    primaryModel: model || 'gpt-5.6-terra',
+  });
 }
 
 /**
@@ -223,58 +246,65 @@ export async function reconcile(supabase, { sessionId, projectId, aoId, apiKey, 
   const items = buildDeterministicItems(canonicalInput);
   const excluded = classifyExcludedMaterial(notes || []);
   const sectionById = new Map(canonicalInput.sections.map(s => [s.id, s]));
-  const gaps = findCoverageGaps(canonicalInput, notes || []);
+
+  const claimsByNote = new Map();
+  for (const c of [...canonicalInput.claims.active, ...canonicalInput.claims.superseded]) {
+    if (!claimsByNote.has(c.note_sequence)) claimsByNote.set(c.note_sequence, []);
+    claimsByNote.get(c.note_sequence).push(c);
+  }
 
   const recovered = [];
-  for (const gap of gaps) {
-    const { note, claims, clause } = gap;
+  for (const note of (notes || [])) {
+    if (note.structured_response?.type === 'direct_answer') continue; // already excluded, not evidence
+    const claims = claimsByNote.get(note.sequence) || [];
+    if (!claims.length) continue; // nothing to check completeness against
+
     const sectionId = claims[0]?.section_id || null;
+    const sectionName = sectionById.get(sectionId)?.display_name || null;
+    const coverageSignal = wordOverlapSignal(note.raw_note, claims); // diagnostic only
 
     if (!apiKey) {
-      // No model available in this environment — record the gap
-      // itself as inspectable evidence of what WOULD be sent for
-      // judgment, without fabricating a recovery decision.
+      // No model available in this environment — record that a
+      // completeness check is owed here as inspectable, honest
+      // incompleteness, rather than silently skipping it or
+      // fabricating a result. Never used to imply the note IS fully
+      // covered.
       recovered.push({
-        id: `recovered-${note.sequence}-pending`,
+        id: `completeness-pending-${note.sequence}`,
         source: 'raw_recovery',
         source_note_sequence: note.sequence,
         section_id: sectionId,
-        section_name: sectionById.get(sectionId)?.display_name || null,
+        section_name: sectionName,
         resolved_content: null,
-        raw_provenance: [{ note_sequence: note.sequence, raw_fragment: clause }],
+        raw_provenance: [{ note_sequence: note.sequence, raw_fragment: note.raw_note }],
         disposition: 'unresolved',
         draftable: false,
         recovered: false,
         recovery_basis: null,
+        coverage_signal: coverageSignal,
         pending_model_judgment: true,
       });
       continue;
     }
 
-    const judgment = await callRecoveryModel({
-      apiKey, model,
-      sectionName: sectionById.get(sectionId)?.display_name,
-      existingClaimsSummary: claims.map(c => `- ${resolvedContentFor(c)} (raw: "${c.raw_fragment}")`).join('\n'),
-      leftoverClause: clause,
-      noteRaw: note.raw_note,
-    });
-
-    if (judgment.recoverable) {
+    const judgment = await checkNoteCompleteness({ apiKey, model, sectionName, note, claims });
+    for (const r of (judgment.recovered || [])) {
       recovered.push({
         id: `recovered-${note.sequence}-${recovered.length + 1}`,
         source: 'raw_recovery',
         source_note_sequence: note.sequence,
         section_id: sectionId,
-        section_name: sectionById.get(sectionId)?.display_name || null,
-        element: judgment.element || claims[0]?.element || null,
-        resolved_content: judgment.recovered_content,
-        raw_provenance: [{ note_sequence: note.sequence, raw_fragment: clause }],
+        section_name: sectionName,
+        element: r.element || claims[0]?.element || null,
+        resolved_content: r.recovered_content,
+        raw_provenance: [{ note_sequence: note.sequence, raw_fragment: note.raw_note }],
         disposition: 'active_evidence',
         status: 'active',
         draftable: true,
         material_relationships: [],
         recovered: true,
-        recovery_basis: judgment.basis,
+        recovery_basis: r.basis,
+        coverage_signal: coverageSignal,
       });
     }
   }
