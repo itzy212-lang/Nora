@@ -2,6 +2,18 @@
 //
 // Nora SOC v2, Phase D3 — the Professional Drafting Contract.
 //
+// v1.1.0 (2026-09-19, D3 acceptance correction): added the SAFE
+// SYNTHESIS section, after a live acceptance run combined two
+// genuinely distinct Front Bedroom party-wall observations (cracking
+// resolved from an STT correction, and a separately clarified ~200mm
+// crack) into one ambiguous sentence that read as though a single
+// measurement belonged to a single fact, when the underlying evidence
+// was two independent ones. This is a general drafting-judgment
+// principle, not a rule tied to that specific wording, measurement,
+// element, or fixture — it governs how ANY combination of distinct
+// items must preserve their distinctness in the resulting prose, or
+// be drafted as separate rows instead.
+//
 // Deliberately narrow. The Universal SOC Brain carries the persistent
 // reasoning principles; this contract carries only what's specific to
 // turning ALREADY-RECONCILED evidence into professional prose. It does
@@ -14,7 +26,7 @@
 // relocating anything, since it never sees another section's evidence
 // in the same call.
 
-export const DRAFTING_CONTRACT_VERSION = 'v1.0.0';
+export const DRAFTING_CONTRACT_VERSION = 'v1.1.0';
 
 export const DRAFTING_CONTRACT = `PROFESSIONAL DRAFTING CONTRACT
 
@@ -35,9 +47,21 @@ WHAT YOU MUST NOT DO
 
 WHAT YOU MAY DO
 
-- Combine two or more closely related items into one coherent, professionally-written entry where that improves readability — e.g. a crack, staining directly related to it, and a further nearby crack on the same element may read better as one entry than three fragmentary ones. Combining must never blur, merge, or lose any individual fact, measurement, or spatial relationship — every fact from every combined item must still be recoverable from the resulting text.
+- Combine two or more closely related items into one coherent, professionally-written entry where that improves readability — e.g. a crack, staining directly related to it, and a further nearby crack on the same element may read better as one entry than three fragmentary ones.
 - Use appropriate professional building-surveying terminology and sentence construction, distinguishing clearly between construction, finish, condition, defects, and operational observations.
 - Write concisely but with sufficient descriptive detail for a professional record — not a bare restatement of the evidence, and not padded.
+
+SAFE SYNTHESIS — when combining items into one row
+
+Combining is about prose readability, not about merging what the evidence actually says. Closely related evidence may be combined into one entry only where the resulting prose preserves the identity, quantity, and material relationships of every underlying observation. When two or more items you were given represent genuinely distinct defects or observations — even if they share the same element — combining them into one entry must never produce wording that could leave a reader unsure:
+- whether there are one or two (or more) distinct things being described;
+- which measurement belongs to which thing;
+- whether one observation is merely describing or qualifying another, when it is actually its own separate fact;
+- how they relate spatially to one another.
+
+If you do combine genuinely distinct observations into one row, the prose itself must keep their distinctness clear — a reader should be able to tell, from the sentence alone, that more than one thing is being recorded and which detail belongs to which. If you cannot phrase that combination clearly, draft separate rows instead — separate, clearly-written rows are always preferable to one row that blurs what the evidence distinctly states. The decision to combine or separate is a professional drafting judgment on a case-by-case basis, not a fixed rule about which items may or may not ever be combined — apply it fresh to whatever evidence you are actually given.
+
+Items that are genuinely one continuous observation with no ambiguity about their relationship (e.g. a defect and its own directly-adjacent, clearly-connected secondary detail) do not need this level of caution — the concern here is specifically combinations that could make separate facts read as one, or misattribute a detail from one observation to another.
 
 RETURN VALID JSON ONLY, matching exactly:
 {
