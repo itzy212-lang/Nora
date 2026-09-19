@@ -8,7 +8,7 @@ import {
 } from './lib/soc-pipeline.js';
 import { checkGenerationBarrier } from './lib/soc-brain-v2/generation-barrier.js';
 import { assembleCanonicalGenerationInput } from './lib/soc-brain-v2/generation-input.js';
-import { runSocV2Pipeline } from './lib/soc-brain-v2/production-pipeline.js';
+import { runSocV2Pipeline, SocV2NoEvidenceError } from './lib/soc-brain-v2/production-pipeline.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1335,6 +1335,20 @@ export async function extractStructuredData(message, projectMeta, apiKey, sessio
   } catch (err) {
     if (err.isBarrierBlock) {
       throw new Error('GENERATION_INCOMPLETE: ' + err.message);
+    }
+    if (err instanceof SocV2NoEvidenceError) {
+      // TEMPORARY, 2026-09-19: this is not a v2 failure being papered
+      // over - v2 correctly found nothing to draft, because this
+      // session has no Phase C structured data (predates live
+      // processing, or otherwise never went through it). Falling back
+      // here is different in kind from the "v2 broke, hide it"
+      // fallback the architecture forbids: v2 worked, there is simply
+      // nothing in its data model for this session. The legacy path
+      // reads raw notes directly and has no such dependency. Generic -
+      // not tied to any specific session - and intended to be removed
+      // once all live sessions carry real Phase C data.
+      console.warn('[generate-soc] SOC v2 found zero draftable items (no Phase C data for this session) — falling back to legacy pipeline for this generation only.');
+      return extractStructuredDataLegacy(message, projectMeta, apiKey, sessionId, projectId, aoId, userId);
     }
     // A SocV2StageError (or anything else) - preserve evidence
     // (nothing above wrote to Phase C tables), identify the failed

@@ -42,6 +42,28 @@ export class SocV2StageError extends Error {
 }
 
 /**
+ * TEMPORARY, 2026-09-19: distinct from SocV2StageError - this is not a
+ * failure of the v2 pipeline, it is D2 genuinely finding nothing to
+ * work with. A session dictated before Phase C's live processing
+ * existed (or otherwise never processed through it) has zero
+ * soc_claims/soc_sections; D2 correctly reconciles that into zero
+ * draftable items, and D3-D6 would correctly, uselessly produce an
+ * empty document from it. This is not the "v2 failed, silently
+ * substitute legacy" case the architecture explicitly forbids - v2
+ * works fine here, there is simply nothing in its own data model for
+ * this particular session. Generic, not tied to any specific session:
+ * fires whenever D2 finds zero draftable items, so it also protects
+ * any other historical session in the same situation. Intended to be
+ * removed once all live sessions have real Phase C data - not a
+ * permanent architectural provision.
+ */
+export class SocV2NoEvidenceError extends Error {
+  constructor() {
+    super('SOC_V2_NO_EVIDENCE: reconciliation found zero draftable items - this session has no Phase C structured data to generate from.');
+  }
+}
+
+/**
  * Runs the complete, accepted D1-D6 pipeline for one session and
  * returns dataForRender-shaped output (sections/site_notes/actions/
  * emails_required) plus a distinct, namespaced metadata block for
@@ -71,6 +93,10 @@ export async function runSocV2Pipeline(supabase, { sessionId, projectId, aoId, a
     reconciliation = await reconcile(supabase, { sessionId, projectId, aoId, apiKey });
   } catch (err) {
     throw new SocV2StageError('d2', err);
+  }
+
+  if (!reconciliation.items.some(i => i.draftable)) {
+    throw new SocV2NoEvidenceError();
   }
 
   let draftResult;

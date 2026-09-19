@@ -13,6 +13,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
+// Every mock of production-pipeline.js in this file must also export
+// SocV2NoEvidenceError, since generate-soc.js statically imports it
+// and uses it in an instanceof check - an incomplete mock would make
+// that check throw (undefined is not callable), unrelated to what
+// each individual test is actually verifying.
+class DummySocV2NoEvidenceError extends Error {}
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }),
@@ -52,7 +59,7 @@ function mockLegacyFns() {
 describe('1-6. the production path calls the v2 pipeline (which itself sequences D1-D6)', () => {
   it('extractStructuredData calls runSocV2Pipeline by default, with the session/project/apiKey it was given', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -70,7 +77,7 @@ describe('1-6. the production path calls the v2 pipeline (which itself sequences
 describe('7. the final persisted/returned output is exactly the D6 result, reference-coded', () => {
   it('sections/site_notes in the returned dataForRender match what the v2 pipeline produced', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -86,7 +93,7 @@ describe('7. the final persisted/returned output is exactly the D6 result, refer
 describe('8-10. the old drafting/quality/completeness functions are never called on a successful v2 run', () => {
   it('draftFromClaims, the old runQualityAudit, and runCompletenessAudit are not invoked', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     const legacy = mockLegacyFns();
     vi.doMock('../soc-pipeline.js', () => legacy);
 
@@ -103,6 +110,7 @@ describe('11/18/19/20. safe generation-failure behaviour', () => {
   it('11. a v2 pipeline failure never falls back to draftFromClaims or any legacy function', async () => {
     vi.resetModules();
     vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
       runSocV2Pipeline: vi.fn(async () => { const e = new Error('SOC_V2_GENERATION_FAILED: stage d3 — boom'); e.stage = 'd3'; throw e; }),
     }));
     const legacy = mockLegacyFns();
@@ -119,6 +127,7 @@ describe('11/18/19/20. safe generation-failure behaviour', () => {
   it('18. the thrown error safely identifies the failed stage without a raw stack trace', async () => {
     vi.resetModules();
     vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
       runSocV2Pipeline: vi.fn(async () => { const e = new Error('x'); e.stage = 'd5'; throw e; }),
     }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
@@ -139,6 +148,7 @@ describe('11/18/19/20. safe generation-failure behaviour', () => {
     const fromSpy = vi.fn(() => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }));
     vi.doMock('@supabase/supabase-js', () => ({ createClient: () => ({ from: fromSpy }) }));
     vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
       runSocV2Pipeline: vi.fn(async () => { const e = new Error('x'); e.stage = 'd4'; throw e; }),
     }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
@@ -154,6 +164,7 @@ describe('11/18/19/20. safe generation-failure behaviour', () => {
   it('20. generation failure does not fall back to legacy drafting even when the failure is a barrier block', async () => {
     vi.resetModules();
     vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
       runSocV2Pipeline: vi.fn(async () => { const e = new Error('notes still processing'); e.isBarrierBlock = true; throw e; }),
     }));
     const legacy = mockLegacyFns();
@@ -169,7 +180,7 @@ describe('explicit legacy opt-in still reaches the preserved old code path', () 
   it('projectMeta.useLegacyPipeline routes to extractStructuredDataLegacy, not the v2 pipeline', async () => {
     vi.resetModules();
     const v2 = mockV2Success();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: v2 }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: v2, SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData, extractStructuredDataLegacy } = await import('../../generate-soc.js');
@@ -189,7 +200,7 @@ describe('explicit legacy opt-in still reaches the preserved old code path', () 
 describe('12-13. site note routing, exercised through the production entry point', () => {
   it('a site note produced by the v2 pipeline appears in site_notes, not embedded in any section row', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -204,7 +215,7 @@ describe('12-13. site note routing, exercised through the production entry point
 describe('14-15. stable row IDs and source_item_ids survive to the returned/persisted metadata', () => {
   it('row_identity in _soc_v2_metadata carries row_id and source_item_ids through unchanged', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -217,7 +228,7 @@ describe('14-15. stable row IDs and source_item_ids survive to the returned/pers
 describe('16. concise human-facing references are what reaches the final output', () => {
   it('row refs are the concise form (e.g. FR01), never a floor-prefixed form (e.g. GFFR01)', async () => {
     vi.resetModules();
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -233,7 +244,7 @@ describe('17. Phase C evidence is never written to by the production entry point
     vi.resetModules();
     const fromSpy = vi.fn(() => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }));
     vi.doMock('@supabase/supabase-js', () => ({ createClient: () => ({ from: fromSpy }) }));
-    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success() }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({ runSocV2Pipeline: mockV2Success(), SocV2NoEvidenceError: DummySocV2NoEvidenceError }));
     vi.doMock('../soc-pipeline.js', () => mockLegacyFns());
 
     const { extractStructuredData } = await import('../../generate-soc.js');
@@ -242,5 +253,57 @@ describe('17. Phase C evidence is never written to by the production entry point
     for (const call of fromSpy.mock.calls) {
       expect(['soc_claims', 'soc_sections', 'soc_notes']).not.toContain(call[0]);
     }
+  });
+});
+
+describe('TEMPORARY: no-evidence fallback (2026-09-19) — distinct from a genuine v2 failure', () => {
+  it('a SocV2NoEvidenceError falls back to the legacy pipeline, unlike a real SocV2StageError', async () => {
+    vi.resetModules();
+    // extractStructuredDataLegacy's own body runs for real here (that
+    // is the point of this test), which means its own internal
+    // barrier/claims-loading queries need a richer chainable mock than
+    // the file-level one - a self-returning, thenable proxy resolves
+    // any chain length to an empty result, since the goal is only to
+    // prove the fallback reaches legacy and returns legacy-shaped
+    // output, not to exercise legacy's own query logic.
+    function makeChainable(resolvedValue = { data: [], error: null }) {
+      const proxy = new Proxy(() => {}, {
+        get(_, prop) {
+          if (prop === 'then') return (resolve) => resolve(resolvedValue);
+          if (prop === 'maybeSingle' || prop === 'single') return () => Promise.resolve({ data: null, error: null });
+          return () => proxy;
+        },
+      });
+      return proxy;
+    }
+    vi.doMock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => makeChainable() }) }));
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
+      runSocV2Pipeline: vi.fn(async () => { throw new DummySocV2NoEvidenceError(); }),
+    }));
+    const legacy = mockLegacyFns();
+    legacy.draftFromClaims = vi.fn(async () => ({ sections: [{ number: 1, title: 'Legacy Room', rows: [{ ref: 'LR01', observation: 'x', action: 'Record only' }] }] }));
+    vi.doMock('../soc-pipeline.js', () => legacy);
+
+    const { extractStructuredData } = await import('../../generate-soc.js');
+    const result = await extractStructuredData('[1] some raw note', {}, 'key', 'session-1', 'project-1', null, 'user-1');
+
+    // Falls all the way through to the legacy body successfully (not
+    // just "attempted") - it returns legacy-shaped output.
+    expect(result.sections[0].title).toBe('Legacy Room');
+  });
+
+  it('a genuine SocV2StageError still does NOT fall back — the no-evidence case is the only exception', async () => {
+    vi.resetModules();
+    vi.doMock('../soc-brain-v2/production-pipeline.js', () => ({
+      SocV2NoEvidenceError: DummySocV2NoEvidenceError,
+      runSocV2Pipeline: vi.fn(async () => { const e = new Error('x'); e.stage = 'd4'; throw e; }),
+    }));
+    const legacy = mockLegacyFns();
+    vi.doMock('../soc-pipeline.js', () => legacy);
+
+    const { extractStructuredData } = await import('../../generate-soc.js');
+    await expect(extractStructuredData('notes', {}, 'key', 'session-1', 'project-1', null, 'user-1')).rejects.toThrow(/GENERATION_INCOMPLETE/);
+    expect(legacy.draftFromClaims).not.toHaveBeenCalled();
   });
 });

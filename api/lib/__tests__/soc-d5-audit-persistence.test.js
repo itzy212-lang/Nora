@@ -13,7 +13,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../soc-brain-v2/generation-barrier.js', () => ({ checkGenerationBarrier: vi.fn(async () => ({ ok: true })) }));
 vi.mock('../soc-brain-v2/reconciliation.js', () => ({
   reconcile: vi.fn(async () => ({
-    items: [], excluded: [], site_notes: [],
+    items: [{ id: 'c-1', draftable: true }], excluded: [], site_notes: [],
     sections: [{ id: 'sec-1', display_name: 'Room', first_entered_sequence: 1 }],
   })),
 }));
@@ -158,5 +158,39 @@ describe('D5 audit trail persistence — the merge logic', () => {
     const result = await runSocV2Pipeline({}, { sessionId: 's1', apiKey: 'k' });
     const entry = result._soc_v2_metadata.d5_audit_trail[0];
     expect(Object.keys(entry).sort()).toEqual(['after_wording', 'before_wording', 'd6_decision', 'final_wording', 'quality_reason', 'row_id', 'section_id', 'source_item_ids'].sort());
+  });
+});
+
+describe('TEMPORARY: zero-evidence detection (2026-09-19)', () => {
+  it('throws SocV2NoEvidenceError immediately when reconciliation finds no draftable items, before D3 is even called', async () => {
+    vi.resetModules();
+    vi.doMock('../soc-brain-v2/reconciliation.js', () => ({
+      reconcile: vi.fn(async () => ({ items: [], excluded: [], site_notes: [], sections: [] })),
+    }));
+    const draftSpy = vi.fn();
+    vi.doMock('../soc-brain-v2/drafting.js', () => ({ draft: draftSpy }));
+    const { runSocV2Pipeline, SocV2NoEvidenceError } = await import('../soc-brain-v2/production-pipeline.js');
+    await expect(runSocV2Pipeline({}, { sessionId: 's1', apiKey: 'k' })).rejects.toBeInstanceOf(SocV2NoEvidenceError);
+    expect(draftSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT throw when at least one draftable item exists, even if others are not draftable', async () => {
+    vi.resetModules();
+    vi.doMock('../soc-brain-v2/reconciliation.js', () => ({
+      reconcile: vi.fn(async () => ({
+        items: [{ id: 'c-1', draftable: false }, { id: 'c-2', draftable: true }],
+        excluded: [], site_notes: [], sections: [{ id: 'sec-1', display_name: 'Room', first_entered_sequence: 1 }],
+      })),
+    }));
+    vi.doMock('../soc-brain-v2/drafting.js', () => ({ draft: vi.fn(async () => ({ sections: [], reconciliation_items: [], excluded: [] })) }));
+    vi.doMock('../soc-brain-v2/fidelity-audit.js', () => ({
+      runFidelityAudit: vi.fn(async () => ({ findings: [], status: 'pass' })),
+      applyRepairs: vi.fn((d) => ({ repairedDraft: d, auditTrail: [] })),
+    }));
+    vi.doMock('../soc-brain-v2/quality-audit.js', () => ({ runQualityAudit: vi.fn(async () => ({ sections: [], quality_audit_trail: [], issues_for_upstream_review: [] })) }));
+    vi.doMock('../soc-brain-v2/factual-guard.js', () => ({ runPostQualityGuard: vi.fn(async () => ({ sections: [], audit_trail: [], guard_findings: [], status: 'pass' })) }));
+    vi.doMock('../soc-brain-v2/site-note-drafting.js', () => ({ draftSiteNotes: vi.fn(async () => []) }));
+    const { runSocV2Pipeline } = await import('../soc-brain-v2/production-pipeline.js');
+    await expect(runSocV2Pipeline({}, { sessionId: 's1', apiKey: 'k' })).resolves.toBeDefined();
   });
 });
