@@ -8,6 +8,7 @@ import {
 } from './lib/soc-pipeline.js';
 import { checkGenerationBarrier } from './lib/soc-brain-v2/generation-barrier.js';
 import { assembleCanonicalGenerationInput } from './lib/soc-brain-v2/generation-input.js';
+import { runSocV2Pipeline } from './lib/soc-brain-v2/production-pipeline.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1078,7 +1079,16 @@ function runCodedFidelityChecks(draftedResult, claims) {
 // receives a plain claims array, now correctly sourced from the real,
 // current soc_claims rather than a destroyed-and-rebuilt approximation
 // of them.
-async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId, userId) {
+// RENAMED 2026-09-19, final integration phase: this is the OLD
+// production orchestration (Stage 1 raw-notes/claims -> Stage 2
+// draftFromClaims (SOC_MASTER_V1) -> Stage 3 old runQualityAudit
+// (imported from soc-pipeline.js, NOT the new D5 module of the same
+// name) -> Stage 4 runCompletenessAudit -> emergency single-call
+// fallback if Stage 2's JSON fails to parse. Preserved verbatim,
+// unchanged, for rollback/reference per explicit instruction - it is
+// simply no longer called by default. See extractStructuredData below
+// for the new dispatcher.
+export async function extractStructuredDataLegacy(message, projectMeta, apiKey, sessionId, projectId, aoId, userId) {
   let claims = [];
   let claimsFromLive = false;
   let canonicalInput = null;
@@ -1261,6 +1271,79 @@ async function extractStructuredData(message, projectMeta, apiKey, sessionId, pr
       emergency_draft: !!draftedResult._emergency_draft,
     },
   };
+}
+
+// NEW 2026-09-19, final integration phase: the default production
+// path. Runs the accepted, frozen D1->D2->D3->D4->D5->D6 pipeline
+// (api/lib/soc-brain-v2/production-pipeline.js) and shapes its result
+// to the same dataForRender contract the legacy function above
+// produces, so nothing downstream (rendering, docx/pdf export,
+// persistence) needs to change.
+//
+// Per explicit instruction: on any v2 failure, this NEVER falls back
+// to extractStructuredDataLegacy. It throws a clear,
+// GENERATION_INCOMPLETE-prefixed error identifying the failed stage,
+// which the existing handler catch block already converts into a
+// clean generation_status response - no new failure-handling wiring
+// needed downstream, and no raw stack trace reaches the response.
+//
+// projectMeta.useLegacyPipeline (set by the handler from an explicit
+// request flag) opts back into extractStructuredDataLegacy above, for
+// rollback/comparison - never the default.
+export async function extractStructuredData(message, projectMeta, apiKey, sessionId, projectId, aoId, userId) {
+  if (projectMeta?.useLegacyPipeline) {
+    console.log('[generate-soc] Explicit legacy pipeline requested — using extractStructuredDataLegacy');
+    return extractStructuredDataLegacy(message, projectMeta, apiKey, sessionId, projectId, aoId, userId);
+  }
+
+  if (!sessionId) {
+    // The v2 pipeline is entirely session/claims-based (Phase C
+    // state) - it has no raw-text-only mode. A request with no
+    // session_id at all (no live inspection to read from) cannot be
+    // served by it; fail clearly rather than silently drafting from
+    // nothing.
+    throw new Error('GENERATION_INCOMPLETE: No session_id provided — the SOC v2 pipeline requires a live inspection session to generate from.');
+  }
+
+  let userBrain = null;
+  try {
+    if (projectId) {
+      const { data: project } = await supabase.from('projects').select('user_id').eq('id', projectId).maybeSingle();
+      if (project?.user_id) {
+        const { data: brainRow } = await supabase.from('user_brain_v2').select('soc_style_preferences, soc_gold_standard').eq('user_id', project.user_id).maybeSingle();
+        userBrain = brainRow || null;
+      }
+    }
+  } catch (e) {
+    console.warn('[generate-soc] Could not load User SOC Brain, proceeding with governing text only:', e.message);
+  }
+
+  try {
+    console.log('[generate-soc] SOC v2: running D1 -> D2 -> D3 -> D4 -> D5 -> D6...');
+    const result = await runSocV2Pipeline(supabase, { sessionId, projectId, aoId, apiKey, userBrain });
+    console.log('[generate-soc] SOC v2 pipeline complete: ' + result._soc_v2_metadata.d3_row_count + ' rows, D4=' + result._soc_v2_metadata.d4_status + ', D6=' + result._soc_v2_metadata.d6_status);
+    return {
+      ...result,
+      claims_extracted: result._soc_v2_metadata.d2_items_count,
+      claims_from_live: true,
+      generation_status: 'complete',
+      audit_issues: [],
+      audit_warnings: [],
+      discussion: [],
+      general_notes: [],
+    };
+  } catch (err) {
+    if (err.isBarrierBlock) {
+      throw new Error('GENERATION_INCOMPLETE: ' + err.message);
+    }
+    // A SocV2StageError (or anything else) - preserve evidence
+    // (nothing above wrote to Phase C tables), identify the failed
+    // stage, never fall back to the legacy pipeline, never leak a raw
+    // stack trace into the thrown message shown to the user.
+    const stage = err.stage || 'unknown';
+    console.error('[generate-soc] SOC v2 pipeline failed at stage ' + stage + ':', err.cause?.message || err.message);
+    throw new Error(`GENERATION_INCOMPLETE: The SOC v2 pipeline could not complete (stage: ${stage}). Your dictated evidence is unchanged and safe. Please try again or contact support if this persists.`);
+  }
 }
 
 
@@ -1473,7 +1556,7 @@ export default async function handler(req, res) {
       // Pass forceReextract=true on regenerate so cached claims are cleared
       // and Stage 1 runs fresh with latest STT corrections
       const isRegenerate = (req.body?.action === 'regenerate') || (req.body?.force_reextract === true);
-      const projectMetaWithFlag = { ...projectMeta, forceReextract: isRegenerate };
+      const projectMetaWithFlag = { ...projectMeta, forceReextract: isRegenerate, useLegacyPipeline: req.body?.use_legacy_pipeline === true };
 
       try {
         dataForRender = await extractStructuredData(notesText, projectMetaWithFlag, apiKey, session_id, project_id, ao_id, socUserId);
@@ -1549,6 +1632,26 @@ export default async function handler(req, res) {
           session_id: session_id || null,
           content_html: preview_html,
         });
+
+        // Record which pipeline actually produced this report -
+        // directly disambiguates the two differently-implemented
+        // runQualityAudit functions (soc-pipeline.js's old Stage 3
+        // vs. the new D5 module) by naming the whole pipeline that
+        // ran, not just one stage.
+        if (dataForRender._soc_v2_metadata) {
+          try {
+            await supabase.from('soc_reports').update({
+              brain_versions: {
+                pipeline: 'soc_v2',
+                pipeline_version: dataForRender._soc_v2_metadata.pipeline_version,
+                d4_status: dataForRender._soc_v2_metadata.d4_status,
+                d6_status: dataForRender._soc_v2_metadata.d6_status,
+              },
+            }).eq('id', reportId);
+          } catch (e) {
+            console.warn('[generate-soc] Could not record brain_versions:', e.message);
+          }
+        }
       }
     } catch (saveError) {
       console.warn('[generate-soc] save warning:', saveError.message);

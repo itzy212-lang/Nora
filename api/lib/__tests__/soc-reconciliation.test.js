@@ -10,7 +10,7 @@
 // was actually verified.
 
 import { describe, it, expect } from 'vitest';
-import { buildDeterministicItems, classifyExcludedMaterial, isDraftable, reconcile } from '../soc-brain-v2/reconciliation.js';
+import { buildDeterministicItems, classifyExcludedMaterial, isDraftable, isSiteNote, reconcile } from '../soc-brain-v2/reconciliation.js';
 
 const FB = 'sec-front';
 const RB = 'sec-rear';
@@ -20,13 +20,22 @@ const sections = [
 ];
 
 describe('isDraftable — the deterministic, code-enforced rule', () => {
-  it('only active_evidence and site_general_note are draftable', () => {
+  it('only active_evidence is room-draftable (fixed final integration phase: site_general_note removed)', () => {
     expect(isDraftable('active_evidence')).toBe(true);
-    expect(isDraftable('site_general_note')).toBe(true);
+    expect(isDraftable('site_general_note')).toBe(false);
     expect(isDraftable('superseded')).toBe(false);
     expect(isDraftable('duplicate')).toBe(false);
     expect(isDraftable('navigation_context')).toBe(false);
     expect(isDraftable('unresolved')).toBe(false);
+  });
+});
+
+describe('isSiteNote — the distinct predicate for site/general notes', () => {
+  it('is true only for site_general_note', () => {
+    expect(isSiteNote('site_general_note')).toBe(true);
+    expect(isSiteNote('active_evidence')).toBe(false);
+    expect(isSiteNote('superseded')).toBe(false);
+    expect(isSiteNote('navigation_context')).toBe(false);
   });
 });
 

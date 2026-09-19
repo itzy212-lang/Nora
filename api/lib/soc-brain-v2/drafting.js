@@ -139,9 +139,16 @@ async function draftSection({ apiKey, model, universalBrain, userBrainContext, s
  * re-extract, re-resolve sections, or re-decide disposition. Sections
  * are drafted in first-visit order (D2's own section ordering,
  * unchanged) and only ever as separate, section-scoped calls.
+ *
+ * Accepts an optional precomputedReconciliation (the production
+ * pipeline's own D2 result) so a caller that already ran D2 doesn't
+ * pay for a second, independent reconciliation pass (including a
+ * second round of D2's own AI recovery calls) purely to get here -
+ * existing callers that don't pass it are unaffected, and reconcile()
+ * itself is completely unchanged.
  */
-export async function draft(supabase, { sessionId, projectId, aoId, apiKey, model, userBrain }) {
-  const reconciliation = await reconcile(supabase, { sessionId, projectId, aoId, apiKey });
+export async function draft(supabase, { sessionId, projectId, aoId, apiKey, model, userBrain, precomputedReconciliation }) {
+  const reconciliation = precomputedReconciliation || await reconcile(supabase, { sessionId, projectId, aoId, apiKey });
 
   const userBrainContext = userBrain
     ? buildUserSocBrainContext(userBrain)

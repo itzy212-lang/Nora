@@ -48,10 +48,33 @@ import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 // but is never draftable. This is a deterministic rule, not a
 // judgment call, so it is enforced here in code rather than left to
 // any model to decide per item.
-const DRAFTABLE_DISPOSITIONS = new Set(['active_evidence', 'site_general_note']);
+// Fixed 2026-09-19, final integration phase: site_general_note was
+// previously included here, which meant a correctly classified site
+// note flowed into per-section room drafting purely because some
+// room happened to be active when it was dictated - the live
+// acceptance run showed the garden-access note drafted as a row
+// inside First Floor Rear Bedroom. A site/general note is real,
+// draftable evidence, but it is not room evidence: it must never
+// enter the per-section room-drafting pool in the first place. See
+// isSiteNote() below and reconcile()'s separate site_notes output -
+// the fix is upstream of D3, not a D4 severity change, per explicit
+// instruction: D4's wrong_section check is unchanged and remains a
+// defence layer for exactly this failure mode, not the primary fix.
+const DRAFTABLE_DISPOSITIONS = new Set(['active_evidence']);
+
+// Site/general notes are genuine, final-SOC-bound evidence - just not
+// room evidence. Kept as a distinct predicate so callers (the
+// production pipeline) can retrieve them explicitly rather than
+// inferring "not draftable" as "site note" (an unresolved or
+// superseded item is also not draftable, and is not a site note).
+const SITE_NOTE_DISPOSITIONS = new Set(['site_general_note']);
 
 export function isDraftable(disposition) {
   return DRAFTABLE_DISPOSITIONS.has(disposition);
+}
+
+export function isSiteNote(disposition) {
+  return SITE_NOTE_DISPOSITIONS.has(disposition);
 }
 
 function resolvedContentFor(claim) {
@@ -90,6 +113,7 @@ export function buildDeterministicItems(canonicalInput) {
       status: claim.status,
       superseded_by: null,
       draftable: isDraftable(claim.disposition),
+      is_site_note: isSiteNote(claim.disposition),
       material_relationships: [],
       recovered: false,
       recovery_basis: null,
@@ -117,6 +141,7 @@ export function buildDeterministicItems(canonicalInput) {
       // of disposition wording - enforced by isDraftable(), not by
       // trusting the disposition string alone.
       draftable: false,
+      is_site_note: false, // a superseded claim's disposition is always 'superseded', never site_general_note
       material_relationships: replacement
         ? [{ type: 'superseded_by', target_id: replacement.claim_id, target_resolved_content: resolvedContentFor(replacement) }]
         : [],
@@ -309,10 +334,19 @@ export async function reconcile(supabase, { sessionId, projectId, aoId, apiKey, 
     }
   }
 
+  const allItems = [...items, ...recovered];
+
   return {
     session_id: sessionId,
     sections: canonicalInput.sections,
-    items: [...items, ...recovered],
+    items: allItems,
+    // Site/general notes, surfaced explicitly so downstream (the
+    // production pipeline) never needs to re-derive "is this a site
+    // note" from draftable/disposition inference - they remain in
+    // `items` too (full evidence accounting is preserved), this is
+    // an additional, convenient view onto the same data, not a
+    // separate source of truth.
+    site_notes: allItems.filter(i => i.is_site_note),
     excluded,
   };
 }
