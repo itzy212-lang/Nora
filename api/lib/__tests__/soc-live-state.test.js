@@ -312,25 +312,24 @@ describe('applyLiveProcessingResult — p_claims serialisation (regression)', ()
 // file for what IS tested about the prompt itself, and the Phase C
 // defect-fix checkpoint for the full picture.
 describe('applyLiveProcessingResult — acceptance-test defect regressions', () => {
-  it('[A] a correction with a resolved element reaches the RPC with amendment_mode and that element intact, so the existing element-matched supersession can apply', async () => {
+  it('[A] a correction carries corrects_claim_id through to the RPC intact, alongside amendment_mode and the changed field — this is what the RPC uses for precise, single-claim targeting (2026-09-19 architecture: targeting is by claim_id, not element — see soc-correction-targeting.test.js for the RPC-level merge/supersede behaviour itself, verified directly against the live database since a JS mock cannot exercise real SQL)', async () => {
     const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
-    // The model, given the strengthened contract and the recent structured
-    // context, resolves "that's 450, not 650" to the party wall crack -
-    // this is the corrected model output shape, not something this test
-    // invents independently of the fix.
+    // The model, given RECENT CONTEXT that labels each prior claim with
+    // its own claim_id, identifies the SPECIFIC prior claim "that's 450,
+    // not 650" corrects — this is the corrected model output shape.
     const modelOutput = {
       section_resolution: { action: 'same_as_current' },
-      claims: [{ claim_type: 'amendment', element: 'party wall', measurement: '450', amendment_mode: 'correct_measurement', raw_fragment: "that's 450, not 650", confidence: 'high' }],
+      claims: [{ claim_type: 'amendment', measurement: '450', amendment_mode: 'correct_measurement', corrects_claim_id: 'c-4-1', raw_fragment: "that's 450, not 650", confidence: 'high' }],
       resolves_pending_clarification: false,
       live_response: { required: false, type: null, text: null },
     };
     await applyLiveProcessingResult(supabase, { sessionId: 's1', noteId: 'note-5', sequence: 5, projectId: 'p1', aoId: 'ao1', modelOutput });
     const params = supabase._calls.rpc[0].params;
-    expect(params.p_claims[0].element).toBe('party wall');
+    expect(params.p_claims[0].corrects_claim_id).toBe('c-4-1');
     expect(params.p_claims[0].amendment_mode).toBe('correct_measurement');
     expect(params.p_claims[0].measurement).toBe('450');
-    // Unaffected detail fields correctly stay null - only element and the
-    // actually-corrected field are populated.
+    // Unaffected detail fields correctly stay null - the RPC merges them
+    // in from the targeted claim; this layer doesn't need to.
     expect(params.p_claims[0].defect_type).toBeNull();
     expect(params.p_correction_mode).toBe('correct_measurement');
     expect(params.p_note_type).toBe('amendment');

@@ -176,6 +176,7 @@ export async function applyLiveProcessingResult(supabase, {
     access_limitation: c.access_limitation ?? null,
     raw_fragment: c.raw_fragment ?? null,
     amendment_mode: c.amendment_mode ?? null,
+    corrects_claim_id: c.corrects_claim_id ?? null,
     confidence: c.confidence || 'high',
     status: 'active',
     content: c.raw_fragment || '',

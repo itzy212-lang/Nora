@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.1.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.2.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -56,6 +56,7 @@ Return valid JSON only, no markdown, no commentary, matching exactly:
       "access_limitation": "..." | null,
       "raw_fragment": "the specific part of the note this claim is drawn from",
       "amendment_mode": "replace" | "correct_measurement" | "correct_location" | "correct_direction" | "withdraw" | null,
+      "corrects_claim_id": "the exact claim_id, copied from RECENT CONTEXT, of the specific prior claim this correction amends" | null,
       "confidence": "high" | "medium" | "low"
     }
   ],
@@ -79,7 +80,7 @@ CLAIMS — what to extract
 - Every substantive fact in the note becomes one or more claims. A single note may produce zero claims (pure navigation, e.g. "moving into the rear bedroom" alone), one claim, or several.
 - claim_type "section_declaration" is for the navigation statement itself when a note is purely or partly about entering/returning to a section — this is not a defect finding and must never carry defect fields.
 - Use "contextual" for genuine navigation/filler with no factual content of its own.
-- Use "amendment" with the matching amendment_mode when the note corrects a previously stated fact. Only the DETAIL fields actually being corrected need values (measurement, direction, condition, etc.) — leave unaffected detail fields null so the disposition/supersession logic can act only on what actually changed. This does NOT extend to element: an amendment claim must always carry a resolved element, identifying which established thing is being corrected, even when the surveyor's own words didn't repeat it. Resolve it from RECENT CONTEXT below — a natural correction like "actually, that's 450, not 650" refers to whatever measurement was most recently on record that 650 could plausibly be correcting; find that entry, and use its element. Without a resolved element, a correction cannot be safely applied and will not take effect.
+- Use "amendment" with the matching amendment_mode when the note corrects a previously stated fact. Only the DETAIL fields actually being corrected need values (measurement, direction, condition, etc.) — leave unaffected detail fields null; the code merges your correction onto the specific prior claim's complete attributes, so you only need to state what changed. An amendment claim must always set corrects_claim_id to the exact claim_id (copied verbatim from RECENT CONTEXT) of the ONE specific prior claim it amends — never element alone, and never a general "the most recent one." Find the specific entry in RECENT CONTEXT whose own established fact is what's actually being corrected (e.g. "actually, that's 450, not 650" targets whichever entry's measurement was 650 — not just any entry on the same element), and copy its claim_id exactly as shown. Without a valid corrects_claim_id, a correction cannot be safely applied and will not take effect.
 - Use "unresolved" for a fragment you genuinely cannot safely interpret — never invent a placeholder value instead.
 - raw_fragment should be the actual words that support this specific claim, not the whole note repeated on every claim.
 

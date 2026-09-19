@@ -24,13 +24,18 @@ import { describe, it, expect } from 'vitest';
 import { LIVE_PROCESSING_CONTRACT, LIVE_PROCESSING_CONTRACT_VERSION } from '../soc-brain-v2/live-processing-contract.js';
 import { formatRecentClaim, loadLiveContext } from '../soc-brain-v2/live-processor.js';
 
-describe('LIVE_PROCESSING_CONTRACT — defect 1: amendment claims must resolve element', () => {
-  it('requires a resolved element on every amendment, even when the surveyor did not repeat it', () => {
-    expect(LIVE_PROCESSING_CONTRACT).toContain('an amendment claim must always carry a resolved element');
-    expect(LIVE_PROCESSING_CONTRACT).toContain('Without a resolved element, a correction cannot be safely applied and will not take effect');
+describe('LIVE_PROCESSING_CONTRACT — defect 1 (superseded 2026-09-19): amendments now target an explicit claim_id, not a resolved element', () => {
+  it('requires a valid corrects_claim_id on every amendment, identifying the specific prior claim it targets', () => {
+    expect(LIVE_PROCESSING_CONTRACT).toContain('An amendment claim must always set corrects_claim_id');
+    expect(LIVE_PROCESSING_CONTRACT).toContain('Without a valid corrects_claim_id, a correction cannot be safely applied and will not take effect');
   });
 
-  it('still allows unaffected detail fields to stay null, distinct from element', () => {
+  it('instructs finding the specific entry whose own established fact is being corrected, not just any entry on the same element', () => {
+    expect(LIVE_PROCESSING_CONTRACT).toContain('never element alone, and never a general "the most recent one."');
+    expect(LIVE_PROCESSING_CONTRACT).toContain('copy its claim_id exactly as shown');
+  });
+
+  it('still allows unaffected detail fields to stay null, distinct from targeting', () => {
     expect(LIVE_PROCESSING_CONTRACT).toContain('leave unaffected detail fields null');
   });
 });
