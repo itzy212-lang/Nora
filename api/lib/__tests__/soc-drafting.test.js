@@ -376,3 +376,40 @@ describe('draft() — safe-synthesis provenance scenarios (code-level guarantees
     expect(allIds.sort()).toEqual(['item-a', 'item-b', 'item-c']);
   });
 });
+
+// D5 acceptance boundary (2026-09-19): stable row identity, generated
+// once here at creation, never based on array position.
+describe('draft() — stable row_id generation', () => {
+  it('generates a deterministic row_id from sorted source_item_ids, not array position', async () => {
+    mockReconciliationResult({
+      sections: [FB],
+      items: [
+        { id: 'c-1', section_id: FB.id, element: 'party wall', resolved_content: 'a', disposition: 'active_evidence', draftable: true },
+        { id: 'c-2', section_id: FB.id, element: 'party wall', resolved_content: 'b', disposition: 'active_evidence', draftable: true },
+      ],
+    });
+    global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ rows: [
+      { observation: 'combined', element: 'party wall', source_item_ids: ['c-2', 'c-1'] }, // deliberately unsorted citation order
+    ] }) } }] }) });
+    const result = await draft({}, { sessionId: 's1', apiKey: 'k' });
+    expect(result.sections[0].rows[0].row_id).toBe('row-c-1_c-2'); // sorted regardless of citation order
+  });
+
+  it('two different rows in the same section get different, stable row_ids', async () => {
+    mockReconciliationResult({
+      sections: [FB],
+      items: [
+        { id: 'c-1', section_id: FB.id, element: 'party wall', resolved_content: 'a', disposition: 'active_evidence', draftable: true },
+        { id: 'c-2', section_id: FB.id, element: 'party wall', resolved_content: 'b', disposition: 'active_evidence', draftable: true },
+      ],
+    });
+    global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ rows: [
+      { observation: 'x', element: 'party wall', source_item_ids: ['c-1'] },
+      { observation: 'y', element: 'party wall', source_item_ids: ['c-2'] },
+    ] }) } }] }) });
+    const result = await draft({}, { sessionId: 's1', apiKey: 'k' });
+    const ids = result.sections[0].rows.map(r => r.row_id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toEqual(['row-c-1', 'row-c-2']);
+  });
+});

@@ -91,14 +91,30 @@ async function draftSection({ apiKey, model, universalBrain, userBrainContext, s
   const result = await callDraftingModel({ apiKey, model, systemContent, userPrompt });
   const validItemIds = new Set(items.map(i => i.id));
 
-  const rows = (result.rows || []).map(r => ({
-    observation: r.observation,
-    element: r.element || null,
-    // Code-level provenance validation: only ids that were genuinely
-    // offered to this call are kept. A hallucinated or cross-section
-    // id cannot enter the output even if the model produced one.
-    source_item_ids: (r.source_item_ids || []).filter(id => validItemIds.has(id)),
-  }));
+  const rows = (result.rows || []).map(r => {
+    const source_item_ids = (r.source_item_ids || []).filter(id => validItemIds.has(id));
+    return {
+      // Fixed 2026-09-19, D5 acceptance boundary: stable row identity,
+      // generated once here at creation - the only point a row is
+      // ever newly created in the pipeline - and never recomputed from
+      // array position again. Deterministic from the row's own
+      // source_item_ids (sorted, so citation order doesn't matter),
+      // not a random id, so it stays reproducible for tests and
+      // genuinely tied to what the row actually represents rather than
+      // where it happens to sit in an array. Survives D4 repair and D5
+      // rewrite unchanged; those stages update the row's text, never
+      // this. source_item_ids remains the separate, authoritative
+      // provenance record - row_id identifies the row, it does not
+      // replace what the row is drawn from.
+      row_id: 'row-' + [...source_item_ids].sort().join('_'),
+      observation: r.observation,
+      element: r.element || null,
+      // Code-level provenance validation: only ids that were genuinely
+      // offered to this call are kept. A hallucinated or cross-section
+      // id cannot enter the output even if the model produced one.
+      source_item_ids,
+    };
+  });
 
   return { section_id: section.id, section_name: section.display_name, rows };
 }

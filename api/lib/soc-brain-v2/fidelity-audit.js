@@ -24,9 +24,11 @@ import { assembleCanonicalGenerationInput } from './generation-input.js';
 import { FIDELITY_AUDIT_CONTRACT } from './fidelity-audit-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 
-function rowRef(sectionId, index) {
-  return `${sectionId}#row${index + 1}`;
-}
+// Fixed 2026-09-19, D5 acceptance boundary: rows now carry a stable
+// row_id (generated once in drafting.js, D3) rather than being
+// referenced by array position. The rowRef() positional-reference
+// helper that used to compute this has been removed entirely - every
+// reference below uses row.row_id directly.
 
 // ─── Deterministic checks (code, no model) — a safety net, not the audit itself ───
 
@@ -68,7 +70,7 @@ function checkCompleteness(draftResult) {
           findings.push({
             severity: 'blocking', type: 'invented_fact',
             section_id: section.section_id, section_name: section.section_name,
-            draft_row_id: rowRef(section.section_id, i), source_item_ids: [id],
+            draft_row_id: section.rows[i].row_id, source_item_ids: [id],
             draft_text: section.rows[i].observation,
             evidence_summary: 'No such reconciled evidence item exists.',
             required_action: 'This row cites evidence that does not exist — remove or correct the citation.',
@@ -93,7 +95,7 @@ function checkSupersededResurrection(draftResult) {
           findings.push({
             severity: 'blocking', type: 'superseded_fact_resurrected',
             section_id: section.section_id, section_name: section.section_name,
-            draft_row_id: rowRef(section.section_id, i), source_item_ids: [id],
+            draft_row_id: section.rows[i].row_id, source_item_ids: [id],
             draft_text: section.rows[i].observation,
             evidence_summary: `This fact was superseded (superseded_by: ${item.superseded_by}) and must not appear as active: "${item.resolved_content}".`,
             required_action: 'Remove the superseded fact from this row; only its active replacement should be represented.',
@@ -159,7 +161,7 @@ function checkProtectedMeasurementsPresent(draftResult) {
             findings.push({
               severity: 'blocking', type: 'altered_measurement',
               section_id: section.section_id, section_name: section.section_name,
-              draft_row_id: rowRef(section.section_id, i), source_item_ids: [id],
+              draft_row_id: section.rows[i].row_id, source_item_ids: [id],
               draft_text: row.observation,
               evidence_summary: `Source evidence includes the measurement "${measurement}", not found in the drafted text citing it.`,
               required_action: `Confirm the measurement "${measurement}" is preserved, or explain its absence.`,
@@ -193,7 +195,7 @@ function checkSectionAssignment(draftResult) {
           findings.push({
             severity: 'blocking', type: 'wrong_section',
             section_id: section.section_id, section_name: section.section_name,
-            draft_row_id: rowRef(section.section_id, i), source_item_ids: [id],
+            draft_row_id: section.rows[i].row_id, source_item_ids: [id],
             draft_text: section.rows[i].observation,
             evidence_summary: `This evidence belongs to "${item.section_name}", not "${section.section_name}".`,
             required_action: `Move this observation to its correct section: "${item.section_name}".`,
@@ -233,7 +235,7 @@ function checkDuplicateSourceConsumption(draftResult) {
       findings.push({
         severity: 'material', type: 'duplicated_observation',
         section_id: locations[0].section.section_id, section_name: locations[0].section.section_name,
-        draft_row_id: locations.map(l => rowRef(l.section.section_id, l.index)).join(', '),
+        draft_row_id: locations.map(l => l.section.rows[l.index].row_id).join(', '),
         source_item_ids: [id],
         draft_text: locations.map(l => l.section.rows[l.index].observation).join(' | '),
         evidence_summary: `Evidence "${item?.resolved_content}" is cited by ${count} separate rows.`,
@@ -288,7 +290,7 @@ async function callAuditModel({ apiKey, systemContent, userPrompt, primaryModel 
 }
 
 async function auditSection({ apiKey, model, section, sectionItems }) {
-  const draftedRowsText = section.rows.map((r, i) => `[${rowRef(section.section_id, i)}] ${r.observation} (cites: ${(r.source_item_ids || []).join(', ') || 'none'})`).join('\n');
+  const draftedRowsText = section.rows.map(r => `[${r.row_id}] ${r.observation} (cites: ${(r.source_item_ids || []).join(', ') || 'none'})`).join('\n');
   const evidenceText = sectionItems.map(item => {
     const raw = item.raw_provenance?.map(p => p.raw_fragment).filter(Boolean).join(' | ') || '';
     return `- [${item.id}] status=${item.status} disposition=${item.disposition} content="${item.resolved_content}" raw="${raw}"`;
@@ -363,17 +365,17 @@ export function applyRepairs(draftResult, findings) {
 
   const repairedSections = draftResult.sections.map(section => ({
     ...section,
-    rows: section.rows.map((row, i) => {
-      const ref = rowRef(section.section_id, i);
-      const finding = repairsByRowRef.get(ref);
+    rows: section.rows.map(row => {
+      const finding = repairsByRowRef.get(row.row_id);
       if (!finding) return row;
       auditTrail.push({
-        draft_row_id: ref,
+        draft_row_id: row.row_id,
         finding: { type: finding.type, severity: finding.severity, evidence_summary: finding.evidence_summary },
         original_row: row.observation,
         repaired_row: finding.proposed_repair,
       });
-      // source_item_ids deliberately unchanged - only the text is repaired.
+      // source_item_ids and row_id deliberately unchanged - only the
+      // text is repaired. Stable identity survives repair exactly.
       return { ...row, observation: finding.proposed_repair };
     }),
   }));

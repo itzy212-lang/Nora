@@ -62,12 +62,12 @@ function baseCorrectDraft() {
     reconciliation_items: baseReconciliationItems(),
     sections: [
       { section_id: FB, section_name: 'Front Bedroom', rows: [
-        { observation: 'The party wall has a plaster and emulsion finish.', element: 'party wall', source_item_ids: ['c-2-1'] },
-        { observation: 'A hairline crack extends approximately 450mm diagonally upward from the corner of the party wall.', element: 'party wall', source_item_ids: ['c-5-1'] },
-        { observation: 'The window was tested and operated satisfactorily without sticking or binding.', element: 'window', source_item_ids: ['c-3-1'] },
+        { row_id: 'row-c-2-1', observation: 'The party wall has a plaster and emulsion finish.', element: 'party wall', source_item_ids: ['c-2-1'] },
+        { row_id: 'row-c-5-1', observation: 'A hairline crack extends approximately 450mm diagonally upward from the corner of the party wall.', element: 'party wall', source_item_ids: ['c-5-1'] },
+        { row_id: 'row-c-3-1', observation: 'The window was tested and operated satisfactorily without sticking or binding.', element: 'window', source_item_ids: ['c-3-1'] },
       ] },
       { section_id: RB, section_name: 'Rear Bedroom', rows: [
-        { observation: 'A vertical crack of approximately 300mm was noted to the party wall, with staining immediately above it.', element: 'party wall', source_item_ids: ['c-8-1', 'c-9-1'] },
+        { row_id: 'row-c-8-1_c-9-1', observation: 'A vertical crack of approximately 300mm was noted to the party wall, with staining immediately above it.', element: 'party wall', source_item_ids: ['c-8-1', 'c-9-1'] },
       ] },
     ],
   };
@@ -218,7 +218,7 @@ describe('applyRepairs — targeted, evidence-bound, provenance-preserving', () 
   it('applies only auto_repairable findings, leaving unrelated rows untouched', () => {
     const draft = baseCorrectDraft();
     const findings = [
-      { auto_repairable: true, proposed_repair: 'The party wall has a plaster and emulsion finish, in generally good condition.', draft_row_id: 'sec-front#row1', type: 'lost_condition_or_finish', severity: 'material', evidence_summary: 'x' },
+      { auto_repairable: true, proposed_repair: 'The party wall has a plaster and emulsion finish, in generally good condition.', draft_row_id: 'row-c-2-1', type: 'lost_condition_or_finish', severity: 'material', evidence_summary: 'x' },
     ];
     const { repairedDraft, auditTrail } = applyRepairs(draft, findings);
     expect(repairedDraft.sections[0].rows[0].observation).toContain('generally good condition');
@@ -233,7 +233,7 @@ describe('applyRepairs — targeted, evidence-bound, provenance-preserving', () 
     const draft = baseCorrectDraft();
     const originalIds = [...draft.sections[1].rows[0].source_item_ids];
     const findings = [
-      { auto_repairable: true, proposed_repair: 'A vertical crack of approximately 300mm was noted to the party wall, with staining immediately above it.', draft_row_id: 'sec-rear#row1', type: 'lost_spatial_relationship', severity: 'material', evidence_summary: 'x' },
+      { auto_repairable: true, proposed_repair: 'A vertical crack of approximately 300mm was noted to the party wall, with staining immediately above it.', draft_row_id: 'row-c-8-1_c-9-1', type: 'lost_spatial_relationship', severity: 'material', evidence_summary: 'x' },
     ];
     const { repairedDraft } = applyRepairs(draft, findings);
     expect(repairedDraft.sections[1].rows[0].source_item_ids).toEqual(originalIds);
@@ -242,7 +242,7 @@ describe('applyRepairs — targeted, evidence-bound, provenance-preserving', () 
   it('ignores a finding with no proposed_repair or not marked auto_repairable', () => {
     const draft = baseCorrectDraft();
     const findings = [
-      { auto_repairable: false, proposed_repair: null, draft_row_id: 'sec-front#row1', type: 'wrong_section', severity: 'blocking', evidence_summary: 'x' },
+      { auto_repairable: false, proposed_repair: null, draft_row_id: 'row-c-2-1', type: 'wrong_section', severity: 'blocking', evidence_summary: 'x' },
     ];
     const { repairedDraft, auditTrail } = applyRepairs(draft, findings);
     expect(repairedDraft.sections[0].rows[0].observation).toBe(draft.sections[0].rows[0].observation);
@@ -253,7 +253,7 @@ describe('applyRepairs — targeted, evidence-bound, provenance-preserving', () 
     const draft = baseCorrectDraft();
     const originalText = draft.sections[0].rows[0].observation;
     const findings = [
-      { auto_repairable: true, proposed_repair: 'Different text entirely.', draft_row_id: 'sec-front#row1', type: 'invented_fact', severity: 'blocking', evidence_summary: 'x' },
+      { auto_repairable: true, proposed_repair: 'Different text entirely.', draft_row_id: 'row-c-2-1', type: 'invented_fact', severity: 'blocking', evidence_summary: 'x' },
     ];
     applyRepairs(draft, findings);
     expect(draft.sections[0].rows[0].observation).toBe(originalText);
