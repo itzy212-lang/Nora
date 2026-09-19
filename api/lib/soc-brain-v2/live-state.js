@@ -118,9 +118,16 @@ export async function resolveSection(supabase, { sessionId, projectId, aoId, seq
  * real note id and resolved section id, and returns what actually
  * happened — for the caller to persist as the note's lifecycle status
  * and structured response.
+ *
+ * currentSectionId is the id of whichever section was already active
+ * before this note (from the context loadLiveContext already
+ * assembled) — distinct from sectionResult, which is only non-null
+ * when THIS note itself caused a section change (a reactivation or a
+ * genuine new section). See the section_id resolution below for why
+ * that distinction matters.
  */
 export async function applyLiveProcessingResult(supabase, {
-  sessionId, noteId, sequence, projectId, aoId, modelOutput,
+  sessionId, noteId, sequence, projectId, aoId, modelOutput, currentSectionId = null,
 }) {
   const sectionResult = await resolveSection(supabase, {
     sessionId, projectId, aoId, sequence,
@@ -128,7 +135,28 @@ export async function applyLiveProcessingResult(supabase, {
   });
 
   const sectionText = sectionResult?.display_name || modelOutput.section_resolution?.display_name || null;
-  const sectionId = sectionResult?.section_id || null;
+  // Fixed 2026-09-19: resolveSection() correctly returns null for
+  // action: 'same_as_current' - no section write is needed when
+  // nothing changes. But that null was being used directly as this
+  // note's section_id, meaning every claim from an ordinary
+  // same_as_current note (i.e. almost every note in a real
+  // inspection) was persisted with section_id: null - invisible to
+  // the recent-context query in live-processor.js, which filters
+  // strictly by section_id. Confirmed live: this made a correction
+  // ("actually, that's 450, not 650") unable to see the very crack
+  // claim it was correcting, despite that claim being fully present
+  // and correct in the database.
+  //
+  // "No NEW section result" (sectionResult is null) and "no CURRENT
+  // section" (currentSectionId is null) are different states - only
+  // the second one means there is genuinely no active section yet
+  // (e.g. the very first note of an inspection, before any section
+  // exists at all). This falls back to the already-active section's
+  // id in the first case, and only allows a genuine null in the
+  // second - matching the stated invariant: every substantive claim
+  // made while a section is active belongs to it unless the model
+  // itself transitioned, returned, or reassigned it elsewhere.
+  const sectionId = sectionResult?.section_id || currentSectionId || null;
 
   const claims = (modelOutput.claims || []).map((c, i) => ({
     claim_id: `c-${sequence}-${i + 1}`,

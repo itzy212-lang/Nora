@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { LIVE_PROCESSING_CONTRACT, LIVE_PROCESSING_CONTRACT_VERSION } from '../soc-brain-v2/live-processing-contract.js';
-import { formatRecentClaim } from '../soc-brain-v2/live-processor.js';
+import { formatRecentClaim, loadLiveContext } from '../soc-brain-v2/live-processor.js';
 
 describe('LIVE_PROCESSING_CONTRACT — defect 1: amendment claims must resolve element', () => {
   it('requires a resolved element on every amendment, even when the surveyor did not repeat it', () => {
@@ -95,5 +95,85 @@ describe('formatRecentClaim — structured context, not bare prose (the other ha
     const line = formatRecentClaim({ claim_id: 'c-2-1', element: 'window', raw_fragment: 'The window opened and closed satisfactorily' });
     expect(line).not.toContain(' — (');
     expect(line).not.toContain(' — undefined');
+  });
+});
+
+// [4] and [5]: regression tests for loadLiveContext, the function whose
+// query is what actually failed live (2026-09-19) - it filters
+// soc_claims by section_id, and every ordinary/corrected claim in a
+// same_as_current note had been persisted with section_id: null (the
+// bug fixed in live-state.js/applyLiveProcessingResult), so this query
+// found almost nothing regardless of how well it formatted what it did
+// find. These tests exercise the real loadLiveContext function against
+// a mock that faithfully simulates the section_id filter, proving the
+// query itself retrieves claims correctly once they carry a real
+// section_id - i.e. that the fix on the write side is matched by
+// correct behaviour on the read side.
+function makeContextMockSupabase({ sections = [], claimsBySection = {} } = {}) {
+  const filters = { calls: [] };
+  const sectionsTable = {
+    select: () => sectionsTable,
+    eq: () => sectionsTable,
+    order: () => Promise.resolve({ data: sections }),
+  };
+  function claimsQuery(recordedEq) {
+    return {
+      eq: (col, val) => claimsQuery([...recordedEq, [col, val]]),
+      order: () => claimsQuery(recordedEq),
+      limit: () => {
+        filters.calls.push(recordedEq);
+        const sectionIdFilter = recordedEq.find(([col]) => col === 'section_id');
+        const sid = sectionIdFilter?.[1];
+        return Promise.resolve({ data: claimsBySection[sid] || [] });
+      },
+    };
+  }
+  return {
+    from: (table) => (table === 'soc_sections' ? sectionsTable : { select: () => claimsQuery([]) }),
+    _filters: filters,
+  };
+}
+
+describe('loadLiveContext — retrieves recent claims for the active section (regression)', () => {
+  it('[4] retrieves earlier claims filed under the active section\'s real id', async () => {
+    const supabase = makeContextMockSupabase({
+      sections: [{ id: 'sec-front', section_key: 'first_floor_front_bedroom', display_name: 'First Floor Front Bedroom', last_active_sequence: 4 }],
+      claimsBySection: {
+        'sec-front': [
+          { claim_id: 'c-2-1', element: 'party wall', construction: 'plaster and emulsion', raw_fragment: 'party wall plaster and emulsion' },
+          { claim_id: 'c-3-1', element: 'window', raw_fragment: 'window opened and closed satisfactorily' },
+        ],
+      },
+    });
+    const context = await loadLiveContext(supabase, { sessionId: 's1' });
+    expect(context.currentSection.id).toBe('sec-front');
+    expect(context.recentNotes.map(c => c.claim_id)).toEqual(['c-2-1', 'c-3-1']);
+  });
+
+  it('[5] the preceding 650mm party-wall crack is present in recent context for the correction that follows it', async () => {
+    const supabase = makeContextMockSupabase({
+      sections: [{ id: 'sec-front', section_key: 'first_floor_front_bedroom', display_name: 'First Floor Front Bedroom', last_active_sequence: 4 }],
+      claimsBySection: {
+        'sec-front': [
+          { claim_id: 'c-4-1', element: 'party wall', defect_type: 'hairline crack', measurement: '650mm', direction: 'diagonally up', raw_fragment: 'a hairline crack in the party wall, about 650 millimetres, running diagonally up from the corner' },
+        ],
+      },
+    });
+    const context = await loadLiveContext(supabase, { sessionId: 's1' });
+    const crack = context.recentNotes.find(c => c.claim_id === 'c-4-1');
+    expect(crack).toBeDefined();
+    expect(crack.element).toBe('party wall');
+    expect(crack.measurement).toBe('650mm');
+    // And confirm the formatted line the model actually receives carries it explicitly.
+    const line = formatRecentClaim(crack);
+    expect(line).toContain('element="party wall"');
+    expect(line).toContain('650mm');
+  });
+
+  it('returns no recent claims (not an error) when no section is active yet', async () => {
+    const supabase = makeContextMockSupabase({ sections: [] });
+    const context = await loadLiveContext(supabase, { sessionId: 's1' });
+    expect(context.currentSection).toBeNull();
+    expect(context.recentNotes).toEqual([]);
   });
 });

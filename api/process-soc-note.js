@@ -94,6 +94,12 @@ export default async function handler(req, res) {
       sessionId: session_id, noteId, sequence,
       projectId: project_id || null, aoId: ao_id || null,
       modelOutput,
+      // Fixed 2026-09-19: the already-active section (from the context
+      // loaded above) must be available as a fallback for same_as_current
+      // notes, or their claims — and any pending clarification raised
+      // while processing them — lose the section identity entirely. See
+      // live-state.js for the full reasoning.
+      currentSectionId: context.currentSection?.id || null,
     });
 
     // ── 4. Pending clarification bookkeeping ──────────────────────────────

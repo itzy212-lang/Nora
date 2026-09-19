@@ -415,3 +415,142 @@ describe('applyLiveProcessingResult — acceptance-test defect regressions', () 
     expect(supabase._calls.updates[0]).toMatchObject({ last_active_sequence: 11 });
   });
 });
+
+// Regression tests for the section-identity-loss bug (2026-09-19):
+// resolveSection() correctly returns null for action: 'same_as_current'
+// (no section write needed), but that null was being used directly as
+// the note's section_id - meaning every ordinary observation, addition,
+// or correction made while continuing in the same section was silently
+// persisted with section_id: null, invisible to the recent-context
+// query that filters strictly by section_id. Fixed by having
+// applyLiveProcessingResult accept the already-active section's id
+// (from context the caller already loaded) as an explicit fallback -
+// used only when resolveSection itself produced no NEW section result,
+// distinct from there being no CURRENT section at all.
+describe('applyLiveProcessingResult — section-identity propagation (regression)', () => {
+  it('[1] an ordinary same_as_current observation receives the active section id, not null', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'construction_description', element: 'party wall', construction: 'plaster and emulsion', raw_fragment: 'party wall plaster and emulsion', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-2', sequence: 2, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-front',
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBe('sec-front');
+  });
+
+  it('[2] several consecutive same_as_current observations all retain the same section id', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const baseOutput = (fragment) => ({
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'general_condition', element: 'window', condition: fragment, raw_fragment: fragment, confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    });
+    for (const [i, fragment] of ['a', 'b', 'c'].entries()) {
+      await applyLiveProcessingResult(supabase, {
+        sessionId: 's1', noteId: `note-${i + 2}`, sequence: i + 2, projectId: 'p1', aoId: 'ao1',
+        modelOutput: baseOutput(fragment), currentSectionId: 'sec-front',
+      });
+    }
+    expect(supabase._calls.rpc.every(c => c.params.p_section_id === 'sec-front')).toBe(true);
+  });
+
+  it('[3] a contextual correction within the same room receives the active section id', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'amendment', element: 'party wall', measurement: '450mm', amendment_mode: 'correct_measurement', raw_fragment: "that's 450, not 650", confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-5', sequence: 5, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-front',
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBe('sec-front');
+    expect(supabase._calls.rpc[0].params.p_claims[0].element).toBe('party wall');
+  });
+
+  it('[6] moving to a new room (create_new) uses the newly created section id, not the previous currentSectionId', async () => {
+    const supabase = makeMockSupabase({ existingSection: null, insertedSection: { id: 'sec-rear', display_name: 'First Floor Rear Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'create_new', section_key: 'first_floor_rear_bedroom', display_name: 'First Floor Rear Bedroom', floor_level: 'First Floor' },
+      claims: [{ claim_type: 'section_declaration', raw_fragment: 'Moving into the first floor rear bedroom.', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-6', sequence: 6, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-front', // the room being left - must NOT leak onto the new room's claims
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBe('sec-rear');
+  });
+
+  it('[7] a spatial reference to another room while remaining in the current one keeps the current section id', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-rear', display_name: 'First Floor Rear Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' }, // "the wall abutting the front bedroom" - spatial only
+      claims: [{ claim_type: 'finish_description', element: 'wall abutting the front bedroom', finish: 'plastered', raw_fragment: 'The wall abutting the front bedroom is also plastered', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-7', sequence: 7, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-rear',
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBe('sec-rear');
+  });
+
+  it('[8] returning to an earlier room (reuse_existing) uses that room\'s own id, not the room just left', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'reuse_existing', section_key: 'first_floor_front_bedroom', display_name: 'First Floor Front Bedroom' },
+      claims: [{ claim_type: 'specific_defect', element: 'window', defect_type: 'crack', raw_fragment: 'there is a crack above the window', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: true, type: 'return_confirmation', text: 'Added the crack above the window to the First Floor Front Bedroom.' },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-11', sequence: 11, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-rear', // the room being left when returning to Front Bedroom
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBe('sec-front');
+    expect(supabase._calls.inserts.length).toBe(0); // reactivation, never a duplicate
+  });
+
+  it('[9] the returned section_id (used for pending-clarification bookkeeping) is correct during same_as_current, not null', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-front', display_name: 'First Floor Front Bedroom' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'unresolved', element: null, measurement: '200 millimetres', raw_fragment: "There's a crack on the wall, about 200 millimetres.", confidence: 'low' }],
+      resolves_pending_clarification: false,
+      live_response: { required: true, type: 'clarification', text: 'Which wall is the 200mm crack on?' },
+    };
+    const applied = await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-13', sequence: 13, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: 'sec-front',
+    });
+    // This is exactly what process-soc-note.js passes as affected_section_id
+    // to setPendingClarification - must not be null.
+    expect(applied.section_id).toBe('sec-front');
+  });
+
+  it('distinguishes "no NEW section result" from "no CURRENT section": genuinely no active section yet stays null, not a crash or a fabricated id', async () => {
+    const supabase = makeMockSupabase({ existingSection: { id: 'sec-x', display_name: 'X' } });
+    const modelOutput = {
+      section_resolution: { action: 'same_as_current' },
+      claims: [{ claim_type: 'contextual', raw_fragment: 'uh, one second', confidence: 'high' }],
+      resolves_pending_clarification: false,
+      live_response: { required: false, type: null, text: null },
+    };
+    await applyLiveProcessingResult(supabase, {
+      sessionId: 's1', noteId: 'note-0', sequence: 1, projectId: 'p1', aoId: 'ao1', modelOutput,
+      currentSectionId: null, // genuinely no section established yet
+    });
+    expect(supabase._calls.rpc[0].params.p_section_id).toBeNull();
+  });
+});
