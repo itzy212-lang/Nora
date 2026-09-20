@@ -119,12 +119,22 @@ export default async function handler(req, res) {
         // normal-priority FCM message rather than delivering it
         // immediately. urgency: 'high' explicitly asks the push
         // service to treat this as time-sensitive and bypass that
-        // batching; a short TTL means it's not worth delivering late
-        // if it somehow still gets deferred beyond that.
+        // batching.
+        // Corrected immediately after: an initial TTL: 300 (5 minutes)
+        // was a real mistake, not an improvement - confirmed live, a
+        // second test with that TTL in place produced NO notification
+        // at all after 20+ minutes, worse than before. If Android
+        // defers actual delivery past the TTL (which it demonstrably
+        // can, well past 5 minutes), FCM simply discards the message
+        // rather than delivering it late - for a "you have a new
+        // email" notification, late is clearly better than silently
+        // dropped, so a generous 24-hour TTL keeps it queued for
+        // delivery whenever the device actually wakes, rather than
+        // giving up.
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload,
-          { urgency: 'high', TTL: 300 },
+          { urgency: 'high', TTL: 86400 },
         );
         sent++;
       } catch (err) {
