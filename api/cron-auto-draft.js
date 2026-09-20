@@ -587,15 +587,28 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 .maybeSingle();
 
               const lastOwnMessageAt = lastOutgoing ? (lastOutgoing.sent_at || lastOutgoing.received_at) : null;
-              const hoursSinceLastOwnMessage = lastOwnMessageAt
-                ? (Date.now() - new Date(lastOwnMessageAt).getTime()) / (1000 * 60 * 60)
-                : Infinity; // no prior outgoing message in this thread at all - nothing to be "mid-conversation" with
 
-              // On request: a live back-and-forth (you personally
-              // replied within the last couple of hours) means Nora
-              // stays out of it entirely - only a settled gap is safe
-              // to auto-close.
-              threadSafe = hoursSinceLastOwnMessage >= 2;
+              // Fixed 2026-09-20, on request, real gap: this originally
+              // only measured time since the user's last own message -
+              // for a thread with no prior reply at all, that's
+              // infinite, so a genuinely brand-new email would have
+              // been eligible on the very next cron run (~15 minutes
+              // after arrival), not after any real waiting window. The
+              // correct reference point is whichever is MORE RECENT -
+              // the email arriving, or the user's last message in this
+              // thread - so a fresh email gets a real, meaningful gap
+              // before Nora touches it, not just an active exchange.
+              const referenceTime = Math.max(
+                new Date(email.received_at).getTime(),
+                lastOwnMessageAt ? new Date(lastOwnMessageAt).getTime() : 0
+              );
+              const hoursSinceReference = (Date.now() - referenceTime) / (1000 * 60 * 60);
+
+              // On request: neither a live back-and-forth (you
+              // personally replied recently) nor a just-arrived email
+              // is safe to auto-close - only a settled gap of two hours
+              // or more, from whichever happened more recently, is.
+              threadSafe = hoursSinceReference >= 2;
             }
 
             if (threadSafe) {
