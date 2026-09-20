@@ -1385,6 +1385,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
   const unread  = !email.is_read;
   const replied = email.is_replied;
   const flagged = email.flagged;
+  const autoResponded = email.ai_auto_responded;
   const hasAtt  = !!email.has_attachments;
   const cat     = email.ai_category;
   const catColour = { damage_claim: '#ef4444', urgent: '#ef4444', consent: '#22c55e', dissent: '#ef4444', legal: '#f59e0b' }[cat?.toLowerCase()] || null;
@@ -1442,6 +1443,14 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
             {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
             {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
             {hasDraft && <span title="Nora has drafted a response" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, border: '1px solid #bbf7d0' }}>✨ Draft ready</span>}
+            {/* Added 2026-09-19, on request: distinct from the generic
+                "replied" arrow above (any reply, manual or otherwise) -
+                this specifically means Nora auto-generated AND sent
+                this response, at a glance, without opening the email.
+                Deliberately never implies the email has been read -
+                unread styling (the bold text/blue dot elsewhere in
+                this row) is completely independent of this badge. */}
+            {autoResponded && <span title="Nora automatically responded to this email" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#dcfce7', color: '#15803d', fontWeight: 700, border: '1px solid #86efac' }}>✅ Nora responded</span>}
             {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
           </div>
         </div>
@@ -2705,6 +2714,57 @@ if (syncErr) throw syncErr;
       await sb.from('emails').update({ is_replied: true }).eq('id', replyToId);
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, is_replied: true } });
       updateCachedEmail(replyToId, { is_replied: true }); // same fix as mark-as-read above
+
+      // Added 2026-09-19, on request: distinct from drafting - this
+      // only fires once a reply that actually originated from Nora's
+      // auto-draft has genuinely been SENT. Detected by checking for
+      // a 'used' email_auto_drafts row for this email (set the moment
+      // "Use this draft" is clicked, before the send itself happens) -
+      // this is what distinguishes "this send followed Nora's draft"
+      // from an ordinary manual reply, without needing to thread that
+      // fact through the whole reply-composer state. Deliberately
+      // does NOT touch is_read anywhere in this block, on explicit
+      // request - the user wants to be able to tell "have I personally
+      // looked at this" independently of anything Nora did.
+      try {
+        const { data: usedDrafts } = await sb
+          .from('email_auto_drafts')
+          .select('id')
+          .eq('email_id', replyToId)
+          .eq('status', 'used')
+          .limit(1);
+
+        if (usedDrafts?.length) {
+          const respondedAt = new Date().toISOString();
+          await sb.from('emails').update({ ai_auto_responded: true, ai_auto_responded_at: respondedAt }).eq('id', replyToId);
+          dispatch({ type: 'UPDATE_EMAIL', payload: { id: replyToId, ai_auto_responded: true, ai_auto_responded_at: respondedAt } });
+          updateCachedEmail(replyToId, { ai_auto_responded: true, ai_auto_responded_at: respondedAt });
+
+          await sb.from('email_auto_drafts').update({ status: 'sent' }).eq('id', usedDrafts[0].id);
+
+          // Every auto-response sent creates a real to-do task, not
+          // only the ones Nora's own draft flagged as uncertain - the
+          // explicit goal is that nothing sent on the user's behalf
+          // can silently be forgotten about.
+          const resolvedUid = state.currentUser?.id || null;
+          if (resolvedUid) {
+            await sb.from('tasks').insert({
+              title: 'Nora sent an auto-response: ' + (subject || 'no subject'),
+              description: 'Review what was sent and confirm nothing further is needed from you.',
+              due_date: new Date().toISOString().slice(0, 10),
+              task_type: 'email',
+              source: 'assistant',
+              status: 'open',
+              project_id: selectedEmail?.project_id || null,
+              linked_email_message_id: replyToId,
+              user_id: resolvedUid,
+            });
+            window.dispatchEvent(new Event('nora:task-added'));
+          }
+        }
+      } catch (autoRespondErr) {
+        console.warn('[handleSendReply] auto-response flagging/task creation failed:', autoRespondErr?.message);
+      }
     }
 
     // Embed the sent email (fire and forget) — enables semantic search
