@@ -396,6 +396,28 @@ export default async function handler(req, res) {
       return resolved;
     }
 
+    // Added URGENTLY 2026-09-20, real, confirmed bug: two of the
+    // practice's own connected mailboxes (help@sq1consulting.co.uk
+    // via Outlook, itzy212@gmail.com via Gmail) emailed each other
+    // during testing, and each one's auto-response landed as a new
+    // "incoming" email in the other mailbox's own sync - which this
+    // same cron then auto-responded to as well, and so on. Confirmed
+    // live: a single thread reached "Re: Re: Re:" through this loop
+    // before being caught and stopped. This is not specific to these
+    // two test accounts - the same thing would happen for ANY two of
+    // the practice's own connected mailboxes emailing each other, in
+    // production as much as in testing. Fixed generically: fetch
+    // every real connected account's email once, up front, and never
+    // auto-draft or auto-send a reply to an email whose sender is one
+    // of the practice's own accounts - regardless of which mailbox it
+    // arrived in.
+    if (!authUsersList) {
+      const { data: allUsers, error: listErr } = await supabase.auth.admin.listUsers();
+      if (listErr) console.warn('[cron-auto-draft] Could not list users for self-correspondence check:', listErr.message);
+      authUsersList = allUsers?.users || [];
+    }
+    const ownAccountEmails = new Set(authUsersList.map(u => (u.email || '').toLowerCase()).filter(Boolean));
+
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of emails || []) {
@@ -407,6 +429,8 @@ export default async function handler(req, res) {
         .maybeSingle();
 
       if (existing) { results.skipped++; continue; }
+
+      if (ownAccountEmails.has((email.sender_email || '').toLowerCase())) { results.skipped++; continue; }
 
       const skipReason = shouldSkip(email);
       if (skipReason) { results.skipped++; continue; }
@@ -733,6 +757,9 @@ Timescales, explained precisely, not vaguely:
 - If the Adjoining Owner does neither within that further 10 days, the practice will appoint a surveyor on their behalf. Always include this specific clarification when explaining that step: this appointed surveyor cannot be Itzik — an agreed surveyor has to be agreed between both parties, and in the absence of agreement under Section 10, a separate surveyor is appointed specifically to act for the Adjoining Owner. Itzik can suggest someone the practice has worked with before whose fees are reasonable, and the two surveyors then work together to get the award finalised.
 
 Explain this warmly and in plain language, not as a dense legal recitation — this is someone trying to understand what they're being asked to do, not reading a statute. The numbered list of options should read as a genuine list; the surrounding explanation should still read as natural prose, not a bullet-pointed legal document throughout.
+
+ADDRESSING THE RECIPIENT — "BUILDING OWNER" / "ADJOINING OWNER" ARE TERMS OF ART, NOT HOW YOU SPEAK TO SOMEONE:
+These terms exist to distinguish parties on paper, not to describe someone to their own face. When writing directly to the person who IS the Building Owner (most commonly Itzik's own client, e.g. explaining the process to them), address them as "you" throughout, the same way anyone would write to the actual person they're emailing — never refer to them in the third person as "the Building Owner" as if they were someone else. If the term genuinely needs to appear for legal precision (e.g. explaining what the Act itself calls them, or a fee point that only makes sense using the term), qualify it plainly the first time — "you, as the Building Owner, ..." or "you (the Building Owner) ..." — not a bare, unexplained "the Building Owner" as though the recipient already knows the jargon and needs it repeated back at them. The same applies when writing directly to an Adjoining Owner. Only use the bare term, unqualified, when writing to someone ELSE about that party — e.g. a surveyor, or the other side, where "the Building Owner" correctly refers to a third person, not the recipient themselves.
 
 PARTY WALL CONTEXT — GENERAL:
 Itzik Darel is primarily a party wall surveyor but also handles general construction consultancy. Do not assume every email is party wall related. Read the email and thread carefully — if it is clearly about party wall matters, use your knowledge of the Party Wall etc. Act 1996 to respond accurately. If it is about something else (construction disputes, general surveying, CDM, building contracts), respond appropriately to that context instead. If the context is unclear or there is no project data available, give a professional acknowledgement and say Itzik will be in touch to discuss further — do not guess or assume what the matter relates to.`;
