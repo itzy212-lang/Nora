@@ -706,7 +706,18 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: 'gpt-5.6-terra',
-            max_completion_tokens: 600,
+            // Fixed: confirmed live, a real draft attempt failed with
+            // "Empty draft" - gpt-5.6-terra is a reasoning model, and
+            // internal reasoning tokens count against the same budget
+            // as the visible reply text. 600 was already tight for
+            // that combined budget, and the brain prompt has grown
+            // substantially tonight (diary/availability logic, the new
+            // process-explanation section) - genuinely more for the
+            // model to reason through before writing anything visible.
+            // Every other gpt-5.6-terra drafting call in this codebase
+            // already uses 2000-4000; 600 was a real outlier, not a
+            // deliberate choice.
+            max_completion_tokens: 2000,
             messages: [
               { role: 'developer', content: NORA_DRAFT_BRAIN },
               { role: 'user', content: userPrompt },
