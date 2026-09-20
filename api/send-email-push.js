@@ -110,9 +110,21 @@ export default async function handler(req, res) {
     let sent = 0, failed = 0;
     for (const sub of subscriptions) {
       try {
+        // Fixed: no urgency/TTL was ever set, meaning this relied on
+        // web-push's default (normal) priority - confirmed live, a
+        // real notification was sent successfully (HTTP 200) within 2
+        // minutes of the email arriving, but didn't actually reach the
+        // Android device for close to an hour, consistent with
+        // Android's own battery-optimisation/Doze deferring a
+        // normal-priority FCM message rather than delivering it
+        // immediately. urgency: 'high' explicitly asks the push
+        // service to treat this as time-sensitive and bypass that
+        // batching; a short TTL means it's not worth delivering late
+        // if it somehow still gets deferred beyond that.
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload,
+          { urgency: 'high', TTL: 300 },
         );
         sent++;
       } catch (err) {
