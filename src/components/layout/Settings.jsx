@@ -959,6 +959,64 @@ function EmailTab() {
   );
 }
 
+const DEFAULT_BUSINESS_HOURS = {
+  monday: { open: '09:00', close: '17:00' },
+  tuesday: { open: '09:00', close: '17:00' },
+  wednesday: { open: '09:00', close: '17:00' },
+  thursday: { open: '09:00', close: '17:00' },
+  friday: { open: '09:00', close: '17:00' },
+  saturday: { off: true },
+  sunday: { off: true },
+};
+const DAYS = [
+  ['monday', 'Monday'], ['tuesday', 'Tuesday'], ['wednesday', 'Wednesday'],
+  ['thursday', 'Thursday'], ['friday', 'Friday'], ['saturday', 'Saturday'], ['sunday', 'Sunday'],
+];
+
+function BusinessHoursSection({ settings, save }) {
+  const hours = settings.business_hours || DEFAULT_BUSINESS_HOURS;
+
+  const updateDay = (day, patch) => {
+    save({ business_hours: { ...hours, [day]: { ...hours[day], ...patch } } });
+  };
+
+  return (
+    <div style={{ padding: '14px 16px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Business hours</div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Used by Nora's auto-response system to know when the office is open, so it can set honest expectations for an email arriving out of hours.</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {DAYS.map(([key, label]) => {
+          const day = hours[key] || { off: true };
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 90, fontSize: 12.5, color: 'var(--text)', fontWeight: 500 }}>{label}</div>
+              <div
+                onClick={() => updateDay(key, day.off ? { off: false, open: day.open || '09:00', close: day.close || '17:00' } : { off: true })}
+                style={{
+                  width: 36, height: 20, borderRadius: 99, cursor: 'pointer', flexShrink: 0,
+                  background: !day.off ? 'var(--accent, #2563eb)' : 'var(--border)',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <div style={{ position: 'absolute', top: 2, left: !day.off ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </div>
+              {day.off ? (
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>Off</span>
+              ) : (
+                <>
+                  <input type="time" value={day.open || '09:00'} onChange={e => updateDay(key, { open: e.target.value })} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12.5 }} />
+                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>to</span>
+                  <input type="time" value={day.close || '17:00'} onChange={e => updateDay(key, { close: e.target.value })} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12.5 }} />
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function NoraTab() {
   const [settings, setSettings] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -974,9 +1032,10 @@ function NoraTab() {
           nora_auto_draft:       data.nora_auto_draft       ?? false,
           nora_use_templates:    data.nora_use_templates    ?? true,
           nora_personality:      data.nora_personality      || 'professional',
+          business_hours:        data.business_hours        || DEFAULT_BUSINESS_HOURS,
         });
       } else {
-        setSettings({ nora_auto_send: false, nora_auto_draft: false, nora_use_templates: true, nora_personality: 'professional' });
+        setSettings({ nora_auto_send: false, nora_auto_draft: false, nora_use_templates: true, nora_personality: 'professional', business_hours: DEFAULT_BUSINESS_HOURS });
       }
     });
   }, []);
@@ -990,6 +1049,7 @@ function NoraTab() {
       nora_auto_draft:    next.nora_auto_draft,
       nora_use_templates: next.nora_use_templates,
       nora_personality:   next.nora_personality,
+      business_hours:     next.business_hours,
       updated_at: new Date().toISOString(),
     };
     if (firmId) {
@@ -1073,6 +1133,11 @@ function NoraTab() {
           ))}
         </div>
       </div>
+
+      {/* Business hours - added 2026-09-20, on request: drives the
+          out-of-hours framing in Nora's auto-response gating (not
+          hardcoded, per instruction). */}
+      <BusinessHoursSection settings={settings} save={save} />
 
       {(saving || saved) && (
         <div style={{ fontSize: 12, color: saving ? 'var(--text3)' : 'var(--green)', textAlign: 'right' }}>

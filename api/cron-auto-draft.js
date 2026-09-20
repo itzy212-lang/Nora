@@ -28,6 +28,257 @@ function shouldSkip(email) {
   return null;
 }
 
+// Added 2026-09-20 - the full diary-aware auto-send gate, built from
+// an extended design conversation. Deliberately a single, self-
+// contained function returning {eligible, framing}: `eligible` gates
+// whether anything happens this cron cycle at all (drafting AND
+// sending both wait behind this - see the caller), `framing` is
+// context handed to the drafting prompt so the response itself says
+// something true and specific, never generic filler, when it does go
+// out. Checked in a fixed priority order, each one a genuinely
+// distinct signal, not a fallback chain of guesses:
+//
+//   1. Holiday - certain, beats everything.
+//   2. Today's Schedule of Condition appointments, blanketed as one
+//      span (own 90-minute assumed duration, since none is ever
+//      recorded; 45 minutes either side for travel) - certain.
+//   3. Any other calendar commitment today (meeting/call/site visit/
+//      appointment) - certain, but the response never says what kind.
+//   4. Outside configured business hours - certain, reads
+//      firm_settings.business_hours, never hardcoded.
+//   5. Fallback: the 45-minute silence rule - an inference, not a
+//      certainty, used only when none of the above apply at all.
+//
+// Every one of 1-4, when it applies, makes the email eligible
+// immediately - there is no reason to wait out silence when a
+// stronger, certain signal already answers "is Itzik available"
+// definitively. Called fresh every single cron cycle with no memory
+// of past calls - the "keep re-asking until something changes"
+// design this whole feature depends on comes entirely from there
+// being no cached decision anywhere, not from this function itself.
+async function computeSendEligibility(email, supabase, ownerUserId) {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  if (!ownerUserId) {
+    // Can't check anyone's diary or hours without knowing whose they
+    // are - falls through to the silence-only fallback rather than
+    // blocking entirely.
+    return computeSilenceFallback(email, supabase);
+  }
+
+  // ── 1. Holiday ──────────────────────────────────────────────────
+  const { data: holidayTasks } = await supabase
+    .from('tasks')
+    .select('due_date, end_date')
+    .eq('user_id', ownerUserId)
+    .eq('task_type', 'holiday')
+    .lte('due_date', todayStr)
+    .order('due_date', { ascending: false })
+    .limit(20);
+
+  const activeHoliday = (holidayTasks || []).find(h => todayStr <= (h.end_date || h.due_date));
+  if (activeHoliday) {
+    const returnDate = new Date((activeHoliday.end_date || activeHoliday.due_date) + 'T00:00:00');
+    const returnDateFmt = returnDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    return {
+      eligible: true,
+      framing: `Itzik is on annual leave until ${returnDateFmt}. He has intermittent access to email while away and will come back to you as soon as he can. Do not state a more specific time than this.`,
+    };
+  }
+
+  // ── 2. Today's SOC appointments, blanketed ─────────────────────
+  const { data: socTasks } = await supabase
+    .from('tasks')
+    .select('time')
+    .eq('user_id', ownerUserId)
+    .eq('task_type', 'soc')
+    .eq('due_date', todayStr)
+    .not('status', 'in', '(cancelled,complete)');
+
+  const socTimes = (socTasks || [])
+    .map(t => (t.time || '').match(/^(\d{1,2}):(\d{2})/))
+    .filter(Boolean)
+    .map(m => parseInt(m[1], 10) * 60 + parseInt(m[2], 10)); // minutes since midnight
+
+  if (socTimes.length) {
+    const SOC_DURATION_MIN = 90; // assumed, always - no real duration is ever recorded
+    const TRAVEL_BUFFER_MIN = 45;
+    const first = Math.min(...socTimes);
+    const last = Math.max(...socTimes);
+    const blanketStart = first - TRAVEL_BUFFER_MIN;
+    const blanketEnd = last + SOC_DURATION_MIN + TRAVEL_BUFFER_MIN;
+
+    if (nowMinutes >= blanketStart && nowMinutes <= blanketEnd) {
+      const returnTimeMin = blanketEnd;
+      const returnDate = new Date(now);
+      returnDate.setHours(0, returnTimeMin, 0, 0);
+      const hours = await getBusinessHoursForDate(supabase, returnDate);
+      const framing = await buildReturnTimeFraming(returnDate, hours, 'soc');
+      return { eligible: true, framing };
+    }
+  }
+
+  // ── 3. Any other calendar commitment today ─────────────────────
+  const OTHER_MEETING_TYPES = ['meeting', 'call', 'site_visit', 'appointment'];
+  const { data: otherTasks } = await supabase
+    .from('tasks')
+    .select('time, task_type')
+    .eq('user_id', ownerUserId)
+    .in('task_type', OTHER_MEETING_TYPES)
+    .eq('due_date', todayStr)
+    .not('status', 'in', '(cancelled,complete)');
+
+  const OTHER_MEETING_DURATION_MIN = 60; // assumed default - no end time is ever recorded for these either
+  const activeOther = (otherTasks || []).find(t => {
+    const m = (t.time || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return false;
+    const startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    return nowMinutes >= startMin && nowMinutes <= startMin + OTHER_MEETING_DURATION_MIN;
+  });
+
+  if (activeOther) {
+    const isCall = activeOther.task_type === 'call';
+    return {
+      eligible: true,
+      framing: isCall
+        ? 'Itzik is in a telephone meeting right now. Say Nora will pass this along and he will message back between appointments. Do not describe the call itself.'
+        : 'Itzik is in a meeting right now. Say he will call back. Do not describe what kind of meeting.',
+    };
+  }
+
+  // ── 4. Outside business hours ───────────────────────────────────
+  const hoursToday = await getBusinessHoursForDate(supabase, now);
+  const isOpenNow = hoursToday && !hoursToday.off && nowMinutes >= toMinutes(hoursToday.open) && nowMinutes < toMinutes(hoursToday.close);
+  if (!isOpenNow) {
+    const framing = await buildOutOfHoursFraming(supabase, now, ownerUserId);
+    return { eligible: true, framing };
+  }
+
+  // ── 5. Fallback: silence gate ────────────────────────────────────
+  return computeSilenceFallback(email, supabase);
+}
+
+function toMinutes(hhmm) {
+  const m = (hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
+}
+
+const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+async function getBusinessHoursForDate(supabase, date) {
+  const { data: firmSettings } = await supabase.from('firm_settings').select('business_hours').limit(1).maybeSingle();
+  const hours = firmSettings?.business_hours;
+  if (!hours) return null;
+  return hours[WEEKDAY_KEYS[date.getDay()]] || { off: true };
+}
+
+// Builds the "back to you by [time]" framing for the SOC case,
+// applying the three-tier hedge established directly on request:
+// comfortably before 4pm -> plain; the return time itself falling in
+// the 4-5pm window -> hedge that it may slip to tomorrow; past close
+// -> state tomorrow plainly, no hedge.
+async function buildReturnTimeFraming(returnDate, hoursToday, kind) {
+  const closeMin = hoursToday && !hoursToday.off ? toMinutes(hoursToday.close) : 17 * 60;
+  const returnMin = returnDate.getHours() * 60 + returnDate.getMinutes();
+  const timeStr = returnDate.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' });
+
+  const base = kind === 'soc'
+    ? 'Itzik is currently out on Schedule of Condition inspections today.'
+    : 'Itzik is currently unavailable.';
+
+  if (returnMin > closeMin) {
+    return `${base} He will not be back at his desk before the office closes today, so he will most likely come back to you tomorrow instead. Do not imply a same-day gap between appointments if there is more than one today - just say he has site appointments booked in.`;
+  }
+  if (returnMin >= closeMin - 60) {
+    return `${base} He should be back at his desk by around ${timeStr}, though as that's close to the end of the day it may be that he comes back to you tomorrow instead if he doesn't manage it today. Do not imply a same-day gap between appointments if there is more than one today - just say he has site appointments booked in.`;
+  }
+  return `${base} He should be back to you by around ${timeStr}. Do not imply a same-day gap between appointments if there is more than one today - just say he has site appointments booked in.`;
+}
+
+// Out-of-hours framing: today closed/finished, or hasn't opened yet -
+// find the next day the office is actually open, and if that
+// reopening day itself has SOC/meeting commitments already booked
+// first thing, mention that too rather than implying full
+// availability the moment the office opens.
+async function buildOutOfHoursFraming(supabase, now, ownerUserId) {
+  const { data: firmSettings } = await supabase.from('firm_settings').select('business_hours').limit(1).maybeSingle();
+  const hours = firmSettings?.business_hours;
+
+  let checkDate = new Date(now);
+  let daysAhead = 0;
+  let nextOpenDay = null;
+  while (daysAhead < 8) {
+    const dayHours = hours ? hours[WEEKDAY_KEYS[checkDate.getDay()]] : null;
+    const isToday = daysAhead === 0;
+    const todayStillOpen = isToday && dayHours && !dayHours.off && (now.getHours() * 60 + now.getMinutes()) < toMinutes(dayHours.close);
+    if (dayHours && !dayHours.off && !todayStillOpen) {
+      nextOpenDay = { date: new Date(checkDate), hours: dayHours };
+      break;
+    }
+    checkDate.setDate(checkDate.getDate() + 1);
+    daysAhead++;
+  }
+
+  if (!nextOpenDay) {
+    return 'The office is currently closed. Itzik will come back to you as soon as he is back in the office.';
+  }
+
+  const dayLabel = daysAhead <= 1 ? 'tomorrow' : nextOpenDay.date.toLocaleDateString('en-GB', { weekday: 'long' });
+  let framing = `This email arrived outside office hours. The office is next open ${dayLabel}, from ${nextOpenDay.hours.open}. Itzik will come back to you then.`;
+
+  if (ownerUserId) {
+    const nextOpenDateStr = nextOpenDay.date.toISOString().slice(0, 10);
+    const { data: nextDaySocs } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('user_id', ownerUserId)
+      .eq('task_type', 'soc')
+      .eq('due_date', nextOpenDateStr)
+      .limit(1);
+    if (nextDaySocs?.length) {
+      framing += ' He does have site appointments booked in that day too, so it may take him a little longer to get back to you once the office reopens.';
+    }
+  }
+
+  return framing;
+}
+
+// The original, pre-diary design - the only fallback once nothing
+// certain (holiday/SOC/meeting/hours) applies. Reference point is
+// whichever is more recent: the email's own arrival, or the user's
+// last message in this thread - fixed 2026-09-20 after finding the
+// original version had no real minimum wait for a never-replied
+// thread at all.
+async function computeSilenceFallback(email, supabase) {
+  if (!email.thread_id) return { eligible: false, framing: null };
+
+  const { data: lastOutgoing } = await supabase
+    .from('emails')
+    .select('received_at, sent_at')
+    .eq('thread_id', email.thread_id)
+    .or('direction.eq.outgoing,is_sent.eq.true')
+    .order('received_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const lastOwnMessageAt = lastOutgoing ? (lastOutgoing.sent_at || lastOutgoing.received_at) : null;
+  const referenceTime = Math.max(
+    new Date(email.received_at).getTime(),
+    lastOwnMessageAt ? new Date(lastOwnMessageAt).getTime() : 0
+  );
+  const minutesSinceReference = (Date.now() - referenceTime) / (1000 * 60);
+
+  // On request: no diary signal at all -> keep this deliberately
+  // vague, no time estimate, since there is nothing real to base one
+  // on.
+  return {
+    eligible: minutesSinceReference >= 45,
+    framing: null,
+  };
+}
+
 export default async function handler(req, res) {
   // Fixed 2026-08-14: the x-vercel-cron header this checked for doesn't
   // exist in real Vercel invocations (confirmed against current Vercel
@@ -167,6 +418,23 @@ export default async function handler(req, res) {
       }
 
       if (emailCategory === 'marketing') {
+        results.skipped++;
+        continue;
+      }
+
+      // Added 2026-09-20: the eligibility gate now runs BEFORE
+      // drafting, not after - on request, so that "not eligible yet"
+      // simply means nothing happens this cycle at all, and the very
+      // next cron run asks the same fresh question with no memory of
+      // this attempt. This replaces drafting-always-then-deciding-
+      // whether-to-send; while nora_auto_draft/nora_auto_send are
+      // both still being trialled, this does mean no draft exists to
+      // review during an active conversation or outside the
+      // eligibility window - only once a response is actually going
+      // out is anything created.
+      const ownerUserId = await resolveOwnerUserId(email.user_id);
+      const eligibility = await computeSendEligibility(email, supabase, ownerUserId);
+      if (!eligibility.eligible) {
         results.skipped++;
         continue;
       }
@@ -397,7 +665,8 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         const userPrompt = 'FROM: ' + (email.sender_name || email.sender_email) +
           '\nSUBJECT: ' + email.subject +
           '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
-          (projectContext ? '\n\n' + projectContext : '');
+          (projectContext ? '\n\n' + projectContext : '') +
+          (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (weave this into the reply naturally - this is why a response is going out now rather than Itzik replying personally):\n' + eligibility.framing : '');
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -516,7 +785,6 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // it, rather than relying on him remembering unprompted.
         if (draftNeedsFollowup) {
           try {
-            const ownerUserId = await resolveOwnerUserId(email.user_id);
             if (!ownerUserId) {
               console.warn('[cron-auto-draft] Could not resolve owner for email', email.id, '— skipping follow-up reminder rather than guessing.');
             } else {
@@ -550,146 +818,92 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           }
         }
 
-        // ── AUTO-SEND, added 2026-09-20 on explicit request ──────────
-        // Deliberately conservative: every one of these conditions
-        // must hold, and any failure or uncertainty anywhere in this
-        // block simply leaves the draft as 'pending' (today's
-        // existing behaviour - reviewed and sent manually) rather
-        // than risk sending something wrong. This never overrides a
-        // 'no' with a 'send anyway'.
+        // ── AUTO-SEND ──────────────────────────────────────────────
+        // The eligibility gate has already run, before drafting even
+        // started (see above) - by this point in the code, sending is
+        // already known to be appropriate. This step only decides
+        // whether to actually SEND it, versus leaving it as a
+        // reviewable draft, which stays gated on nora_auto_send and on
+        // the draft's own confidence - an uncertain draft
+        // (<<<NEEDS_FOLLOWUP>>>) always waits for Itzik personally,
+        // regardless of the setting. Any failure here leaves the
+        // already-saved draft exactly as if auto-send were off -
+        // never a false "sent" state.
         let autoSent = false;
         if (autoSendEnabled && !draftNeedsFollowup) {
           try {
-            // Missing/empty thread_id -> cannot safely determine
-            // conversation recency (confirmed directly: ~4% of
-            // historical Outlook mail has this, though none in live
-            // traffic for months) - fails safe, never auto-sends.
-            let threadSafe = false;
-            if (email.thread_id) {
-              // Fixed before shipping, real, confirmed gap found by
-              // checking actual data rather than assuming: messages
-              // sent via Nora's own send button don't reliably get
-              // direction='outgoing' set at all (confirmed: 132 of 150
-              // Nora-sent messages are tagged direction='incoming'
-              // instead - is_sent=true is what that path actually
-              // sets consistently), while messages synced in from the
-              // Sent folder directly DO get direction='outgoing' but
-              // never touch is_sent. Matching only one signal would
-              // have missed real prior replies and wrongly judged a
-              // thread as safe to auto-send into.
-              const { data: lastOutgoing } = await supabase
-                .from('emails')
-                .select('received_at, sent_at')
-                .eq('thread_id', email.thread_id)
-                .or('direction.eq.outgoing,is_sent.eq.true')
-                .order('received_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              const lastOwnMessageAt = lastOutgoing ? (lastOutgoing.sent_at || lastOutgoing.received_at) : null;
-
-              // Fixed 2026-09-20, on request, real gap: this originally
-              // only measured time since the user's last own message -
-              // for a thread with no prior reply at all, that's
-              // infinite, so a genuinely brand-new email would have
-              // been eligible on the very next cron run (~15 minutes
-              // after arrival), not after any real waiting window. The
-              // correct reference point is whichever is MORE RECENT -
-              // the email arriving, or the user's last message in this
-              // thread - so a fresh email gets a real, meaningful gap
-              // before Nora touches it, not just an active exchange.
-              const referenceTime = Math.max(
-                new Date(email.received_at).getTime(),
-                lastOwnMessageAt ? new Date(lastOwnMessageAt).getTime() : 0
-              );
-              const hoursSinceReference = (Date.now() - referenceTime) / (1000 * 60 * 60);
-
-              // On request: neither a live back-and-forth (you
-              // personally replied recently) nor a just-arrived email
-              // is safe to auto-close - only a settled gap of two hours
-              // or more, from whichever happened more recently, is.
-              threadSafe = hoursSinceReference >= 2;
+            // Fixed before shipping: the manual send path (Inbox.jsx)
+            // sets sender_email to the actual sending user's email,
+            // not null - matching that here rather than leaving a
+            // gap this path would have introduced. authUsersList is
+            // already populated by resolveOwnerUserId's admin
+            // listUsers() call above.
+            const senderUser = (authUsersList || []).find(u => u.id === ownerUserId);
+            let senderEmailForSend = senderUser?.email || null;
+            if (!senderEmailForSend && ownerUserId) {
+              // resolveOwnerUserId's fast path (rawUserId already a
+              // UUID) returns without ever populating authUsersList -
+              // fetch directly rather than leave this null in that case.
+              const { data: fetchedUser } = await supabase.auth.admin.getUserById(ownerUserId);
+              senderEmailForSend = fetchedUser?.user?.email || null;
             }
+            const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).maybeSingle();
+            const isGmail = integ?.email_provider === 'gmail';
 
-            if (threadSafe) {
-              const ownerUidForSend = await resolveOwnerUserId(email.user_id);
-              // Fixed before shipping: the manual send path (Inbox.jsx)
-              // sets sender_email to the actual sending user's email,
-              // not null - matching that here rather than leaving a
-              // gap this path would have introduced. authUsersList is
-              // already populated by resolveOwnerUserId's admin
-              // listUsers() call above.
-              const senderUser = (authUsersList || []).find(u => u.id === ownerUidForSend);
-              let senderEmailForSend = senderUser?.email || null;
-              if (!senderEmailForSend && ownerUidForSend) {
-                // resolveOwnerUserId's fast path (rawUserId already a
-                // UUID) returns without ever populating authUsersList -
-                // fetch directly rather than leave this null in that case.
-                const { data: fetchedUser } = await supabase.auth.admin.getUserById(ownerUidForSend);
-                senderEmailForSend = fetchedUser?.user?.email || null;
-              }
-              const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUidForSend).maybeSingle();
-              const isGmail = integ?.email_provider === 'gmail';
-
-              const { data: sendData, error: sendError } = await supabase.functions.invoke(
-                isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
-                { body: {
-                  user_id: isGmail ? ownerUidForSend : (email.user_id || null),
-                  to_email: email.sender_email,
-                  subject: 'Re: ' + (email.subject || ''),
-                  body: draftBody,
-                  reply_to_message_id: email.id,
-                } }
-              );
-
-              if (sendError || sendData?.error) throw new Error(sendError?.message || sendData?.error || 'Send failed');
-
-              const respondedAt = new Date().toISOString();
-              await supabase.from('emails').insert({
+            const { data: sendData, error: sendError } = await supabase.functions.invoke(
+              isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
+              { body: {
+                user_id: isGmail ? ownerUserId : (email.user_id || null),
+                to_email: email.sender_email,
                 subject: 'Re: ' + (email.subject || ''),
                 body: draftBody,
-                is_sent: true,
-                is_read: true,
-                direction: 'outgoing',
-                sender_email: senderEmailForSend,
-                to_email: email.sender_email,
-                thread_id: email.thread_id || null,
+                reply_to_message_id: email.id,
+              } }
+            );
+
+            if (sendError || sendData?.error) throw new Error(sendError?.message || sendData?.error || 'Send failed');
+
+            const respondedAt = new Date().toISOString();
+            await supabase.from('emails').insert({
+              subject: 'Re: ' + (email.subject || ''),
+              body: draftBody,
+              is_sent: true,
+              is_read: true,
+              direction: 'outgoing',
+              sender_email: senderEmailForSend,
+              to_email: email.sender_email,
+              thread_id: email.thread_id || null,
+              project_id: email.project_id || null,
+              received_at: respondedAt,
+              sent_at: respondedAt,
+              created_at: respondedAt,
+            }).catch(e => console.warn('[cron-auto-draft] Sent-email DB insert warning:', e.message));
+
+            await supabase.from('emails').update({
+              is_replied: true,
+              ai_auto_responded: true,
+              ai_auto_responded_at: respondedAt,
+            }).eq('id', email.id);
+
+            await supabase.from('email_auto_drafts').update({ status: 'sent' }).eq('id', savedDraft.id);
+
+            if (ownerUserId) {
+              await supabase.from('tasks').insert({
+                title: 'Nora sent an auto-response: ' + (email.subject || 'no subject'),
+                description: 'Review what was sent and confirm nothing further is needed from you.',
+                due_date: respondedAt.slice(0, 10),
+                task_type: 'email',
+                source: 'assistant',
+                status: 'open',
                 project_id: email.project_id || null,
-                received_at: respondedAt,
-                sent_at: respondedAt,
-                created_at: respondedAt,
-              }).catch(e => console.warn('[cron-auto-draft] Sent-email DB insert warning:', e.message));
-
-              await supabase.from('emails').update({
-                is_replied: true,
-                ai_auto_responded: true,
-                ai_auto_responded_at: respondedAt,
-              }).eq('id', email.id);
-
-              await supabase.from('email_auto_drafts').update({ status: 'sent' }).eq('id', savedDraft.id);
-
-              if (ownerUidForSend) {
-                await supabase.from('tasks').insert({
-                  title: 'Nora sent an auto-response: ' + (email.subject || 'no subject'),
-                  description: 'Review what was sent and confirm nothing further is needed from you.',
-                  due_date: respondedAt.slice(0, 10),
-                  task_type: 'email',
-                  source: 'assistant',
-                  status: 'open',
-                  project_id: email.project_id || null,
-                  linked_email_message_id: email.id,
-                  user_id: ownerUidForSend,
-                }).catch(e => console.warn('[cron-auto-draft] Auto-send task creation failed:', e.message));
-              }
-
-              autoSent = true;
-              console.log('[cron-auto-draft] Auto-sent response to', email.id);
+                linked_email_message_id: email.id,
+                user_id: ownerUserId,
+              }).catch(e => console.warn('[cron-auto-draft] Auto-send task creation failed:', e.message));
             }
+
+            autoSent = true;
+            console.log('[cron-auto-draft] Auto-sent response to', email.id);
           } catch (autoSendErr) {
-            // Never let a failed auto-send attempt look like success,
-            // and never let it block the draft that's already safely
-            // saved - the draft stays 'pending', exactly as if
-            // auto-send were off.
             console.warn('[cron-auto-draft] Auto-send failed for', email.id, '- draft left pending for manual review:', autoSendErr.message);
           }
         }

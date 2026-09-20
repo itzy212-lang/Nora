@@ -202,6 +202,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
     project_id: initialProjectId,
     ao_id: initialAOId,
     notes: clean(task?.description || task?.notes || ''),
+    end_date: normalDate(task?.end_date || ''),
   });
   const [saving, setSaving] = useState(false);
 
@@ -216,6 +217,12 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
 
     if (k === 'type' && v === 'soc' && !next.title.trim()) {
       next.title = 'Schedule of Condition';
+    }
+    if (k === 'type' && v === 'holiday' && !next.title.trim()) {
+      next.title = 'Annual leave';
+    }
+    if (k === 'type' && v === 'holiday' && !next.end_date) {
+      next.end_date = next.date;
     }
 
     return next;
@@ -266,6 +273,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
               <option value="call">Call</option>
               <option value="site_visit">Site visit</option>
               <option value="soc">Schedule of Condition</option>
+              <option value="holiday">Holiday</option>
               <option value="surveyor_response">Surveyor response</option>
               <option value="award_draft">Award draft</option>
             </select>
@@ -275,6 +283,16 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
             <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Schedule of Condition" style={inputStyle} />
           </Field>
 
+          {form.type === 'holiday' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="First day off">
+                <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+              </Field>
+              <Field label="Last day off">
+                <input type="date" value={form.end_date || form.date} onChange={e => set('end_date', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="Date">
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
@@ -284,6 +302,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
             </Field>
           </div>
+          )}
 
           <Field label="Project">
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inputStyle}>
@@ -611,6 +630,7 @@ export default function Calendar({ onOpenProject }) {
     const payload = {
       title: form.title,
       due_date: form.date,
+      end_date: form.type === 'holiday' ? (form.end_date || form.date) : null,
       time: form.time || null,
       status: existingTask?.status || 'pending',
       task_type: form.type,
