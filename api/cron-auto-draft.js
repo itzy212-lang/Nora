@@ -421,14 +421,32 @@ export default async function handler(req, res) {
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of emails || []) {
-      const { data: existing } = await supabase
+      // Fixed URGENTLY 2026-09-20, real, confirmed historical bug -
+      // traced directly: seven emails from July/August 2026
+      // accumulated between 24 and 105 duplicate 'pending' drafts
+      // each, all compounding over roughly a 24-hour window before
+      // stopping on their own. Root cause: .maybeSingle() errors out
+      // (returns null data, not a thrown exception) once MORE than
+      // one row matches - and that error was never checked here. The
+      // instant a second duplicate existed for any reason, every
+      // future check on that email silently failed closed as "no
+      // draft found," so the cron kept creating another one, every
+      // cron cycle, indefinitely. Not currently recurring (confirmed:
+      // nothing since 22 August, and every fresh email tonight has
+      // exactly one draft) - but it's a real, still-present latent
+      // bug, and now that auto-send is live, the same failure mode
+      // would mean repeatedly SENDING to a real recipient, not just
+      // harmlessly accumulating unsent drafts as it did before.
+      // .limit(1) + an array-length check never errors regardless of
+      // how many rows actually match, closing this permanently.
+      const { data: existingRows } = await supabase
         .from('email_auto_drafts')
         .select('id')
         .eq('email_id', email.id)
         .eq('status', 'pending')
-        .maybeSingle();
+        .limit(1);
 
-      if (existing) { results.skipped++; continue; }
+      if (existingRows?.length) { results.skipped++; continue; }
 
       if (ownAccountEmails.has((email.sender_email || '').toLowerCase())) { results.skipped++; continue; }
 
@@ -987,7 +1005,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
               const { data: fetchedUser } = await supabase.auth.admin.getUserById(ownerUserId);
               senderEmailForSend = fetchedUser?.user?.email || null;
             }
-            const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).maybeSingle();
+            const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).limit(1).maybeSingle();
             const isGmail = integ?.email_provider === 'gmail';
 
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
