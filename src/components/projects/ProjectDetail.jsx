@@ -75,7 +75,21 @@ function addDaysIsoFromDate(value, days) {
   const [year, month, day] = String(value || todayIso()).split('-').map(Number);
   const d = new Date(year, month - 1, day);
   d.setDate(d.getDate() + Number(days || 0));
-  return d.toISOString().slice(0, 10);
+  // Fixed 2026-09-19, real, confirmed bug found live: toISOString()
+  // converts through UTC. In any timezone ahead of UTC (e.g. UK
+  // British Summer Time, UTC+1, in effect this exact month), a date
+  // constructed at local midnight lands on the previous UTC day once
+  // converted, silently shifting every deadline this function
+  // computes back by one day - confirmed directly: 2026-09-19 + 14
+  // days produced 2026-10-02 under Europe/London, 2026-10-03 (the
+  // correct answer) under UTC. Legal deadlines (Section 10, 10(4)(b))
+  // must never depend on which timezone the code happens to run in -
+  // building the string from the date object's own local getters
+  // avoids the UTC round-trip entirely.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 function ordinalSuffix(day) {
@@ -3931,6 +3945,22 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
 
       if (existing?.length) return existing[0];
 
+      // Fixed 2026-09-19, real, confirmed bug found live: every
+      // deadline task this function creates (notice consent deadline,
+      // Section 10 deadline) was silently failing to insert at all.
+      // tasks has RLS enabled (unlike most tables in this app, which
+      // have it disabled per the platform's general pattern) and this
+      // insert never included user_id — confirmed directly: the AO
+      // record's own status/consent_deadline updates (a separate,
+      // unrelated call) succeeded every time, but zero rows ever
+      // appeared in tasks for any served notice. The RLS rejection was
+      // caught by this function's own try/catch and only ever logged
+      // to the browser console, invisible to the user - the AO card
+      // and to-do list both looked correct until a deadline actually
+      // arrived with nothing there to show it.
+      const { data: { user } } = await sb.auth.getUser();
+      const userId = user?.id;
+
       const { data, error } = await sb.from('tasks').insert([{
         project_id: project.id,
         title,
@@ -3940,6 +3970,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         status: 'open',
         priority: 'high',
         project_address_snapshot: aoAddress(ao) || project.bo_premise_address || '',
+        user_id: userId,
       }]).select('id').single();
 
       if (error) throw error;
