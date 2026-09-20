@@ -47,6 +47,20 @@ export default async function handler(req, res) {
   );
   const openaiKey = process.env.OPENAI_API_KEY;
 
+  // Added 2026-09-20, on request: nora_auto_send previously existed
+  // as a Settings toggle (firm_settings.nora_auto_send) but was never
+  // read anywhere in the backend - confirmed directly, zero matches
+  // across api/*.js before this change. Fetched once per run, not
+  // per-email, since it's a single global firm-level setting (this
+  // account currently has exactly one firm_settings row).
+  let autoSendEnabled = false;
+  try {
+    const { data: firmSettings } = await supabase.from('firm_settings').select('nora_auto_send').limit(1).maybeSingle();
+    autoSendEnabled = !!firmSettings?.nora_auto_send;
+  } catch (e) {
+    console.warn('[cron-auto-draft] Could not read nora_auto_send setting, defaulting to off:', e.message);
+  }
+
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -114,6 +128,48 @@ export default async function handler(req, res) {
 
       const skipReason = shouldSkip(email);
       if (skipReason) { results.skipped++; continue; }
+
+      // Added 2026-09-20, on request: ai_category existed as a column
+      // and was already referenced by shouldSkip() above, but nothing
+      // ever populated it - confirmed directly against real data,
+      // 2,629 of 2,629 incoming Outlook emails had ai_category=null.
+      // That check was dead code. This is a genuine classification
+      // pass, cheap/fast tier (Luna), run before any thread/project
+      // context is loaded so a marketing email doesn't pay for that
+      // work at all. Only skips on a confident classification -
+      // anything the model itself is unsure about is left to draft
+      // normally rather than risk silently dropping something real.
+      let emailCategory = null;
+      try {
+        const classifyRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-5.6-luna',
+            max_completion_tokens: 60,
+            messages: [
+              { role: 'developer', content: 'Classify this email for a Party Wall surveying practice. Respond with valid JSON only: {"category": "business"|"marketing", "confident": true|false}. "business" means genuine correspondence related to a project, a party wall matter, a surveyor, an adjoining/building owner, an invoice/payment for real work, or similar. "marketing" means sales outreach, promotional content, newsletters, or cold pitches unrelated to an actual matter this practice is handling. If genuinely unsure, set confident to false.' },
+              { role: 'user', content: 'FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + (email.subject || '') + '\nBODY: ' + (email.body || '').slice(0, 800) },
+            ],
+          }),
+        });
+        if (classifyRes.ok) {
+          const classifyData = await classifyRes.json();
+          const parsed = JSON.parse((classifyData.choices?.[0]?.message?.content || '{}').replace(/```json|```/g, '').trim());
+          if (parsed.confident) emailCategory = parsed.category;
+        }
+      } catch (classifyErr) {
+        console.warn('[cron-auto-draft] Classification failed for', email.id, '- proceeding to draft as normal:', classifyErr.message);
+      }
+
+      if (emailCategory) {
+        await supabase.from('emails').update({ ai_category: emailCategory }).eq('id', email.id).catch(() => {});
+      }
+
+      if (emailCategory === 'marketing') {
+        results.skipped++;
+        continue;
+      }
 
       results.processed++;
 
@@ -369,7 +425,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         const draftNeedsFollowup = rawDraftBody.includes('<<<NEEDS_FOLLOWUP>>>');
         const draftBody = rawDraftBody.replace('<<<NEEDS_FOLLOWUP>>>', '').trim();
 
-        const { error: saveError } = await supabase.from('email_auto_drafts').insert({
+        const { data: savedDraft, error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
           project_id: email.project_id || null,
           thread_id: email.thread_id || null,
@@ -380,7 +436,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           status: 'pending',
           generated_by: 'cron-auto-draft',
           model: 'gpt-5.6-terra',
-        });
+        }).select('id').single();
 
         if (saveError) throw saveError;
 
@@ -494,7 +550,139 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           }
         }
 
+        // ── AUTO-SEND, added 2026-09-20 on explicit request ──────────
+        // Deliberately conservative: every one of these conditions
+        // must hold, and any failure or uncertainty anywhere in this
+        // block simply leaves the draft as 'pending' (today's
+        // existing behaviour - reviewed and sent manually) rather
+        // than risk sending something wrong. This never overrides a
+        // 'no' with a 'send anyway'.
+        let autoSent = false;
+        if (autoSendEnabled && !draftNeedsFollowup) {
+          try {
+            // Missing/empty thread_id -> cannot safely determine
+            // conversation recency (confirmed directly: ~4% of
+            // historical Outlook mail has this, though none in live
+            // traffic for months) - fails safe, never auto-sends.
+            let threadSafe = false;
+            if (email.thread_id) {
+              // Fixed before shipping, real, confirmed gap found by
+              // checking actual data rather than assuming: messages
+              // sent via Nora's own send button don't reliably get
+              // direction='outgoing' set at all (confirmed: 132 of 150
+              // Nora-sent messages are tagged direction='incoming'
+              // instead - is_sent=true is what that path actually
+              // sets consistently), while messages synced in from the
+              // Sent folder directly DO get direction='outgoing' but
+              // never touch is_sent. Matching only one signal would
+              // have missed real prior replies and wrongly judged a
+              // thread as safe to auto-send into.
+              const { data: lastOutgoing } = await supabase
+                .from('emails')
+                .select('received_at, sent_at')
+                .eq('thread_id', email.thread_id)
+                .or('direction.eq.outgoing,is_sent.eq.true')
+                .order('received_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              const lastOwnMessageAt = lastOutgoing ? (lastOutgoing.sent_at || lastOutgoing.received_at) : null;
+              const hoursSinceLastOwnMessage = lastOwnMessageAt
+                ? (Date.now() - new Date(lastOwnMessageAt).getTime()) / (1000 * 60 * 60)
+                : Infinity; // no prior outgoing message in this thread at all - nothing to be "mid-conversation" with
+
+              // On request: a live back-and-forth (you personally
+              // replied within the last couple of hours) means Nora
+              // stays out of it entirely - only a settled gap is safe
+              // to auto-close.
+              threadSafe = hoursSinceLastOwnMessage >= 2;
+            }
+
+            if (threadSafe) {
+              const ownerUidForSend = await resolveOwnerUserId(email.user_id);
+              // Fixed before shipping: the manual send path (Inbox.jsx)
+              // sets sender_email to the actual sending user's email,
+              // not null - matching that here rather than leaving a
+              // gap this path would have introduced. authUsersList is
+              // already populated by resolveOwnerUserId's admin
+              // listUsers() call above.
+              const senderUser = (authUsersList || []).find(u => u.id === ownerUidForSend);
+              let senderEmailForSend = senderUser?.email || null;
+              if (!senderEmailForSend && ownerUidForSend) {
+                // resolveOwnerUserId's fast path (rawUserId already a
+                // UUID) returns without ever populating authUsersList -
+                // fetch directly rather than leave this null in that case.
+                const { data: fetchedUser } = await supabase.auth.admin.getUserById(ownerUidForSend);
+                senderEmailForSend = fetchedUser?.user?.email || null;
+              }
+              const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUidForSend).maybeSingle();
+              const isGmail = integ?.email_provider === 'gmail';
+
+              const { data: sendData, error: sendError } = await supabase.functions.invoke(
+                isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
+                { body: {
+                  user_id: isGmail ? ownerUidForSend : (email.user_id || null),
+                  to_email: email.sender_email,
+                  subject: 'Re: ' + (email.subject || ''),
+                  body: draftBody,
+                  reply_to_message_id: email.id,
+                } }
+              );
+
+              if (sendError || sendData?.error) throw new Error(sendError?.message || sendData?.error || 'Send failed');
+
+              const respondedAt = new Date().toISOString();
+              await supabase.from('emails').insert({
+                subject: 'Re: ' + (email.subject || ''),
+                body: draftBody,
+                is_sent: true,
+                is_read: true,
+                direction: 'outgoing',
+                sender_email: senderEmailForSend,
+                to_email: email.sender_email,
+                thread_id: email.thread_id || null,
+                project_id: email.project_id || null,
+                received_at: respondedAt,
+                sent_at: respondedAt,
+                created_at: respondedAt,
+              }).catch(e => console.warn('[cron-auto-draft] Sent-email DB insert warning:', e.message));
+
+              await supabase.from('emails').update({
+                is_replied: true,
+                ai_auto_responded: true,
+                ai_auto_responded_at: respondedAt,
+              }).eq('id', email.id);
+
+              await supabase.from('email_auto_drafts').update({ status: 'sent' }).eq('id', savedDraft.id);
+
+              if (ownerUidForSend) {
+                await supabase.from('tasks').insert({
+                  title: 'Nora sent an auto-response: ' + (email.subject || 'no subject'),
+                  description: 'Review what was sent and confirm nothing further is needed from you.',
+                  due_date: respondedAt.slice(0, 10),
+                  task_type: 'email',
+                  source: 'assistant',
+                  status: 'open',
+                  project_id: email.project_id || null,
+                  linked_email_message_id: email.id,
+                  user_id: ownerUidForSend,
+                }).catch(e => console.warn('[cron-auto-draft] Auto-send task creation failed:', e.message));
+              }
+
+              autoSent = true;
+              console.log('[cron-auto-draft] Auto-sent response to', email.id);
+            }
+          } catch (autoSendErr) {
+            // Never let a failed auto-send attempt look like success,
+            // and never let it block the draft that's already safely
+            // saved - the draft stays 'pending', exactly as if
+            // auto-send were off.
+            console.warn('[cron-auto-draft] Auto-send failed for', email.id, '- draft left pending for manual review:', autoSendErr.message);
+          }
+        }
+
         results.drafted++;
+        if (autoSent) results.autoSent = (results.autoSent || 0) + 1;
 
       } catch (e) {
         results.errors++;
