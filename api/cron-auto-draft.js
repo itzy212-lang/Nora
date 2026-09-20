@@ -414,7 +414,18 @@ export default async function handler(req, res) {
       }
 
       if (emailCategory) {
-        await supabase.from('emails').update({ ai_category: emailCategory }).eq('id', email.id).catch(() => {});
+        // Fixed: .catch() chained directly on a Supabase query builder
+        // is not reliably supported in this environment - confirmed
+        // live, this exact line was throwing "TypeError: ...catch is
+        // not a function" and crashing the ENTIRE cron run (HTTP 500)
+        // on every single invocation since deployment, not just
+        // skipping this one email. A proper try/catch is the only
+        // safe pattern here.
+        try {
+          await supabase.from('emails').update({ ai_category: emailCategory }).eq('id', email.id);
+        } catch (e) {
+          console.warn('[cron-auto-draft] ai_category update failed:', e.message);
+        }
       }
 
       if (emailCategory === 'marketing') {
@@ -767,7 +778,14 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 isAllDay = true;
               }
 
-              // Save to calendar_events table for Nora to display
+              // Save to calendar_events table for Nora to display.
+              // Fixed: .catch() chained directly on a Supabase query
+              // builder is not reliably supported here - this was
+              // already inside an outer try/catch so it wasn't
+              // crashing the whole run, but it would have surfaced as
+              // a misleading generic "Calendar detection failed"
+              // rather than the real error. Letting it propagate to
+              // that existing outer catch is simplest and correct.
               await supabase.from('calendar_events').insert({
                 title: appt.title || 'Call with ' + (email.sender_name || email.sender_email),
                 description: (appt.description || 'Auto-booked from email: ' + email.subject) + (isAllDay ? ' (no specific time agreed)' : ''),
@@ -777,7 +795,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 email_id: email.id,
                 project_id: email.project_id || null,
                 created_by: 'cron-auto-draft',
-              }).catch(e => console.warn('[cron-auto-draft] Calendar insert failed:', e.message));
+              });
 
               console.log('[cron-auto-draft] Booked calendar event:', appt.title, appt.date, hasSpecificTime ? appt.time : '(all-day, no specific time)');
             }
@@ -817,7 +835,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                   project_id: email.project_id || null,
                   linked_email_message_id: email.id,
                   user_id: ownerUserId,
-                }).catch(e => console.warn('[cron-auto-draft] Follow-up reminder insert failed:', e.message));
+                });
               }
               console.log('[cron-auto-draft] Created follow-up reminders for', email.id, '-> owner', ownerUserId);
             }
@@ -885,7 +903,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
               received_at: respondedAt,
               sent_at: respondedAt,
               created_at: respondedAt,
-            }).catch(e => console.warn('[cron-auto-draft] Sent-email DB insert warning:', e.message));
+            });
 
             await supabase.from('emails').update({
               is_replied: true,
@@ -906,7 +924,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 project_id: email.project_id || null,
                 linked_email_message_id: email.id,
                 user_id: ownerUserId,
-              }).catch(e => console.warn('[cron-auto-draft] Auto-send task creation failed:', e.message));
+              });
             }
 
             autoSent = true;
