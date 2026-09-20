@@ -32,6 +32,11 @@ export function stripHtmlFromDraft(text) {
  * Convert plain text to HTML paragraphs.
  * If already HTML, returns as-is.
  * Preserves paragraph breaks (double newline → <p>) and line breaks (single newline → <br>).
+ * A block where every line starts "N. " (a genuine numbered list, one
+ * item per line) renders as a real <ol><li> list instead of <br>-
+ * separated text - added 2026-09-20, since a numbered list read back
+ * as one flat, line-broken paragraph doesn't actually look like a
+ * list to the recipient, just a wall of text with numbers in it.
  */
 export function toHtml(text) {
   if (!text) return '';
@@ -44,6 +49,14 @@ export function toHtml(text) {
     .map((p, i, arr) => {
       const isLast = i === arr.length - 1;
       const margin = isLast ? '0' : '0 0 10px 0';
+
+      const lines = p.split('\n').map(l => l.trim()).filter(Boolean);
+      const isNumberedList = lines.length >= 2 && lines.every(l => /^\d+\.\s+/.test(l));
+      if (isNumberedList) {
+        const items = lines.map(l => `<li style="margin-bottom:6px">${l.replace(/^\d+\.\s+/, '')}</li>`).join('');
+        return `<ol style="margin:${margin};padding-left:22px">${items}</ol>`;
+      }
+
       return `<p style="margin:${margin}">${p.replace(/\n/g, '<br>')}</p>`;
     })
     .join('');

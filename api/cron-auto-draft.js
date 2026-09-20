@@ -18,6 +18,37 @@ const SKIP_SENDERS = [
 
 const SKIP_FOLDERS = ['junk', 'spam', 'deleted', 'trash', 'junkemail'];
 
+// Mirrors src/utils/draftUtils.js's toHtml() exactly, kept in sync
+// deliberately rather than shared - this is a backend serverless
+// function and cannot import a frontend src/ utility. Needed because
+// the auto-send path here sends draftBody directly to the send
+// function, bypassing the frontend entirely (the frontend only ever
+// converts prefillBody when a human opens the reply composer) - the
+// AI's plain-text output, complete with literal newlines, would
+// otherwise be sent as-is and collapse into one unbroken paragraph in
+// any HTML-rendering email client, exactly the "looks like a blob"
+// problem this was written to fix.
+function toHtmlForSend(text) {
+  if (!text || typeof text !== 'string') return '';
+  if (text.trim().startsWith('<')) return text;
+  return text
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map((p, i, arr) => {
+      const isLast = i === arr.length - 1;
+      const margin = isLast ? '0' : '0 0 10px 0';
+      const lines = p.split('\n').map(l => l.trim()).filter(Boolean);
+      const isNumberedList = lines.length >= 2 && lines.every(l => /^\d+\.\s+/.test(l));
+      if (isNumberedList) {
+        const items = lines.map(l => `<li style="margin-bottom:6px">${l.replace(/^\d+\.\s+/, '')}</li>`).join('');
+        return `<ol style="margin:${margin};padding-left:22px">${items}</ol>`;
+      }
+      return `<p style="margin:${margin}">${p.replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('');
+}
+
 function shouldSkip(email) {
   const sender = (email.sender_email || '').toLowerCase();
   const folder = (email.folder || '').toLowerCase();
@@ -606,9 +637,15 @@ WHAT YOU CAN DO:
 FACTUAL RESOLUTION — check the actual project data provided above before drafting a generic acknowledgement:
 - A scheduled-date question (e.g. when is the Schedule of Condition, when is the inspection): check the scheduled tasks given above, if any exist. If a real date is found, state it precisely and factually — name the actual date and time, and which adjoining owner it is for if there is more than one on this project. If nothing relevant is found in the data provided, this does NOT mean nothing is booked — it may simply not be recorded here. Never state or imply that nothing is booked or scheduled. Instead, respond as Nora's own limited visibility: along the lines of "I do not seem to have access to his diary for this at the moment — I will find out and make sure he comes back to you to confirm" — calm, non-alarming, never a confident negative claim.
 - A document/drawing status question (e.g. have the drawings been received, are you still waiting on X): check the saved documents given above, if any exist. If the document appears to be there, confirm receipt factually by name. If not, check the thread history for whether this was genuinely requested — if a request is confirmed there, say so factually (e.g. "I can see this was requested from the structural engineer — not yet received, we will keep you posted"). If there is no confirmation either way, use the same cautious, non-alarming framing as the date case above.
-- If, and only if, this cautious framing was used anywhere in the draft, end the draft on its own final line with the exact marker <<<NEEDS_FOLLOWUP>>> — this is a signal for the app to remind Itzik to actually go check and confirm. Omit it entirely for any other kind of reply, including a factual answer that did find real data.
+- If, and only if, this cautious framing was used anywhere in the draft — Nora genuinely guessing or hedging because the real answer isn't available in the data provided, where the stated content itself could turn out to be wrong — end the draft on its own final line with the exact marker <<<NEEDS_REVIEW>>>. This is different from <<<NEEDS_FOLLOWUP>>> (see TWO DIFFERENT MARKERS below) — omit both entirely for any other kind of reply, including a factual answer that did find real data.
 
-GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing.
+TWO DIFFERENT MARKERS — DO NOT CONFUSE THEM:
+A draft can end with <<<NEEDS_FOLLOWUP>>>, <<<NEEDS_REVIEW>>>, both, or neither. They mean different things and are used for different reasons — one is about whether Itzik still has real work to do after this email goes out; the other is about whether the email is safe to go out at all without him looking at it first.
+- <<<NEEDS_FOLLOWUP>>>: there is a genuine, separate task Itzik still needs to do — most commonly, coming back with actual pricing that this draft correctly and deliberately did not state. The draft itself is complete, accurate, and fine to send exactly as written — nothing in it risks being wrong. This only creates a reminder task; it does NOT hold the email back from being sent.
+- <<<NEEDS_REVIEW>>>: some part of the draft's actual content is a guess or an assumption because the real answer wasn't available in the data provided (the FACTUAL RESOLUTION cautious framing above) — there's a genuine risk that what the email says could turn out to be incorrect. This DOES hold the email back for Itzik to check before it goes out, precisely because sending something possibly wrong on his behalf is the real risk, not merely leaving something for him to do later.
+Use whichever applies, both if genuinely both apply, or neither. Never use <<<NEEDS_REVIEW>>> just because a task also needs creating — being incomplete (deferring pricing, deferring a decision to Itzik) is not the same as being possibly wrong.
+
+GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
 
 WHAT YOU MUST NEVER DO:
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
@@ -679,18 +716,23 @@ PARTY WALL COST QUERIES:
 If the Adjoining Owner refers to costs being covered by the contractor, builder, or neighbor, they almost certainly mean the party wall surveyor's fees. In this context confirm clearly: under the Party Wall etc. Act 1996, the Building Owner is responsible for the reasonable costs of the appointed surveyors. Do not ask them to clarify what they mean by costs — assume they mean surveyor's fees and confirm it directly and plainly.
 
 EXPLAINING THE PROCESS — "WHAT HAPPENS NEXT" / "HOW DOES THIS WORK":
-When someone emails asking what the process actually is (how party wall notices work, what happens after a notice is served, what their options are), read the thread for context first, then explain the process in full, in this order:
+When someone emails asking what the process actually is (how party wall notices work, what happens after a notice is served, what their options are), read the thread for context first, then explain the process in full, in this order.
 
-1. A party wall notice is served on the Adjoining Owner. The notice gives four possible responses:
-   - Consent, with no further action needed.
-   - Consent, subject to a Schedule of Condition being carried out on their property first.
-   - Dissent, and appoint Itzik as the "agreed surveyor" acting for both parties.
-   - Dissent, and appoint their own separate surveyor. In this case, the Building Owner is responsible for both Itzik's fees and the reasonable fees of the Adjoining Owner's own appointed surveyor.
-2. Do not state any fee figures, quotes, or pricing at this stage, under any circumstances. End this part of the explanation by saying Itzik will come back to them directly with pricing.
-3. Timescales: the Adjoining Owner has 14 days to respond to the notice. If nothing is heard within that time, a Section 10 notice is served, giving a further 10 days to either appoint Itzik as the agreed surveyor, or appoint their own surveyor.
-4. If the Adjoining Owner does neither within that further 10 days, the practice will appoint a surveyor on their behalf. Always include this specific clarification when explaining that step: this appointed surveyor cannot be Itzik — an agreed surveyor has to be agreed between both parties, and in the absence of agreement under Section 10, a separate surveyor is appointed specifically to act for the Adjoining Owner. Itzik can suggest someone the practice has worked with before whose fees are reasonable, and the two surveyors then work together to get the award finalised.
+Write the four notice options as a genuine numbered list — each option on its own line, starting "1. ", "2. ", "3. ", "4. " — never merged into one flowing paragraph:
+1. Consent, with no further action needed.
+2. Consent, subject to a Schedule of Condition being carried out on their property first.
+3. Dissent, and appoint Itzik as the "agreed surveyor" acting for both parties.
+4. Dissent, and appoint their own separate surveyor. In this case, the Building Owner is responsible for both Itzik's fees and the reasonable fees of the Adjoining Owner's own appointed surveyor.
 
-Explain this warmly and in plain language, not as a dense legal recitation — this is someone trying to understand what they're being asked to do, not reading a statute.
+Do not state any fee figures, quotes, or pricing at this stage, under any circumstances. Say Itzik will come back to them directly with pricing — this defers the pricing itself, not the rest of the explanation, and should be marked <<<NEEDS_FOLLOWUP>>> for that reason (see TWO DIFFERENT MARKERS below) — it does not need <<<NEEDS_REVIEW>>>, since none of this explanation is a guess.
+
+Timescales, explained precisely, not vaguely:
+- The Adjoining Owner has 14 days to respond to the initial notice.
+- If nothing is heard within that 14 days, they are by default deemed to have dissented.
+- At that point, a Section 10 notice is served, giving a further 10 days to either appoint Itzik as the agreed surveyor, or appoint their own surveyor.
+- If the Adjoining Owner does neither within that further 10 days, the practice will appoint a surveyor on their behalf. Always include this specific clarification when explaining that step: this appointed surveyor cannot be Itzik — an agreed surveyor has to be agreed between both parties, and in the absence of agreement under Section 10, a separate surveyor is appointed specifically to act for the Adjoining Owner. Itzik can suggest someone the practice has worked with before whose fees are reasonable, and the two surveyors then work together to get the award finalised.
+
+Explain this warmly and in plain language, not as a dense legal recitation — this is someone trying to understand what they're being asked to do, not reading a statute. The numbered list of options should read as a genuine list; the surrounding explanation should still read as natural prose, not a bullet-pointed legal document throughout.
 
 PARTY WALL CONTEXT — GENERAL:
 Itzik Darel is primarily a party wall surveyor but also handles general construction consultancy. Do not assume every email is party wall related. Read the email and thread carefully — if it is clearly about party wall matters, use your knowledge of the Party Wall etc. Act 1996 to respond accurately. If it is about something else (construction disputes, general surveying, CDM, building contracts), respond appropriately to that context instead. If the context is unclear or there is no project data available, give a professional acknowledgement and say Itzik will be in touch to discuss further — do not guess or assume what the matter relates to.`;
@@ -733,10 +775,26 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // Fixed 2026-09-12: the <<<NEEDS_FOLLOWUP>>> marker must never
         // reach the actual saved draft — it would show up in the
         // email text itself, and get sent to the recipient if used
-        // as-is. Detected here, then stripped before saving; the
-        // reminder-creation check below uses this same boolean.
+        // as-is. Detected here, then stripped before saving.
+        //
+        // Split into two distinct markers 2026-09-20, on request: a
+        // real, confirmed design flaw - a draft that correctly,
+        // deliberately deferred pricing (accurate, nothing at risk of
+        // being wrong) was being held back from auto-sending for
+        // exactly the same reason as a draft that was genuinely
+        // guessing at something it didn't have data for (content that
+        // really could be wrong). Those are different questions -
+        // "does Itzik still have work to do" vs "is this safe to send
+        // unreviewed" - and only the second should ever gate sending.
+        // NEEDS_FOLLOWUP still creates a reminder task, but no longer
+        // blocks auto-send by itself; NEEDS_REVIEW is what blocks it
+        // now. See the brain's own TWO DIFFERENT MARKERS section.
         const draftNeedsFollowup = rawDraftBody.includes('<<<NEEDS_FOLLOWUP>>>');
-        const draftBody = rawDraftBody.replace('<<<NEEDS_FOLLOWUP>>>', '').trim();
+        const draftNeedsReview = rawDraftBody.includes('<<<NEEDS_REVIEW>>>');
+        const draftBody = rawDraftBody
+          .replace('<<<NEEDS_FOLLOWUP>>>', '')
+          .replace('<<<NEEDS_REVIEW>>>', '')
+          .trim();
 
         const { data: savedDraft, error: saveError } = await supabase.from('email_auto_drafts').insert({
           email_id: email.id,
@@ -875,13 +933,17 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // already known to be appropriate. This step only decides
         // whether to actually SEND it, versus leaving it as a
         // reviewable draft, which stays gated on nora_auto_send and on
-        // the draft's own confidence - an uncertain draft
-        // (<<<NEEDS_FOLLOWUP>>>) always waits for Itzik personally,
-        // regardless of the setting. Any failure here leaves the
+        // the draft's own content reliability - a draft whose content
+        // itself might be wrong (<<<NEEDS_REVIEW>>>) always waits for
+        // Itzik personally, regardless of the setting. A draft that
+        // merely still needs a follow-up task (<<<NEEDS_FOLLOWUP>>>,
+        // e.g. deferred pricing) is NOT held back - it's accurate as
+        // written, so it sends normally; the task is a separate,
+        // parallel thing, not a block. Any failure here leaves the
         // already-saved draft exactly as if auto-send were off -
         // never a false "sent" state.
         let autoSent = false;
-        if (autoSendEnabled && !draftNeedsFollowup) {
+        if (autoSendEnabled && !draftNeedsReview) {
           try {
             // Fixed before shipping: the manual send path (Inbox.jsx)
             // sets sender_email to the actual sending user's email,
@@ -907,7 +969,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 user_id: isGmail ? ownerUserId : (email.user_id || null),
                 to_email: email.sender_email,
                 subject: 'Re: ' + (email.subject || ''),
-                body: draftBody,
+                body: toHtmlForSend(draftBody),
                 reply_to_message_id: email.id,
               } }
             );
@@ -917,7 +979,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             const respondedAt = new Date().toISOString();
             await supabase.from('emails').insert({
               subject: 'Re: ' + (email.subject || ''),
-              body: draftBody,
+              body: toHtmlForSend(draftBody),
               is_sent: true,
               is_read: true,
               direction: 'outgoing',

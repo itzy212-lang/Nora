@@ -3236,9 +3236,10 @@ if (syncErr) throw syncErr;
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>✨ Nora has drafted a response</span>
                 <button onClick={() => { sb.from('email_auto_drafts').update({ status: 'dismissed' }).eq('id', autoDraft.id); setAutoDraft(null); setDraftEmailIds(prev => { const n = new Set(prev); n.delete(selectedEmail?.id); return n; }); }} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>Dismiss</button>
               </div>
-              <div style={{ fontSize: 12.5, color: '#1f2937', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginBottom: 10, maxHeight: 160, overflowY: 'auto', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1fae5' }}>
-                {autoDraft.body}
-              </div>
+              <div
+                style={{ fontSize: 12.5, color: '#1f2937', lineHeight: 1.5, marginBottom: 10, maxHeight: 160, overflowY: 'auto', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1fae5' }}
+                dangerouslySetInnerHTML={{ __html: toHtml(autoDraft.body) }}
+              />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => {
                   setReplyOverlay({ mode: 'reply', prefillBody: autoDraft.body });
