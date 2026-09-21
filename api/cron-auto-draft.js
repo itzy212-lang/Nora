@@ -655,6 +655,32 @@ export default async function handler(req, res) {
                 return '- ' + (e.title || 'Appointment') + ': ' + start.toLocaleDateString('en-GB') + ' ' + start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' to ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
               }).join('\n');
           }
+
+          // Added 2026-09-20, on request: Project Chat (Ely) notes for
+          // this project - previously never read anywhere in the
+          // auto-draft context, so a status correction typed into chat
+          // (e.g. "the AO status field is wrong, they've actually
+          // consented now") would never reach a drafted response, only
+          // whatever the structured AO/task fields already said.
+          // Scoped deliberately to the user's OWN messages only, not
+          // Ely's replies too - the value here is catching a manual
+          // note/correction, not replaying a prior conversation.
+          // Recency-based, matching the established pattern already
+          // used for project chat elsewhere in this codebase
+          // (ely-smart.js) - not relevance-ranked, stated explicitly
+          // rather than implied.
+          const { data: chatNotes } = await supabase
+            .from('ai_messages')
+            .select('content, created_at')
+            .eq('project_id', email.project_id)
+            .eq('surface', 'project_chat')
+            .eq('role', 'user')
+            .order('created_at', { ascending: false })
+            .limit(15);
+          if (chatNotes?.length) {
+            projectContext += '\n\nRECENT PROJECT CHAT NOTES (Itzik\'s own notes/instructions typed into the project chat, most recent first - these may be MORE up to date than a structured field above if there is a conflict, since a quick note is often added before the underlying record is updated):\n' +
+              chatNotes.map(m => '- [' + new Date(m.created_at).toLocaleDateString('en-GB') + '] ' + (m.content || '').slice(0, 400)).join('\n');
+          }
         }
 
         // Nora autonomous draft brain
@@ -688,6 +714,8 @@ A draft can end with <<<NEEDS_FOLLOWUP>>>, <<<NEEDS_REVIEW>>>, both, or neither.
 Use whichever applies, both if genuinely both apply, or neither. Never use <<<NEEDS_REVIEW>>> just because a task also needs creating — being incomplete (deferring pricing, deferring a decision to Itzik) is not the same as being possibly wrong.
 
 GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
+
+WHEN A RECENT PROJECT CHAT NOTE CONFLICTS WITH A STRUCTURED FIELD: if RECENT PROJECT CHAT NOTES are provided above and one of them states something about this project's status, an AO's position, or any other fact that contradicts the structured ADJOINING OWNER STATUS/SCHEDULED TASKS/other data also provided, treat the chat note as the more current, correct answer — a quick note Itzik types is often added before the underlying record catches up, not the other way round. Use the chat note's information in the response. This is a genuine factual answer, not a guess, so it does NOT need <<<NEEDS_REVIEW>>> on that basis alone.
 
 WHAT YOU MUST NEVER DO:
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
