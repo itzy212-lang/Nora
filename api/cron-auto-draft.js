@@ -681,6 +681,47 @@ export default async function handler(req, res) {
             projectContext += '\n\nRECENT PROJECT CHAT NOTES (Itzik\'s own notes/instructions typed into the project chat, most recent first - raw and unfiltered, may contain internal discussion beyond status - see the brain rule on how these may be used):\n' +
               chatNotes.map(m => '- [' + new Date(m.created_at).toLocaleDateString('en-GB') + '] ' + (m.content || '').slice(0, 400)).join('\n');
           }
+
+          // Added 2026-09-21, on request: genuine semantic search over
+          // project_memory (a real, already-embedded per-project fact
+          // store - confirmed 100% embedding coverage on what exists in
+          // it), not just recency. Complements the raw chat-notes fetch
+          // above rather than replacing it - project_memory is
+          // currently populated almost entirely from past EMAILS
+          // (extract-email-memory.js), so this is what actually
+          // delivers the "look at historical emails, not just the
+          // current thread" capability, distinct from the chat-specific
+          // fetch above. New RPC match_project_memory() does the
+          // pgvector similarity query - no equivalent existed before
+          // this (the similarly-named get_project_memory() turned out,
+          // on inspection, to query a completely different table,
+          // project_events, not project_memory at all).
+          try {
+            const embRes = await fetch('https://api.openai.com/v1/embeddings', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: 'text-embedding-3-small', input: (email.subject || '') + '\n' + (email.body || '').slice(0, 2000) }),
+            });
+            const embData = await embRes.json();
+            const queryEmbedding = embData.data?.[0]?.embedding;
+            if (queryEmbedding) {
+              const { data: memoryMatches } = await supabase.rpc('match_project_memory', {
+                p_project_id: email.project_id,
+                p_query_embedding: queryEmbedding,
+                p_limit: 6,
+              });
+              // Deliberately conservative similarity floor - a weak
+              // match here is worse than no match, since it would just
+              // add noise the model might mistakenly treat as relevant.
+              const relevantMemory = (memoryMatches || []).filter(m => m.similarity >= 0.5);
+              if (relevantMemory.length) {
+                projectContext += '\n\nRELEVANT PROJECT HISTORY (found by semantic search across past correspondence on this project, most relevant first - same strict usage rule as RECENT PROJECT CHAT NOTES above: only use to answer the specific question asked, never introduce a new topic, never name an individual, nothing personal or unrelated):\n' +
+                  relevantMemory.map(m => '- [' + new Date(m.created_at).toLocaleDateString('en-GB') + '] ' + (m.summary || m.title || '').slice(0, 400)).join('\n');
+              }
+            }
+          } catch (memErr) {
+            console.warn('[cron-auto-draft] Project memory semantic search failed (non-fatal):', memErr.message);
+          }
         }
 
         // Nora autonomous draft brain
@@ -715,18 +756,18 @@ Use whichever applies, both if genuinely both apply, or neither. Never use <<<NE
 
 GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
 
-WHEN A RECENT PROJECT CHAT NOTE CONFLICTS WITH A STRUCTURED FIELD — STRICT SCOPE, READ CAREFULLY:
-RECENT PROJECT CHAT NOTES are raw and unfiltered — they are exactly what Itzik typed into the project chat, for his own reference, with no editing or filtering applied before reaching you. This means they can contain far more than status updates: internal discussion, names of staff or contacts, personal remarks, anything he was thinking through at the time. Treat this entire section as strictly, narrowly single-purpose:
+WHEN RECENT PROJECT CHAT NOTES OR PROJECT HISTORY CONFLICT WITH A STRUCTURED FIELD — STRICT SCOPE, READ CAREFULLY:
+This rule covers BOTH RECENT PROJECT CHAT NOTES and RELEVANT PROJECT HISTORY, wherever either appears above — the same strict scope applies to both, for the same reason. RECENT PROJECT CHAT NOTES are raw and unfiltered — exactly what Itzik typed into the project chat, for his own reference, with no editing or filtering applied before reaching you. RELEVANT PROJECT HISTORY is drawn from past correspondence, found by similarity to this email, and may likewise touch on more than the current question. Either can contain far more than status updates: internal discussion, names of staff or contacts, personal remarks, matters unrelated to this specific email. Treat both sections as strictly, narrowly single-purpose:
 
-You may ONLY use it to check whether it updates a specific status/factual point that is directly relevant to answering what the recipient actually asked — e.g. the recipient asked for a project update, and a chat note says the structured AO status is out of date because something has actually happened since. If, and only if, a note genuinely updates a fact relevant to the question asked, use that updated fact in your answer, worded as a plain status statement — never quote or closely paraphrase the note's own wording, never mention that it came from a chat note, and never say more than the specific fact itself required.
+You may ONLY use either to check whether it updates a specific status/factual point that is directly relevant to answering what the recipient actually asked — e.g. the recipient asked for a project update, and a chat note or a past email says the structured AO status is out of date because something has actually happened since. If, and only if, an entry genuinely updates a fact relevant to the question asked, use that updated fact in your answer, worded as a plain status statement — never quote or closely paraphrase its own wording, never mention that it came from a chat note or a past email, and never say more than the specific fact itself required.
 
-You must NEVER, under any circumstances, regardless of what appears in this section:
-- Introduce a new topic, task, or discussion point into the reply that the recipient did not ask about, just because it appeared in a chat note.
-- Name any individual mentioned in a chat note (a surveyor, a colleague, a contact, anyone) — describe them by role only ("the surveyor," "the other side's representative"), exactly as you would from any other source.
+You must NEVER, under any circumstances, regardless of what appears in either section:
+- Introduce a new topic, task, or discussion point into the reply that the recipient did not ask about, just because it appeared there.
+- Name any individual mentioned there (a surveyor, a colleague, a contact, anyone) — describe them by role only ("the surveyor," "the other side's representative"), exactly as you would from any other source.
 - Include anything that reads as personal, internal, sensitive, or not directly about the specific status fact needed to answer the question.
-- Treat a chat note as license to say more than the recipient's own question called for.
+- Treat either section as license to say more than the recipient's own question called for.
 
-If nothing in this section is relevant to what was actually asked, ignore it completely and answer from the structured data and the email itself as normal.
+If nothing in either section is relevant to what was actually asked, ignore both completely and answer from the structured data and the email itself as normal.
 
 WHAT YOU MUST NEVER DO:
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
