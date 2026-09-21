@@ -629,11 +629,43 @@ export default async function handler(req, res) {
             .order('due_date', { ascending: true })
             .limit(30);
           projectTasksForDrafting = tasks || [];
+
+          // Added 2026-09-21, on request, real confirmed case: a past
+          // Schedule of Condition appointment was described in the
+          // present/future tense ("are booked for") despite the date
+          // already having passed, and Nora deferred to Itzik on
+          // whether it had actually been completed - when in fact
+          // completion is directly checkable: a real SOC document
+          // exists in soc_reports the moment it's generated. Cross-
+          // referencing this here means a past, completed SOC can be
+          // confirmed as a genuine fact ("dated X") rather than
+          // deferred as an open question.
+          let socReportsForDrafting = [];
+          const pastSocTasks = projectTasksForDrafting.filter(t => t.task_type === 'soc' && t.due_date && t.due_date < new Date().toISOString().slice(0, 10));
+          if (pastSocTasks.length) {
+            const { data: socReports } = await supabase
+              .from('soc_reports')
+              .select('ao_address, created_at, status')
+              .eq('project_id', email.project_id)
+              .order('created_at', { ascending: false })
+              .limit(20);
+            socReportsForDrafting = socReports || [];
+          }
+
           if (projectTasksForDrafting.length) {
-            projectContext += '\n\nSCHEDULED TASKS ON THIS PROJECT (' + projectTasksForDrafting.length + '):\n' +
+            const todayStr = new Date().toISOString().slice(0, 10);
+            projectContext += '\n\nSCHEDULED TASKS ON THIS PROJECT (' + projectTasksForDrafting.length + ') - the brief below already tells you whether each is in the past or future; word the reply accordingly (see the TENSE rule in the brain):\n' +
               projectTasksForDrafting.map(t => {
                 const when = t.due_date ? t.due_date + (t.time ? ' at ' + t.time : ' (no specific time set)') : 'no date set';
-                return '- ' + (t.title || t.task_type || 'Task') + ': ' + when + ' — status: ' + (t.status || 'open') + (t.ao_address_snapshot ? ' — AO: ' + t.ao_address_snapshot : '');
+                const isPast = t.due_date && t.due_date < todayStr;
+                let line = '- ' + (t.title || t.task_type || 'Task') + ': ' + when + (isPast ? ' [DATE HAS PASSED - refer to this in the past tense]' : ' [upcoming]') + ' — status: ' + (t.status || 'open') + (t.ao_address_snapshot ? ' — AO: ' + t.ao_address_snapshot : '');
+                if (t.task_type === 'soc' && isPast) {
+                  const matchingReport = socReportsForDrafting.find(r => !t.ao_address_snapshot || !r.ao_address || r.ao_address.toLowerCase().includes(t.ao_address_snapshot.toLowerCase().split(',')[0]) || t.ao_address_snapshot.toLowerCase().includes((r.ao_address || '').toLowerCase().split(',')[0]));
+                  line += matchingReport
+                    ? ' — CONFIRMED: the Schedule of Condition was completed and is dated ' + new Date(matchingReport.created_at).toLocaleDateString('en-GB') + '. State this as a fact.'
+                    : ' — no Schedule of Condition document found yet for this date, despite the appointment date having passed - this is genuinely unconfirmed, use the cautious framing and mark <<<NEEDS_REVIEW>>>.';
+                }
+                return line;
               }).join('\n');
           }
 
@@ -752,6 +784,9 @@ WHAT YOU CAN DO:
 - Request further information or documents when relevant
 - Confirm that matters are in hand or being progressed
 - Advise on next steps under the Party Wall Act where the situation is clear from the data
+
+TENSE — CHECK WHETHER A DATE HAS ALREADY PASSED:
+When referring to any appointment, inspection, or scheduled task from the data provided, check whether its date is in the past or future relative to today and word it accordingly. A past date is never "is booked for" or "are booked for" - it already happened, so say "was carried out on," "took place on," or similar. Only a genuinely future date gets present/future phrasing ("is booked for," "will take place on"). This applies to every date mentioned, not just Schedule of Condition appointments.
 
 FACTUAL RESOLUTION — check the actual project data provided above before drafting a generic acknowledgement:
 - A scheduled-date question (e.g. when is the Schedule of Condition, when is the inspection): check the scheduled tasks given above, if any exist. If a real date is found, state it precisely and factually — name the actual date and time, and which adjoining owner it is for if there is more than one on this project. If nothing relevant is found in the data provided, this does NOT mean nothing is booked — it may simply not be recorded here. Never state or imply that nothing is booked or scheduled. Instead, respond as Nora's own limited visibility: along the lines of "I do not seem to have access to his diary for this at the moment — I will find out and make sure he comes back to you to confirm" — calm, non-alarming, never a confident negative claim.
