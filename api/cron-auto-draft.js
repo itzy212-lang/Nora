@@ -472,7 +472,7 @@ export default async function handler(req, res) {
             model: 'gpt-5.6-luna',
             max_completion_tokens: 60,
             messages: [
-              { role: 'developer', content: 'Classify this email for a Party Wall surveying practice. Respond with valid JSON only: {"category": "business"|"marketing", "confident": true|false}. "business" means genuine correspondence related to a project, a party wall matter, a surveyor, an adjoining/building owner, an invoice/payment for real work, or similar. "marketing" means sales outreach, promotional content, newsletters, or cold pitches unrelated to an actual matter this practice is handling. If genuinely unsure, set confident to false.' },
+              { role: 'developer', content: 'Classify this email for a Party Wall surveying practice. Respond with valid JSON only: {"category": "business"|"marketing"|"acknowledgment_only", "confident": true|false}. "business" means genuine correspondence related to a project, a party wall matter, a surveyor, an adjoining/building owner, an invoice/payment for real work, or similar, that contains a question, a request, or new information needing a response. "marketing" means sales outreach, promotional content, newsletters, or cold pitches unrelated to an actual matter this practice is handling. "acknowledgment_only" means the email is nothing more than a brief thank-you, closing acknowledgment, or confirmation of receipt (e.g. "thanks", "thanks Nora", "got it", "noted", "perfect, thank you") with no new question, request, or information that needs a further reply - this applies even if it is a real client replying to a real previous email. If genuinely unsure, set confident to false.' },
               { role: 'user', content: 'FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + (email.subject || '') + '\nBODY: ' + (email.body || '').slice(0, 800) },
             ],
           }),
@@ -501,7 +501,17 @@ export default async function handler(req, res) {
         }
       }
 
-      if (emailCategory === 'marketing') {
+      // Added 2026-09-21, on request, real confirmed case: Nora
+      // auto-responded to a bare "Thanks Nora" - a reply to a reply
+      // that itself already correctly answered everything - producing
+      // a redundant second message repeating information already
+      // given minutes earlier. Rule is deliberately simple and
+      // absolute, exactly as specified: a thank-you or closing
+      // acknowledgment of a previous email never needs a response,
+      // full stop - not "usually," not "unless." This is checked here,
+      // same place and same effect as the marketing skip - no draft,
+      // no send, nothing created at all.
+      if (emailCategory === 'marketing' || emailCategory === 'acknowledgment_only') {
         results.skipped++;
         continue;
       }
@@ -792,6 +802,12 @@ If the thread shows that a specific call or meeting time has been confirmed (eit
 3. Keep it short — 2-3 sentences maximum.
 Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
 
+WHETHER AN AVAILABILITY CONTEXT BLOCK BELONGS IN THE REPLY AT ALL — CHECK THE ORIGINAL EMAIL FIRST:
+An AVAILABILITY CONTEXT block being provided does not automatically mean the reply should say "back to you by [time]" or promise any specific return. Look at what the sender's own email actually needed first:
+- If the sender asked a question, requested a call, or is genuinely waiting on Itzik personally to do or decide something — then yes, use the availability context to set honest, specific expectations, exactly as described elsewhere in this brief.
+- If the sender was simply sending something through with no request attached (e.g. "please see attached," a dictation, a document, an FYI) — nothing was actually asked that needs a promised return time. The correct reply is a brief, plain acknowledgment that it will be passed on ("I will make sure Itzik receives this") — do NOT add "he's currently out" or "back to you by [time]" onto it. Stating a return time nobody asked for reads as a non sequitur, not as helpful information.
+Get this distinction from the sender's own words, not from whether an AVAILABILITY CONTEXT block happens to be present.
+
 WHAT ITZIK IS ACTUALLY DOING — NEVER REVEAL DETAIL:
 If an AVAILABILITY CONTEXT block says Itzik is on a Schedule of Condition inspection, you may say exactly that — it's specific, real information a sender should have. For anything else (a meeting, a call, an appointment), never say what kind — "in a meeting" or "in a telephone meeting" only, regardless of what the underlying task is actually called or what the thread might suggest. If Itzik has more than one Schedule of Condition booked on the same day, describe it as one continuous block of site appointments — never state or imply a gap between them, even where one technically exists between the actual times.
 
@@ -866,7 +882,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           '\nSUBJECT: ' + email.subject +
           '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
           (projectContext ? '\n\n' + projectContext : '') +
-          (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (weave this into the reply naturally - this is why a response is going out now rather than Itzik replying personally):\n' + eligibility.framing : '');
+          (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (this is why a response is going out now rather than Itzik replying personally - see the brain rule on when this belongs in the reply at all):\n' + eligibility.framing : '');
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
