@@ -837,9 +837,14 @@ If the thread shows that a specific call or meeting time has been confirmed (eit
 3. Keep it short — 2-3 sentences maximum.
 Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
 
-ADDRESSED TO SOMEONE ELSE — CHECK WHO THE EMAIL IS ACTUALLY FOR BEFORE REPLYING AS IF IT WERE A ONE-TO-ONE EXCHANGE:
-Being on the To: line does not mean an email is addressed to you specifically. When OTHER RECIPIENTS ON THIS EMAIL is shown above, check the email's own opening greeting - if it says "Dear [someone else's name]" rather than addressing Itzik or the practice, the sender's real, primary addressee is that other person, and the practice is essentially copied in alongside them, whatever the formal To:/Cc: split says. This is a genuine, real case that happened and produced a bad outcome: a surveyor's update addressed "Dear Maxime" (the Building Owner) was auto-replied to as "Dear Richard, thank you for your email" - as if it were a private exchange between the practice and the sender, completely ignoring that someone else was the actual addressee.
-If the email is addressed to someone else this way, mark the draft <<<NEEDS_REVIEW>>> and do not write it as a confident one-to-one reply - this is a judgement call about whether and how the practice should even be the one responding in a multi-party exchange, not a simple factual question, and it deserves Itzik's eyes before anything goes out. Still draft something reasonable (Itzik will see and can send or amend it), but do not have it auto-send.
+ADDRESSED TO SOMEONE ELSE — CHECK WHO THE EMAIL IS ACTUALLY FOR, EVERY TIME, BEFORE DRAFTING ANYTHING:
+Being on the To: line does not mean an email is addressed to you specifically. When OTHER RECIPIENTS ON THIS EMAIL is shown above, check the current email's own opening greeting - if it says "Dear [someone else's name]" rather than addressing Itzik or the practice, the sender's real, primary addressee is that other person, whatever the formal To:/Cc: split says. This is a genuine, real case that happened and produced a bad outcome: a surveyor's update addressed "Dear Maxime" (the Building Owner) was auto-replied to as "Dear Richard, thank you for your email" - as if it were a private exchange between the practice and the sender, completely ignoring that someone else was the actual addressee. There are exactly three possible outcomes here - work out which one applies before writing anything:
+
+1. THE CURRENT EMAIL IS ADDRESSED TO ITZIK/THE PRACTICE DIRECTLY (its own greeting names Itzik, "the surveyor," or is otherwise clearly written to the practice, not to a third party). Draft and respond normally, as described throughout the rest of this brief.
+
+2. THE CURRENT EMAIL IS ADDRESSED TO SOMEONE ELSE, BUT SOMEWHERE EARLIER IN THE THREAD HISTORY, ITZIK/THE PRACTICE WAS DIRECTLY ADDRESSED WITH A QUESTION THAT HAS NOT YET BEEN ANSWERED. Draft a response, but answer ONLY that specific earlier question - do not respond to the current email's own content, do not treat the whole thread as needing a general reply, and do not write as though the current email's sender addressed the practice directly. Mark this <<<NEEDS_REVIEW>>> - deciding whether it's still appropriate to jump back in on an old question, in a thread that has since moved on to address someone else, is a genuine judgement call for Itzik, not something to auto-send.
+
+3. THE PRACTICE HAS NEVER BEEN DIRECTLY ADDRESSED WITH A QUESTION ANYWHERE IN THIS THREAD - not in the current email, not earlier. Do not draft a reply at all. Output nothing except the exact marker <<<SKIP_NOT_ADDRESSED>>> and nothing else - no greeting, no body, no sign-off. This is a genuine, absolute rule: being copied into other people's correspondence is not, by itself, ever a reason for the practice to respond.
 
 WHETHER AN AVAILABILITY CONTEXT BLOCK BELONGS IN THE REPLY AT ALL — CHECK THE ORIGINAL EMAIL FIRST:
 An AVAILABILITY CONTEXT block being provided does not automatically mean the reply should say "back to you by [time]" or promise any specific return. Look at what the sender's own email actually needed first:
@@ -976,6 +981,18 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         const rawDraftBody = aiData.choices?.[0]?.message?.content || '';
         if (!rawDraftBody) throw new Error('Empty draft');
 
+        // Added 2026-09-22, on request: a third, distinct outcome from
+        // the two markers below - "never addressed at all" needs to
+        // skip creating a draft entirely, not just hold one back for
+        // review. Checked BEFORE the other two markers specifically
+        // because if the model determines it was never addressed
+        // anywhere in the thread, nothing else about the draft matters -
+        // there should be no draft.
+        if (rawDraftBody.includes('<<<SKIP_NOT_ADDRESSED>>>')) {
+          results.skipped++;
+          continue;
+        }
+
         // Fixed 2026-09-12: the <<<NEEDS_FOLLOWUP>>> marker must never
         // reach the actual saved draft — it would show up in the
         // email text itself, and get sent to the recipient if used
@@ -996,6 +1013,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         const draftNeedsFollowup = rawDraftBody.includes('<<<NEEDS_FOLLOWUP>>>');
         const draftNeedsReview = rawDraftBody.includes('<<<NEEDS_REVIEW>>>');
         const draftBody = rawDraftBody
+          .replace('<<<SKIP_NOT_ADDRESSED>>>', '')
           .replace('<<<NEEDS_FOLLOWUP>>>', '')
           .replace('<<<NEEDS_REVIEW>>>', '')
           .trim();
