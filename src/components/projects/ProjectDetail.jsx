@@ -4276,7 +4276,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       return;
     }
 
-    if (warnings.length) console.warn('[10(4)(b)]', warnings);
+    // Fixed 2026-09-22, real confirmed case: this alert previously only
+    // fired when EVERY document failed - a partial failure (one document
+    // generated, one didn't) produced no visible error at all, only a
+    // console.warn nobody would ever see. That's exactly what happened
+    // here: the AO letter succeeded, so the Surveyor Appointment
+    // failure was completely invisible in the app itself.
+    if (warnings.length) {
+      alert(`Some documents could not be generated:\n${warnings.join('\n')}\n\nThe rest were generated successfully.`);
+    }
 
     // Open review modal — same flow as notices
     // Workflow state saved only after user confirms in the modal
