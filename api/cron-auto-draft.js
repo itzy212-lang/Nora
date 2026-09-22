@@ -837,6 +837,10 @@ If the thread shows that a specific call or meeting time has been confirmed (eit
 3. Keep it short — 2-3 sentences maximum.
 Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
 
+ADDRESSED TO SOMEONE ELSE — CHECK WHO THE EMAIL IS ACTUALLY FOR BEFORE REPLYING AS IF IT WERE A ONE-TO-ONE EXCHANGE:
+Being on the To: line does not mean an email is addressed to you specifically. When OTHER RECIPIENTS ON THIS EMAIL is shown above, check the email's own opening greeting - if it says "Dear [someone else's name]" rather than addressing Itzik or the practice, the sender's real, primary addressee is that other person, and the practice is essentially copied in alongside them, whatever the formal To:/Cc: split says. This is a genuine, real case that happened and produced a bad outcome: a surveyor's update addressed "Dear Maxime" (the Building Owner) was auto-replied to as "Dear Richard, thank you for your email" - as if it were a private exchange between the practice and the sender, completely ignoring that someone else was the actual addressee.
+If the email is addressed to someone else this way, mark the draft <<<NEEDS_REVIEW>>> and do not write it as a confident one-to-one reply - this is a judgement call about whether and how the practice should even be the one responding in a multi-party exchange, not a simple factual question, and it deserves Itzik's eyes before anything goes out. Still draft something reasonable (Itzik will see and can send or amend it), but do not have it auto-send.
+
 WHETHER AN AVAILABILITY CONTEXT BLOCK BELONGS IN THE REPLY AT ALL — CHECK THE ORIGINAL EMAIL FIRST:
 An AVAILABILITY CONTEXT block being provided does not automatically mean the reply should say "back to you by [time]" or promise any specific return. Look at what the sender's own email actually needed first:
 - If the sender asked a question, requested a call, or is genuinely waiting on Itzik personally to do or decide something — then yes, use the availability context to set honest, specific expectations, exactly as described elsewhere in this brief.
@@ -913,9 +917,33 @@ These terms exist to distinguish parties on paper, not to describe someone to th
 PARTY WALL CONTEXT — GENERAL:
 Itzik Darel is primarily a party wall surveyor but also handles general construction consultancy. Do not assume every email is party wall related. Read the email and thread carefully — if it is clearly about party wall matters, use your knowledge of the Party Wall etc. Act 1996 to respond accurately. If it is about something else (construction disputes, general surveying, CDM, building contracts), respond appropriately to that context instead. If the context is unclear or there is no project data available, give a professional acknowledgement and say Itzik will be in touch to discuss further — do not guess or assume what the matter relates to.`;
 
+        // Added 2026-09-22, on request, real confirmed case: Richard
+        // Morse's email was addressed "Dear Maxime" and listed Maxime
+        // as a co-recipient, with the practice's own address also on
+        // the To: line but not the one being spoken to - Nora replied
+        // "Dear Richard... thank you for YOUR email" as if it were a
+        // private one-to-one exchange with the practice, completely
+        // missing that Maxime was the actual primary addressee. The
+        // drafting context never even included who else the email was
+        // sent to, so the model had no way to know. Now it does.
+        const otherToRecipients = (email.to_email || '')
+          .split(/[;,]/)
+          .map(a => a.trim())
+          .filter(a => a && !a.toLowerCase().includes('sq1consulting'));
+        const ccRecipients = (email.cc_emails || '')
+          .split(/[;,]/)
+          .map(a => a.trim())
+          .filter(Boolean);
+        const recipientContext = (otherToRecipients.length || ccRecipients.length)
+          ? '\n\nOTHER RECIPIENTS ON THIS EMAIL - check carefully whether this email is actually addressed to you at all (see the ADDRESSED TO SOMEONE ELSE brain rule):' +
+            (otherToRecipients.length ? '\nAlso in To: ' + otherToRecipients.join(', ') : '') +
+            (ccRecipients.length ? '\nCc: ' + ccRecipients.join(', ') : '')
+          : '';
+
         const userPrompt = 'FROM: ' + (email.sender_name || email.sender_email) +
           '\nSUBJECT: ' + email.subject +
           '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
+          recipientContext +
           (projectContext ? '\n\n' + projectContext : '') +
           (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (this is why a response is going out now rather than Itzik replying personally - see the brain rule on when this belongs in the reply at all):\n' + eligibility.framing : '');
 
