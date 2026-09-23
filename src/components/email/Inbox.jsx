@@ -1803,6 +1803,15 @@ function AttachmentChip({ att }) {
 }
 
 function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
+  // Fixed URGENTLY 2026-09-22, real confirmed regression from the
+  // recipients-popup fix: this component referenced state.currentUser
+  // without ever getting state from useApp() in this scope - state
+  // only existed in OTHER components in this file (ReplyOverlay, the
+  // main Inbox component), not here. That's a ReferenceError the
+  // instant an email preview renders, which is exactly what "select
+  // an email, blank screen" looks like - a component throwing during
+  // render leaves nothing on screen.
+  const { state } = useApp();
   const [attachments, setAttachments] = useState([]);
   const [showRecipientsPopup, setShowRecipientsPopup] = useState(false);
 
