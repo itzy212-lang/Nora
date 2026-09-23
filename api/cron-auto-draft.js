@@ -329,18 +329,26 @@ export default async function handler(req, res) {
   );
   const openaiKey = process.env.OPENAI_API_KEY;
 
-  // Added 2026-09-20, on request: nora_auto_send previously existed
-  // as a Settings toggle (firm_settings.nora_auto_send) but was never
-  // read anywhere in the backend - confirmed directly, zero matches
-  // across api/*.js before this change. Fetched once per run, not
-  // per-email, since it's a single global firm-level setting (this
-  // account currently has exactly one firm_settings row).
-  let autoSendEnabled = false;
+  // Fixed 2026-09-23, real confirmed bug - on request, traced to root
+  // cause: firm_settings.user_id shows this table IS meant to be
+  // per-account, but this check queried it with no user_id filter at
+  // all, so every email got governed by whichever single row
+  // happened to exist (the main practice account's) - confirmed
+  // directly: itzy212@gmail.com has never had its own firm_settings
+  // row, yet its emails were being processed under the main account's
+  // auto-send setting regardless. All rows now fetched once, keyed by
+  // user_id; each email's OWN account is looked up individually
+  // inside the loop below (see emailAutoSendEnabled) - an account
+  // with no row of its own now correctly defaults to off, not to
+  // whatever the first/only other row says.
+  let autoSendSettingsByUser = new Map();
   try {
-    const { data: firmSettings } = await supabase.from('firm_settings').select('nora_auto_send').limit(1).maybeSingle();
-    autoSendEnabled = !!firmSettings?.nora_auto_send;
+    const { data: allFirmSettings } = await supabase.from('firm_settings').select('user_id, nora_auto_send');
+    for (const row of allFirmSettings || []) {
+      if (row.user_id) autoSendSettingsByUser.set(row.user_id, !!row.nora_auto_send);
+    }
   } catch (e) {
-    console.warn('[cron-auto-draft] Could not read nora_auto_send setting, defaulting to off:', e.message);
+    console.warn('[cron-auto-draft] Could not read nora_auto_send settings, defaulting to off:', e.message);
   }
 
   try {
@@ -543,6 +551,11 @@ export default async function handler(req, res) {
       // eligibility window - only once a response is actually going
       // out is anything created.
       const ownerUserId = await resolveOwnerUserId(email.user_id);
+      // Per-account lookup, not the old single global value - an
+      // account with no firm_settings row of its own (like
+      // itzy212@gmail.com) correctly gets false here, not whatever
+      // another account's row happens to say.
+      const autoSendEnabled = autoSendSettingsByUser.get(ownerUserId) || false;
       const eligibility = await computeSendEligibility(email, supabase, ownerUserId);
       if (!eligibility.eligible) {
         results.skipped++;
