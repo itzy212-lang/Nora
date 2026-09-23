@@ -357,6 +357,22 @@ export default async function handler(req, res) {
 
     if (error) throw error;
 
+    // Added 2026-09-23, on request: itzy212@gmail.com should never
+    // auto-respond to anything at all, full stop - it's a personal/
+    // test account that also receives real personal mail unrelated to
+    // the practice (confirmed directly: a personal medical appointment
+    // reminder landed here and got auto-replied to, since nothing
+    // distinguished it from genuine practice correspondence). This is
+    // a permanent, absolute exclusion for this one mailbox - not
+    // dependent on sender detection or any other heuristic, which is
+    // exactly the point: nothing arriving in this account should ever
+    // be auto-processed, regardless of who it's from or what it says.
+    // user_id is stored inconsistently across rows (sometimes the raw
+    // email string, sometimes the resolved UUID), so both forms are
+    // excluded here rather than relying on one.
+    const EXCLUDED_MAILBOXES = ['itzy212@gmail.com', '6bbba55b-5cba-4d9b-9277-fa6786a7bfe1'];
+    const scopedEmails = (emails || []).filter(e => !EXCLUDED_MAILBOXES.includes((e.user_id || '').toLowerCase()));
+
     // Fixed 2026-09-17, real, confirmed bug — flagged explicitly in
     // the to-do list handoff brief as a known, not-yet-fixed gap: the
     // follow-up reminder task below hardcoded user_id to Itzik's own
@@ -420,7 +436,7 @@ export default async function handler(req, res) {
 
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
-    for (const email of emails || []) {
+    for (const email of scopedEmails) {
       // Fixed URGENTLY 2026-09-20, real, confirmed historical bug -
       // traced directly: seven emails from July/August 2026
       // accumulated between 24 and 105 duplicate 'pending' drafts
