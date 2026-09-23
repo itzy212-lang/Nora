@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import sb from '../../supabaseClient';
 import { syncSocToAO } from '../../utils/adjoiningOwners';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 
 const TASK_TYPES = [
   { value: 'todo', label: 'General task' },
@@ -33,7 +34,7 @@ function aoLabel(ao = {}) {
 export default function TaskEditModal({ task, project, onClose, onSaved, onDeleted }) {
   const isNew = !task;
   const projectId = project?.id || task?.project_id;
-  const aos = Array.isArray(project?.aos) ? project.aos : [];
+  const aos = sortAOsNumerically(Array.isArray(project?.aos) ? project.aos : []);
   const [form, setForm] = useState({
     title: task?.title || '',
     description: task?.description || '',

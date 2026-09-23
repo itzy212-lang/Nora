@@ -18,6 +18,7 @@
 import { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 
 export default function SaveToOneDriveOverlay({
   projectId,
@@ -60,7 +61,7 @@ export default function SaveToOneDriveOverlay({
 
   const folders = (() => {
     if (!project) return [];
-    const aos = Array.isArray(project.aos) ? project.aos : [];
+    const aos = sortAOsNumerically(Array.isArray(project.aos) ? project.aos : []);
     const result = [];
 
     if (project.onedrive_folder_id) {

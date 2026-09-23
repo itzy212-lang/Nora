@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 import { saveAdjoiningOwners, syncSocToAO } from '../../utils/adjoiningOwners';
 
 const EVENT_TYPES = {
@@ -61,7 +62,7 @@ function aoKey(ao = {}) {
 }
 
 function getAOs(project = {}) {
-  return Array.isArray(project.aos) ? project.aos : [];
+  return sortAOsNumerically(Array.isArray(project.aos) ? project.aos : []);
 }
 
 function projectDisplay(project = {}) {

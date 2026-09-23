@@ -1843,18 +1843,32 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
 
   const isHtml = isHtmlEmail(email.body || '');
 
-  // Parse recipients from email — to_emails can be string, array, or null
+  // Parse recipients from email — to_emails can be string, array, or null.
+  // Fixed 2026-09-22, on request: split on both comma AND semicolon -
+  // confirmed directly from real data that to_email/cc_emails actually
+  // use "; " as the separator (e.g. "a@x.com; b@y.com"), so splitting
+  // on comma alone left multi-address fields as one unbroken string,
+  // which is very likely why they never displayed in full on screen.
   const parseRecipients = (field) => {
     if (!field) return [];
     if (Array.isArray(field)) return field.map(r => typeof r === 'string' ? r : r.email || r);
-    if (typeof field === 'string') return field.split(',').map(e => e.trim()).filter(Boolean);
+    if (typeof field === 'string') return field.split(/[,;]/).map(e => e.trim()).filter(Boolean);
     return [];
   };
 
-  const toRecipients = parseRecipients(email.to_emails || email.to_email);
+  // Fixed 2026-09-22, on request: the user's own address was showing up
+  // in "To" every time (since the user is almost always literally on
+  // the To: line of their own inbox) - pointless to see your own
+  // address, and it pushed out the addresses actually needed here,
+  // which are the other parties on the email. Own address filtered out
+  // of To specifically; a From section (the actual sender) is now shown
+  // separately above it, which never existed here before at all.
+  const ownEmailLower = (state.currentUser?.email || '').toLowerCase();
+  const toRecipients = parseRecipients(email.to_emails || email.to_email).filter(r => r.toLowerCase() !== ownEmailLower);
   const ccRecipients = parseRecipients(email.cc_emails);
   const bccRecipients = parseRecipients(email.bcc_emails);
-  const hasRecipients = toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0;
+  const fromSender = email.sender_email ? (email.sender_name ? `${email.sender_name} <${email.sender_email}>` : email.sender_email) : null;
+  const hasRecipients = !!fromSender || toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
@@ -1911,7 +1925,14 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
               onClick={e => e.stopPropagation()}
             >
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--text)' }}>Email Recipients</div>
-              
+
+              {fromSender && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>From</div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, wordBreak: 'break-word' }}>{fromSender}</div>
+                </div>
+              )}
+
               {toRecipients.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</div>

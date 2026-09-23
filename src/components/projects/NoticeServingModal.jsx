@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 
 const NOTICE_TYPES = [
   { key: 's6', label: 'Section 6(1) Notice', deadlineDays: 14 },
@@ -59,7 +60,7 @@ function normaliseAOList({ ao, aos, project }) {
       out.push(item);
     }
   }
-  return out;
+  return sortAOsNumerically(out);
 }
 
 export default function NoticeServingModal({ project, ao, aos = [], defaultSections = [], prefillData = null, editingNoticeId = null, onServe, onClose, initialSelectedAO = null }) {

@@ -3,6 +3,7 @@ import QAReviewOverlay from '../shared/QAReviewOverlay';
 import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -55,7 +56,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const selectedProject = projects.find(p => p.id === projectId) || projects[0] || null;
   const projectAddress = selectedProject?.bo_address || selectedProject?.address || '';
-  const aos = selectedProject?.aos || [];
+  const aos = sortAOsNumerically(selectedProject?.aos || []);
   const selectedAO = aos[Number(selectedAOIndex)] || null;
   const selectedAOAddress = selectedAO?.address || selectedAO?.ao_address || selectedAO?.reg_addr || '';
 

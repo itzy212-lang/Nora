@@ -3,6 +3,7 @@ import { useApp } from '../../state/appStore';
 import TaskEditModal from './TaskEditModal';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { sortAOsNumerically } from '../../utils/aoUtils';
 import ClausePanel from './ClausePanel';
 import { useSpeech } from '../../hooks/useSpeech';
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
@@ -3246,7 +3247,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const bo = project.bo || project.bo_1_name || '';
   const boEmail = project.bo_email || project.bo_1_email || '';
   const works = project.works || '';
-  const aos = project.aos || [];
+  const aos = sortAOsNumerically(project.aos || []);
   const modalAOs = Array.isArray(aos) && aos.length ? aos : (Array.isArray(project?.aos) ? project.aos : []);
   const docs = project.documents || [];
   const projColour = getProjectColour(project);
