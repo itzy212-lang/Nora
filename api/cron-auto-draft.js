@@ -578,9 +578,23 @@ export default async function handler(req, res) {
             .limit(10);
 
           if (thread?.length) {
-            const threadText = thread.map(t =>
-              '[' + (t.direction === 'incoming' ? 'FROM: ' + (t.sender_name || t.sender_email) : 'FROM ITZIK:') + ']\n' + (t.body || '').slice(0, 500)
-            ).join('\n\n---\n\n');
+            // Fixed 2026-09-23, on request, real confirmed gap: every
+            // outgoing message was labelled "FROM ITZIK:" regardless of
+            // whether it was actually typed by Itzik or auto-sent by
+            // Nora - which meant the model could never actually tell
+            // whether Itzik had personally re-engaged in a thread,
+            // undermining the ALREADY RESPONDED rule this feeds.
+            // Nora's own replies always carry her distinctive sign-off
+            // ("On behalf of Itzik Darel") - a simple, reliable way to
+            // tell them apart without a fragile join against
+            // email_auto_drafts (which has no direct link to the
+            // resulting sent email row).
+            const threadText = thread.map(t => {
+              let label;
+              if (t.direction === 'incoming') label = 'FROM: ' + (t.sender_name || t.sender_email);
+              else label = (t.body || '').includes('On behalf of Itzik Darel') ? 'FROM NORA (auto-reply):' : 'FROM ITZIK (personally):';
+              return '[' + label + ']\n' + (t.body || '').slice(0, 500);
+            }).join('\n\n---\n\n');
             projectContext = 'THREAD HISTORY (oldest first):\n' + threadText;
           }
         }
@@ -866,6 +880,13 @@ If the thread shows that a specific call or meeting time has been confirmed (eit
 3. Keep it short — 2-3 sentences maximum.
 Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
 
+ALREADY RESPONDED IN THIS THREAD — DON'T KEEP A CONVERSATION GOING JUST BECAUSE YOU KEEP GETTING REPLIES:
+When PRIOR RESPONSES IN THIS THREAD is shown above, you have already replied in this thread at least once. This is a real, confirmed pattern that happened repeatedly on one real day: threads with Maxime, with Gabriel, and others kept extending purely because you kept replying to every further message - a "thanks", a "here's a copy of the revised drawings", a simple FYI - when the conversation had already been properly closed out by your first reply. Being replied to is not, by itself, a reason to reply again.
+Once you've already responded in a thread, check the CURRENT email carefully before drafting again:
+- If it contains a genuine NEW question, request, or something that actually needs an answer or action from Itzik - respond normally, exactly as you would anywhere else in this brief. A real question always deserves an answer, however many times you've already replied.
+- If it's a closing-type message - a thanks, an acknowledgment, "noted", a document or update sent with no question attached, a "here's X for your records" - do not draft a further reply. Output the exact marker <<<SKIP_NOT_ADDRESSED>>> and nothing else. This applies even if the message contains a small new detail (a phone number, a document, a date) - noting new information for Itzik doesn't require an email reply confirming you've noted it every single time; a plain "thank you, noted" is itself often the unnecessary reply, not the correct one, once the thread is already closed out.
+The one thing that lifts this caution: if Itzik has personally sent something into the thread since your last reply - check the THREAD HISTORY above for a message labelled "FROM ITZIK (personally)" rather than "FROM NORA (auto-reply)" after your own last reply - the conversation is now his to drive, not yours to keep closing out - respond normally as the current email warrants.
+
 ADDRESSED TO SOMEONE ELSE — CHECK WHO THE EMAIL IS ACTUALLY FOR, EVERY TIME, BEFORE DRAFTING ANYTHING:
 Being on the To: line does not mean an email is addressed to you specifically. When OTHER RECIPIENTS ON THIS EMAIL is shown above, check the current email's own opening greeting - if it says "Dear [someone else's name]" rather than addressing Itzik or the practice, the sender's real, primary addressee is that other person, whatever the formal To:/Cc: split says. This is a genuine, real case that happened and produced a bad outcome: a surveyor's update addressed "Dear Maxime" (the Building Owner) was auto-replied to as "Dear Richard, thank you for your email" - as if it were a private exchange between the practice and the sender, completely ignoring that someone else was the actual addressee. There are exactly three possible outcomes - work out which one applies before writing anything. This is entirely about THIS ONE EMAIL'S OWN CONTENT, not the thread history above it - earlier emails may well have already been answered, by Itzik or by Nora, and are not what decides this:
 
@@ -951,6 +972,32 @@ These terms exist to distinguish parties on paper, not to describe someone to th
 PARTY WALL CONTEXT — GENERAL:
 Itzik Darel is primarily a party wall surveyor but also handles general construction consultancy. Do not assume every email is party wall related. Read the email and thread carefully — if it is clearly about party wall matters, use your knowledge of the Party Wall etc. Act 1996 to respond accurately. If it is about something else (construction disputes, general surveying, CDM, building contracts), respond appropriately to that context instead. If the context is unclear or there is no project data available, give a professional acknowledgement and say Itzik will be in touch to discuss further — do not guess or assume what the matter relates to.`;
 
+        // Added 2026-09-23, on request, real confirmed pattern: several
+        // threads today (Maxime, Gabriel, others) kept extending purely
+        // because Nora kept replying to every "thanks"/"here's a copy
+        // of X"/simple FYI message, when the conversation had already
+        // been properly closed out. Once Nora has already responded in
+        // a thread, and Itzik hasn't personally sent anything since,
+        // she should not keep replying to every further message unless
+        // it contains a genuine new question - see the brain rule this
+        // feeds. email_auto_drafts is the reliable record of every
+        // reply Nora has actually sent (both auto-sent and Itzik-
+        // reviewed-then-sent), since emails itself has no equivalent
+        // flag on outgoing rows distinguishing Nora's own text from
+        // Itzik's.
+        let priorResponseContext = '';
+        if (email.thread_id) {
+          const { data: priorSent } = await supabase
+            .from('email_auto_drafts')
+            .select('id')
+            .eq('thread_id', email.thread_id)
+            .eq('status', 'sent');
+          const priorCount = (priorSent || []).length;
+          if (priorCount > 0) {
+            priorResponseContext = '\n\nPRIOR RESPONSES IN THIS THREAD - Nora has already sent ' + priorCount + ' repl' + (priorCount === 1 ? 'y' : 'ies') + ' in this thread already (see the ALREADY RESPONDED brain rule before drafting another).';
+          }
+        }
+
         // Added 2026-09-22, on request, real confirmed case: Richard
         // Morse's email was addressed "Dear Maxime" and listed Maxime
         // as a co-recipient, with the practice's own address also on
@@ -979,6 +1026,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
           recipientContext +
           (projectContext ? '\n\n' + projectContext : '') +
+          (priorResponseContext) +
           (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (this is why a response is going out now rather than Itzik replying personally - see the brain rule on when this belongs in the reply at all):\n' + eligibility.framing : '');
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
