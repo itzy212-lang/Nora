@@ -2173,6 +2173,25 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     onOverlayChange(isOpen, () => { setReplyOverlay(null); setDraftWithEly(false); });
   }, [replyOverlay, draftWithEly, onOverlayChange]);
 
+  // Added 2026-09-24, real, confirmed live "Aw, Snap!" tab crash on
+  // mobile only, reported during exactly this window: Reply/Draft
+  // with Ely open, mid-dictation, mid-generation, or mid-send. The
+  // 3-minute auto-sync effect below fires a full cron-auto-draft
+  // request from this same tab in the background whenever new mail
+  // has synced - and that endpoint got substantially heavier this
+  // week (query embeddings + semantic search over project_memory +
+  // a larger brain prompt). Two memory-hungry things landing on one
+  // mobile tab at once - the user's own active dictation/generation
+  // and this background trigger - is a plausible crash mechanism.
+  // Tracked via ref (not the state directly) so the interval's
+  // closure, set up once per loadEmails identity, can still read the
+  // current overlay-open status at fire time without needing to be
+  // torn down and rebuilt every time an overlay opens or closes.
+  const overlayOpenRef = useRef(false);
+  useEffect(() => {
+    overlayOpenRef.current = !!replyOverlay || !!draftWithEly;
+  }, [replyOverlay, draftWithEly]);
+
   // Re-navigating to Inbox while already here (e.g. tapping "Inbox" in the
   // sidebar from inside an open email) bumps resetKey — clear the open-email
   // view so the user lands back on the list, without reloading the inbox.
@@ -2518,8 +2537,12 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         const { data, error } = await invokeSyncOutlookWithTimeout();
         if (!error && data?.newEmails > 0) {
           await loadEmails({ incremental: true });
-          // Chain auto-draft immediately after sync — eliminates up to 15 min delay
-          fetch('/api/cron-auto-draft', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' }, body: '{}' }).catch(() => {});
+          // Chain auto-draft immediately after sync — eliminates up to 15 min delay.
+          // Skipped while Reply/Draft with Ely is open (see overlayOpenRef comment
+          // above) — the actual scheduled cron still covers it within 15 min either way.
+          if (!overlayOpenRef.current) {
+            fetch('/api/cron-auto-draft', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-nora-manual': 'true' }, body: '{}' }).catch(() => {});
+          }
         }
       } catch (err) {
         console.warn('[auto-sync] error:', err);
