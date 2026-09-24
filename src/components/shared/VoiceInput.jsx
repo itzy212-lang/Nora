@@ -542,18 +542,31 @@ export default function VoiceInput({
       return;
     }
 
-    // Use Web Speech API if available — works on desktop Chrome, Android Chrome,
-    // and any browser with reliable Web Speech support. Text appears in real time,
-    // no upload delay, no Whisper round-trip needed.
-    // Falls back to Whisper (startMobileRecording) automatically on iOS Safari
-    // where Web Speech is unreliable or unavailable.
+    // Fixed 2026-09-24, real confirmed live crash: on mobile, Web
+    // Speech (startDesktopRecording, despite the name) auto-restarts
+    // itself repeatedly for as long as the user keeps talking - every
+    // time it naturally ends, it immediately starts a new recognition
+    // session on a short timer. This is a well-documented source of
+    // instability specifically on Android Chrome's implementation,
+    // and matches exactly what was reported: a full tab crash ("Aw,
+    // Snap!"), specifically during dictation, specifically on phone,
+    // never on desktop. startMobileRecording (MediaRecorder + server-
+    // side Whisper transcription, a single recording session with no
+    // repeated restarts) has none of this risk and was already built
+    // and working as the iOS Safari fallback - now used for every
+    // mobile device, not only ones lacking Web Speech entirely, using
+    // the same isMobileBrowser() hardware-based detection already
+    // fixed here on 2026-09-18 (touch-only input + phone-sized
+    // viewport, not spoofable by user-agent or "Desktop site" mode).
+    // Desktop is unaffected - still gets the instant, no-upload-delay
+    // Web Speech experience exactly as before.
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    if (SpeechRecognition && !isMobileBrowser()) {
       startDesktopRecording();
       return;
     }
 
-    // No Web Speech API available (iOS Safari) — use Whisper
+    // Mobile (any device), or no Web Speech API available at all — use Whisper
     startMobileRecording();
   }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
 
