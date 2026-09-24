@@ -542,31 +542,24 @@ export default function VoiceInput({
       return;
     }
 
-    // Fixed 2026-09-24, real confirmed live crash: on mobile, Web
-    // Speech (startDesktopRecording, despite the name) auto-restarts
-    // itself repeatedly for as long as the user keeps talking - every
-    // time it naturally ends, it immediately starts a new recognition
-    // session on a short timer. This is a well-documented source of
-    // instability specifically on Android Chrome's implementation,
-    // and matches exactly what was reported: a full tab crash ("Aw,
-    // Snap!"), specifically during dictation, specifically on phone,
-    // never on desktop. startMobileRecording (MediaRecorder + server-
-    // side Whisper transcription, a single recording session with no
-    // repeated restarts) has none of this risk and was already built
-    // and working as the iOS Safari fallback - now used for every
-    // mobile device, not only ones lacking Web Speech entirely, using
-    // the same isMobileBrowser() hardware-based detection already
-    // fixed here on 2026-09-18 (touch-only input + phone-sized
-    // viewport, not spoofable by user-agent or "Desktop site" mode).
-    // Desktop is unaffected - still gets the instant, no-upload-delay
-    // Web Speech experience exactly as before.
+    // Reverted 2026-09-24, on request: the 2026-09-24 change routing
+    // mobile through startMobileRecording (Whisper) instead of Web
+    // Speech was tried to address a reported "Aw, Snap!" tab crash
+    // during dictation, but the user prefers the original instant,
+    // real-time-text experience and doesn't want the Whisper
+    // upload/transcription delay - and a subsequent send crash
+    // happened even without dictation being involved, suggesting the
+    // original crash may not have been reliably tied to this code
+    // path in the first place. Back to the original behaviour: Web
+    // Speech on any device that supports it, Whisper only as a
+    // fallback where it doesn't.
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition && !isMobileBrowser()) {
+    if (SpeechRecognition) {
       startDesktopRecording();
       return;
     }
 
-    // Mobile (any device), or no Web Speech API available at all — use Whisper
+    // No Web Speech API available (iOS Safari) — use Whisper
     startMobileRecording();
   }, [disabled, recording, startDesktopRecording, startMobileRecording, stopRecording, transcribing]);
 
