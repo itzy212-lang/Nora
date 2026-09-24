@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
-import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote } from '../../utils/draftUtils';
+import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote, logDiag } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
@@ -301,6 +301,17 @@ function DraftWithElyOverlay({ email, threadEmails, onSendWithDraft, onUseDraft,
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
+  // Heartbeat — logs memory every 5s while this overlay is open, so a
+  // mid-dictation crash (reported live, no other action involved)
+  // leaves a trend leading up to it, not just a single before/after
+  // snapshot. Cheap: one small beacon, no processing, no DB write.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      logDiag('heartbeat', { messageCount: messages.length, workingDraftLen: (workingDraft || '').length });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [messages.length, workingDraft]);
+
   useEffect(() => {
     sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,email,tel,address_line1,address_line2,city,postcode,website,signature_b64,logo_base64,accreditation_b64').limit(1)
       .then(({ data }) => { if (data?.[0]) setFirmSettings(data[0]); });
@@ -520,6 +531,11 @@ ${threadText}`;
 
       const { data: { session: _inboxSession } } = await (sb?.auth.getSession() || Promise.resolve({ data: { session: null } }));
       const contactsForRequest = await getContactsForRequest();
+      logDiag('generate_start', {
+        fullThreadLen: fullThread.length,
+        historyLen: JSON.stringify(history).length,
+        promptLen: promptWithDraft.length,
+      });
       const res = await fetch('/api/ely-smart', {
         method: 'POST',
         headers: {
@@ -557,6 +573,7 @@ ${threadText}`;
       }
 
       const data = await res.json();
+      logDiag('generate_response_received', { responseJsonLen: JSON.stringify(data).length });
 
       // Case review prompt — store pending state, show the question as plain message
       if (data.case_review_prompt) {
@@ -645,6 +662,7 @@ ${threadText}`;
       if (draft && !isBriefContent(draft)) {
         setWorkingDraft(draft);
         workingDraftRef.current = draft;
+        logDiag('draft_ready', { draftLen: (typeof draft === 'string' ? draft : (draft?.body || '')).length });
       }
     } catch (err) {
       console.error('[DraftWithEly] callEly error:', err);
@@ -793,7 +811,7 @@ ${threadText}`;
                       );
                     })()}
                     <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, cursor: 'pointer', padding: '1px 6px' }}
-                      onClick={() => navigator.clipboard.writeText(msg.content || '')}>
+                      onClick={() => { logDiag('copy_tapped', { contentLen: (msg.content || '').length }); navigator.clipboard.writeText(msg.content || ''); }}>
                       Copy
                     </span>
                   </div>
@@ -841,7 +859,7 @@ ${threadText}`;
                             style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer' }}>
                             ▶ Play
                           </button>
-                          <button onClick={() => navigator.clipboard.writeText(msg.draft)}
+                          <button onClick={() => { logDiag('copy_draft_tapped', { draftLen: (msg.draft || '').length }); navigator.clipboard.writeText(msg.draft); }}
                             style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, border: '1px solid var(--blue)', background: 'transparent', color: 'var(--blue)', cursor: 'pointer' }}>
                             Copy
                           </button>
@@ -1036,6 +1054,11 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const handleSend = async () => {
     const htmlBody = bodyEditorRef.current?.innerHTML || body;
     if (!to.trim() || !htmlBody.trim()) return;
+    logDiag('send_tapped', {
+      htmlBodyLen: htmlBody.length,
+      attachmentCount: attachments.length,
+      attachmentsTotalLen: attachments.reduce((sum, a) => sum + (a.base64?.length || 0), 0),
+    });
     setSending(true);
     try {
       // Build the quoted thread/forward content
@@ -1055,8 +1078,10 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
       // Signature goes ABOVE quoted content (after user's reply text, before the original email)
       const signatureBlock = includeSignature && signatureHtml ? `<br><br>${signatureHtml}` : '';
       const outgoingBody = htmlBody + signatureBlock + quotedThread;
+      logDiag('send_body_assembled', { outgoingBodyLen: outgoingBody.length, quotedThreadLen: quotedThread.length });
 
       await onSend({ to, cc, subject, body: outgoingBody, replyToId: email?.id, includeSignature, createTask, attachments });
+      logDiag('send_done', {});
       setSending(false);
       onClose();
     } catch (err) {

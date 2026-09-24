@@ -19,6 +19,7 @@
 
 import { useRef, useCallback, useState, useEffect } from 'react';
 import VoiceInput from './VoiceInput';
+import { logDiag } from '../../utils/draftUtils';
 
 export default function ChatInputBar({
   value = '',
@@ -99,12 +100,17 @@ export default function ChatInputBar({
   }, []);
 
   // Voice handlers
+  const wasRecordingRef = useRef(false);
   const handleVoice = useCallback((transcript, meta) => {
     // Ignore restart gaps — VoiceInput restarts Web Speech sessions continuously
     // while recording. restarting=true means still recording, not finished.
     if (meta?.restarting) return;
 
     if (meta?.recording) {
+      if (!wasRecordingRef.current) {
+        wasRecordingRef.current = true;
+        logDiag('mic_engaged', { existingTextLen: (value || '').length });
+      }
       setIsRecording(true);
       setIsTranscribing(false);
       // Write finalised transcript to textarea during recording.
@@ -122,6 +128,8 @@ export default function ChatInputBar({
       }
     } else {
       // recording === false — truly finished
+      wasRecordingRef.current = false;
+      logDiag('mic_stopped', { transcriptLen: (transcript || '').length });
       setIsRecording(false);
       setStoppedRecording(true);
       setInterimText('');

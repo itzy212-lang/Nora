@@ -6,6 +6,29 @@
  */
 
 /**
+ * Fire-and-forget diagnostic beacon — see api/client-diagnostic.js for why.
+ * Never awaited, never blocks, never throws into the caller. Includes
+ * whatever the browser will hand over about memory pressure (Chrome-only,
+ * both fields undefined elsewhere — that itself is useful signal).
+ */
+export function logDiag(event, extra = {}) {
+  try {
+    const mem = (typeof performance !== 'undefined' && performance.memory) ? {
+      usedJSHeapMB: Math.round(performance.memory.usedJSHeapSize / 1048576),
+      totalJSHeapMB: Math.round(performance.memory.totalJSHeapSize / 1048576),
+      limitJSHeapMB: Math.round(performance.memory.jsHeapSizeLimit / 1048576),
+    } : null;
+    const deviceMemoryGB = (typeof navigator !== 'undefined' && navigator.deviceMemory) || null;
+    fetch('/api/client-diagnostic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ event, ...extra, mem, deviceMemoryGB, ua: typeof navigator !== 'undefined' ? navigator.userAgent : null }),
+    }).catch(() => {});
+  } catch {}
+}
+
+/**
  * Strip HTML tags from a draft and convert to plain text.
  * Used when the AI returns HTML markup in a draft despite being told not to.
  */

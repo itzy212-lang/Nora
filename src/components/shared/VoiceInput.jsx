@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { logDiag } from '../../utils/draftUtils';
 
 function cleanText(value = '') {
   return String(value || '')
@@ -562,6 +563,11 @@ export default function VoiceInput({
 
   const toggleRecording = useCallback(() => {
     if (disabled || transcribing) return;
+
+    logDiag('mic_tapped', {
+      wasRecording: !!(shouldKeepRecordingRef.current || recording),
+      hasSpeechRecognition: !!(typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)),
+    });
 
     if (shouldKeepRecordingRef.current || recording) {
       stopRecording();
