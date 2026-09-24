@@ -399,6 +399,27 @@ export default function VoiceInput({
 
     const recognition = new SpeechRecognition();
 
+    // Added 2026-09-24, real, confirmed live "Aw, Snap!" tab crash on
+    // mobile, root-caused directly: reproduced by tapping the mic
+    // button, getting no visible recording, tapping stop, tapping
+    // start again — froze then crashed. None of the four handlers
+    // below checked whether THIS specific recognition instance was
+    // still the current one — only the shared manualStopRef/
+    // shouldKeepRecordingRef flags. Those flags get reset by a NEWER
+    // start() call before an OLDER instance's async onend/onerror has
+    // had a chance to fire. On a rapid stop→start→stop→start sequence
+    // (exactly what triggered this live), a stale, already-abandoned
+    // recognition object can still fire onend after the flags have
+    // flipped back to "recording", see them and conclude it's the
+    // legitimate active session, and spawn its OWN independent 180ms
+    // restart cycle running alongside the new one — two or more
+    // concurrent SpeechRecognition sessions each fighting for the mic
+    // and each independently restarting, compounding with every
+    // further stale-onend hit. This guard makes an abandoned instance
+    // fully inert the moment it's no longer recognitionRef.current,
+    // regardless of what the shared flags say.
+    const isCurrent = () => recognitionRef.current === recognition;
+
     recognition.lang = 'en-GB';
     recognition.continuous = true;
     // On mobile, interim results cause aggressive repetition because Android Chrome
@@ -408,11 +429,13 @@ export default function VoiceInput({
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
+      if (!isCurrent()) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
       setRecording(true);
     };
 
     recognition.onresult = (event) => {
+      if (!isCurrent()) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current) return;
 
       // On mobile, interim results from Web Speech come in as overlapping phrases
@@ -449,6 +472,7 @@ export default function VoiceInput({
     };
 
     recognition.onend = () => {
+      if (!isCurrent()) return;
       if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) {
         setRecording(false);
         return;
@@ -473,12 +497,14 @@ export default function VoiceInput({
       setRecording(true);
 
       restartTimerRef.current = setTimeout(() => {
+        if (!isCurrent()) return;
         if (manualStopRef.current || !shouldKeepRecordingRef.current || disabled) return;
         startRecognitionSession();
       }, 180);
     };
 
     recognition.onerror = (event) => {
+      if (!isCurrent()) return;
       const errorType = event?.error || '';
       console.warn('[VoiceInput] Web Speech error:', errorType);
 
