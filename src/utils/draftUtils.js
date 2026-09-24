@@ -29,6 +29,49 @@ export function stripHtmlFromDraft(text) {
 }
 
 /**
+ * Strip embedded base64 image data (data:image/...;base64,....) out of
+ * quoted/forwarded HTML before it gets re-appended into a new reply.
+ *
+ * Added 2026-09-24, real, confirmed live "Aw, Snap!" tab crash on
+ * mobile, root-caused directly: every reply quotes the ENTIRE previous
+ * email body verbatim underneath the new text — including any inline
+ * images (most commonly a signature logo) already embedded as base64
+ * text. That reply is then saved as the new email, so the next reply
+ * quotes THAT (now-larger) body again, compounding every round trip.
+ * Confirmed against real inbox data: active threads only a few days
+ * old had grown to 120-266KB per email, almost entirely duplicated
+ * base64 image data re-embedded at every hop. Rendering, editing and
+ * serialising that much text inside a mobile contentEditable box is a
+ * reliable way to exceed mobile Chrome's per-tab memory ceiling - and
+ * explains why the crash wasn't tied to one specific action (dictating,
+ * generating, copying, sending all have to handle the same bloated
+ * content).
+ *
+ * The recipient has already received these images in the original
+ * email - quoting them again adds weight, not information. Replaces
+ * each embedded image with a small neutral placeholder so the quoted
+ * text/layout is otherwise untouched.
+ */
+export function stripEmbeddedImagesFromQuote(html) {
+  if (!html || typeof html !== 'string') return html;
+  // Whole <img> tags with a base64 data: src — most common case
+  // (signature logos, pasted screenshots).
+  let out = html.replace(
+    /<img\b[^>]*\bsrc\s*=\s*["']data:image\/[^"']*["'][^>]*>/gi,
+    '<span style="display:inline-block;padding:2px 6px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#888;">[image omitted from quote]</span>'
+  );
+  // Catch-all for the same data URI appearing anywhere else (e.g.
+  // background-image: url(data:image/...) in an inline style) that
+  // the <img>-only pass above wouldn't touch — replace the base64
+  // payload itself so nothing this heavy can slip through untouched.
+  out = out.replace(
+    /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi,
+    'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+  );
+  return out;
+}
+
+/**
  * Convert plain text to HTML paragraphs.
  * If already HTML, returns as-is.
  * Preserves paragraph breaks (double newline → <p>) and line breaks (single newline → <br>).

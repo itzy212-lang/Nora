@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
-import { toHtml, cleanSignOff } from '../../utils/draftUtils';
+import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
@@ -1009,7 +1009,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     'From: ' + (email?.sender_name || email?.sender_email || '') + '<br>' +
     'Date: ' + (email?.received_at ? new Date(email.received_at).toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '') + '<br>' +
     'Subject: ' + (email?.subject || '') + '<br><br>' +
-    (email?.body || email?.body_preview || '')
+    stripEmbeddedImagesFromQuote(email?.body || email?.body_preview || '')
   ) : '';
   const [body, setBody]       = useState(toHtml(prefillBody) || forwardQuote);
   const [showEly, setShowEly] = useState(false);
@@ -1048,7 +1048,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
           : (email.sender_email || 'Unknown sender');
         return `<br><br><div style="border-left: 2px solid #ccc; padding-left: 12px; margin-top: 16px; color: #555;">`
           + `On ${dateStr}, ${fromStr} wrote:<br>`
-          + (email.body || email.body_preview || '')
+          + stripEmbeddedImagesFromQuote(email.body || email.body_preview || '')
           + `</div>`;
       })() : '';
 
