@@ -725,6 +725,7 @@ ${threadText}`;
                 // Strip Subject line from body before transferring to composer
                 const cleanedBody = body.replace(/^Subject\s*:[^\n]+\n*/im, '').trim();
                 if (!cleanedBody) { alert('Ask Nora to produce a draft first.'); return; }
+                logDiag('use_draft_tapped', { draftLen: cleanedBody.length, source: 'header_button' });
                 if (onSendWithDraft) {
                   onSendWithDraft({
                     to: email?.sender_email || '',
@@ -864,6 +865,7 @@ ${threadText}`;
                             Copy
                           </button>
                           <button onClick={() => {
+                            logDiag('use_draft_tapped', { draftLen: (msg.draft || '').length, source: 'inline_button' });
                             workingDraftRef.current = msg.draft;
                             setWorkingDraft(msg.draft);
                             const htmlDraft = msg.draft && !msg.draft.trim().startsWith('<')
@@ -1091,6 +1093,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   };
 
   const handleElyDraft = (draft, close = false) => {
+    logDiag('handleElyDraft_start', { draftType: typeof draft, rawLen: (typeof draft === 'string' ? draft : draft?.body || '').length });
     // Strip Subject line, clean sign-off, convert to HTML with paragraph spacing
     let raw = typeof draft === 'string' ? draft : draft?.body || '';
     // Strip Subject: line if present
@@ -1107,6 +1110,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     if (bodyEditorRef.current) {
       bodyEditorRef.current.innerHTML = html;
     }
+    logDiag('handleElyDraft_done', { htmlLen: html.length });
     if (close) setShowEly(false);
   };
 
@@ -1131,11 +1135,26 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 
   useEffect(() => {
     if (bodyEditorRef.current && prefillBody) {
+      logDiag('replyoverlay_prefill_sync_start', { prefillBodyLen: (prefillBody || '').length });
       const html = toHtml(prefillBody);
       bodyEditorRef.current.innerHTML = html;
       setBody(html);
+      logDiag('replyoverlay_prefill_sync_done', { htmlLen: html.length });
     }
   }, [prefillBody]);
+
+  // Heartbeat while the composer itself is open and settled — covers
+  // the gap between a draft arriving and the Send tap, which showed up
+  // as a real gap with no events at all in a live reproduction: last
+  // signal was draft_ready, nothing at all afterward, not even the
+  // Send button's own first line. This should catch whatever happens
+  // in that window on the next occurrence.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      logDiag('composer_heartbeat', { bodyLen: (body || '').length, attachmentCount: attachments.length });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [body, attachments.length]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 600, display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
