@@ -132,6 +132,16 @@ export default async function handler(req, res) {
       `${CRLF}--${boundary2}${CRLF}` +
       `Content-Disposition: form-data; name="model"${CRLF}${CRLF}` +
       `whisper-1${CRLF}` +
+      // Added 2026-09-24, real, confirmed live bug: a genuine on-site
+      // recording came back with large stretches transcribed as fluent
+      // Welsh, interleaved with correct English party-wall content —
+      // classic Whisper hallucination when language isn't pinned and
+      // it hits an ambiguous stretch (quiet, muffled, a chunk boundary)
+      // and guesses wrong instead of erring toward English. Forcing
+      // language=en removes the guess entirely.
+      `--${boundary2}${CRLF}` +
+      `Content-Disposition: form-data; name="language"${CRLF}${CRLF}` +
+      `en${CRLF}` +
       `--${boundary2}${CRLF}` +
       `Content-Disposition: form-data; name="prompt"${CRLF}${CRLF}` +
       `${whisperPrompt}${CRLF}` +
