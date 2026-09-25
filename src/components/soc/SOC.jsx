@@ -7,6 +7,61 @@ import { sortAOsNumerically } from '../../utils/aoUtils';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
+// Added 2026-09-24 — Vercel's serverless functions have a hard ~4.5MB
+// request body limit, enforced at the platform level regardless of
+// function config (bodyParser: false doesn't change it). An uploaded
+// recording of any real length exceeds this easily, so a direct
+// upload fails with a non-JSON "Request Entity Too Large" response
+// before the function code even runs. Fixed by decoding and
+// resampling the recording to 16kHz mono in-browser (Whisper doesn't
+// need more than that for speech, and it cuts file size dramatically),
+// then slicing it into ~100-second WAV chunks (~3.2MB each, safely
+// under the limit) and transcribing each in a separate request,
+// concatenating the results in order. Works for a recording of any
+// length, not just files that happen to fit under one request.
+async function decodeAndResampleMono(arrayBuffer, targetSampleRate) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  let audioBuffer;
+  try {
+    audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+  } finally {
+    ctx.close();
+  }
+  const offlineCtx = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetSampleRate) + 1, targetSampleRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  const rendered = await offlineCtx.startRendering();
+  return rendered.getChannelData(0); // mono Float32Array at targetSampleRate
+}
+
+function encodeWavChunk(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);       // PCM
+  view.setUint16(22, 1, true);       // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate (mono, 16-bit)
+  view.setUint16(32, 2, true);       // block align
+  view.setUint16(34, 16, true);      // bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([view], { type: 'audio/wav' });
+}
+
 export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, onBack }) {
   const { state } = useApp();
   const projects = state.projects || [];
@@ -401,28 +456,59 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // Whisper pipeline live dictation already uses, then feed the text
   // through handleSend exactly as if it had been dictated or typed.
   const [transcribingUpload, setTranscribingUpload] = useState(false);
+  const [transcribeProgress, setTranscribeProgress] = useState('');
   const uploadInputRef = useRef(null);
   const handleUploadRecording = useCallback(async (file) => {
     if (!file) return;
     setTranscribingUpload(true);
     try {
-      const formData = new FormData();
-      formData.append('audio', file, file.name);
-      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        alert(data.error || 'Transcription failed. Please try again.');
-        return;
+      let texts = [];
+
+      // Small files (under Vercel's ~4.5MB body limit) go straight through —
+      // no need to decode/re-encode what already fits.
+      if (file.size < 4 * 1024 * 1024) {
+        setTranscribeProgress('Transcribing…');
+        const formData = new FormData();
+        formData.append('audio', file, file.name);
+        const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+        const data = await res.json().catch(() => null);
+        if (!data) throw new Error('Server rejected the upload (file may be too large).');
+        if (!res.ok || !data.success) throw new Error(data.error || 'Transcription failed.');
+        if (data.text?.trim()) texts.push(data.text.trim());
+      } else {
+        setTranscribeProgress('Preparing recording…');
+        const arrayBuffer = await file.arrayBuffer();
+        const SAMPLE_RATE = 16000;
+        const CHUNK_SECONDS = 100; // ~3.2MB per WAV chunk at 16kHz mono — safely under the limit
+        const samples = await decodeAndResampleMono(arrayBuffer, SAMPLE_RATE);
+        const chunkSize = SAMPLE_RATE * CHUNK_SECONDS;
+        const totalChunks = Math.max(1, Math.ceil(samples.length / chunkSize));
+
+        for (let i = 0; i < totalChunks; i++) {
+          setTranscribeProgress(`Transcribing part ${i + 1} of ${totalChunks}…`);
+          const chunkSamples = samples.subarray(i * chunkSize, Math.min((i + 1) * chunkSize, samples.length));
+          const wavBlob = encodeWavChunk(chunkSamples, SAMPLE_RATE);
+          const formData = new FormData();
+          formData.append('audio', wavBlob, `chunk-${i}.wav`);
+          const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+          const data = await res.json().catch(() => null);
+          if (!data) throw new Error(`Server rejected part ${i + 1} of ${totalChunks}.`);
+          if (!res.ok || !data.success) throw new Error(data.error || `Transcription failed on part ${i + 1} of ${totalChunks}.`);
+          if (data.text?.trim()) texts.push(data.text.trim());
+        }
       }
-      if (!data.text?.trim()) {
+
+      const fullText = texts.join(' ').trim();
+      if (!fullText) {
         alert('No speech detected in that recording.');
         return;
       }
-      await handleSend(data.text);
+      await handleSend(fullText);
     } catch (err) {
       alert('Could not transcribe that recording: ' + (err.message || 'unknown error'));
     } finally {
       setTranscribingUpload(false);
+      setTranscribeProgress('');
       if (uploadInputRef.current) uploadInputRef.current.value = '';
     }
   }, [handleSend]);
@@ -1569,7 +1655,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             isRecording={isRecording}
             disabled={processing || sendingNote}
             loading={sendingNote}
-            placeholder={transcribingUpload ? 'Transcribing recording…' : 'Dictate or type an observation…'}
+            placeholder={transcribingUpload ? (transcribeProgress || 'Transcribing recording…') : 'Dictate or type an observation…'}
             inputRef={inputRef}
           />
           </div>
