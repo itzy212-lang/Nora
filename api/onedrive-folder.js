@@ -6,14 +6,26 @@ const supabase = createClient(
 );
 
 async function getValidToken(userId) {
-  const { data: account, error } = await supabase
-    .from('email_accounts')
-    .select('*')
-    .eq('provider', 'outlook')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // Fixed 2026-09-25, real, confirmed bug found via direct database
+  // evidence (oauth_debug), reported live: user_integrations.user_id
+  // is a UUID column, but email_accounts.user_id is stored as the
+  // plain email string - two tables using the same field name for two
+  // different ID formats. The 2026-09-17 fix upstream (ProjectDetail.jsx
+  // -> createAOFolder) correctly switched to passing the UUID, since
+  // that's what user_integrations needs - but that same UUID then
+  // flows straight through into this function too, which queries
+  // email_accounts and has only ever matched on the email string.
+  // Fixing one broke the other. Resolved here by trying the value
+  // passed in first, then falling back to resolving it to the other
+  // format via auth.users if that finds nothing - robust to either
+  // an email or a UUID being passed in, rather than assuming one.
+  let account = await lookupEmailAccount(userId);
+  if (!account) {
+    const resolved = await resolveToOtherIdFormat(userId);
+    if (resolved) account = await lookupEmailAccount(resolved);
+  }
 
-  if (error || !account) throw new Error('No Outlook account found');
+  if (!account) throw new Error('No Outlook account found');
   if (account.reconnect_required) throw new Error('Outlook needs reconnecting');
 
   const expiresAt = account.token_expires_at ? new Date(account.token_expires_at).getTime() : 0;
@@ -44,6 +56,35 @@ async function getValidToken(userId) {
   }
 
   return account.access_token;
+}
+
+async function lookupEmailAccount(userId) {
+  const { data: account } = await supabase
+    .from('email_accounts')
+    .select('*')
+    .eq('provider', 'outlook')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return account || null;
+}
+
+async function resolveToOtherIdFormat(userId) {
+  // userId looks like a UUID -> resolve to its email; otherwise treat
+  // it as an email and resolve to its UUID.
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+  try {
+    if (looksLikeUuid) {
+      const { data } = await supabase.auth.admin.getUserById(userId);
+      return data?.user?.email || null;
+    } else {
+      const { data } = await supabase.auth.admin.listUsers();
+      const match = (data?.users || []).find(u => (u.email || '').toLowerCase() === userId.toLowerCase());
+      return match?.id || null;
+    }
+  } catch (e) {
+    console.warn('[onedrive-folder] Could not resolve user id format:', e.message);
+    return null;
+  }
 }
 
 function safeFolderName(value, fallback = 'Untitled') {
