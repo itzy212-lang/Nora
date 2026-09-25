@@ -396,6 +396,37 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     setSendingNote(false);
   }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex, state.currentUser]);
 
+  // Added 2026-09-24 — upload an existing recording (e.g. from a site visit
+  // recorded on a separate device/app) and transcribe it via the same
+  // Whisper pipeline live dictation already uses, then feed the text
+  // through handleSend exactly as if it had been dictated or typed.
+  const [transcribingUpload, setTranscribingUpload] = useState(false);
+  const uploadInputRef = useRef(null);
+  const handleUploadRecording = useCallback(async (file) => {
+    if (!file) return;
+    setTranscribingUpload(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', file, file.name);
+      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Transcription failed. Please try again.');
+        return;
+      }
+      if (!data.text?.trim()) {
+        alert('No speech detected in that recording.');
+        return;
+      }
+      await handleSend(data.text);
+    } catch (err) {
+      alert('Could not transcribe that recording: ' + (err.message || 'unknown error'));
+    } finally {
+      setTranscribingUpload(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
+  }, [handleSend]);
+
   const handleMicToggle = useCallback(() => {
     if (isRecording) {
       stopRecording();
@@ -1506,6 +1537,30 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
         {/* Input */}
         <div style={s.inputArea}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px' }}>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="audio/*,video/*"
+            style={{ display: 'none' }}
+            onChange={(e) => handleUploadRecording(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            onClick={() => uploadInputRef.current?.click()}
+            disabled={processing || sendingNote || transcribingUpload}
+            title="Upload an existing recording to transcribe"
+            style={{
+              flexShrink: 0, width: 36, height: 36, borderRadius: '50%',
+              border: '1px solid var(--border, #ddd)', background: 'var(--bg2, #fff)',
+              color: 'var(--text2, #555)', fontSize: 16, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 6,
+              opacity: transcribingUpload ? 0.6 : 1,
+            }}
+          >
+            {transcribingUpload ? '…' : '📎'}
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
           <ChatInputBar
             value={textInput}
             onChange={setTextInput}
@@ -1514,9 +1569,11 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             isRecording={isRecording}
             disabled={processing || sendingNote}
             loading={sendingNote}
-            placeholder="Dictate or type an observation…"
+            placeholder={transcribingUpload ? 'Transcribing recording…' : 'Dictate or type an observation…'}
             inputRef={inputRef}
           />
+          </div>
+          </div>
         </div>
       </div>
 
