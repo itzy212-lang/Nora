@@ -18,6 +18,42 @@ const SKIP_SENDERS = [
 
 const SKIP_FOLDERS = ['junk', 'spam', 'deleted', 'trash', 'junkemail'];
 
+// Jiten Wagjiani running joke - added on request, 2026-09-28. A
+// standing, good-natured bit with one specific named contact (Jiten
+// Wagjiani, jiten@jpw-arc.co.uk) who has apparently told Itzik more
+// than once, in person, that he isn't a fan of Nora. When a reply to
+// him is triggered specifically by Itzik being unavailable right now
+// (in a meeting, or out on a Schedule of Condition - reason 'meeting'
+// or 'soc' from computeSendEligibility) - the same "he's not free"
+// moment the joke is actually about - Nora acknowledges that running
+// joke briefly and warmly before giving the normal availability
+// information, and never uses the exact same line twice in a row.
+// Deliberately NOT routed through the Terra drafting call: this is a
+// fixed, pre-approved, one-off bit of office humour going to a real
+// external professional contact, not something to leave to per-call
+// generation - so the exact wording is controlled here. Picked
+// deterministically from the triggering email's own id, so nothing
+// extra needs to be stored anywhere to avoid repeats.
+// To switch this off, flip JITTEN_JOKE_ENABLED to false - nothing
+// else needs to change.
+const JITTEN_JOKE_ENABLED = true;
+const JITTEN_EMAIL = 'jiten@jpw-arc.co.uk';
+const JITTEN_JOKE_LINES = [
+  "Itzik did mention you've told him more than once that you're not really a fan of mine - I'll try not to take it personally!",
+  "I know you and I aren't exactly close, but I didn't want you left hanging all the same.",
+  "You've made it fairly clear over the years that I'm not your favourite part of this practice, but here I am anyway.",
+  "I'm well aware I'm not exactly your cup of tea, but someone has to let you know what's going on.",
+  "Word has reached me that you're still not sold on this whole AI-assistant thing - can't say I blame you, but here's the update all the same.",
+  "I get the sense you'd rather hear from Itzik directly than from me, and fair enough - but he's tied up, so you're stuck with me for now.",
+];
+
+function pickJitenJokeLine(seed) {
+  let hash = 0;
+  const str = String(seed || '');
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return JITTEN_JOKE_LINES[hash % JITTEN_JOKE_LINES.length];
+}
+
 // Mirrors src/utils/draftUtils.js's toHtml() exactly, kept in sync
 // deliberately rather than shared - this is a backend serverless
 // function and cannot import a frontend src/ utility. Needed because
@@ -92,6 +128,28 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   const todayStr = now.toISOString().slice(0, 10);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
+  // ── 0. Read gate ─────────────────────────────────────────────────
+  // Added 2026-09-28, on request: the simplest possible manual
+  // override. If Itzik has actually opened this specific email in the
+  // inbox (is_read is set the moment he does - see Inbox.jsx), Nora
+  // never auto-responds to it, full stop, no matter how long it then
+  // sits there - opening it is treated as "I've seen this, I'm
+  // handling it myself." This is checked first, before any diary or
+  // timing logic, because it's absolute and doesn't depend on any of
+  // that.
+  if (email.is_read) {
+    return { eligible: false, framing: null, reason: 'read' };
+  }
+
+  // Same-day back-and-forth: has there been a genuine exchange (at
+  // least one incoming AND one outgoing message in this thread) on
+  // today's calendar date? Computed once here and threaded through so
+  // the SOC/meeting framings below can acknowledge it specifically
+  // ("Itzik has been responding to you today") rather than giving the
+  // same generic "he's in a meeting" line regardless of context - see
+  // computeSameDayBackAndForth.
+  const sameDayBackAndForth = await computeSameDayBackAndForth(email, supabase, todayStr);
+
   if (!ownerUserId) {
     // Can't check anyone's diary or hours without knowing whose they
     // are - falls through to the silence-only fallback rather than
@@ -116,6 +174,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     return {
       eligible: true,
       framing: `Itzik is on annual leave until ${returnDateFmt}. He has intermittent access to email while away and will come back to you as soon as he can. Do not state a more specific time than this.`,
+      reason: 'holiday',
     };
   }
 
@@ -146,8 +205,16 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
       const returnDate = new Date(now);
       returnDate.setHours(0, returnTimeMin, 0, 0);
       const hours = await getBusinessHoursForDate(supabase, returnDate);
-      const framing = await buildReturnTimeFraming(returnDate, hours, 'soc');
-      return { eligible: true, framing };
+      let framing = await buildReturnTimeFraming(returnDate, hours, 'soc');
+      // Added 2026-09-28, on request: when Itzik has genuinely been
+      // corresponding with this exact person earlier today (not just
+      // "a reply is overdue" - an actual back-and-forth), acknowledge
+      // that directly rather than giving the same generic out-on-site
+      // line regardless of context.
+      if (sameDayBackAndForth) {
+        framing = 'Itzik has personally been corresponding with this person earlier today - acknowledge that directly (e.g. "I can see Itzik has been in touch with you today") before giving the rest of this. ' + framing;
+      }
+      return { eligible: true, framing, reason: 'soc', sameDayBackAndForth };
     }
   }
 
@@ -171,12 +238,13 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
 
   if (activeOther) {
     const isCall = activeOther.task_type === 'call';
-    return {
-      eligible: true,
-      framing: isCall
-        ? 'Itzik is in a telephone meeting right now. Say Nora will pass this along and he will message back between appointments. Do not describe the call itself.'
-        : 'Itzik is in a meeting right now. Say he will call back. Do not describe what kind of meeting.',
-    };
+    let framing = isCall
+      ? 'Itzik is in a telephone meeting right now. Say Nora will pass this along and he will message back between appointments. Do not describe the call itself.'
+      : 'Itzik is in a meeting right now. Say he will call back. Do not describe what kind of meeting.';
+    if (sameDayBackAndForth) {
+      framing = 'Itzik has personally been corresponding with this person earlier today - acknowledge that directly (e.g. "I can see Itzik has been in touch with you today") before giving the rest of this. ' + framing;
+    }
+    return { eligible: true, framing, reason: 'meeting', sameDayBackAndForth };
   }
 
   // ── 4. Outside business hours ───────────────────────────────────
@@ -184,11 +252,40 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   const isOpenNow = hoursToday && !hoursToday.off && nowMinutes >= toMinutes(hoursToday.open) && nowMinutes < toMinutes(hoursToday.close);
   if (!isOpenNow) {
     const framing = await buildOutOfHoursFraming(supabase, now, ownerUserId);
-    return { eligible: true, framing };
+    return { eligible: true, framing, reason: 'hours' };
   }
 
   // ── 5. Fallback: silence gate ────────────────────────────────────
   return computeSilenceFallback(email, supabase);
+}
+
+// Same-day back-and-forth: at least one incoming AND one outgoing
+// message in this thread that both landed on today's date. Added
+// 2026-09-28, on request, to distinguish "Itzik has genuinely been in
+// a live conversation with this person today" from a first-touch
+// email that simply happens to arrive while he's in a meeting - only
+// the former earns the "I can see Itzik has been responding to you"
+// acknowledgment above. Uses the same UTC-day boundary as the rest of
+// this function's todayStr, for consistency with the diary checks it
+// feeds.
+async function computeSameDayBackAndForth(email, supabase, todayStr) {
+  if (!email.thread_id) return false;
+  const { data: todayMsgs } = await supabase
+    .from('emails')
+    .select('direction, is_sent, received_at, sent_at')
+    .eq('thread_id', email.thread_id);
+  if (!todayMsgs?.length) return false;
+
+  let hasIncomingToday = false;
+  let hasOutgoingToday = false;
+  for (const m of todayMsgs) {
+    const ts = m.sent_at || m.received_at;
+    if (!ts) continue;
+    if (new Date(ts).toISOString().slice(0, 10) !== todayStr) continue;
+    if (m.direction === 'incoming') hasIncomingToday = true;
+    if (m.direction === 'outgoing' || m.is_sent) hasOutgoingToday = true;
+  }
+  return hasIncomingToday && hasOutgoingToday;
 }
 
 function toMinutes(hhmm) {
@@ -282,8 +379,20 @@ async function buildOutOfHoursFraming(supabase, now, ownerUserId) {
 // last message in this thread - fixed 2026-09-20 after finding the
 // original version had no real minimum wait for a never-replied
 // thread at all.
+//
+// Threshold raised 45 -> 60 minutes on 2026-09-28, on request: "if an
+// unread email has been non-responded to for an hour, then Nora sends
+// a response." This same threshold also covers the same-day
+// back-and-forth case when Itzik isn't actually in a meeting/SOC/etc
+// (those return eligible immediately via their own branch above,
+// before ever reaching here) - so a live but currently-uninterrupted
+// conversation simply waits out the same one hour of silence as any
+// other unread email, re-checked fresh on every cron cycle, rather
+// than needing a second, separate threshold.
+const SILENCE_THRESHOLD_MINUTES = 60;
+
 async function computeSilenceFallback(email, supabase) {
-  if (!email.thread_id) return { eligible: false, framing: null };
+  if (!email.thread_id) return { eligible: false, framing: null, reason: 'silence' };
 
   const { data: lastOutgoing } = await supabase
     .from('emails')
@@ -305,8 +414,9 @@ async function computeSilenceFallback(email, supabase) {
   // vague, no time estimate, since there is nothing real to base one
   // on.
   return {
-    eligible: minutesSinceReference >= 45,
+    eligible: minutesSinceReference >= SILENCE_THRESHOLD_MINUTES,
     framing: null,
+    reason: 'silence',
   };
 }
 
@@ -1029,33 +1139,64 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           (priorResponseContext) +
           (eligibility.framing ? '\n\nAVAILABILITY CONTEXT (this is why a response is going out now rather than Itzik replying personally - see the brain rule on when this belongs in the reply at all):\n' + eligibility.framing : '');
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'gpt-5.6-terra',
-            // Fixed: confirmed live, a real draft attempt failed with
-            // "Empty draft" - gpt-5.6-terra is a reasoning model, and
-            // internal reasoning tokens count against the same budget
-            // as the visible reply text. 600 was already tight for
-            // that combined budget, and the brain prompt has grown
-            // substantially tonight (diary/availability logic, the new
-            // process-explanation section) - genuinely more for the
-            // model to reason through before writing anything visible.
-            // Every other gpt-5.6-terra drafting call in this codebase
-            // already uses 2000-4000; 600 was a real outlier, not a
-            // deliberate choice.
-            max_completion_tokens: 2000,
-            messages: [
-              { role: 'developer', content: NORA_DRAFT_BRAIN },
-              { role: 'user', content: userPrompt },
-            ],
-          }),
-        });
+        // Jiten Wagjiani running joke override - see the constants
+        // block at the top of this file. Only fires when the reply is
+        // specifically triggered by Itzik being unavailable right now
+        // (reason 'soc' or 'meeting' - the exact moment the joke is
+        // about), so it never surfaces on an ordinary silence-gated
+        // reply to him. Bypasses the Terra call entirely - fixed,
+        // pre-approved wording, not per-call generation - but still
+        // goes through the normal draft-save / auto-send pipeline
+        // below like any other reply.
+        const isJitenAvailabilityMoment = JITTEN_JOKE_ENABLED &&
+          (email.sender_email || '').toLowerCase() === JITTEN_EMAIL &&
+          (eligibility.reason === 'soc' || eligibility.reason === 'meeting');
 
-        if (!response.ok) throw new Error('OpenAI ' + response.status);
-        const aiData = await response.json();
-        const rawDraftBody = aiData.choices?.[0]?.message?.content || '';
+        let rawDraftBody;
+        if (isJitenAvailabilityMoment) {
+          // Built directly here, not from eligibility.framing - that
+          // field is written as an instruction FOR Terra to turn into
+          // prose (e.g. "Say he will call back. Do not describe what
+          // kind of meeting."), not as literal reader-facing text, so
+          // it must never be sent to a real recipient as-is.
+          const firstName = (email.sender_name || '').split(' ')[0] || 'Jiten';
+          const jokeLine = pickJitenJokeLine(email.id);
+          const availabilityLine = eligibility.reason === 'soc'
+            ? "Itzik is currently out on a Schedule of Condition inspection and will be back in touch with you as soon as he's free."
+            : "Itzik is in a meeting right now and will get back to you as soon as he's out.";
+          const backAndForthLine = eligibility.sameDayBackAndForth
+            ? "I can see he's been in touch with you already today - "
+            : '';
+          rawDraftBody = `Hi ${firstName},\n\n${jokeLine} ${backAndForthLine}${availabilityLine}\n\nKind regards,\nNora\nOn behalf of Itzik Darel`;
+        } else {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gpt-5.6-terra',
+              // Fixed: confirmed live, a real draft attempt failed with
+              // "Empty draft" - gpt-5.6-terra is a reasoning model, and
+              // internal reasoning tokens count against the same budget
+              // as the visible reply text. 600 was already tight for
+              // that combined budget, and the brain prompt has grown
+              // substantially tonight (diary/availability logic, the new
+              // process-explanation section) - genuinely more for the
+              // model to reason through before writing anything visible.
+              // Every other gpt-5.6-terra drafting call in this codebase
+              // already uses 2000-4000; 600 was a real outlier, not a
+              // deliberate choice.
+              max_completion_tokens: 2000,
+              messages: [
+                { role: 'developer', content: NORA_DRAFT_BRAIN },
+                { role: 'user', content: userPrompt },
+              ],
+            }),
+          });
+
+          if (!response.ok) throw new Error('OpenAI ' + response.status);
+          const aiData = await response.json();
+          rawDraftBody = aiData.choices?.[0]?.message?.content || '';
+        }
         if (!rawDraftBody) throw new Error('Empty draft');
 
         // Added 2026-09-22, on request: a third, distinct outcome from
@@ -1417,3 +1558,18 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
     return res.status(500).json({ error: err.message });
   }
 }
+
+// Named exports for the pure/testable pieces of the eligibility and
+// Jiten-joke logic above - added 2026-09-28 alongside those changes so
+// they have real regression coverage (see
+// api/lib/__tests__/cron-auto-draft-eligibility.test.js). The default
+// export (the cron handler itself) and its Vercel config are
+// unaffected; these are additional, not replacements.
+export {
+  computeSendEligibility,
+  computeSameDayBackAndForth,
+  computeSilenceFallback,
+  pickJitenJokeLine,
+  JITTEN_EMAIL,
+  JITTEN_JOKE_LINES,
+};
