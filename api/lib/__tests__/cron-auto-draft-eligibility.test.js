@@ -6,6 +6,10 @@ import {
   pickJitenJokeLine,
   JITTEN_EMAIL,
   JITTEN_JOKE_LINES,
+  JITTEN_JOKE_ENABLED,
+  JITTEN_ONE_OFF_ENABLED,
+  JITTEN_ONE_OFF_LINE,
+  JITTEN_ONE_OFF_MARKER,
 } from '../../cron-auto-draft.js';
 
 // Minimal chainable mock of the subset of the Supabase query builder
@@ -144,5 +148,31 @@ describe('pickJitenJokeLine', () => {
 
   it('JITTEN_EMAIL is the expected contact', () => {
     expect(JITTEN_EMAIL).toBe('jiten@jpw-arc.co.uk');
+  });
+
+  it('none of the ongoing joke lines claim a long-running history', () => {
+    // On request, 2026-09-28: "it's not been years, it's just a
+    // recent thing" - regression guard against that phrasing
+    // creeping back in.
+    for (const line of JITTEN_JOKE_LINES) {
+      expect(line.toLowerCase()).not.toMatch(/over the years/);
+    }
+  });
+});
+
+describe('Jiten one-off - current configuration', () => {
+  it('the ongoing varying joke is paused while the one-off is live', () => {
+    expect(JITTEN_JOKE_ENABLED).toBe(false);
+  });
+
+  it('the one-off is enabled and has the exact requested wording', () => {
+    expect(JITTEN_ONE_OFF_ENABLED).toBe(true);
+    expect(JITTEN_ONE_OFF_LINE).toBe(
+      "A little birdie told me that you're not my biggest fan - that being said, I just thought I'd let you know that he's in a meeting and will get back to you shortly."
+    );
+  });
+
+  it('has a distinct marker so it can be detected as already-used and never fires twice', () => {
+    expect(JITTEN_ONE_OFF_MARKER).toBe('cron-auto-draft-jiten-oneoff');
   });
 });

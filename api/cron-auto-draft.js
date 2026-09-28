@@ -18,30 +18,44 @@ const SKIP_SENDERS = [
 
 const SKIP_FOLDERS = ['junk', 'spam', 'deleted', 'trash', 'junkemail'];
 
-// Jiten Wagjiani running joke - added on request, 2026-09-28. A
-// standing, good-natured bit with one specific named contact (Jiten
-// Wagjiani, jiten@jpw-arc.co.uk) who has apparently told Itzik more
-// than once, in person, that he isn't a fan of Nora. When a reply to
-// him is triggered specifically by Itzik being unavailable right now
-// (in a meeting, or out on a Schedule of Condition - reason 'meeting'
-// or 'soc' from computeSendEligibility) - the same "he's not free"
-// moment the joke is actually about - Nora acknowledges that running
-// joke briefly and warmly before giving the normal availability
-// information, and never uses the exact same line twice in a row.
-// Deliberately NOT routed through the Terra drafting call: this is a
-// fixed, pre-approved, one-off bit of office humour going to a real
-// external professional contact, not something to leave to per-call
-// generation - so the exact wording is controlled here. Picked
-// deterministically from the triggering email's own id, so nothing
-// extra needs to be stored anywhere to avoid repeats.
-// To switch this off, flip JITTEN_JOKE_ENABLED to false - nothing
-// else needs to change.
-const JITTEN_JOKE_ENABLED = true;
+// Jiten Wagjiani running joke - added on request, 2026-09-28, revised
+// same day per feedback. A good-natured, RECENT bit with one specific
+// named contact (Jiten Wagjiani, jiten@jpw-arc.co.uk) who has told
+// Itzik he isn't a fan of Nora - "recent," not "over the years," so
+// the wording must not imply a long-running history. Deliberately NOT
+// routed through the Terra drafting call: fixed, pre-approved wording
+// going to a real external professional contact, not left to per-call
+// generation.
+//
+// Two separate mechanisms, on request:
+//
+// 1. JITTEN_ONE_OFF - fires exactly once, on the very next incoming
+//    email from Jiten, unconditionally: regardless of
+//    computeSendEligibility's reason (meeting/SOC/silence/whatever),
+//    regardless of whether Itzik has personally been corresponding
+//    with him today, and regardless of the account's nora_auto_send
+//    setting - this one send is explicit, deliberate, and always
+//    goes out. Self-disabling: once a 'sent' email_auto_drafts row
+//    exists with generated_by JITTEN_ONE_OFF_MARKER, it never fires
+//    again (checked fresh each run, no separate flag to remember to
+//    flip). JITTEN_ONE_OFF_ENABLED is still there as a manual
+//    override if it needs pausing before it's used.
+//
+// 2. JITTEN_JOKE_ENABLED - the earlier ongoing, varying version
+//    (multiple lines, only on a genuine meeting/SOC busy moment).
+//    Paused (false) while the one-off runs first, per request - flip
+//    back to true to resume it, using JITTEN_JOKE_LINES/
+//    pickJitenJokeLine below, unchanged.
 const JITTEN_EMAIL = 'jiten@jpw-arc.co.uk';
+
+const JITTEN_ONE_OFF_ENABLED = true;
+const JITTEN_ONE_OFF_MARKER = 'cron-auto-draft-jiten-oneoff';
+const JITTEN_ONE_OFF_LINE = "A little birdie told me that you're not my biggest fan - that being said, I just thought I'd let you know that he's in a meeting and will get back to you shortly.";
+
+const JITTEN_JOKE_ENABLED = false;
 const JITTEN_JOKE_LINES = [
-  "Itzik did mention you've told him more than once that you're not really a fan of mine - I'll try not to take it personally!",
+  "Itzik did mention you've told him you're not really a fan of mine - I'll try not to take it personally!",
   "I know you and I aren't exactly close, but I didn't want you left hanging all the same.",
-  "You've made it fairly clear over the years that I'm not your favourite part of this practice, but here I am anyway.",
   "I'm well aware I'm not exactly your cup of tea, but someone has to let you know what's going on.",
   "Word has reached me that you're still not sold on this whole AI-assistant thing - can't say I blame you, but here's the update all the same.",
   "I get the sense you'd rather hear from Itzik directly than from me, and fair enough - but he's tied up, so you're stuck with me for now.",
@@ -552,6 +566,21 @@ export default async function handler(req, res) {
     }
     const ownAccountEmails = new Set(authUsersList.map(u => (u.email || '').toLowerCase()).filter(Boolean));
 
+    // Jiten one-off - checked once per run, not per email: has this
+    // already been sent? See the constants block at the top of this
+    // file. A 'sent' row with this exact marker means it's been used
+    // and must never fire again.
+    let jitenOneOffAlreadyUsed = false;
+    if (JITTEN_ONE_OFF_ENABLED) {
+      const { data: oneOffRows } = await supabase
+        .from('email_auto_drafts')
+        .select('id')
+        .eq('generated_by', JITTEN_ONE_OFF_MARKER)
+        .eq('status', 'sent')
+        .limit(1);
+      jitenOneOffAlreadyUsed = !!oneOffRows?.length;
+    }
+
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of scopedEmails) {
@@ -586,6 +615,94 @@ export default async function handler(req, res) {
 
       const skipReason = shouldSkip(email);
       if (skipReason) { results.skipped++; continue; }
+
+      // Jiten one-off - added on request, 2026-09-28: fires exactly
+      // once, on the very next incoming email from him, completely
+      // unconditionally - not gated by computeSendEligibility (no
+      // meeting/SOC/silence check), not gated by whether Itzik has
+      // been personally in touch with him today, and not gated by
+      // the account's nora_auto_send setting - explicitly requested
+      // to always send regardless of any of that. Placed here, before
+      // the AI classification and eligibility logic below, so none of
+      // it can suppress this one. Self-disabling via
+      // jitenOneOffAlreadyUsed (checked once before this loop started,
+      // and re-set the instant this succeeds) - it can only ever fire
+      // once, ever, across all future runs, and never again after
+      // that, until someone flips JITTEN_ONE_OFF_ENABLED back on for
+      // a fresh one-off deliberately.
+      if (JITTEN_ONE_OFF_ENABLED && !jitenOneOffAlreadyUsed && (email.sender_email || '').toLowerCase() === JITTEN_EMAIL) {
+        try {
+          const oneOffOwnerUserId = await resolveOwnerUserId(email.user_id);
+          const oneOffSenderUser = (authUsersList || []).find(u => u.id === oneOffOwnerUserId);
+          let oneOffSenderEmailForSend = oneOffSenderUser?.email || null;
+          if (!oneOffSenderEmailForSend && oneOffOwnerUserId) {
+            const { data: fetchedUser } = await supabase.auth.admin.getUserById(oneOffOwnerUserId);
+            oneOffSenderEmailForSend = fetchedUser?.user?.email || null;
+          }
+          const { data: oneOffInteg } = await supabase.from('user_integrations').select('email_provider').eq('user_id', oneOffOwnerUserId).limit(1).maybeSingle();
+          const oneOffIsGmail = oneOffInteg?.email_provider === 'gmail';
+
+          const oneOffBody = 'Hi ' + ((email.sender_name || '').split(' ')[0] || 'Jiten') + ',\n\n' + JITTEN_ONE_OFF_LINE + '\n\nKind regards,\nNora\nOn behalf of Itzik Darel';
+
+          const { data: savedOneOffDraft, error: oneOffSaveError } = await supabase.from('email_auto_drafts').insert({
+            email_id: email.id,
+            project_id: email.project_id || null,
+            thread_id: email.thread_id || null,
+            subject: 'Re: ' + (email.subject || ''),
+            body: oneOffBody,
+            to_email: email.sender_email,
+            to_name: email.sender_name,
+            status: 'pending',
+            generated_by: JITTEN_ONE_OFF_MARKER,
+            model: 'none - fixed text, not AI-generated',
+          }).select('id').single();
+          if (oneOffSaveError) throw oneOffSaveError;
+
+          const { data: oneOffSendData, error: oneOffSendError } = await supabase.functions.invoke(
+            oneOffIsGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
+            { body: {
+              user_id: oneOffIsGmail ? oneOffOwnerUserId : (email.user_id || null),
+              to_email: email.sender_email,
+              subject: 'Re: ' + (email.subject || ''),
+              body: toHtmlForSend(oneOffBody),
+              reply_to_message_id: email.id,
+            } }
+          );
+          if (oneOffSendError || oneOffSendData?.error) throw new Error(oneOffSendError?.message || oneOffSendData?.error || 'Send failed');
+
+          const oneOffRespondedAt = new Date().toISOString();
+          await supabase.from('emails').insert({
+            subject: 'Re: ' + (email.subject || ''),
+            body: toHtmlForSend(oneOffBody),
+            is_sent: true,
+            is_read: true,
+            direction: 'outgoing',
+            sender_email: oneOffSenderEmailForSend,
+            to_email: email.sender_email,
+            thread_id: email.thread_id || null,
+            project_id: email.project_id || null,
+            received_at: oneOffRespondedAt,
+            sent_at: oneOffRespondedAt,
+            created_at: oneOffRespondedAt,
+          });
+          await supabase.from('emails').update({
+            is_replied: true,
+            ai_auto_responded: true,
+            ai_auto_responded_at: oneOffRespondedAt,
+          }).eq('id', email.id);
+          await supabase.from('email_auto_drafts').update({ status: 'sent' }).eq('id', savedOneOffDraft.id);
+
+          jitenOneOffAlreadyUsed = true;
+          results.processed++;
+          results.drafted++;
+          console.log('[cron-auto-draft] Sent Jiten one-off joke reply for email', email.id);
+        } catch (oneOffErr) {
+          console.warn('[cron-auto-draft] Jiten one-off failed, falling through to normal handling:', oneOffErr.message);
+          // Left un-marked as used, and falls through to normal
+          // processing below rather than losing this email entirely.
+        }
+        if (jitenOneOffAlreadyUsed) { continue; }
+      }
 
       // Added 2026-09-20, on request: ai_category existed as a column
       // and was already referenced by shouldSkip() above, but nothing
@@ -1572,4 +1689,8 @@ export {
   pickJitenJokeLine,
   JITTEN_EMAIL,
   JITTEN_JOKE_LINES,
+  JITTEN_JOKE_ENABLED,
+  JITTEN_ONE_OFF_ENABLED,
+  JITTEN_ONE_OFF_LINE,
+  JITTEN_ONE_OFF_MARKER,
 };
