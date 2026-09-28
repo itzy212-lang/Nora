@@ -17,8 +17,12 @@
 export function sortAOsNumerically(list, addressField) {
   if (!Array.isArray(list)) return list;
   const streetNumber = (item) => {
+    // Address-like fields ONLY - never `name` (the owner's name), which
+    // almost never starts with a digit and would defeat the numeric sort
+    // for nearly every real record. `name` was wrongly checked first here
+    // until 2026-09-28; see aoUtils.test.js for the regression this covers.
     const addr = (addressField && item?.[addressField])
-      || item?.name || item?.premise || item?.address
+      || item?.premise || item?.address
       || item?.ao_address || item?.ao_premise_address
       || item?.reg_addr || item?.service_address || item?.serviceAddress || '';
     const match = String(addr).match(/^\s*(\d+)/);

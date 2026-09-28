@@ -8,6 +8,6 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['api/lib/__tests__/**/*.test.js'],
+    include: ['api/lib/__tests__/**/*.test.js', 'src/utils/__tests__/**/*.test.js'],
   },
 });
