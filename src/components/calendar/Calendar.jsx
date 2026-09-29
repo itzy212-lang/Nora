@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
-import { sortAOsNumerically } from '../../utils/aoUtils';
 import { saveAdjoiningOwners, syncSocToAO } from '../../utils/adjoiningOwners';
 
 const EVENT_TYPES = {
@@ -62,11 +61,48 @@ function aoKey(ao = {}) {
 }
 
 function getAOs(project = {}) {
-  return sortAOsNumerically(Array.isArray(project.aos) ? project.aos : []);
+  const aos = Array.isArray(project.aos) ? project.aos : [];
+  // Sort by the street number of the address actually shown in the
+  // dropdown (aoAddress), not aoUtils.js's generic field-priority chain.
+  // aoAddress here checks premise/reg_addr/address/ao_premise_address in
+  // a different order than sortAOsNumerically's default chain, so the two
+  // could disagree on which field to read for a given row - sorting by
+  // one field while displaying another is what made this list look
+  // randomly ordered. Non-numeric leads fall to the end (Infinity).
+  const streetNumber = (ao) => {
+    const addr = aoAddress(ao, project) || '';
+    const match = addr.match(/^\s*(\d+)/);
+    return match ? parseInt(match[1], 10) : Infinity;
+  };
+  return [...aos].sort((a, b) => {
+    const nA = streetNumber(a);
+    const nB = streetNumber(b);
+    if (nA !== nB) return nA - nB;
+    return (aoAddress(a, project) || '').localeCompare(aoAddress(b, project) || '');
+  });
 }
 
 function projectDisplay(project = {}) {
   return projectAddress(project) || clean(project.name || project.ref || project.id || 'Project');
+}
+
+// Sort by the street number of the address actually shown in the option
+// (projectDisplay), not by an internal ref code - sorting by a different
+// field than what's displayed is what made this list look randomly
+// ordered. Non-numeric leads fall to the end (Infinity), matching the
+// aoUtils.js convention used elsewhere for the same kind of list.
+function sortProjectsByAddress(projects = []) {
+  const streetNumber = (p) => {
+    const addr = projectDisplay(p) || '';
+    const match = addr.match(/^\s*(\d+)/);
+    return match ? parseInt(match[1], 10) : Infinity;
+  };
+  return [...(Array.isArray(projects) ? projects : [])].sort((a, b) => {
+    const nA = streetNumber(a);
+    const nB = streetNumber(b);
+    if (nA !== nB) return nA - nB;
+    return (projectDisplay(a) || '').localeCompare(projectDisplay(b) || '');
+  });
 }
 
 function findProject(projects = [], projectId) {
@@ -308,7 +344,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
           <Field label="Project">
             <select value={form.project_id} onChange={e => set('project_id', e.target.value)} style={inputStyle}>
               <option value="">No project</option>
-              {[...projects].sort((a,b) => { const na=parseInt((a.ref||'').replace(/\D/g,''),10)||0; const nb=parseInt((b.ref||'').replace(/\D/g,''),10)||0; return na-nb; }).map(p => (
+              {sortProjectsByAddress(projects).map(p => (
                 <option key={p.id} value={p.id}>{projectDisplay(p)}</option>
               ))}
             </select>
@@ -890,4 +926,9 @@ export default function Calendar({ onOpenProject }) {
     </div>
   );
 }
+
+// Exported for regression testing (see
+// src/components/calendar/__tests__/calendar-sort.test.js) - the default
+// export above is the connected React component, unchanged.
+export { getAOs, projectDisplay, projectAddress, aoAddress, sortProjectsByAddress };
 
