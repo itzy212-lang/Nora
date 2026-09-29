@@ -193,33 +193,68 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   }
 
   // ── 2. Today's SOC appointments, blanketed ─────────────────────
+  const SOC_DURATION_MIN = 90; // assumed, always - no real duration is ever recorded
+  const TRAVEL_BUFFER_MIN = 45;
   const { data: socTasks } = await supabase
     .from('tasks')
-    .select('time')
+    .select('time, project_id, ao_id')
     .eq('user_id', ownerUserId)
     .eq('task_type', 'soc')
     .eq('due_date', todayStr)
     .not('status', 'in', '(cancelled,complete)');
 
-  const socTimes = (socTasks || [])
-    .map(t => (t.time || '').match(/^(\d{1,2}):(\d{2})/))
-    .filter(Boolean)
-    .map(m => parseInt(m[1], 10) * 60 + parseInt(m[2], 10)); // minutes since midnight
+  const socEntries = (socTasks || [])
+    .map(t => {
+      const m = (t.time || '').match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return null;
+      return {
+        startMin: parseInt(m[1], 10) * 60 + parseInt(m[2], 10),
+        project_id: t.project_id || null,
+        ao_id: t.ao_id || null,
+      };
+    })
+    .filter(Boolean);
 
-  if (socTimes.length) {
-    const SOC_DURATION_MIN = 90; // assumed, always - no real duration is ever recorded
-    const TRAVEL_BUFFER_MIN = 45;
+  if (socEntries.length) {
+    const socTimes = socEntries.map(e => e.startMin);
     const first = Math.min(...socTimes);
     const last = Math.max(...socTimes);
     const blanketStart = first - TRAVEL_BUFFER_MIN;
     const blanketEnd = last + SOC_DURATION_MIN + TRAVEL_BUFFER_MIN;
 
     if (nowMinutes >= blanketStart && nowMinutes <= blanketEnd) {
-      const returnTimeMin = blanketEnd;
-      const returnDate = new Date(now);
-      returnDate.setHours(0, returnTimeMin, 0, 0);
-      const hours = await getBusinessHoursForDate(supabase, returnDate);
-      let framing = await buildReturnTimeFraming(returnDate, hours, 'soc');
+      // Added 2026-09-29, on request: if this email is from the exact
+      // property Itzik has today's SOC appointment for, the generic
+      // "he has site appointments booked" line looks odd - the sender
+      // already knows why he's unavailable, because it's their own
+      // appointment. See findSameAppointmentMatch for the matching
+      // rule (project-level only when the project has a single AO on
+      // file; otherwise requires the sender's email to match the
+      // specific AO the task is booked against, so a different
+      // leaseholder in the same building is never wrongly told he's
+      // at their door).
+      const sameAppointment = await findSameAppointmentMatch(email, socEntries, supabase);
+
+      let framing;
+      if (sameAppointment && nowMinutes < sameAppointment.startMin) {
+        // Still travelling there - safe to say so.
+        framing = 'This email is from the exact property Itzik has a Schedule of Condition appointment for today, and he is currently on his way there - this person already knows why he is unavailable. Say he is on his way to them now and may not see this email until afterwards. Do not give a specific return time, and do not mention any other appointment.';
+      } else if (sameAppointment && nowMinutes <= sameAppointment.startMin + SOC_DURATION_MIN) {
+        // Appointment assumed to be under way - safe to say he's there.
+        framing = 'This email is from the exact property where Itzik is currently carrying out today\'s Schedule of Condition appointment - this person already knows why he is unavailable. Say he is on site with them now and may not see this email until he is finished there. Do not give a specific return time, and do not mention any other appointment.';
+      } else {
+        // No match on the specific property, or past the assumed
+        // appointment end (the tail travel buffer) - the appointment
+        // may have overrun, so never claim he is on his way back or
+        // has finished here. Fall back to the existing generic
+        // return-time framing rather than guessing his location.
+        const returnTimeMin = blanketEnd;
+        const returnDate = new Date(now);
+        returnDate.setHours(0, returnTimeMin, 0, 0);
+        const hours = await getBusinessHoursForDate(supabase, returnDate);
+        framing = await buildReturnTimeFraming(returnDate, hours, 'soc');
+      }
+
       // Added 2026-09-28, on request: when Itzik has genuinely been
       // corresponding with this exact person earlier today (not just
       // "a reply is overdue" - an actual back-and-forth), acknowledge
@@ -300,6 +335,53 @@ async function computeSameDayBackAndForth(email, supabase, todayStr) {
     if (m.direction === 'outgoing' || m.is_sent) hasOutgoingToday = true;
   }
   return hasIncomingToday && hasOutgoingToday;
+}
+
+// Determines whether the incoming email is about the exact property
+// Itzik has a SOC appointment for today (see the "2. Today's SOC
+// appointments" block above), so the framing can say "he's on his way
+// to you / on site with you" instead of a generic return-time line.
+// Added 2026-09-29, after a real case where Nora told the occupant of
+// that day's SOC property that Itzik "has site appointments booked
+// this morning" - a strange thing to say to the one person who
+// already knows exactly why he's unavailable.
+//
+// Emails are only ever linked to a project, never to a specific
+// adjoining owner (there is no ao_id column on the emails table), so
+// project-level matching alone is only safe when the project has a
+// single AO on file - otherwise a different leaseholder in the same
+// building could be wrongly told Itzik is at their door for an
+// appointment that isn't theirs. With more than one AO on the
+// project, this requires the sender's email to be on file against the
+// specific AO the day's task is booked for.
+async function findSameAppointmentMatch(email, socEntries, supabase) {
+  if (!email.project_id) return null;
+  const candidates = socEntries.filter(e => e.project_id === email.project_id);
+  if (!candidates.length) return null;
+
+  const { data: projectAOs } = await supabase
+    .from('adjoining_owners')
+    .select('id, email, email2')
+    .eq('project_id', email.project_id);
+
+  if ((projectAOs || []).length <= 1) {
+    // Single AO (or none on file) - no ambiguity about which property
+    // this is, so any matching SOC task today is it.
+    return candidates[0];
+  }
+
+  // Multiple AOs on this project - only trust a match where the
+  // sender's email is actually on file against the same AO the task
+  // is booked for.
+  const senderEmail = (email.sender_email || '').trim().toLowerCase();
+  if (!senderEmail) return null;
+  const matchingAO = (projectAOs || []).find(ao =>
+    (ao.email || '').trim().toLowerCase() === senderEmail ||
+    (ao.email2 || '').trim().toLowerCase() === senderEmail
+  );
+  if (!matchingAO) return null;
+
+  return candidates.find(e => e.ao_id === matchingAO.id) || null;
 }
 
 function toMinutes(hhmm) {
@@ -1686,6 +1768,7 @@ export {
   computeSendEligibility,
   computeSameDayBackAndForth,
   computeSilenceFallback,
+  findSameAppointmentMatch,
   pickJitenJokeLine,
   JITTEN_EMAIL,
   JITTEN_JOKE_LINES,

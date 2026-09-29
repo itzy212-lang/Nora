@@ -3,6 +3,7 @@ import {
   computeSendEligibility,
   computeSameDayBackAndForth,
   computeSilenceFallback,
+  findSameAppointmentMatch,
   pickJitenJokeLine,
   JITTEN_EMAIL,
   JITTEN_JOKE_LINES,
@@ -157,6 +158,191 @@ describe('pickJitenJokeLine', () => {
     for (const line of JITTEN_JOKE_LINES) {
       expect(line.toLowerCase()).not.toMatch(/over the years/);
     }
+  });
+});
+
+describe('findSameAppointmentMatch', () => {
+  // Reported 2026-09-29: Nora told the occupant of that day's SOC
+  // property "he has site appointments booked this morning", which
+  // looked odd since they already knew why he was unavailable. These
+  // tests cover the matching rule that lets the framing instead say
+  // "he's on his way to you / on site with you" - safely, without
+  // ever telling the WRONG leaseholder in a multi-AO building that
+  // Itzik is at their door.
+
+  it('matches on project alone when the project has a single AO on file', async () => {
+    const email = { project_id: 'proj-1', sender_email: 'someone-not-on-file@example.com' };
+    const socEntries = [{ startMin: 600, project_id: 'proj-1', ao_id: 'ao-1' }];
+    const supabase = makeMockSupabase({
+      adjoining_owners: [{ data: [{ id: 'ao-1', email: '', email2: '' }], error: null }],
+    });
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toEqual(socEntries[0]);
+  });
+
+  it('with multiple AOs on the project, matches only the AO whose email matches the sender', async () => {
+    const email = { project_id: 'proj-1', sender_email: 'flat3@example.com' };
+    const socEntries = [
+      { startMin: 600, project_id: 'proj-1', ao_id: 'ao-flat-3' },
+    ];
+    const supabase = makeMockSupabase({
+      adjoining_owners: [{
+        data: [
+          { id: 'ao-flat-3', email: 'Flat3@Example.com', email2: '' },
+          { id: 'ao-flat-7', email: 'flat7@example.com', email2: '' },
+        ],
+        error: null,
+      }],
+    });
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toEqual(socEntries[0]);
+  });
+
+  it('also checks the AO email2 field', async () => {
+    const email = { project_id: 'proj-1', sender_email: 'secondary@example.com' };
+    const socEntries = [{ startMin: 600, project_id: 'proj-1', ao_id: 'ao-1' }];
+    const supabase = makeMockSupabase({
+      adjoining_owners: [{
+        data: [{ id: 'ao-1', email: 'primary@example.com', email2: 'secondary@example.com' }],
+        error: null,
+      }],
+    });
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toEqual(socEntries[0]);
+  });
+
+  it('never matches a different leaseholder in the same multi-AO building', async () => {
+    // The critical safety case: today's SOC is booked for flat 3, but
+    // flat 7's tenant (also on this project) is the one emailing.
+    // Must NOT say "he's on his way to you" to flat 7.
+    const email = { project_id: 'proj-1', sender_email: 'flat7@example.com' };
+    const socEntries = [{ startMin: 600, project_id: 'proj-1', ao_id: 'ao-flat-3' }];
+    const supabase = makeMockSupabase({
+      adjoining_owners: [{
+        data: [
+          { id: 'ao-flat-3', email: 'flat3@example.com', email2: '' },
+          { id: 'ao-flat-7', email: 'flat7@example.com', email2: '' },
+        ],
+        error: null,
+      }],
+    });
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toBeNull();
+  });
+
+  it('returns null with multiple AOs when the sender email is not on file at all', async () => {
+    const email = { project_id: 'proj-1', sender_email: 'unknown@example.com' };
+    const socEntries = [{ startMin: 600, project_id: 'proj-1', ao_id: 'ao-flat-3' }];
+    const supabase = makeMockSupabase({
+      adjoining_owners: [{
+        data: [
+          { id: 'ao-flat-3', email: 'flat3@example.com', email2: '' },
+          { id: 'ao-flat-7', email: 'flat7@example.com', email2: '' },
+        ],
+        error: null,
+      }],
+    });
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when the email has no project_id, without querying at all', async () => {
+    const supabase = makeMockSupabase({});
+    const result = await findSameAppointmentMatch({ project_id: null, sender_email: 'x@example.com' }, [], supabase);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when today's SOC tasks are all for a different project", async () => {
+    const email = { project_id: 'proj-1', sender_email: 'someone@example.com' };
+    const socEntries = [{ startMin: 600, project_id: 'proj-OTHER', ao_id: 'ao-1' }];
+    const supabase = makeMockSupabase({});
+    const result = await findSameAppointmentMatch(email, socEntries, supabase);
+    expect(result).toBeNull();
+  });
+});
+
+describe('computeSendEligibility - SOC same-property phrasing', () => {
+  // End-to-end coverage of the phase-aware wording through
+  // computeSendEligibility itself: "on his way" before the
+  // appointment, "on site" during it, and - per explicit instruction -
+  // never a "driving back" / "finished" claim in the tail travel
+  // buffer after, since the appointment may have overrun.
+
+  function socSetup({ nowOffsetFromStartMin, projectMatches = true }) {
+    const startHour = new Date().getHours();
+    // Build a start time relative to "now" using minutes-since-midnight
+    // math so the test is independent of wall-clock time.
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const startMin = nowMin - nowOffsetFromStartMin;
+    const hh = String(Math.floor(((startMin % 1440) + 1440) % 1440 / 60)).padStart(2, '0');
+    const mm = String((((startMin % 1440) + 1440) % 1440) % 60).padStart(2, '0');
+    return {
+      time: `${hh}:${mm}`,
+      project_id: projectMatches ? 'proj-1' : 'proj-OTHER',
+      ao_id: 'ao-1',
+    };
+  }
+
+  it('says "on his way" while still in the pre-appointment travel buffer', async () => {
+    const task = socSetup({ nowOffsetFromStartMin: -20 }); // starts in 20 min
+    const supabase = makeMockSupabase({
+      tasks: [
+        { data: [], error: null }, // holiday check
+        { data: [task], error: null }, // soc check
+      ],
+      adjoining_owners: [{ data: [{ id: 'ao-1', email: '', email2: '' }], error: null }],
+      emails: [{ data: [], error: null }], // same-day back-and-forth check
+    });
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 't1', project_id: 'proj-1', sender_email: 'occupant@example.com' },
+      supabase,
+      'owner-1'
+    );
+    expect(result.reason).toBe('soc');
+    expect(result.framing.toLowerCase()).toContain('on his way');
+  });
+
+  it('says "on site" once the appointment is assumed under way', async () => {
+    const task = socSetup({ nowOffsetFromStartMin: 30 }); // started 30 min ago
+    const supabase = makeMockSupabase({
+      tasks: [
+        { data: [], error: null },
+        { data: [task], error: null },
+      ],
+      adjoining_owners: [{ data: [{ id: 'ao-1', email: '', email2: '' }], error: null }],
+      emails: [{ data: [], error: null }],
+    });
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 't1', project_id: 'proj-1', sender_email: 'occupant@example.com' },
+      supabase,
+      'owner-1'
+    );
+    expect(result.reason).toBe('soc');
+    expect(result.framing.toLowerCase()).toContain('on site');
+  });
+
+  it('never claims he is driving back or finished in the tail travel buffer - falls back to the generic line', async () => {
+    const task = socSetup({ nowOffsetFromStartMin: 110 }); // 90-min appointment ended 20 min ago
+    const supabase = makeMockSupabase({
+      tasks: [
+        { data: [], error: null },
+        { data: [task], error: null },
+      ],
+      adjoining_owners: [{ data: [{ id: 'ao-1', email: '', email2: '' }], error: null }],
+      emails: [{ data: [], error: null }],
+      firm_settings: [{ data: { business_hours: null }, error: null }],
+    });
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 't1', project_id: 'proj-1', sender_email: 'occupant@example.com' },
+      supabase,
+      'owner-1'
+    );
+    expect(result.reason).toBe('soc');
+    expect(result.framing.toLowerCase()).not.toContain('driving back');
+    expect(result.framing.toLowerCase()).not.toContain('finished');
+    expect(result.framing.toLowerCase()).not.toContain('on his way');
+    expect(result.framing.toLowerCase()).not.toContain('on site');
   });
 });
 
