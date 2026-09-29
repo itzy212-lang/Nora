@@ -476,7 +476,12 @@ function WeekView({ currentDate, events, onDayClick, selectedDate }) {
 
         return (
           <div key={dateStr} onClick={() => onDayClick(dateStr)} style={{
-            background: '#fafafa', border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? '#d9d9d9' : '#ececec'}`,
+            background: '#fafafa',
+            // The outline tracks whichever day is selected (i.e. shown
+            // in the day panel below), independently of which day is
+            // actually today - today keeps its own indicator (the
+            // coloured date label below) regardless of selection.
+            border: `${isSelected ? '2px solid var(--blue)' : '1px solid #ececec'}`,
             borderRadius: 12, padding: 10, height: 140, overflow: 'hidden', cursor: 'pointer',
           }}>
             <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--blue)' : 'var(--text3)', marginBottom: 6 }}>
@@ -549,7 +554,11 @@ export default function Calendar({ onOpenProject }) {
 
   const [view, setView] = useState('month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(null);
+  // Defaults to today rather than null, so the selection outline (see
+  // MonthView/WeekView below) has somewhere to sit before the user has
+  // clicked any date - you're implicitly "looking at" today until you
+  // pick somewhere else.
+  const [selectedDate, setSelectedDate] = useState(todayYMD());
   const [taskEvents, setTaskEvents] = useState([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskModalDate, setTaskModalDate] = useState(todayYMD());
@@ -818,7 +827,14 @@ export default function Calendar({ onOpenProject }) {
               <div key={date} onClick={() => handleDayClick(date)} style={{
                 height: cellH,
                 background: '#fafafa',
-                border: `1px solid ${isToday ? 'var(--blue)' : isSelected ? '#d9d9d9' : '#ececec'}`,
+                // The outline tracks whichever day is selected (i.e.
+                // shown in the day panel below) and moves with it -
+                // it used to be tied to isToday instead, so today's
+                // cell always looked "selected" even after clicking a
+                // different date. The blue fill on the date number
+                // below is the separate, permanent "today" indicator
+                // and never moves.
+                border: `${isSelected ? '2px solid var(--blue)' : '1px solid #ececec'}`,
                 borderRadius: 10, padding: '5px 6px',
                 cursor: 'pointer', overflow: 'hidden',
                 opacity: faded ? 0.35 : 1,
