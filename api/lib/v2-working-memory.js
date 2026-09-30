@@ -274,6 +274,21 @@ function buildStructuredProjectFacts(projectBundle) {
     parts.push(`SOC reports:\n${socLines.join('\n')}`);
   }
 
+  // Added 2026-09-30, real gap: a true aggregate count, not derived
+  // from the capped email list this file may also be given (which
+  // only ever holds a relevance-ranked or most-recent subset) - see
+  // loadProjectEmailStats in api/ely-smart.js. Dates are given as
+  // plain ISO strings; formatting them for the reader is Terra's job,
+  // not this deterministic-facts layer's.
+  const stats = projectBundle.email_stats;
+  if (stats && stats.total) {
+    parts.push(
+      `Email correspondence on this project: ${stats.total} emails in total ` +
+      `(${stats.incoming} incoming, ${stats.outgoing} outgoing), ` +
+      `from ${stats.first || 'unknown'} to ${stats.last || 'unknown'}.`
+    );
+  }
+
   const text = parts.join('\n\n').trim();
   if (!text) return [];
   return [{ id: 'structured_project_facts', content: text, evidential_status: 'project_record' }];

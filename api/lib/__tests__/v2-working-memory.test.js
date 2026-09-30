@@ -350,6 +350,33 @@ describe('buildStructuredProjectFacts — replaces the crude JSON dump (spec tes
     expect(buildStructuredProjectFacts(null)).toEqual([]);
     expect(buildStructuredProjectFacts({})).toEqual([]);
   });
+
+  // Added 2026-09-30: a user asked Nora "how many emails have been sent
+  // in total on this project?" and she correctly said she couldn't -
+  // she'd only ever been given a capped subset of emails, never a true
+  // count. loadProjectEmailStats (api/ely-smart.js) now supplies a real
+  // aggregate, attached to the bundle as email_stats; these tests cover
+  // that this file surfaces it as plain, readable text.
+  it('includes a real email total when email_stats is present on the bundle', () => {
+    const withStats = {
+      ...projectBundle,
+      email_stats: { total: 173, incoming: 104, outgoing: 69, first: '2026-04-29T11:47:22+00:00', last: '2026-09-30T14:48:08+00:00' },
+    };
+    const result = buildStructuredProjectFacts(withStats);
+    const text = result[0].content;
+    expect(text).toContain('173 emails in total');
+    expect(text).toContain('104 incoming');
+    expect(text).toContain('69 outgoing');
+  });
+
+  it('omits the email-stats line entirely when there is nothing to report', () => {
+    const noStats = { ...projectBundle, email_stats: null };
+    const result = buildStructuredProjectFacts(noStats);
+    expect(result[0].content).not.toContain('emails in total');
+
+    const zeroStats = { ...projectBundle, email_stats: { total: 0, incoming: 0, outgoing: 0 } };
+    expect(buildStructuredProjectFacts(zeroStats)[0].content).not.toContain('emails in total');
+  });
 });
 
 describe('per-category budgets — one category cannot crowd out another (spec item 7)', () => {

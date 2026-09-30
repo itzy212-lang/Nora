@@ -601,6 +601,41 @@ async function loadProjectFacts(projectId) {
   };
 }
 
+// Cheap, deterministic email-count stats for a project. Added
+// 2026-09-30, real gap: a user asked Nora "how many emails have been
+// sent in total on this project?" and she correctly said she couldn't
+// - the only email data she's ever given is a capped semantic-search/
+// recent-list retrieval (see loadProjectFacts/loadProjectBundle
+// above), never a true aggregate count. This is a deliberately
+// separate, tiny query rather than asking Terra to count from a list
+// it was never given in full: count-only selects (head: true) fetch
+// no row bodies, so this is negligible extra cost on every request.
+async function loadProjectEmailStats(projectId) {
+  const sb = getSupabase();
+  if (!sb || !projectId) return null;
+  try {
+    const [totalRes, incomingRes, outgoingRes, firstRes, lastRes] = await Promise.all([
+      sb.from('emails').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+      sb.from('emails').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('direction', 'incoming'),
+      sb.from('emails').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('direction', 'outgoing'),
+      sb.from('emails').select('received_at').eq('project_id', projectId).order('received_at', { ascending: true }).limit(1),
+      sb.from('emails').select('received_at').eq('project_id', projectId).order('received_at', { ascending: false }).limit(1),
+    ]);
+    const total = totalRes.count || 0;
+    if (!total) return null; // nothing to report - keep it out of the prompt entirely
+    return {
+      total,
+      incoming: incomingRes.count || 0,
+      outgoing: outgoingRes.count || 0,
+      first: firstRes.data?.[0]?.received_at || null,
+      last: lastRes.data?.[0]?.received_at || null,
+    };
+  } catch (e) {
+    console.warn('[ely-smart] email stats load failed:', e.message);
+    return null;
+  }
+}
+
 // ── Semantic search across all project content ───────────────────────────
 async function semanticSearchProject(projectId, userPrompt, limit = 20) {
   const sb = getSupabase();
@@ -3402,7 +3437,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     // surface — genuinely irrelevant elsewhere.
     const needsClauseLibrary = body.surface === 'clause_request';
 
-    const [projectBundle, scopedEmailContext, brain, clauseLibraryMatches] = await Promise.all([
+    const [projectBundle, scopedEmailContext, brain, clauseLibraryMatches, emailStats] = await Promise.all([
       projectId
         ? (needsFullBundle ? loadProjectBundle(projectId) : loadProjectFacts(projectId))
         : Promise.resolve(null),
@@ -3415,7 +3450,12 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
       }) : Promise.resolve(suppliedEmailContext ? [suppliedEmailContext] : []),
       needsBrain ? loadBrain({ userId, projectId, surface: body.surface, modeHint }) : Promise.resolve(null),
       needsClauseLibrary ? matchClauseLibrary(body.prompt) : Promise.resolve([]),
+      projectId ? loadProjectEmailStats(projectId) : Promise.resolve(null),
     ]);
+    // Attached onto the bundle (rather than threaded through as a
+    // separate pipeline argument) so buildStructuredProjectFacts picks
+    // it up the same way it already reads every other project_* field.
+    if (projectBundle && emailStats) projectBundle.email_stats = emailStats;
 
     // ── Brain layer diagnostic logging ───────────────────────────────────────
     console.log('[ely-smart] brain layers:', JSON.stringify({
