@@ -535,6 +535,65 @@ async function computeSilenceFallback(email, supabase) {
   };
 }
 
+// Added 2026-09-30, on request, real confirmed gap: the Alex Frame
+// email had the exact instruction Nora needed ("please see attached
+// the PDF... sign and return just the two signature pages") sitting
+// in the body at raw-HTML character 5,806 - but every context slice
+// in this file (current email, thread history, classification,
+// appointment extraction) cuts the RAW HTML body at a flat character
+// count. Raw HTML from Outlook/Word is front-loaded with non-content
+// (a <style> block alone was 694 characters here) and every visible
+// word is wrapped in markup, so the same content that lands at
+// character ~1,900 once stripped to plain text doesn't surface until
+// 3x further into the raw HTML - meaning the real instruction was cut
+// off before Terra ever saw it. This strips tags/style/entities down
+// to plain text BEFORE any slicing happens, so the character budgets
+// below actually buy real content instead of markup.
+function htmlToPlainText(html) {
+  if (!html) return '';
+  let text = String(html);
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ');
+  text = text.replace(/<head[\s\S]*?<\/head>/gi, ' ');
+  text = text.replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n');
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<[^>]+>/g, ' ');
+  text = text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.replace(/\n[ \t]*\n+/g, '\n\n');
+  text = text.replace(/ *\n */g, '\n');
+  return text.trim();
+}
+
+// Excises standalone confidentiality/legal-disclaimer boilerplate
+// paragraphs from the plain text. Deliberately a removal from the
+// middle of the text, never a truncation from a cut point onward -
+// on request: a signature/disclaimer block sits BEFORE a reply's
+// quoted original message in the body (confirmed on the Alex Frame
+// email), so cutting everything after the first "Kind regards" would
+// destroy the very quoted context this whole fix exists to preserve.
+// Only short-to-medium paragraphs matching known boilerplate language
+// are dropped, so a genuinely long paragraph that happens to mention
+// "confidential" in passing is never at risk of being removed.
+function stripDisclaimerBoilerplate(text) {
+  if (!text) return text;
+  const disclaimerPattern = /(confidential|privileged|intended solely for|please notify the sender|do not open any attachment|is prohibited and may be unlawful|registered in england|registered office)/i;
+  return text
+    .split(/\n{2,}/)
+    .filter(p => !(disclaimerPattern.test(p) && p.length <= 600))
+    .join('\n\n');
+}
+
+function plainTextBody(row) {
+  return stripDisclaimerBoilerplate(htmlToPlainText(row?.body || ''));
+}
+
 export default async function handler(req, res) {
   // Fixed 2026-08-14: the x-vercel-cron header this checked for doesn't
   // exist in real Vercel invocations (confirmed against current Vercel
@@ -825,7 +884,7 @@ export default async function handler(req, res) {
             max_completion_tokens: 60,
             messages: [
               { role: 'developer', content: 'Classify this email for a Party Wall surveying practice. Respond with valid JSON only: {"category": "business"|"marketing"|"acknowledgment_only", "confident": true|false}. "business" means genuine correspondence related to a project, a party wall matter, a surveyor, an adjoining/building owner, an invoice/payment for real work, or similar, that contains a question, a request, or new information needing a response. "marketing" means sales outreach, promotional content, newsletters, or cold pitches unrelated to an actual matter this practice is handling. "acknowledgment_only" means the email is nothing more than a brief thank-you, closing acknowledgment, or confirmation of receipt (e.g. "thanks", "thanks Nora", "got it", "noted", "perfect, thank you") with no new question, request, or information that needs a further reply - this applies even if it is a real client replying to a real previous email. If genuinely unsure, set confident to false.' },
-              { role: 'user', content: 'FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + (email.subject || '') + '\nBODY: ' + (email.body || '').slice(0, 800) },
+              { role: 'user', content: 'FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + (email.subject || '') + '\nBODY: ' + plainTextBody(email).slice(0, 1500) },
             ],
           }),
         });
@@ -921,7 +980,7 @@ export default async function handler(req, res) {
               let label;
               if (t.direction === 'incoming') label = 'FROM: ' + (t.sender_name || t.sender_email);
               else label = (t.body || '').includes('On behalf of Itzik Darel') ? 'FROM NORA (auto-reply):' : 'FROM ITZIK (personally):';
-              return '[' + label + ']\n' + (t.body || '').slice(0, 500);
+              return '[' + label + ']\n' + plainTextBody(t).slice(0, 1200);
             }).join('\n\n---\n\n');
             projectContext = 'THREAD HISTORY (oldest first):\n' + threadText;
           }
@@ -1113,7 +1172,7 @@ export default async function handler(req, res) {
             const embRes = await fetch('https://api.openai.com/v1/embeddings', {
               method: 'POST',
               headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ model: 'text-embedding-3-small', input: (email.subject || '') + '\n' + (email.body || '').slice(0, 2000) }),
+              body: JSON.stringify({ model: 'text-embedding-3-small', input: (email.subject || '') + '\n' + plainTextBody(email).slice(0, 2000) }),
             });
             const embData = await embRes.json();
             const queryEmbedding = embData.data?.[0]?.embedding;
@@ -1351,7 +1410,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 
         const userPrompt = 'FROM: ' + (email.sender_name || email.sender_email) +
           '\nSUBJECT: ' + email.subject +
-          '\nEMAIL BODY:\n' + (email.body || '').slice(0, 2500) +
+          '\nEMAIL BODY:\n' + plainTextBody(email).slice(0, 6000) +
           recipientContext +
           (projectContext ? '\n\n' + projectContext : '') +
           (priorResponseContext) +
@@ -1488,7 +1547,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 // at all, since the model had no way to say "confirmed,
                 // but no time".
                 { role: 'developer', content: 'You extract confirmed appointment commitments from email threads. Respond only with valid JSON or null. If a day or a call/meeting has genuinely been committed to in the thread (not just proposed and left open), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM or null if no specific time was actually agreed", "duration_minutes": 30, "title": "Call with [name]", "description": "brief context"}. duration_minutes should reflect the real, stated length if one was given in the thread, and default to 30 (the minimum) if only a specific time was agreed with no stated length — never below 30. If no specific time was agreed at all, set time to null; do not invent one. If nothing has genuinely been committed to, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
-                { role: 'user', content: 'EMAIL FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + (email.body || '').slice(0, 1000) + '\n\n' + (projectContext || '') },
+                { role: 'user', content: 'EMAIL FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + plainTextBody(email).slice(0, 2000) + '\n\n' + (projectContext || '') },
               ],
             }),
           });
@@ -1795,4 +1854,7 @@ export {
   JITTEN_ONE_OFF_ENABLED,
   JITTEN_ONE_OFF_LINE,
   JITTEN_ONE_OFF_MARKER,
+  htmlToPlainText,
+  stripDisclaimerBoilerplate,
+  plainTextBody,
 };
