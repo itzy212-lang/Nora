@@ -155,6 +155,25 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     return { eligible: false, framing: null, reason: 'read' };
   }
 
+  // ── 0b. No project link ──────────────────────────────────────────
+  // Added 2026-09-30, on request, after a real and fairly embarrassing
+  // miss: an automated Supabase billing receipt
+  // (invoice+statements@supabase.com, "Payment received for ...
+  // invoice") got a full "Dear Supabase Team ... Kind regards, Nora,
+  // On behalf of Itzik Darel" auto-reply. It wasn't caught by
+  // SKIP_SENDERS (which only blocklists specific known patterns -
+  // inherently whack-a-mole) and the classifier labelled it "business"
+  // (true, but "business" never meant "needs a reply"). Nora's actual
+  // job is party-wall project correspondence, so an email with no
+  // project_id at all - not tied to any matter, client, surveyor or
+  // adjoining owner - should never get an automated reply, regardless
+  // of sender pattern or classification. This is a hard, deterministic
+  // rule (not a judgment call), so unlike the classifier it can't be
+  // fooled by a sender address nobody thought to blocklist.
+  if (!email.project_id) {
+    return { eligible: false, framing: null, reason: 'no_project' };
+  }
+
   // Same-day back-and-forth: has there been a genuine exchange (at
   // least one incoming AND one outgoing message in this thread) on
   // today's calendar date? Computed once here and threaded through so

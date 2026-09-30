@@ -64,14 +64,72 @@ describe('cron-auto-draft eligibility — read gate', () => {
   it('an unread email is not blocked by the read gate itself', async () => {
     // No ownerUserId -> falls through to the silence fallback, which
     // with no thread_id returns ineligible for its own separate
-    // reason - proves the read gate itself didn't fire.
+    // reason - proves the read gate itself didn't fire. Needs a
+    // project_id so the no_project gate (below) doesn't intercept it
+    // first and mask what this test is actually checking.
     const supabase = makeMockSupabase({});
     const result = await computeSendEligibility(
-      { is_read: false, thread_id: null },
+      { is_read: false, thread_id: null, project_id: 'proj-1' },
       supabase,
       null
     );
     expect(result.reason).toBe('silence');
+  });
+});
+
+describe('cron-auto-draft eligibility — no-project gate', () => {
+  // Added 2026-09-30, after a real miss: an automated Supabase billing
+  // receipt (invoice+statements@supabase.com) - not tied to any
+  // project - got a full "Dear Supabase Team ... On behalf of Itzik
+  // Darel" auto-reply. SKIP_SENDERS is a blocklist of known patterns
+  // and missed this address entirely; the classifier labelled it
+  // "business" (true, but not the same as "needs a reply"). An email
+  // with no project_id at all isn't tied to any party-wall matter, so
+  // it should never be eligible for an automated reply - a hard,
+  // deterministic rule rather than one more pattern to keep adding to.
+
+  it('is never eligible when the email has no project_id, regardless of anything else', async () => {
+    const supabase = makeMockSupabase({});
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 'thread-1', project_id: null },
+      supabase,
+      'owner-1'
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('no_project');
+  });
+
+  it('also fires with project_id simply absent (undefined), not just explicit null', async () => {
+    const supabase = makeMockSupabase({});
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 'thread-1' },
+      supabase,
+      'owner-1'
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('no_project');
+  });
+
+  it('takes priority over the silence fallback (would otherwise be eligible)', async () => {
+    const receivedAt = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+    const supabase = makeMockSupabase({ emails: [{ data: null, error: null }] });
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: 'thread-1', project_id: '', received_at: receivedAt },
+      supabase,
+      null
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('no_project');
+  });
+
+  it('does not block an otherwise-eligible email that does have a project_id', async () => {
+    const supabase = makeMockSupabase({});
+    const result = await computeSendEligibility(
+      { is_read: false, thread_id: null, project_id: 'proj-1' },
+      supabase,
+      null
+    );
+    expect(result.reason).not.toBe('no_project');
   });
 });
 
