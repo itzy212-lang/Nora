@@ -6,7 +6,7 @@ import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 
-function getProjectColour(project) {
+export function getProjectColour(project) {
   const aos = project.aos || [];
 
   // Grey — no AOs added
@@ -22,9 +22,19 @@ function getProjectColour(project) {
     const resolved = ['consent', 'complete', 'award_served'].includes(st);
     const awardServed = !!(ao.award_served_date || ao.awardServedDate);
     if (resolved || awardServed) return false;
-    // Dissent with surveyor appointed — not red regardless of deadlines
+    // Surveyor appointed (on either side) means dissent has already
+    // been acted on, whatever the stored status string says from
+    // there - 'dissent', 'award', or anything else further down the
+    // same chain. Fixed 2026-10-01, on request, real confirmed case:
+    // 8 Biggin Avenue's AOs had both progressed to status 'award'
+    // (surveyor appointed, SOC done, award being drafted) but were
+    // still shown red here because this check only ever excluded the
+    // literal string 'dissent' from the stale-consent-deadline rule -
+    // 'award' was never recognised as "already past that stage" here,
+    // even though the long-expired consent deadline is now completely
+    // expected, not a sign of anything stalled.
     const hasSurveyor = !!(ao.surv_name || ao.surveyorName || ao.ao_surveyor_name || ao.aoSurveyorName || ao.agreed_surveyor || ao.agreedSurveyor);
-    if (st === 'dissent' && hasSurveyor) return false;
+    if (hasSurveyor) return false;
     // 10(4)(b) served — not red
     if (ao.s104b_served_date || ao.s104bServedDate) return false;
     // Overdue consent deadline (only if not dissent)

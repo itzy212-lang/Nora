@@ -508,7 +508,16 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
               level = 'amber'; reason = `Award draft due in ${adDays}d`; action = 'serve_award';
             } else if (sdDays !== null && sdDays < 0 && !s104bServed && !hasSurv) {
               level = 'red'; reason = `Section 10 expired ${Math.abs(sdDays)}d ago`; action = 's104b';
-            } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && st !== 'consent' && !s10Served) {
+            } else if (cdDays !== null && cdDays < 0 && st !== 'dissent' && st !== 'consent' && !s10Served && !hasSurv) {
+              // Fixed 2026-10-01, on request, real confirmed case: 8
+              // Biggin Avenue's AOs had progressed to status 'award'
+              // (surveyor appointed, SOC done) but were still flagged
+              // red here, since this check excluded only the literal
+              // strings 'dissent'/'consent' - 'award' wasn't
+              // recognised as already past that stage, even though a
+              // surveyor being appointed (hasSurv, already used for
+              // the S10-expired check just above) means the long-
+              // expired consent deadline is expected, not stalled.
               level = 'red'; reason = `Consent deadline expired ${Math.abs(cdDays)}d ago`; action = 's10';
             } else if (st === 'dissent' && !hasSurv && daysSinceDissent !== null && daysSinceDissent >= 7) {
               level = 'red'; reason = `Dissent — no surveyor appointed (${daysSinceDissent}d)`; action = 'add_surveyor';
