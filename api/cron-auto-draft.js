@@ -1004,11 +1004,37 @@ export default async function handler(req, res) {
         if (email.project_id) {
           const { data: project } = await supabase
             .from('projects')
-            .select('ref, bo_address, bo_names, proposed_works, status')
+            .select('ref, bo_address, bo_names, proposed_works, status, role')
             .eq('id', email.project_id)
             .single();
           if (project) {
-            projectContext = 'PROJECT: Ref ' + project.ref + ' | ' + project.bo_address + ' | Building Owner: ' + project.bo_names + ' | Works: ' + (project.proposed_works || 'not specified') + '\n\n' + projectContext;
+            // Added 2026-10-01, real, confirmed case: a Building Owner
+            // asked "are you representing them as well?" (meaning the
+            // adjoining owner) in a thread whose own quoted content
+            // already said the AO had appointed their own, separate
+            // surveyor — and Nora answered "Yes, Itzik has been
+            // appointed to act on behalf of the adjoining owners."
+            // Sent, uncorrected, to the client. This is never answerable
+            // from loose inference over prose; it needs one explicit,
+            // structured, impossible-to-misread anchor. `role` on the
+            // project record is exactly that — who Itzik is actually
+            // instructed by on THIS project — so it's now stated here in
+            // plain words, every time, rather than left for the model to
+            // reconstruct from context. See REPRESENTATION below for how
+            // this is used.
+            const normalisedRole = (project.role || '').trim().toLowerCase();
+            let roleLine;
+            if (normalisedRole === 'ao' || normalisedRole === 'adjoining owner') {
+              roleLine = 'Itzik is acting as the appointed/agreed surveyor for the Adjoining Owner on this project — NOT for the Building Owner.';
+            } else if (normalisedRole === 'bo' || normalisedRole === 'building owner') {
+              roleLine = 'Itzik is acting as the appointed surveyor for the Building Owner on this project — NOT for any Adjoining Owner, even one who has appointed no surveyor of their own or asks him to.';
+            } else {
+              // role is missing/unrecognised in Nora's own records — never
+              // guess which side this is; REPRESENTATION below treats this
+              // the same as having no answer at all.
+              roleLine = 'not recorded in Nora\'s data — do not guess which side Itzik is acting for.';
+            }
+            projectContext = 'PROJECT: Ref ' + project.ref + ' | ' + project.bo_address + ' | Building Owner: ' + project.bo_names + ' | Works: ' + (project.proposed_works || 'not specified') + '\nWHO ITZIK ACTS FOR: ' + roleLine + '\n\n' + projectContext;
           }
 
           // Added 2026-09-12, on request, built into the correct
@@ -1238,6 +1264,14 @@ A draft can end with <<<NEEDS_FOLLOWUP>>>, <<<NEEDS_REVIEW>>>, both, or neither.
 - <<<NEEDS_FOLLOWUP>>>: there is a genuine, separate task Itzik still needs to do — most commonly, coming back with actual pricing that this draft correctly and deliberately did not state. The draft itself is complete, accurate, and fine to send exactly as written — nothing in it risks being wrong. This only creates a reminder task; it does NOT hold the email back from being sent.
 - <<<NEEDS_REVIEW>>>: some part of the draft's actual content is a guess or an assumption because the real answer wasn't available in the data provided (the FACTUAL RESOLUTION cautious framing above) — there's a genuine risk that what the email says could turn out to be incorrect. This DOES hold the email back for Itzik to check before it goes out, precisely because sending something possibly wrong on his behalf is the real risk, not merely leaving something for him to do later.
 Use whichever applies, both if genuinely both apply, or neither. Never use <<<NEEDS_REVIEW>>> just because a task also needs creating — being incomplete (deferring pricing, deferring a decision to Itzik) is not the same as being possibly wrong.
+
+REPRESENTATION / CONFLICT-OF-INTEREST QUESTIONS — TREAT WITH MORE CAUTION THAN ANY OTHER FACTUAL QUESTION:
+A real, confirmed, serious case: a Building Owner asked "are you representing them as well?" (meaning the adjoining owner) and Nora answered "Yes — Itzik has been appointed to act on behalf of the adjoining owners," sent with no review. This was wrong, and it is about the single most professionally and legally sensitive fact in any party wall matter — a surveyor acting for both sides of a dispute at once is a genuine conflict-of-interest problem under the Act. Getting it wrong, in writing, auto-sent, is a far more serious outcome than an ordinary wrong fact.
+Any question that is actually asking this — who Itzik acts for, whether he represents another named party, whether he's representing "both sides," whether he can act for someone he isn't already confirmed to act for — is answered ONLY from the WHO ITZIK ACTS FOR line given above, never from inference over the surrounding prose of the email or thread, however clearly worded that prose may seem, and never from a general sense of who seems to be corresponding with whom:
+- If WHO ITZIK ACTS FOR states he acts for the Building Owner, and the question asks whether he represents an Adjoining Owner (any of them, named or not, surveyor-appointed or not) — the answer is no, stated plainly and factually, exactly as given.
+- If it states he acts for an Adjoining Owner, the same applies in reverse for the Building Owner or another Adjoining Owner.
+- If it says the role is not recorded in Nora's data, or the question is about something the line above doesn't directly settle (e.g. being the agreed surveyor for one AO but asked about a different one specifically) — do not answer the representation question at all. Use the cautious FACTUAL RESOLUTION framing and mark <<<NEEDS_REVIEW>>> — being wrong here is worse than being unhelpfully cautious.
+This rule overrides GENERAL STATUS UPDATE REQUESTS and ordinary FACTUAL RESOLUTION wherever they would otherwise answer a representation question from AO status data or thread content instead.
 
 GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
 
