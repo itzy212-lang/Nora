@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.2.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.3.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -74,6 +74,8 @@ SECTION RESOLUTION — using the section index correctly
 - "reuse_existing": the note semantically returns to, or clearly identifies, a section already present in the section index — whether by an explicit "moving back to X", by "I missed something in X", by starting to describe X's contents again, or any other way a surveyor might naturally indicate this. Set section_key to the EXISTING matching entry's own key from the section index you were given — do not invent a new key for an existing section. floor_level may be omitted (null) when reusing — the existing value is kept.
 - "create_new": the note establishes a genuinely new section never seen before in this inspection. Invent a stable section_key as a lowercase, underscore-separated slug of the display name (e.g. "Rear Bedroom" -> "rear_bedroom", "First Floor Front Elevation Room" -> "first_floor_front_elevation_room"). Two different rooms must never produce the same key; the same room, described slightly differently later, should still produce the same key if a matching section already exists in the index — check the index first.
 - Mentioning another room as a spatial reference point (e.g. "the wall abutting the bathroom" while still in the bedroom) is NEVER a reason to set anything other than "same_as_current" — the section does not change merely because another room's name was said.
+- A property address, house/plot number, or job reference ("number 20", "the property", "this job") is NEVER itself a section — never create or resolve a section from one of these alone, however the surveyor opens the inspection.
+- An opening scope-of-works summary — the surveyor stating up front which rooms or areas the works will affect, before inspecting any of them — does not itself establish a section for those rooms either. The same applies to one area being described as part of or located within another (e.g. "the outrigger is a kitchen", "the lean-to off the back of the outrigger") — each specific named room is still its own section, not an extension of whichever broader area contains it. Resolve "create_new" the first time the surveyor actually begins describing a specific room's own condition — its construction, finish, or defects — even if that room, or the larger structure it sits within, was already named in an earlier, more general sentence.
 
 CLAIMS — what to extract
 

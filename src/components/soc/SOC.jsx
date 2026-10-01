@@ -62,31 +62,32 @@ function encodeWavChunk(samples, sampleRate) {
   return new Blob([view], { type: 'audio/wav' });
 }
 
-// Added 2026-10-01 — see the real bug this fixes at its call site in
-// handleUploadRecording below. Splits a block of transcribed text into
-// sentence-sized notes, grouping consecutive sentences up to roughly
-// MAX_NOTE_CHARS so a long recording doesn't turn into one API round
-// trip per sentence. This only decides where to CUT the text — it makes
-// no judgment about room/section identity or meaning; that is left
-// entirely to the live semantic processor downstream, exactly as it
-// already is for an ordinary dictated note.
-const MAX_NOTE_CHARS = 400;
+// Added 2026-10-01, tightened the same day on real evidence from 20
+// Selborne Road — see the call site in handleUploadRecording below.
+// Splits a block of transcribed text into one note PER SENTENCE. This
+// only decides where to CUT the text — it makes no judgment about
+// room/section identity or meaning; that is left entirely to the live
+// semantic processor downstream, exactly as it already is for an
+// ordinary dictated note.
+//
+// This originally grouped several consecutive sentences into each note
+// (up to ~400 characters) to cut down on API round trips. Confirmed
+// live that this was still wrong: the live processor resolves section
+// identity once for the ENTIRE note it's given, so whenever a room-
+// transition sentence ("Moving into the lean-to...") landed in the
+// middle of a grouped note alongside unrelated sentences either side of
+// it, the transition got diluted and the whole note — transition
+// included — was kept under whatever section was already active. On 20
+// Selborne Road this meant "Moving into the lean-to off the back of the
+// outrigger." and two separate "Moving back into the kitchen" sentences
+// never triggered a section change at all, even though a plainer
+// transition later in the same recording ("Moving to the external rear
+// elevation") did. One sentence per note removes the ambiguity: a
+// transition sentence is never sharing a note with anything else, so it
+// gets an undiluted section-resolution call every time.
 export function splitTranscriptIntoNotes(text) {
   const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [text];
-  const notes = [];
-  let current = '';
-  for (const raw of sentences) {
-    const sentence = raw.trim();
-    if (!sentence) continue;
-    if (current && current.length + sentence.length + 1 > MAX_NOTE_CHARS) {
-      notes.push(current);
-      current = sentence;
-    } else {
-      current = current ? `${current} ${sentence}` : sentence;
-    }
-  }
-  if (current) notes.push(current);
-  return notes;
+  return sentences.map(s => s.trim()).filter(Boolean);
 }
 
 export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, onBack }) {
