@@ -194,6 +194,41 @@ describe('computeSilenceFallback — one-hour threshold', () => {
   });
 });
 
+// Added 2026-10-01, on request: a thread with genuine same-day
+// back-and-forth means Itzik is actively engaged and likely to reply
+// himself soon, so it gets a longer 2-hour grace period rather than
+// the ordinary 1-hour default used for a thread with no current
+// engagement.
+describe('computeSilenceFallback — two-hour threshold for an active same-day thread', () => {
+  it('does NOT fire at the ordinary one-hour mark when sameDayBackAndForth is true', async () => {
+    const receivedAt = new Date(Date.now() - 75 * 60 * 1000).toISOString();
+    const supabase = makeMockSupabase({ emails: [{ data: null, error: null }] });
+    const result = await computeSilenceFallback({ thread_id: 't1', received_at: receivedAt }, supabase, true);
+    expect(result.eligible).toBe(false);
+  });
+
+  it('is not yet eligible just under two hours in when sameDayBackAndForth is true', async () => {
+    const receivedAt = new Date(Date.now() - 119 * 60 * 1000).toISOString();
+    const supabase = makeMockSupabase({ emails: [{ data: null, error: null }] });
+    const result = await computeSilenceFallback({ thread_id: 't1', received_at: receivedAt }, supabase, true);
+    expect(result.eligible).toBe(false);
+  });
+
+  it('is eligible once a full two hours has passed when sameDayBackAndForth is true', async () => {
+    const receivedAt = new Date(Date.now() - 121 * 60 * 1000).toISOString();
+    const supabase = makeMockSupabase({ emails: [{ data: null, error: null }] });
+    const result = await computeSilenceFallback({ thread_id: 't1', received_at: receivedAt }, supabase, true);
+    expect(result.eligible).toBe(true);
+  });
+
+  it('still uses the ordinary one-hour threshold when sameDayBackAndForth is false/omitted', async () => {
+    const receivedAt = new Date(Date.now() - 75 * 60 * 1000).toISOString();
+    const supabase = makeMockSupabase({ emails: [{ data: null, error: null }] });
+    const result = await computeSilenceFallback({ thread_id: 't1', received_at: receivedAt }, supabase, false);
+    expect(result.eligible).toBe(true);
+  });
+});
+
 describe('pickJitenJokeLine', () => {
   it('always returns one of the approved joke lines', () => {
     for (const seed of ['a', 'email-id-123', 'another-id', '', 'z']) {

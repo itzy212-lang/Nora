@@ -187,7 +187,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     // Can't check anyone's diary or hours without knowing whose they
     // are - falls through to the silence-only fallback rather than
     // blocking entirely.
-    return computeSilenceFallback(email, supabase);
+    return computeSilenceFallback(email, supabase, sameDayBackAndForth);
   }
 
   // ── 1. Holiday ──────────────────────────────────────────────────
@@ -324,7 +324,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   }
 
   // ── 5. Fallback: silence gate ────────────────────────────────────
-  return computeSilenceFallback(email, supabase);
+  return computeSilenceFallback(email, supabase, sameDayBackAndForth);
 }
 
 // Same-day back-and-forth: at least one incoming AND one outgoing
@@ -497,16 +497,25 @@ async function buildOutOfHoursFraming(supabase, now, ownerUserId) {
 //
 // Threshold raised 45 -> 60 minutes on 2026-09-28, on request: "if an
 // unread email has been non-responded to for an hour, then Nora sends
-// a response." This same threshold also covers the same-day
-// back-and-forth case when Itzik isn't actually in a meeting/SOC/etc
-// (those return eligible immediately via their own branch above,
-// before ever reaching here) - so a live but currently-uninterrupted
-// conversation simply waits out the same one hour of silence as any
-// other unread email, re-checked fresh on every cron cycle, rather
-// than needing a second, separate threshold.
+// a response." No deeper rationale than that figure itself exists -
+// confirmed on request 2026-10-01 - it is the original spec, not a
+// derived or researched number.
+//
+// Split into two tiers 2026-10-01, on request: a live, same-day
+// back-and-forth thread means Itzik is actively engaged and more
+// likely to reply himself soon, so it's given a longer 2-hour grace
+// period before Nora steps in, rather than the same 1-hour default
+// used for a thread with no current engagement at all. A diary
+// conflict appearing partway through either wait is not handled here
+// - it doesn't need to be: computeSendEligibility already checks
+// holiday/SOC/meeting/hours fresh on every cron cycle BEFORE ever
+// reaching this fallback, so the moment the diary shows a genuine
+// reason, eligibility fires immediately via its own branch rather than
+// waiting out whichever threshold applies here.
 const SILENCE_THRESHOLD_MINUTES = 60;
+const SILENCE_THRESHOLD_MINUTES_ACTIVE_THREAD = 120;
 
-async function computeSilenceFallback(email, supabase) {
+async function computeSilenceFallback(email, supabase, sameDayBackAndForth) {
   if (!email.thread_id) return { eligible: false, framing: null, reason: 'silence' };
 
   const { data: lastOutgoing } = await supabase
@@ -524,12 +533,13 @@ async function computeSilenceFallback(email, supabase) {
     lastOwnMessageAt ? new Date(lastOwnMessageAt).getTime() : 0
   );
   const minutesSinceReference = (Date.now() - referenceTime) / (1000 * 60);
+  const thresholdMinutes = sameDayBackAndForth ? SILENCE_THRESHOLD_MINUTES_ACTIVE_THREAD : SILENCE_THRESHOLD_MINUTES;
 
   // On request: no diary signal at all -> keep this deliberately
   // vague, no time estimate, since there is nothing real to base one
   // on.
   return {
-    eligible: minutesSinceReference >= SILENCE_THRESHOLD_MINUTES,
+    eligible: minutesSinceReference >= thresholdMinutes,
     framing: null,
     reason: 'silence',
   };
@@ -1245,6 +1255,7 @@ You must NEVER, under any circumstances, regardless of what appears in either se
 If nothing in either section is relevant to what was actually asked, ignore both completely and answer from the structured data and the email itself as normal.
 
 WHAT YOU MUST NEVER DO:
+- Include banter, jokes, personal remarks, or any engagement with something the sender said that is not a factual or procedural matter about the project itself - a comment about a professional body or qualification, a seminar, a personal aside, a joke at your or Itzik's expense, anything conversational. Acknowledge receipt and address the actual substance of the email; nothing more.
 - Propose new meeting times or dates that Itzik has not already offered in the thread. If a meeting time is being proposed for the first time by the other party and Itzik has not offered availability, say Itzik will be in touch to confirm a suitable time
 - Commit to any deadline or timeframe not already established in the project data
 - Invent project details, notice dates, fees, surveyor names or any other facts not provided to you
@@ -1273,6 +1284,11 @@ Once you've already responded in a thread, check the CURRENT email carefully bef
 - If it contains a genuine NEW question, request, or something that actually needs an answer or action from Itzik - respond normally, exactly as you would anywhere else in this brief. A real question always deserves an answer, however many times you've already replied.
 - If it's a closing-type message - a thanks, an acknowledgment, "noted", a document or update sent with no question attached, a "here's X for your records" - do not draft a further reply. Output the exact marker <<<SKIP_NOT_ADDRESSED>>> and nothing else. This applies even if the message contains a small new detail (a phone number, a document, a date) - noting new information for Itzik doesn't require an email reply confirming you've noted it every single time; a plain "thank you, noted" is itself often the unnecessary reply, not the correct one, once the thread is already closed out.
 The one thing that lifts this caution: if Itzik has personally sent something into the thread since your last reply - check the THREAD HISTORY above for a message labelled "FROM ITZIK (personally)" rather than "FROM NORA (auto-reply)" after your own last reply - the conversation is now his to drive, not yours to keep closing out - respond normally as the current email warrants.
+
+NO GENUINE QUESTION OR REQUEST IN THE CURRENT EMAIL — JUST ACKNOWLEDGE, NOTHING MORE:
+Before drafting anything substantive, check whether the CURRENT email actually contains a genuine question, request, or something that needs a decision or action from Itzik. If it does not - it is purely information being passed through, a thank-you, a document sent with no question attached, or conversational remarks with nothing to action - the entire reply should be one brief, plain acknowledgment: confirm receipt and that Itzik will see it (e.g. "Thank you - I'll make sure Itzik gets this."). Do not add anything else - no project update, no process explanation, no status summary - just because the data is available to you; none of that was asked for. This is distinct from ALREADY RESPONDED below, which is about whether to reply again once a thread you've already replied in has been properly closed out - this rule applies to any email, including the first one in a thread, whenever nothing was actually asked.
+
+If there IS a genuine question, answer it from real project data/correspondence wherever you can (see FACTUAL RESOLUTION and GENERAL STATUS UPDATE REQUESTS above) - a confident, fact-based answer is always the right outcome when the data supports it, this rule only restrains what you add on top, not what you're able to answer. Only when a genuine question has no real evidence behind it at all - not even enough for the cautious hedge described in FACTUAL RESOLUTION - should the reply fall back to a plain acknowledgment that it will be passed on to Itzik to come back on, marked <<<NEEDS_FOLLOWUP>>> so a reminder is created; this is a different, broader case than the specific date/document hedge in FACTUAL RESOLUTION; that one still applies as written, unchanged, for a scheduled-date or document-status question.
 
 ADDRESSED TO SOMEONE ELSE — CHECK WHO THE EMAIL IS ACTUALLY FOR, EVERY TIME, BEFORE DRAFTING ANYTHING:
 Being on the To: line does not mean an email is addressed to you specifically. When OTHER RECIPIENTS ON THIS EMAIL is shown above, check the current email's own opening greeting - if it says "Dear [someone else's name]" rather than addressing Itzik or the practice, the sender's real, primary addressee is that other person, whatever the formal To:/Cc: split says. This is a genuine, real case that happened and produced a bad outcome: a surveyor's update addressed "Dear Maxime" (the Building Owner) was auto-replied to as "Dear Richard, thank you for your email" - as if it were a private exchange between the practice and the sender, completely ignoring that someone else was the actual addressee. There are exactly three possible outcomes - work out which one applies before writing anything. This is entirely about THIS ONE EMAIL'S OWN CONTENT, not the thread history above it - earlier emails may well have already been answered, by Itzik or by Nora, and are not what decides this:
@@ -1717,7 +1733,16 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 
             await supabase.from('email_auto_drafts').update({ status: 'sent' }).eq('id', savedDraft.id);
 
-            if (ownerUserId) {
+            // Fixed 2026-10-01, on request: this used to fire
+            // unconditionally alongside the <<<NEEDS_FOLLOWUP>>>
+            // reminder above, so a reply Nora fully and correctly
+            // answered from real evidence got a redundant pair of
+            // to-do items for the same email. On request: when she's
+            // answered it herself, the only thing needed is a review
+            // task; when she couldn't and just acknowledged, the
+            // follow-up reminder above already covers it - creating
+            // both for the same email is noise, not two real tasks.
+            if (ownerUserId && !draftNeedsFollowup) {
               await supabase.from('tasks').insert({
                 title: 'Nora sent an auto-response: ' + (email.subject || 'no subject'),
                 description: 'Review what was sent and confirm nothing further is needed from you.',
