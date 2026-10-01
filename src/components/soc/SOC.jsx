@@ -62,6 +62,33 @@ function encodeWavChunk(samples, sampleRate) {
   return new Blob([view], { type: 'audio/wav' });
 }
 
+// Added 2026-10-01 — see the real bug this fixes at its call site in
+// handleUploadRecording below. Splits a block of transcribed text into
+// sentence-sized notes, grouping consecutive sentences up to roughly
+// MAX_NOTE_CHARS so a long recording doesn't turn into one API round
+// trip per sentence. This only decides where to CUT the text — it makes
+// no judgment about room/section identity or meaning; that is left
+// entirely to the live semantic processor downstream, exactly as it
+// already is for an ordinary dictated note.
+const MAX_NOTE_CHARS = 400;
+export function splitTranscriptIntoNotes(text) {
+  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [text];
+  const notes = [];
+  let current = '';
+  for (const raw of sentences) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+    if (current && current.length + sentence.length + 1 > MAX_NOTE_CHARS) {
+      notes.push(current);
+      current = sentence;
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+    }
+  }
+  if (current) notes.push(current);
+  return notes;
+}
+
 export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, onBack }) {
   const { state } = useApp();
   const projects = state.projects || [];
@@ -373,54 +400,26 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // ── Submit a note — saves directly to ai_messages ───────────────────────
   const [sendingNote, setSendingNote] = useState(false);
 
-  const handleSend = useCallback(async (overrideText) => {
-    const userContent = (overrideText ?? textInput).trim();
-    if (!userContent) return;
-    // Auto-create session on first note if none exists
-    let newSessionId = null;
-    if (!socSessionId) {
-      const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
-      const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
-      if (!projectId || !aoId) {
-        alert('Please select an Adjoining Owner before dictating.');
-        return;
-      }
-      try {
-        newSessionId = await initSession(aoId, aoAddr, true); // force new session
-      } catch (err) {
-        alert('Could not create SOC session. Please try again.');
-        return;
-      }
-      if (!newSessionId) {
-        alert('SOC session is not ready yet. Please try again.');
-        return;
-      }
-    }
-    if (false) { // removed old error path
-      const reason = '';
-      alert(reason);
-      return;
-    }
-
+  // Extracted 2026-10-01 from what used to be the body of handleSend
+  // below, with no behavioural change to that path, so the
+  // upload-a-recording flow further down can save several notes in
+  // sequence against one session without going through handleSend's own
+  // React-state-closure session lookup (which — being a useCallback
+  // closure — would still see the *old* socSessionId value, null, on
+  // every iteration of a tight loop, since nothing re-renders between
+  // awaited calls; that would have silently created a brand-new SOC
+  // session, via forceNew, for every single note). Sessions are instead
+  // threaded through explicitly here.
+  const saveNoteToSession = useCallback(async (sessionId, content) => {
     const msgId = uid();
-    setMessages(prev => [...prev, { id: msgId, role: 'user', content: userContent }]);
-    setTextInput('');
-    // Fixed 2026-09-19, Phase C: this request now genuinely waits for
-    // live semantic processing (a real model call) rather than
-    // returning near-instantly as it did when process-soc-note.js was
-    // fire-and-forget. Without this, the input gave no feedback during
-    // a now-multi-second wait — a real, if minor, UX regression the
-    // architecture change would otherwise have introduced silently.
-    setSendingNote(true);
-
-    // Save via API route (service-role key required)
+    setMessages(prev => [...prev, { id: msgId, role: 'user', content }]);
     const saveRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'save_note',
-        session_id: newSessionId || socSessionId,
-        content: userContent,
+        session_id: sessionId,
+        content,
         project_id: projectId || null,
         user_id: state.currentUser?.id || state.currentUser?.email,
       }),
@@ -448,8 +447,43 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       console.error('[SOC] save_note failed:', err);
       setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
     }
+  }, [projectId, state.currentUser]);
+
+  const handleSend = useCallback(async (overrideText) => {
+    const userContent = (overrideText ?? textInput).trim();
+    if (!userContent) return;
+    // Auto-create session on first note if none exists
+    let newSessionId = null;
+    if (!socSessionId) {
+      const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+      const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+      if (!projectId || !aoId) {
+        alert('Please select an Adjoining Owner before dictating.');
+        return;
+      }
+      try {
+        newSessionId = await initSession(aoId, aoAddr, true); // force new session
+      } catch (err) {
+        alert('Could not create SOC session. Please try again.');
+        return;
+      }
+      if (!newSessionId) {
+        alert('SOC session is not ready yet. Please try again.');
+        return;
+      }
+    }
+
+    setTextInput('');
+    // Fixed 2026-09-19, Phase C: this request now genuinely waits for
+    // live semantic processing (a real model call) rather than
+    // returning near-instantly as it did when process-soc-note.js was
+    // fire-and-forget. Without this, the input gave no feedback during
+    // a now-multi-second wait — a real, if minor, UX regression the
+    // architecture change would otherwise have introduced silently.
+    setSendingNote(true);
+    await saveNoteToSession(newSessionId || socSessionId, userContent);
     setSendingNote(false);
-  }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex, state.currentUser]);
+  }, [textInput, socSessionId, projectId, selectedAO, selectedAOIndex, state.currentUser, initSession, saveNoteToSession]);
 
   // Added 2026-09-24 — upload an existing recording (e.g. from a site visit
   // recorded on a separate device/app) and transcribe it via the same
@@ -503,7 +537,48 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         alert('No speech detected in that recording.');
         return;
       }
-      await handleSend(fullText);
+
+      // Fixed 2026-10-01, real bug found live on 20 Selborne Road: this
+      // used to hand the WHOLE transcript to handleSend as one note. The
+      // live semantic processor (process-soc-note.js) resolves which
+      // section/room a note belongs to once per note it's given — that's
+      // how an ordinary dictation session ends up correctly split by
+      // room: the surveyor starts/stops the mic once per observation, so
+      // each recording is its own note, and the model tracks the room
+      // transitions note-by-note as the session progresses. A single
+      // continuous site-visit recording covering several rooms, submitted
+      // as one note, only ever gets ONE section decision from the model
+      // for everything in it — confirmed live: 32 observations spanning
+      // the kitchen, lean-to, rear elevation, landing and bedroom were
+      // all filed under "Kitchen", the only section ever resolved.
+      //
+      // This splits the transcript back into sentence-sized notes before
+      // sending — purely a note-boundary mechanism, deciding nothing
+      // about what anything MEANS (that stays entirely the model's job,
+      // per the live processing contract) — and sends them one at a time,
+      // in order, against a single session, so the already-correct
+      // per-note section tracking actually gets to run more than once.
+      let sessionId;
+      try {
+        if (socSessionId) {
+          sessionId = socSessionId;
+        } else {
+          const aoId = aoIdValue(selectedAO, Number(selectedAOIndex));
+          const aoAddr = selectedAOAddress || aoName(selectedAO) || 'Adjoining Owner';
+          if (!projectId || !aoId) throw new Error('Please select an Adjoining Owner before importing a recording.');
+          sessionId = await initSession(aoId, aoAddr, true); // force new session
+          if (!sessionId) throw new Error('SOC session is not ready yet. Please try again.');
+        }
+      } catch (err) {
+        alert(err.message || 'Could not start the SOC session. Please try again.');
+        return;
+      }
+
+      const noteChunks = splitTranscriptIntoNotes(fullText);
+      for (let i = 0; i < noteChunks.length; i++) {
+        setTranscribeProgress(`Processing note ${i + 1} of ${noteChunks.length}…`);
+        await saveNoteToSession(sessionId, noteChunks[i]);
+      }
     } catch (err) {
       alert('Could not transcribe that recording: ' + (err.message || 'unknown error'));
     } finally {
@@ -511,7 +586,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       setTranscribeProgress('');
       if (uploadInputRef.current) uploadInputRef.current.value = '';
     }
-  }, [handleSend]);
+  }, [socSessionId, projectId, selectedAO, selectedAOIndex, initSession, saveNoteToSession]);
 
   const handleMicToggle = useCallback(() => {
     if (isRecording) {
