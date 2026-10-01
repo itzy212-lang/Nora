@@ -1190,6 +1190,50 @@ export default async function handler(req, res) {
               chatNotes.map(m => '- [' + new Date(m.created_at).toLocaleDateString('en-GB') + '] ' + (m.content || '').slice(0, 400)).join('\n');
           }
 
+          // Added 2026-10-01, on request, after the Raju/Allendale Road
+          // incident: a project with only a handful of emails has no
+          // real reason to go through the lossy extract -> embed ->
+          // similarity-filter pipeline below at all. That pipeline
+          // reduces every email down to a few AI-extracted "facts" and
+          // then keeps only whichever ones happen to score highest
+          // against the current question - proven, on a real case, to
+          // silently drop the one email that actually answered the
+          // question, because it was worded differently even though it
+          // meant the same thing. A project this small can just be read
+          // directly, in full, the same way THREAD HISTORY above already
+          // is - no extraction, no embeddings, no similarity score to
+          // get wrong. The semantic search below only runs as a
+          // fallback once a project has outgrown what's reasonable to
+          // paste in whole.
+          const { count: totalProjectEmails } = await supabase
+            .from('emails')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', email.project_id);
+
+          const DIRECT_READ_EMAIL_CAP = 30;
+          let usedDirectRead = false;
+
+          if ((totalProjectEmails || 0) <= DIRECT_READ_EMAIL_CAP) {
+            const { data: otherThreadEmails } = await supabase
+              .from('emails')
+              .select('subject, sender_email, sender_name, body, direction, received_at, thread_id')
+              .eq('project_id', email.project_id)
+              .neq('thread_id', email.thread_id || '__none__')
+              .order('received_at', { ascending: true })
+              .limit(40);
+
+            if (otherThreadEmails?.length) {
+              usedDirectRead = true;
+              const otherText = otherThreadEmails.map(t => {
+                const label = t.direction === 'incoming'
+                  ? 'FROM: ' + (t.sender_name || t.sender_email)
+                  : ((t.body || '').includes('On behalf of Itzik Darel') ? 'FROM NORA (auto-reply)' : 'FROM ITZIK (personally)');
+                return '[' + new Date(t.received_at).toLocaleDateString('en-GB') + ' | ' + label + ' | ' + (t.subject || '') + ']\n' + plainTextBody(t).slice(0, 1000);
+              }).join('\n\n---\n\n');
+              projectContext += '\n\nOTHER CORRESPONDENCE ON THIS PROJECT (every other email thread on this project, in full - not a summary, not a similarity-ranked extract. This project has few enough emails that there is no need to cut this down - read it with the same care as THREAD HISTORY above, including for anything relevant to a representation/conflict-of-interest question):\n' + otherText;
+            }
+          }
+
           // Added 2026-09-21, on request: genuine semantic search over
           // project_memory (a real, already-embedded per-project fact
           // store - confirmed 100% embedding coverage on what exists in
@@ -1204,7 +1248,14 @@ export default async function handler(req, res) {
           // this (the similarly-named get_project_memory() turned out,
           // on inspection, to query a completely different table,
           // project_events, not project_memory at all).
+          // Skipped entirely once the direct-read path above already
+          // ran - there is nothing left for a similarity search to add
+          // once the model has already been given every email in full.
           try {
+            if (usedDirectRead) {
+              // Nothing to add - the model already has every email on
+              // this project in full, above.
+            } else {
             const embRes = await fetch('https://api.openai.com/v1/embeddings', {
               method: 'POST',
               headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
@@ -1243,6 +1294,7 @@ export default async function handler(req, res) {
                 projectContext += '\n\nRELEVANT PROJECT HISTORY (found by semantic search across past correspondence on this project, most relevant first - same strict usage rule as RECENT PROJECT CHAT NOTES above: only use to answer the specific question asked, never introduce a new topic, never name an individual, nothing personal or unrelated):\n' +
                   relevantMemory.map(m => '- [' + new Date(m.created_at).toLocaleDateString('en-GB') + '] ' + (m.summary || m.title || '').slice(0, 400)).join('\n');
               }
+            }
             }
           } catch (memErr) {
             console.warn('[cron-auto-draft] Project memory semantic search failed (non-fatal):', memErr.message);
