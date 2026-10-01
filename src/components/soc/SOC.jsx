@@ -85,9 +85,25 @@ function encodeWavChunk(samples, sampleRate) {
 // elevation") did. One sentence per note removes the ambiguity: a
 // transition sentence is never sharing a note with anything else, so it
 // gets an undiluted section-resolution call every time.
+//
+// Caught before shipping, by actually running this against 20 Selborne
+// Road's real transcript rather than trusting the unit tests alone: a
+// measurement written as a decimal ("approximately 1.8 meters in before
+// fading away") was being torn in half, because a bare period is also a
+// sentence terminator to this regex. The sentence containing it was
+// silently dropped from the output and a stray fragment ("8 meters in
+// before fading away.") appeared on its own — a real observation lost,
+// not just mis-sectioned. Measurements are everywhere in a schedule of
+// condition (crack widths, gaps, distances), so decimal points are
+// protected from the sentence split below before anything else happens.
 export function splitTranscriptIntoNotes(text) {
-  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [text];
-  return sentences.map(s => s.trim()).filter(Boolean);
+  if (!text) return [];
+  const DECIMAL_SENTINEL = '\u0000';
+  const protectedText = text.replace(/(\d)\.(\d)/g, `$1${DECIMAL_SENTINEL}$2`);
+  const sentences = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [protectedText];
+  return sentences
+    .map(s => s.trim().replace(new RegExp(DECIMAL_SENTINEL, 'g'), '.'))
+    .filter(Boolean);
 }
 
 export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, onBack }) {
