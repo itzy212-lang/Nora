@@ -752,33 +752,46 @@ ${threadText}`;
       {/* Body — split screen on desktop, full screen chat on mobile */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LEFT — original email — hidden on mobile */}
-        <div style={{
-          width: isMobile ? '0%' : '50%',
-          display: isMobile ? 'none' : 'flex',
-          flexDirection: 'column',
-          borderRight: '1px solid var(--border)',
-          overflow: 'hidden',
-        }}>
+        {/* LEFT — original email — not rendered at all on mobile, not just hidden.
+            Fixed 2026-10-02, on request - real, confirmed cause of "Aw, Snap!"
+            crashes on mobile Chrome in this overlay: this pane was only ever
+            CSS-hidden (display:none/width:0) on mobile, but the iframe inside
+            it was still unconditionally mounted - browsers still fully load
+            and parse a hidden iframe's srcDoc, including any images it
+            references. Confirmed against real data: some email bodies on
+            this account run past 1.7MB of raw HTML. Loading that into an
+            invisible iframe for no visual benefit at all on a phone is pure
+            waste, and mobile Chrome's per-tab memory budget is far smaller
+            than desktop's - exactly why this never showed up there. Now the
+            whole pane, iframe included, simply isn't rendered on mobile. */}
+        {!isMobile && (
           <div style={{
-            padding: '12px 18px', borderBottom: '1px solid var(--border)',
-            background: 'var(--bg3)', flexShrink: 0,
+            width: '50%',
+            display: 'flex',
+            flexDirection: 'column',
+            borderRight: '1px solid var(--border)',
+            overflow: 'hidden',
           }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{email?.subject}</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-              {email?.sender_name || email?.sender_email}
-              {email?.received_at && ` · ${fmtDate(email.received_at)}`}
+            <div style={{
+              padding: '12px 18px', borderBottom: '1px solid var(--border)',
+              background: 'var(--bg3)', flexShrink: 0,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{email?.subject}</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                {email?.sender_name || email?.sender_email}
+                {email?.received_at && ` · ${fmtDate(email.received_at)}`}
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden', background: isHtml ? '#fff' : 'transparent' }}>
+              {isHtml
+                ? <iframe srcDoc={emailHtml} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none' }} title="email-content" />
+                : <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                    {stripHtml(email?.body || email?.body_preview || '')}
+                  </div>
+              }
             </div>
           </div>
-          <div style={{ flex: 1, overflow: 'hidden', background: isHtml ? '#fff' : 'transparent' }}>
-            {isHtml
-              ? <iframe srcDoc={emailHtml} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none' }} title="email-content" />
-              : <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                  {stripHtml(email?.body || email?.body_preview || '')}
-                </div>
-            }
-          </div>
-        </div>
+        )}
 
         {/* RIGHT — Ely collaboration — full width on mobile */}
         <div style={{ width: isMobile ? '100%' : '50%', display: 'flex', flexDirection: 'column', background: 'var(--bg3)', overflow: 'hidden' }}>

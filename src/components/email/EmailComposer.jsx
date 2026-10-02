@@ -78,6 +78,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const [showDraftWithEly, setShowDraftWithEly] = useState(false);
   const [toSuggestions, setToSuggestions] = useState([]);
   const [dirty, setDirty] = useState(false);
+  const [showOriginalPreview, setShowOriginalPreview] = useState(false);
   const replyInfoRef = useRef({});
   const fileInputRef = useRef(null);
 
@@ -568,10 +569,37 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
         {replyInfoRef.current.original && (
           <>
             <hr className="email-composer-divider" />
-            <div className="email-composer-original-label">Original email</div>
-            <div className="email-composer-preview"
-              dangerouslySetInnerHTML={{ __html: replyInfoRef.current.original.body || replyInfoRef.current.original.preview || '' }}
-            />
+            <div className="email-composer-original-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setShowOriginalPreview(s => !s)}>
+              <span>{showOriginalPreview ? '▾' : '▸'}</span> Original email{!showOriginalPreview ? ' (tap to show)' : ''}
+            </div>
+            {/* Fixed 2026-10-02, on request - real, confirmed cause of
+                "Aw, Snap!" crashes on mobile Chrome in Inbox/Draft with
+                Nora/Send: this used to inject the full original email's
+                raw HTML straight into the live page via
+                dangerouslySetInnerHTML, completely unsandboxed, every
+                time a reply screen opened - whether or not anyone
+                looked at it. Confirmed against real data: some threads
+                on this account have individual email bodies over 1.7MB
+                of HTML (long quoted chains with stacked signatures/
+                logos). Parsing and laying that out directly in the main
+                document is heavy on any device; mobile Chrome's much
+                smaller per-tab memory budget is what actually tips it
+                into a renderer crash, not something desktop ever
+                surfaces. Now collapsed by default (nothing is rendered
+                or parsed until the user asks to see it) and, when
+                opened, rendered inside a sandboxed iframe - the same
+                safe pattern Inbox.jsx already uses for reading email
+                bodies - so a huge or malformed original email is
+                isolated from the composer page instead of being laid
+                out as part of it. */}
+            {showOriginalPreview && (
+              <iframe
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;line-height:1.6;color:#1f2937;margin:10px;padding:0}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${replyInfoRef.current.original.body || replyInfoRef.current.original.preview || ''}</body></html>`}
+                sandbox="allow-same-origin"
+                title="original-email-preview"
+                style={{ width: '100%', height: 300, border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+            )}
           </>
         )}
 
