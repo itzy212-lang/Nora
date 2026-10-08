@@ -109,6 +109,74 @@ function shouldSkip(email) {
   return null;
 }
 
+// Added 2026-10-08, on request, after a real and serious miss: a brand-
+// new enquirer (Nichole Matthews, a loft-conversion lead) got an auto-
+// sent reply stating that "the adjoining owner at number 119 has
+// appointed Itzik as agreed surveyor, and the matter at number 123 is
+// being progressed" - facts about a completely different client's
+// project (Silvermere Road), disclosed to a stranger. Root cause: her
+// emails were filed under the Silvermere project because the database
+// trigger links by identical SUBJECT LINE ("Party Wall Matters" is
+// Itzik's generic opening subject for any new enquiry), and later
+// replies inherited that link by thread. Everything downstream then
+// trusted the link. Every earlier safeguard checked that a link EXISTS
+// (see the no_project rule below); none checked that the link is
+// RIGHT.
+//
+// This is that check, and it deliberately does not depend on how the
+// link was made, so it holds whatever linking mistake happens next: an
+// auto-sent reply may only go to someone who is actually recorded as a
+// party on the project the email is filed under - an owner, an
+// adjoining owner, a surveyor on either side, or the client. A sender
+// who isn't recorded there can still get a reviewable draft; it just
+// never goes out without Itzik reading it. Failing closed is
+// intentional: the cost of a missed auto-send is one manual reply, the
+// cost of a wrong one is disclosing one client's matter to another.
+function collectProjectPartyEmails(project, adjoiningOwnerRows) {
+  const found = new Set();
+  const add = v => {
+    if (typeof v !== 'string') return;
+    const e = v.trim().toLowerCase();
+    if (e && e.includes('@')) found.add(e);
+  };
+  if (project) {
+    ['bo_1_email', 'bo_2_email', 'ao_email', 'bos_email', 'client_email'].forEach(k => add(project[k]));
+    let aos = project.aos;
+    if (typeof aos === 'string') { try { aos = JSON.parse(aos); } catch { aos = null; } }
+    if (Array.isArray(aos)) {
+      aos.forEach(ao => {
+        if (!ao || typeof ao !== 'object') return;
+        ['email', 'email2', 'surv_email', 'surveyorEmail'].forEach(k => add(ao[k]));
+      });
+    }
+  }
+  (adjoiningOwnerRows || []).forEach(ao => {
+    if (!ao) return;
+    ['email', 'email2', 'surveyor_email', 'third_surveyor_email'].forEach(k => add(ao[k]));
+  });
+  return found;
+}
+
+function isSenderKnownToProject(senderEmail, project, adjoiningOwnerRows) {
+  if (typeof senderEmail !== 'string' || !senderEmail.trim()) return false;
+  if (!project) return false;
+  return collectProjectPartyEmails(project, adjoiningOwnerRows).has(senderEmail.trim().toLowerCase());
+}
+
+async function senderIsKnownPartyOfProject(email, supabase) {
+  if (!email?.project_id || !email?.sender_email) return false;
+  const [{ data: project }, { data: aoRows }] = await Promise.all([
+    supabase.from('projects')
+      .select('bo_1_email, bo_2_email, ao_email, bos_email, client_email, aos')
+      .eq('id', email.project_id)
+      .maybeSingle(),
+    supabase.from('adjoining_owners')
+      .select('email, email2, surveyor_email, third_surveyor_email')
+      .eq('project_id', email.project_id),
+  ]);
+  return isSenderKnownToProject(email.sender_email, project, aoRows);
+}
+
 // Added 2026-09-20 - the full diary-aware auto-send gate, built from
 // an extended design conversation. Deliberately a single, self-
 // contained function returning {eligible, framing}: `eligible` gates
@@ -1798,7 +1866,18 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // already-saved draft exactly as if auto-send were off -
         // never a false "sent" state.
         let autoSent = false;
-        if (autoSendEnabled && !draftNeedsReview) {
+        // Fixed 2026-10-08: see senderIsKnownPartyOfProject above. A
+        // failed lookup counts as "not verified" - never an assumed yes.
+        let senderVerifiedForProject = false;
+        try {
+          senderVerifiedForProject = await senderIsKnownPartyOfProject(email, supabase);
+        } catch (verifyErr) {
+          console.warn('[cron-auto-draft] Could not verify sender against project parties:', verifyErr.message);
+        }
+        if (autoSendEnabled && !draftNeedsReview && !senderVerifiedForProject) {
+          console.warn('[cron-auto-draft] Held back from auto-send (draft saved for review): sender', email.sender_email, 'is not a recorded party on project', email.project_id, '- the email may be filed under the wrong project. email', email.id);
+        }
+        if (autoSendEnabled && !draftNeedsReview && senderVerifiedForProject) {
           try {
             // Fixed before shipping: the manual send path (Inbox.jsx)
             // sets sender_email to the actual sending user's email,
@@ -1990,6 +2069,9 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 // export (the cron handler itself) and its Vercel config are
 // unaffected; these are additional, not replacements.
 export {
+  collectProjectPartyEmails,
+  isSenderKnownToProject,
+  senderIsKnownPartyOfProject,
   computeSendEligibility,
   computeSameDayBackAndForth,
   computeSilenceFallback,

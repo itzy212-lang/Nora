@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  collectProjectPartyEmails,
+  isSenderKnownToProject,
+  senderIsKnownPartyOfProject,
   computeSendEligibility,
   computeSameDayBackAndForth,
   computeSilenceFallback,
@@ -453,5 +456,67 @@ describe('Jiten one-off - current configuration', () => {
 
   it('has a distinct marker so it can be detected as already-used and never fires twice', () => {
     expect(JITTEN_ONE_OFF_MARKER).toBe('cron-auto-draft-jiten-oneoff');
+  });
+});
+
+// Added 2026-10-08 - regression coverage for the real incident: a new
+// enquirer's emails were filed under an unrelated client's project (by
+// identical subject line), and Nora auto-sent her that client's
+// confidential appointment details. The send gate must hold no matter
+// HOW the email came to be filed there.
+describe('cron-auto-draft — sender must be a recorded party on the linked project', () => {
+  const silvermere = {
+    bo_1_email: 'aykut_ozparlak@hotmail.co.uk',
+    bo_2_email: null,
+    ao_email: null,
+    bos_email: 'bos@example.com',
+    client_email: '',
+    aos: [{ email: 'AO@Example.com', surv_email: 'surveyor@firm.co.uk' }],
+  };
+  const aoRows = [{ email: 'dawn@example.com', email2: null, surveyor_email: 'jiten@jpw-arc.co.uk', third_surveyor_email: 'third@x.com' }];
+
+  it('the real incident: a stranger filed under an unrelated project is NOT a known party', () => {
+    expect(isSenderKnownToProject('nichole.p.matthews@gmail.com', silvermere, aoRows)).toBe(false);
+  });
+
+  it('recognises owners, adjoining owners and surveyors on both sides, case-insensitively', () => {
+    expect(isSenderKnownToProject('Aykut_Ozparlak@Hotmail.co.uk', silvermere, aoRows)).toBe(true);
+    expect(isSenderKnownToProject('ao@example.com', silvermere, aoRows)).toBe(true);
+    expect(isSenderKnownToProject('surveyor@firm.co.uk', silvermere, aoRows)).toBe(true);
+    expect(isSenderKnownToProject('jiten@jpw-arc.co.uk', silvermere, aoRows)).toBe(true);
+    expect(isSenderKnownToProject('third@x.com', silvermere, aoRows)).toBe(true);
+    expect(isSenderKnownToProject('  bos@example.com ', silvermere, aoRows)).toBe(true);
+  });
+
+  it('fails closed on missing or malformed input — never an assumed yes', () => {
+    expect(isSenderKnownToProject('', silvermere, aoRows)).toBe(false);
+    expect(isSenderKnownToProject(null, silvermere, aoRows)).toBe(false);
+    expect(isSenderKnownToProject('a@b.com', null, aoRows)).toBe(false);
+    expect(isSenderKnownToProject('a@b.com', {}, null)).toBe(false);
+    expect(collectProjectPartyEmails({ aos: 'not json' }, [null]).size).toBe(0);
+  });
+
+  it('reads aos stored as a JSON string as well as an array', () => {
+    const asString = { aos: JSON.stringify([{ email: 'x@y.com' }]) };
+    expect(isSenderKnownToProject('x@y.com', asString, [])).toBe(true);
+  });
+
+  it('senderIsKnownPartyOfProject: false with no project link or no sender, without querying', async () => {
+    const supabase = makeMockSupabase({});
+    expect(await senderIsKnownPartyOfProject({ project_id: null, sender_email: 'a@b.com' }, supabase)).toBe(false);
+    expect(await senderIsKnownPartyOfProject({ project_id: 'p1', sender_email: null }, supabase)).toBe(false);
+  });
+
+  it('senderIsKnownPartyOfProject: reads the project and its adjoining owners', async () => {
+    const supabase = makeMockSupabase({
+      projects: [{ data: silvermere, error: null }],
+      adjoining_owners: [{ data: aoRows, error: null }],
+    });
+    expect(await senderIsKnownPartyOfProject({ project_id: 'p1', sender_email: 'dawn@example.com' }, supabase)).toBe(true);
+    const supabase2 = makeMockSupabase({
+      projects: [{ data: silvermere, error: null }],
+      adjoining_owners: [{ data: aoRows, error: null }],
+    });
+    expect(await senderIsKnownPartyOfProject({ project_id: 'p1', sender_email: 'nichole.p.matthews@gmail.com' }, supabase2)).toBe(false);
   });
 });
