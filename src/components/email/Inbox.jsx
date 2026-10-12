@@ -1467,6 +1467,9 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
         }}>
           {checked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
         </div>
+        {email.nora_no_reply && (
+          <span title="Nora will not reply to this email" style={{ position: 'absolute', left: 10, top: 34, fontSize: 12, lineHeight: 1 }}>🔕</span>
+        )}
         <button onClick={e => { e.stopPropagation(); onDelete(email.id); }} style={{
           position: 'absolute', right: 7, top: 8, background: 'none', border: 'none',
           color: 'var(--text3)', fontSize: 13, cursor: 'pointer', padding: '2px 4px', borderRadius: 4, opacity: 0.4,
@@ -1859,7 +1862,7 @@ function AttachmentChip({ att }) {
   );
 }
 
-function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onEmailPatched }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   // Fixed URGENTLY 2026-09-22, real confirmed regression from the
   // recipients-popup fix: this component referenced state.currentUser
   // without ever getting state from useApp() in this scope - state
@@ -1868,29 +1871,9 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onEma
   // instant an email preview renders, which is exactly what "select
   // an email, blank screen" looks like - a component throwing during
   // render leaves nothing on screen.
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const [attachments, setAttachments] = useState([]);
   const [showRecipientsPopup, setShowRecipientsPopup] = useState(false);
-  // Added 2026-10-12, on request: per-email switch so Nora never
-  // auto-drafts or auto-sends a reply to this specific email.
-  const [noReplySaving, setNoReplySaving] = useState(false);
-  const toggleNoReply = async () => {
-    if (!email?.id || !sb || noReplySaving) return;
-    const next = !email.nora_no_reply;
-    setNoReplySaving(true);
-    try {
-      const { error } = await sb.from('emails').update({ nora_no_reply: next }).eq('id', email.id);
-      if (error) throw error;
-      dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, nora_no_reply: next } });
-      onEmailPatched?.({ nora_no_reply: next });
-      try { updateCachedEmail(email.id, { nora_no_reply: next }); } catch { /* cache is best-effort */ }
-    } catch (e) {
-      alert('Could not change this setting: ' + (e?.message || 'unknown error'));
-    } finally {
-      setNoReplySaving(false);
-    }
-  };
-
   useEffect(() => {
     if (!email?.id || !sb) { setAttachments([]); return; }
     sb.from('email_attachments')
@@ -1963,22 +1946,6 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onEma
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            {/* Nora auto-reply switch for this email */}
-            <button
-              onClick={toggleNoReply}
-              disabled={noReplySaving}
-              title={email.nora_no_reply ? "Nora will NOT reply to this email. Click to let her." : "Nora may auto-reply to this email. Click to stop her."}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
-                padding: '3px 8px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: noReplySaving ? 'wait' : 'pointer',
-                border: '1px solid ' + (email.nora_no_reply ? '#fca5a5' : 'var(--border)'),
-                background: email.nora_no_reply ? '#fef2f2' : 'var(--bg3)',
-                color: email.nora_no_reply ? '#b91c1c' : 'var(--text3)',
-              }}
-            >
-              <span>{email.nora_no_reply ? '🔕' : '🔔'}</span>
-              <span>{email.nora_no_reply ? 'Nora won\'t reply' : 'Nora'}</span>
-            </button>
             {/* Small button to see all recipients — FIRST on left */}
             {(toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0) && (
               <button 
@@ -3089,6 +3056,22 @@ if (syncErr) throw syncErr;
     setCheckedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
   };
 
+  // Added 2026-10-12, on request: one button in the bulk-action bar that
+  // switches Nora's auto-reply off (or back on) for every ticked email.
+  // If every ticked email is already switched off it turns them back on;
+  // otherwise it switches them all off.
+  const handleBulkToggleNoReply = async () => {
+    if (!sb || checkedIds.size === 0) return;
+    const ids = [...checkedIds];
+    const ticked = state.emails.filter(e => checkedIds.has(e.id));
+    const next = !(ticked.length > 0 && ticked.every(e => e.nora_no_reply));
+    const { error } = await sb.from('emails').update({ nora_no_reply: next }).in('id', ids);
+    if (error) { alert('Could not change this setting: ' + error.message); return; }
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => checkedIds.has(e.id) ? { ...e, nora_no_reply: next } : e) });
+    ids.forEach(id => { try { updateCachedEmail(id, { nora_no_reply: next }); } catch { /* cache is best-effort */ } });
+    setSelectedEmail(prev => prev && checkedIds.has(prev.id) ? { ...prev, nora_no_reply: next } : prev);
+  };
+
   const handleMassDelete = async () => {
     if (!sb || checkedIds.size === 0 || !window.confirm(`Delete ${checkedIds.size} emails?`)) return;
     await sb.from('emails').delete().in('id', [...checkedIds]);
@@ -3289,6 +3272,18 @@ if (syncErr) throw syncErr;
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
                   {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
                 </button>
+                {(() => {
+                  const ticked = state.emails.filter(e => checkedIds.has(e.id));
+                  const allOff = ticked.length > 0 && ticked.every(e => e.nora_no_reply);
+                  return (
+                    <button onClick={handleBulkToggleNoReply}
+                      title={allOff ? 'Nora will NOT reply to the ticked emails. Click to let her reply again.' : 'Click to stop Nora replying to the ticked emails.'}
+                      style={{ padding: '3px 9px', borderRadius: 99, fontSize: 13, cursor: 'pointer', lineHeight: 1.2,
+                        background: allOff ? '#fef2f2' : 'var(--bg3)', border: '1px solid ' + (allOff ? '#fca5a5' : 'var(--border)') }}>
+                      {allOff ? '🔕' : '🔔'}
+                    </button>
+                  );
+                })()}
                 <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
                   🗑 Delete {checkedIds.size}
                 </button>
@@ -3372,7 +3367,7 @@ if (syncErr) throw syncErr;
               </span>
             </div>
           )}
-          <EmailPreview email={selectedEmail} onEmailPatched={patch => setSelectedEmail(prev => prev ? { ...prev, ...patch } : prev)} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
 
           {/* Auto-draft panel */}
           {autoDraft && (
