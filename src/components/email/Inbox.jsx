@@ -1438,7 +1438,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
 }
 
 // ── Email row card ────────────────────────────────────────────────────────────
-function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDraft }) {
+function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onToggleNoReply, hasDraft }) {
   const unread  = !email.is_read;
   const replied = email.is_replied;
   const flagged = email.flagged;
@@ -1467,9 +1467,17 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, hasDr
         }}>
           {checked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
         </div>
-        {email.nora_no_reply && (
-          <span title="Nora will not reply to this email" style={{ position: 'absolute', left: 10, top: 34, fontSize: 12, lineHeight: 1 }}>🔕</span>
-        )}
+        <div
+          role="button"
+          onClick={e => { e.stopPropagation(); onToggleNoReply?.(email.id); }}
+          title={email.nora_no_reply ? 'Nora will NOT reply to this email (click to allow)' : 'Click to stop Nora replying to this email'}
+          style={{ position: 'absolute', left: 8, top: 34, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={email.nora_no_reply ? '#dc2626' : '#d1d5db'} strokeWidth={email.nora_no_reply ? 2 : 1.5} strokeLinecap="round">
+            <circle cx="8" cy="8" r="6.5" />
+            <line x1="3.4" y1="12.6" x2="12.6" y2="3.4" />
+          </svg>
+        </div>
         <button onClick={e => { e.stopPropagation(); onDelete(email.id); }} style={{
           position: 'absolute', right: 7, top: 8, background: 'none', border: 'none',
           color: 'var(--text3)', fontSize: 13, cursor: 'pointer', padding: '2px 4px', borderRadius: 4, opacity: 0.4,
@@ -3056,20 +3064,26 @@ if (syncErr) throw syncErr;
     setCheckedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
   };
 
-  // Added 2026-10-12, on request: one button in the bulk-action bar that
-  // switches Nora's auto-reply off (or back on) for every ticked email.
-  // If every ticked email is already switched off it turns them back on;
-  // otherwise it switches them all off.
-  const handleBulkToggleNoReply = async () => {
-    if (!sb || checkedIds.size === 0) return;
-    const ids = [...checkedIds];
-    const ticked = state.emails.filter(e => checkedIds.has(e.id));
-    const next = !(ticked.length > 0 && ticked.every(e => e.nora_no_reply));
-    const { error } = await sb.from('emails').update({ nora_no_reply: next }).in('id', ids);
-    if (error) { alert('Could not change this setting: ' + error.message); return; }
-    dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => checkedIds.has(e.id) ? { ...e, nora_no_reply: next } : e) });
-    ids.forEach(id => { try { updateCachedEmail(id, { nora_no_reply: next }); } catch { /* cache is best-effort */ } });
-    setSelectedEmail(prev => prev && checkedIds.has(prev.id) ? { ...prev, nora_no_reply: next } : prev);
+  // Added 2026-10-12, on request: one-click per-email switch (the no-entry
+  // sign under each email's tick box) that stops/restores Nora's auto-reply
+  // for that single email. Updates the list immediately.
+  const handleToggleNoReply = async (emailId) => {
+    if (!sb) return;
+    const target = state.emails.find(e => e.id === emailId);
+    if (!target) return;
+    const next = !target.nora_no_reply;
+    // Show the change straight away, undo it if saving fails.
+    const apply = (value) => {
+      dispatch({ type: 'SET_EMAILS', payload: state.emails.map(e => e.id === emailId ? { ...e, nora_no_reply: value } : e) });
+      setSelectedEmail(prev => prev && prev.id === emailId ? { ...prev, nora_no_reply: value } : prev);
+      try { updateCachedEmail(emailId, { nora_no_reply: value }); } catch { /* cache is best-effort */ }
+    };
+    apply(next);
+    const { error } = await sb.from('emails').update({ nora_no_reply: next }).eq('id', emailId);
+    if (error) {
+      apply(!next);
+      alert('Could not change this setting: ' + error.message);
+    }
   };
 
   const handleMassDelete = async () => {
@@ -3272,18 +3286,6 @@ if (syncErr) throw syncErr;
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
                   {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
                 </button>
-                {(() => {
-                  const ticked = state.emails.filter(e => checkedIds.has(e.id));
-                  const allOff = ticked.length > 0 && ticked.every(e => e.nora_no_reply);
-                  return (
-                    <button onClick={handleBulkToggleNoReply}
-                      title={allOff ? 'Nora will NOT reply to the ticked emails. Click to let her reply again.' : 'Click to stop Nora replying to the ticked emails.'}
-                      style={{ padding: '3px 9px', borderRadius: 99, fontSize: 13, cursor: 'pointer', lineHeight: 1.2,
-                        background: allOff ? '#fef2f2' : 'var(--bg3)', border: '1px solid ' + (allOff ? '#fca5a5' : 'var(--border)') }}>
-                      {allOff ? '🔕' : '🔔'}
-                    </button>
-                  );
-                })()}
                 <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
                   🗑 Delete {checkedIds.size}
                 </button>
@@ -3322,7 +3324,7 @@ if (syncErr) throw syncErr;
             : filtered.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>{search && search.trim() ? 'No matching emails' : `No emails in ${folder}`}</div>
             : filtered.map(email => (
-              <EmailRow key={email.id} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(String(email.id))} />
+              <EmailRow key={email.id} onToggleNoReply={handleToggleNoReply} email={email} selected={selectedEmail?.id === email.id} checked={checkedIds.has(email.id)} onSelect={handleSelect} onCheck={toggleCheck} onDelete={handleDelete} hasDraft={draftEmailIds.has(String(email.id))} />
             ))
           }
           {!search && loadingMore && (
