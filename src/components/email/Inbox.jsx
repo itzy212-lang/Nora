@@ -1859,7 +1859,7 @@ function AttachmentChip({ att }) {
   );
 }
 
-function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onEmailPatched }) {
   // Fixed URGENTLY 2026-09-22, real confirmed regression from the
   // recipients-popup fix: this component referenced state.currentUser
   // without ever getting state from useApp() in this scope - state
@@ -1882,6 +1882,7 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
       const { error } = await sb.from('emails').update({ nora_no_reply: next }).eq('id', email.id);
       if (error) throw error;
       dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, nora_no_reply: next } });
+      onEmailPatched?.({ nora_no_reply: next });
       try { updateCachedEmail(email.id, { nora_no_reply: next }); } catch { /* cache is best-effort */ }
     } catch (e) {
       alert('Could not change this setting: ' + (e?.message || 'unknown error'));
@@ -3371,7 +3372,7 @@ if (syncErr) throw syncErr;
               </span>
             </div>
           )}
-          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+          <EmailPreview email={selectedEmail} onEmailPatched={patch => setSelectedEmail(prev => prev ? { ...prev, ...patch } : prev)} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
 
           {/* Auto-draft panel */}
           {autoDraft && (
