@@ -3162,6 +3162,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [oneDriveRefresh, setOneDriveRefresh] = useState(0); // increment to force reload
   const [loaLoading, setLoaLoading] = useState(null);
   const [awardLoading, setAwardLoading] = useState(null);
+  // Missing-date prompt for award generation: { ao, fields:[{label,patch:[keys],value}], other:[labels] }
+  const [awardDatePrompt, setAwardDatePrompt] = useState(null);
   const [boAgreedSurveyorMode, setBoAgreedSurveyorMode] = useState(
     () => (initialProject?.aos || []).some(a => a.agreed_surveyor || a.agreedSurveyor)
   );
@@ -3555,7 +3557,21 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       });
 
       if (!award?.isValid) {
-        alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${(award?.missing || []).map(item => `- ${item}`).join('\n')}`);
+        // Missing dates can be entered right here; anything else still needs fixing on the record.
+        const DATE_FIELDS = {
+          'Notice date': ['notice_served_date', 'noticeServedDate'],
+          'Section 10 notice date': ['s10_served_date', 's10ServedDate'],
+          'Section 10(4)(b) date': ['s104b_served_date', 's104bServedDate'],
+          'Schedule of Condition date': ['soc_agreed_date', 'socAgreedDate'],
+        };
+        const missingList = award?.missing || [];
+        const dateFields = missingList.filter(m => DATE_FIELDS[m]).map(m => ({ label: m, keys: DATE_FIELDS[m], value: '' }));
+        const other = missingList.filter(m => !DATE_FIELDS[m]);
+        if (dateFields.length > 0) {
+          setAwardDatePrompt({ ao, awardLabel: award?.awardTypeLabel || 'award', fields: dateFields, other });
+        } else {
+          alert(`Cannot generate ${award?.awardTypeLabel || 'award'} yet. Missing:\n\n${missingList.map(item => `- ${item}`).join('\n')}`);
+        }
         return;
       }
 
@@ -3581,6 +3597,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         awardGeneratedAt: new Date().toISOString(),
         award_deadline: awardDeadlineISO,
         awardDeadline: awardDeadlineISO,
+        // Re-apply any dates just entered in the missing-date prompt, so this
+        // save (made from a possibly older copy of the project) cannot lose them.
+        ...Object.fromEntries(
+          ['notice_served_date', 'noticeServedDate', 's10_served_date', 's10ServedDate', 's104b_served_date', 's104bServedDate', 'soc_agreed_date', 'socAgreedDate']
+            .filter(k => ao[k]).map(k => [k, ao[k]])
+        ),
       });
 
       alert(`${award.awardTypeLabel || 'Award'} generated successfully.`);
@@ -5962,6 +5984,58 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             setTaskModal(null);
           }}
         />
+      )}
+
+      {/* Missing-date prompt for award generation */}
+      {awardDatePrompt && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setAwardDatePrompt(null)}
+        >
+          <div
+            style={{ background: 'var(--bg)', borderRadius: 14, width: '100%', maxWidth: 420, padding: 18 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>Missing dates for the {awardDatePrompt.awardLabel}</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+              Enter the date{awardDatePrompt.fields.length > 1 ? 's' : ''} below and the award will be generated. They will also be saved on the adjoining owner's record.
+            </div>
+            {awardDatePrompt.fields.map((f, i) => (
+              <div key={f.label} style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>{f.label}</label>
+                <input
+                  type="date"
+                  value={f.value}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setAwardDatePrompt(prev => ({ ...prev, fields: prev.fields.map((x, j) => j === i ? { ...x, value: v } : x) }));
+                  }}
+                  style={{ width: '100%', padding: 8, fontSize: 14, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+              </div>
+            ))}
+            {awardDatePrompt.other.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10 }}>
+                Also still missing (fix on the record): {awardDatePrompt.other.join(', ')}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setAwardDatePrompt(null)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text)', cursor: 'pointer' }}>Cancel</button>
+              <button
+                disabled={awardDatePrompt.fields.some(f => !f.value) || awardDatePrompt.other.length > 0}
+                onClick={async () => {
+                  const { ao, fields } = awardDatePrompt;
+                  const patch = {};
+                  fields.forEach(f => f.keys.forEach(k => { patch[k] = f.value; }));
+                  setAwardDatePrompt(null);
+                  try { await updateAORecord(ao, patch); } catch (e) { console.warn('[Award] Could not save dates:', e?.message); }
+                  handleGenerateAward({ ...ao, ...patch });
+                }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)', color: '#fff', cursor: 'pointer', opacity: (awardDatePrompt.fields.some(f => !f.value) || awardDatePrompt.other.length > 0) ? 0.5 : 1 }}
+              >Save &amp; generate</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Clauses modal — moved off the top tabs, on request */}
