@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isWithinTimedEntry,
+  realFinishTime,
   collectProjectPartyEmails,
   isSenderKnownToProject,
   senderIsKnownPartyOfProject,
@@ -544,5 +545,20 @@ describe('manual no-reply switch and timed diary entries', () => {
     expect(isWithinTimedEntry({ time: '10:00', end_time: '09:00' }, 10 * 60 + 30)).toBe(true);
     expect(isWithinTimedEntry({ time: '10:00', end_time: '09:00' }, 11 * 60 + 30)).toBe(false);
     expect(isWithinTimedEntry({ time: '' }, 600)).toBe(false);
+  });
+});
+
+describe('real finish time for non-SOC diary entries', () => {
+  it('returns the finish time for meetings, calls, site visits and appointments', () => {
+    expect(realFinishTime({ task_type: 'meeting', time: '10:00', end_time: '13:00' })).toBe('13:00');
+    expect(realFinishTime({ task_type: 'call', time: '09:30', end_time: '10:15:00' })).toBe('10:15');
+  });
+  it('never uses a finish time for Schedules of Condition', () => {
+    expect(realFinishTime({ task_type: 'soc', time: '10:00', end_time: '13:00' })).toBeNull();
+  });
+  it('ignores missing or nonsensical finish times', () => {
+    expect(realFinishTime({ task_type: 'meeting', time: '10:00' })).toBeNull();
+    expect(realFinishTime({ task_type: 'meeting', time: '10:00', end_time: '09:00' })).toBeNull();
+    expect(realFinishTime({ task_type: 'meeting', end_time: '09:00' })).toBeNull();
   });
 });

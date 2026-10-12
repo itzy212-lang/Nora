@@ -192,6 +192,21 @@ function isWithinTimedEntry(task, nowMinutes) {
   return nowMinutes >= startMin && nowMinutes <= endMin;
 }
 
+// The real finish time (HH:MM) of a non-SOC timed diary entry, or null
+// when none was set / it is not after the start. Schedules of Condition
+// deliberately never use this - they keep their own fixed 90-minute
+// assumption plus travel buffer.
+function realFinishTime(task) {
+  if (!task || task.task_type === 'soc') return null;
+  const m = (task.time || '').match(/^(\d{1,2}):(\d{2})/);
+  const e = (task.end_time || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m || !e) return null;
+  const startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  const endMin = parseInt(e[1], 10) * 60 + parseInt(e[2], 10);
+  if (endMin <= startMin) return null;
+  return String(parseInt(e[1], 10)).padStart(2, '0') + ':' + e[2];
+}
+
 // Added 2026-09-20 - the full diary-aware auto-send gate, built from
 // an extended design conversation. Deliberately a single, self-
 // contained function returning {eligible, framing}: `eligible` gates
@@ -395,6 +410,13 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     let framing = isCall
       ? 'Itzik is in a telephone meeting right now. Say Nora will pass this along and he will message back between appointments. Do not describe the call itself.'
       : 'Itzik is in a meeting right now. Say he will call back. Do not describe what kind of meeting.';
+    // Added 2026-10-12, on request: when the diary entry has a real
+    // finish time, give it to the reply as a fact. Without one, the
+    // wording above is unchanged and no time is stated.
+    const finishTime = realFinishTime(activeOther);
+    if (finishTime) {
+      framing += ' His diary shows this finishing at ' + finishTime + ', so he should be free from around then (if that is close to or after the end of the working day, he will most likely come back to you tomorrow instead). Do not state a more precise time than this.';
+    }
     if (sameDayBackAndForth) {
       framing = 'Itzik has personally been corresponding with this person earlier today - acknowledge that directly (e.g. "I can see Itzik has been in touch with you today") before giving the rest of this. ' + framing;
     }
@@ -1192,7 +1214,7 @@ export default async function handler(req, res) {
 
           const { data: tasks } = await supabase
             .from('tasks')
-            .select('id, title, task_type, due_date, time, status, ao_id, ao_address_snapshot')
+            .select('id, title, task_type, due_date, time, end_time, status, ao_id, ao_address_snapshot')
             .eq('project_id', email.project_id)
             .order('due_date', { ascending: true })
             .limit(30);
@@ -1224,7 +1246,7 @@ export default async function handler(req, res) {
             const todayStr = new Date().toISOString().slice(0, 10);
             projectContext += '\n\nSCHEDULED TASKS ON THIS PROJECT (' + projectTasksForDrafting.length + ') - the brief below already tells you whether each is in the past or future; word the reply accordingly (see the TENSE rule in the brain):\n' +
               projectTasksForDrafting.map(t => {
-                const when = t.due_date ? t.due_date + (t.time ? ' at ' + t.time : ' (no specific time set)') : 'no date set';
+                const when = t.due_date ? t.due_date + (t.time ? ' at ' + t.time + (realFinishTime(t) ? ' until ' + realFinishTime(t) : '') : ' (no specific time set)') : 'no date set';
                 const isPast = t.due_date && t.due_date < todayStr;
                 let line = '- ' + (t.title || t.task_type || 'Task') + ': ' + when + (isPast ? ' [DATE HAS PASSED - refer to this in the past tense]' : ' [upcoming]') + ' — status: ' + (t.status || 'open') + (t.ao_address_snapshot ? ' — AO: ' + t.ao_address_snapshot : '');
                 if (t.task_type === 'soc' && isPast) {
@@ -2088,6 +2110,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 // unaffected; these are additional, not replacements.
 export {
   isWithinTimedEntry,
+  realFinishTime,
   collectProjectPartyEmails,
   isSenderKnownToProject,
   senderIsKnownPartyOfProject,
