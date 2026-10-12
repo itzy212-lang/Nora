@@ -177,6 +177,21 @@ async function senderIsKnownPartyOfProject(email, supabase) {
   return isSenderKnownToProject(email.sender_email, project, aoRows);
 }
 
+// Added 2026-10-12, on request: timed diary entries (meeting / call /
+// site visit / appointment) can now carry a real finish time
+// (tasks.end_time, HH:MM). When present and later than the start, that
+// is the window used; otherwise the old 60-minute assumption applies.
+const DEFAULT_OTHER_MEETING_DURATION_MIN = 60;
+function isWithinTimedEntry(task, nowMinutes) {
+  const m = ((task && task.time) || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return false;
+  const startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  const e = ((task && task.end_time) || '').match(/^(\d{1,2}):(\d{2})/);
+  const endMinRaw = e ? parseInt(e[1], 10) * 60 + parseInt(e[2], 10) : null;
+  const endMin = endMinRaw !== null && endMinRaw > startMin ? endMinRaw : startMin + DEFAULT_OTHER_MEETING_DURATION_MIN;
+  return nowMinutes >= startMin && nowMinutes <= endMin;
+}
+
 // Added 2026-09-20 - the full diary-aware auto-send gate, built from
 // an extended design conversation. Deliberately a single, self-
 // contained function returning {eligible, framing}: `eligible` gates
@@ -221,6 +236,15 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // that.
   if (email.is_read) {
     return { eligible: false, framing: null, reason: 'read' };
+  }
+
+  // ── 0a. Manual "Nora must not respond" switch ────────────────────
+  // Added 2026-10-12, on request: a per-email switch in the inbox
+  // (nora_no_reply). Absolute, like the read gate, and checked before
+  // any diary or timing logic. Holds even if the email is later marked
+  // unread again.
+  if (email.nora_no_reply) {
+    return { eligible: false, framing: null, reason: 'muted' };
   }
 
   // ── 0b. No project link ──────────────────────────────────────────
@@ -358,19 +382,13 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   const OTHER_MEETING_TYPES = ['meeting', 'call', 'site_visit', 'appointment'];
   const { data: otherTasks } = await supabase
     .from('tasks')
-    .select('time, task_type')
+    .select('time, end_time, task_type')
     .eq('user_id', ownerUserId)
     .in('task_type', OTHER_MEETING_TYPES)
     .eq('due_date', todayStr)
     .not('status', 'in', '(cancelled,complete)');
 
-  const OTHER_MEETING_DURATION_MIN = 60; // assumed default - no end time is ever recorded for these either
-  const activeOther = (otherTasks || []).find(t => {
-    const m = (t.time || '').match(/^(\d{1,2}):(\d{2})/);
-    if (!m) return false;
-    const startMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    return nowMinutes >= startMin && nowMinutes <= startMin + OTHER_MEETING_DURATION_MIN;
-  });
+  const activeOther = (otherTasks || []).find(t => isWithinTimedEntry(t, nowMinutes));
 
   if (activeOther) {
     const isCall = activeOther.task_type === 'call';
@@ -718,7 +736,7 @@ export default async function handler(req, res) {
 
     const { data: emails, error } = await supabase
       .from('emails')
-      .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction, user_id')
+      .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction, user_id, is_read, nora_no_reply')
       .eq('direction', 'incoming')
       .eq('is_draft', false)
       .gte('received_at', since)
@@ -2069,6 +2087,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
 // export (the cron handler itself) and its Vercel config are
 // unaffected; these are additional, not replacements.
 export {
+  isWithinTimedEntry,
   collectProjectPartyEmails,
   isSenderKnownToProject,
   senderIsKnownPartyOfProject,

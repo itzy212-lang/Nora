@@ -148,6 +148,7 @@ function taskToEvent(task = {}, projects = []) {
     source: 'task',
     date,
     time: clean(task.time || task.start_time),
+    endTime: clean(task.end_time),
     label: buildTaskLabel(task, projects),
     type,
     projectId: task.project_id || null,
@@ -235,6 +236,7 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
     title: clean(task?.title || task?.label || ''),
     date: normalDate(task?.due_date || task?.date || defaultDate || todayYMD()),
     time: clean(task?.time || task?.start_time || ''),
+    end_time: clean(task?.end_time || ''),
     type: clean(task?.task_type || task?.type || 'todo') || 'todo',
     project_id: initialProjectId,
     ao_id: initialAOId,
@@ -335,9 +337,14 @@ function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, 
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
             </Field>
 
-            <Field label="Time">
+            <Field label="Start time">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
             </Field>
+            {['meeting', 'call', 'site_visit', 'appointment'].includes(form.type) && (
+              <Field label="Finish time (optional)">
+                <input type="time" value={form.end_time || ''} min={form.time || undefined} onChange={e => set('end_time', e.target.value)} style={inputStyle} />
+              </Field>
+            )}
           </div>
           )}
 
@@ -417,7 +424,7 @@ function EventCard({ ev, onOpenTask, onOpenProject }) {
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', lineHeight: 1.35 }}>
-          {ev.time && <span style={{ color: cfg.colour, marginRight: 8, fontSize: 12, fontWeight: 600 }}>{fmtTime(ev.time)}</span>}
+          {ev.time && <span style={{ color: cfg.colour, marginRight: 8, fontSize: 12, fontWeight: 600 }}>{fmtTime(ev.time)}{ev.endTime ? '–' + fmtTime(ev.endTime) : ''}</span>}
           {ev.label}
         </div>
         {ev.notes && <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2, lineHeight: 1.4 }}>{ev.notes}</div>}
@@ -678,6 +685,7 @@ export default function Calendar({ onOpenProject }) {
       due_date: form.date,
       end_date: form.type === 'holiday' ? (form.end_date || form.date) : null,
       time: form.time || null,
+      end_time: (['meeting', 'call', 'site_visit', 'appointment'].includes(form.type) && form.time && form.end_time && form.end_time > form.time) ? form.end_time : null,
       status: existingTask?.status || 'pending',
       task_type: form.type,
       description: form.notes || '',

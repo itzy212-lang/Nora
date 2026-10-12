@@ -1868,9 +1868,27 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   // instant an email preview renders, which is exactly what "select
   // an email, blank screen" looks like - a component throwing during
   // render leaves nothing on screen.
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [attachments, setAttachments] = useState([]);
   const [showRecipientsPopup, setShowRecipientsPopup] = useState(false);
+  // Added 2026-10-12, on request: per-email switch so Nora never
+  // auto-drafts or auto-sends a reply to this specific email.
+  const [noReplySaving, setNoReplySaving] = useState(false);
+  const toggleNoReply = async () => {
+    if (!email?.id || !sb || noReplySaving) return;
+    const next = !email.nora_no_reply;
+    setNoReplySaving(true);
+    try {
+      const { error } = await sb.from('emails').update({ nora_no_reply: next }).eq('id', email.id);
+      if (error) throw error;
+      dispatch({ type: 'UPDATE_EMAIL', payload: { id: email.id, nora_no_reply: next } });
+      try { updateCachedEmail(email.id, { nora_no_reply: next }); } catch { /* cache is best-effort */ }
+    } catch (e) {
+      alert('Could not change this setting: ' + (e?.message || 'unknown error'));
+    } finally {
+      setNoReplySaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!email?.id || !sb) { setAttachments([]); return; }
@@ -1944,6 +1962,22 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {/* Nora auto-reply switch for this email */}
+            <button
+              onClick={toggleNoReply}
+              disabled={noReplySaving}
+              title={email.nora_no_reply ? "Nora will NOT reply to this email. Click to let her." : "Nora may auto-reply to this email. Click to stop her."}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                padding: '3px 8px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: noReplySaving ? 'wait' : 'pointer',
+                border: '1px solid ' + (email.nora_no_reply ? '#fca5a5' : 'var(--border)'),
+                background: email.nora_no_reply ? '#fef2f2' : 'var(--bg3)',
+                color: email.nora_no_reply ? '#b91c1c' : 'var(--text3)',
+              }}
+            >
+              <span>{email.nora_no_reply ? '🔕' : '🔔'}</span>
+              <span>{email.nora_no_reply ? 'Nora won\'t reply' : 'Nora'}</span>
+            </button>
             {/* Small button to see all recipients — FIRST on left */}
             {(toRecipients.length > 0 || ccRecipients.length > 0 || bccRecipients.length > 0) && (
               <button 

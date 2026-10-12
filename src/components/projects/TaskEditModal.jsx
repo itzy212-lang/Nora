@@ -40,6 +40,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
     description: task?.description || '',
     due_date: task?.due_date || '',
     time: task?.time || '',
+    end_time: task?.end_time || '',
     priority: task?.priority || 'normal',
     task_type: task?.task_type || 'todo',
     status: task?.status || 'open',
@@ -82,6 +83,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
         description: form.description.trim(),
         due_date: form.due_date || null,
         time: form.time || null,
+        end_time: (['meeting', 'call', 'site_visit', 'appointment'].includes(form.task_type) && form.time && form.end_time && form.end_time > form.time) ? form.end_time : null,
         priority: form.priority,
         task_type: form.task_type,
         status: form.status,
@@ -203,7 +205,7 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={label}>Time</label>
+            <label style={label}>Start time</label>
             <input
               type="time"
               style={input}
@@ -211,6 +213,18 @@ export default function TaskEditModal({ task, project, onClose, onSaved, onDelet
               onChange={e => set('time', e.target.value)}
             />
           </div>
+          {['meeting', 'call', 'site_visit', 'appointment'].includes(form.task_type) && (
+            <div style={{ flex: 1 }}>
+              <label style={label}>Finish time</label>
+              <input
+                type="time"
+                style={input}
+                value={form.end_time || ''}
+                min={form.time || undefined}
+                onChange={e => set('end_time', e.target.value)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Type + Priority row */}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isWithinTimedEntry,
   collectProjectPartyEmails,
   isSenderKnownToProject,
   senderIsKnownPartyOfProject,
@@ -518,5 +519,30 @@ describe('cron-auto-draft — sender must be a recorded party on the linked proj
       adjoining_owners: [{ data: aoRows, error: null }],
     });
     expect(await senderIsKnownPartyOfProject({ project_id: 'p1', sender_email: 'nichole.p.matthews@gmail.com' }, supabase2)).toBe(false);
+  });
+});
+
+
+describe('manual no-reply switch and timed diary entries', () => {
+  it('never replies when the email has the no-reply switch on (before any other check)', async () => {
+    const r = await computeSendEligibility({ id: 'e1', is_read: false, nora_no_reply: true, project_id: 'p1' }, {}, 'u1');
+    expect(r).toMatchObject({ eligible: false, reason: 'muted' });
+  });
+  it('never replies to an email that has been opened', async () => {
+    const r = await computeSendEligibility({ id: 'e1', is_read: true, project_id: 'p1' }, {}, 'u1');
+    expect(r).toMatchObject({ eligible: false, reason: 'read' });
+  });
+  it('uses the real finish time of a meeting when one is set', () => {
+    const t = { time: '10:00', end_time: '13:00' };
+    expect(isWithinTimedEntry(t, 12 * 60 + 30)).toBe(true);   // 12:30, inside a 3h meeting
+    expect(isWithinTimedEntry(t, 13 * 60 + 1)).toBe(false);   // just after
+    expect(isWithinTimedEntry(t, 9 * 60 + 59)).toBe(false);   // just before
+  });
+  it('falls back to one hour when there is no (or a nonsense) finish time', () => {
+    expect(isWithinTimedEntry({ time: '10:00' }, 10 * 60 + 59)).toBe(true);
+    expect(isWithinTimedEntry({ time: '10:00' }, 11 * 60 + 1)).toBe(false);
+    expect(isWithinTimedEntry({ time: '10:00', end_time: '09:00' }, 10 * 60 + 30)).toBe(true);
+    expect(isWithinTimedEntry({ time: '10:00', end_time: '09:00' }, 11 * 60 + 30)).toBe(false);
+    expect(isWithinTimedEntry({ time: '' }, 600)).toBe(false);
   });
 });
