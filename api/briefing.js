@@ -2,6 +2,7 @@
 // Returns structured per-AO briefing cards for the morning briefing chat view
 
 import { createClient } from '@supabase/supabase-js';
+import { daysSinceProgress } from './lib/aoProgress.js';
 
 function getSupabase() {
   return createClient(
@@ -203,7 +204,7 @@ export default async function handler(req, res) {
         const s10Served = !!(ao.s10_served_date || ao.s10ServedDate);
         const s104bServed = !!(ao.s104b_served_date || ao.s104bServedDate);
         const lastChange = ao.last_status_change;
-        const staleDays = daysSince(lastChange);
+        const staleDays = daysSinceProgress(ao);
         const noticed = !!(ao.noticeServedDate || ao.notice_served_date || cd);
 
         // Determine urgency level and reason

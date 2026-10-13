@@ -5,6 +5,7 @@ import NewProjectModal from './NewProjectModal';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { daysSinceProgress } from '../../utils/aoProgress';
 
 export function getProjectColour(project) {
   const aos = project.aos || [];
@@ -42,9 +43,9 @@ export function getProjectColour(project) {
     // Overdue S10 deadline (only if not dissent with surveyor)
     if (sd && new Date(sd).getTime() < now && st !== 'dissent') return true;
     // Stale — no progress for 14+ days
-    const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
+    const staleDays = daysSinceProgress(ao, now);
     const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
-    if (noticed && lastChange && Math.floor((now - lastChange.getTime()) / 86400000) >= 14) return true;
+    if (noticed && staleDays !== null && staleDays >= 14) return true;
     return false;
   });
   if (hasRed) return '#ef4444';
@@ -65,10 +66,9 @@ export function getProjectColour(project) {
     // Dissent with no surveyor and no agreed surveyor
     if (st === 'dissent' && !ao.agreed_surveyor && !ao.surv_name && !ao.surveyorName && !ao.ao_surveyor_name && !ao.aoSurveyorName) return true;
     // Stale 10-13 days
-    const lastChange = ao.last_status_change ? new Date(ao.last_status_change) : null;
+    const days = daysSinceProgress(ao, now);
     const noticed = !!(ao.noticeServedDate || ao.notice_served_date || ao.ao_notice_served_date || cd);
-    if (noticed && lastChange) {
-      const days = Math.floor((now - lastChange.getTime()) / 86400000);
+    if (noticed && days !== null) {
       if (days >= 10 && days < 14) return true;
     }
     return false;

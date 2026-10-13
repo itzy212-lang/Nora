@@ -19,6 +19,7 @@ import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { createAOFolder, uploadDocument } from '../../utils/providers';
 import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
+import { daysSinceProgress } from '../../utils/aoProgress';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1407,8 +1408,8 @@ function AOCard({
   const resolvedStatuses = ['consent', 'complete', 'award_served'];
   const st = (ao?.status || '').toLowerCase();
   const isResolved = resolvedStatuses.includes(st) || !!(ao?.award_served_date || ao?.awardServedDate);
-  const lastChange = ao?.last_status_change ? new Date(ao.last_status_change) : null;
-  const daysSinceChange = lastChange ? Math.floor((Date.now() - lastChange.getTime()) / 86400000) : null;
+  // Real progress (SOC, notices, consent...), not just the last manual status change.
+  const daysSinceChange = daysSinceProgress(ao);
   const isStale = !isResolved && noticed && daysSinceChange !== null && daysSinceChange >= 10;
   const statusLabel = statusMeta.label;
   const statusColour = statusMeta.colour || colour;
