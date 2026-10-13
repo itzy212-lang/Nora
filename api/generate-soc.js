@@ -532,6 +532,13 @@ function renderSocContent(data = {}, config = {}, projectMeta = {}) {
     const secTitle = esc(section.title || '');
     const rows = section.rows || [];
 
+    // An area with no observations (e.g. "Flat B" used purely as a heading
+    // above its rooms) prints as a title only - no empty table.
+    if (rows.length === 0) {
+      html += `<div class="soc-section-heading">${secNum}. ${secTitle}</div>`;
+      return;
+    }
+
     html +=
       `<div class="soc-section-heading">${secNum}. ${secTitle}</div>` +
       '<table class="soc-obs-table">' +

@@ -132,6 +132,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [auditWarnings, setAuditWarnings] = useState([]);
   const [unresolvedOverridden, setUnresolvedOverridden] = useState(false);
   const [editableSections, setEditableSections] = useState([]);
+  // Area tools (added 2026-10-13): tick observations -> move to an area, add an
+  // area, reorder areas. Selection is keyed "sectionIdx:rowIdx" and is cleared
+  // after any change that could shift indices.
+  const [selectedRows, setSelectedRows] = useState(() => new Set());
+  const [showAddArea, setShowAddArea] = useState(false);
+  const [newAreaName, setNewAreaName] = useState('');
+  const [dragSecIdx, setDragSecIdx] = useState(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [editPersistPending, setEditPersistPending] = useState(false);
@@ -1087,6 +1094,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   }
 
   function moveRow(fromSectionIdx, rowIdx, toSectionTitle) {
+    setSelectedRows(new Set());
     setEditableSections(prev => {
       const next = JSON.parse(JSON.stringify(prev));
       const [row] = next[fromSectionIdx].rows.splice(rowIdx, 1);
@@ -1098,13 +1106,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
       // Renumbers both sections sequentially under their own prefix.
       next[fromSectionIdx] = renumberSectionRows(next[fromSectionIdx]);
       if (toIdx >= 0) next[toIdx] = renumberSectionRows(next[toIdx]);
-      const filtered = next.filter(s => s.rows.length > 0);
+      const filtered = next; // empty areas are kept (an empty area prints as a title only)
       schedulePersistEdits(filtered);
       return filtered;
     });
   }
 
   function deleteRow(sectionIdx, rowIdx) {
+    setSelectedRows(new Set());
     setEditableSections(prev => {
       const next = JSON.parse(JSON.stringify(prev));
       const [removed] = next[sectionIdx].rows.splice(rowIdx, 1);
@@ -1122,10 +1131,102 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           }),
         }).catch(e => console.warn('[SOC] claim exclusion update failed:', e.message));
       }
-      const filtered = next.filter(s => s.rows.length > 0);
+      const filtered = next; // empty areas are kept (an empty area prints as a title only)
       schedulePersistEdits(filtered);
       return filtered;
     });
+  }
+
+  // ── Area tools ──────────────────────────────────────────────────────────
+  function toggleRowSelected(sIdx, rIdx) {
+    setSelectedRows(prev => {
+      const n = new Set(prev);
+      const k = `${sIdx}:${rIdx}`;
+      if (n.has(k)) n.delete(k); else n.add(k);
+      return n;
+    });
+  }
+
+  function toggleAreaSelected(sIdx) {
+    setSelectedRows(prev => {
+      const n = new Set(prev);
+      const rows = editableSections[sIdx]?.rows || [];
+      const allOn = rows.length > 0 && rows.every((_, r) => n.has(`${sIdx}:${r}`));
+      rows.forEach((_, r) => { if (allOn) n.delete(`${sIdx}:${r}`); else n.add(`${sIdx}:${r}`); });
+      return n;
+    });
+  }
+
+  function addArea(name) {
+    const title = String(name || '').trim();
+    if (!title) return;
+    setEditableSections(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      if (next.some(a => normaliseText(a.title) === normaliseText(title))) return prev; // already exists
+      // Put the new area straight after the area holding the first ticked
+      // observation (so it lands next to what you are about to move into it),
+      // otherwise at the end.
+      let at = next.length;
+      const firstKey = [...selectedRows].sort((a, b) => {
+        const [as, ar] = a.split(':').map(Number); const [bs, br] = b.split(':').map(Number);
+        return as - bs || ar - br;
+      })[0];
+      if (firstKey) at = Number(firstKey.split(':')[0]) + 1;
+      next.splice(at, 0, { title, rows: [] });
+      schedulePersistEdits(next);
+      return next;
+    });
+    setNewAreaName('');
+    setShowAddArea(false);
+  }
+
+  function moveSelectedRowsTo(targetTitle) {
+    if (!targetTitle || selectedRows.size === 0) return;
+    setEditableSections(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const toIdx = next.findIndex(a => a.title === targetTitle);
+      if (toIdx < 0) return prev;
+      const picks = [...selectedRows].map(k => k.split(':').map(Number))
+        .filter(([si, ri]) => next[si] && next[si].rows[ri] && si !== toIdx)
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      if (!picks.length) return prev;
+      const moving = picks.map(([si, ri]) => next[si].rows[ri]);
+      // Remove from the end so earlier indices stay valid.
+      [...picks].reverse().forEach(([si, ri]) => next[si].rows.splice(ri, 1));
+      next[toIdx].rows.push(...moving);
+      const touched = new Set([toIdx, ...picks.map(([si]) => si)]);
+      touched.forEach(i => { next[i] = renumberSectionRows(next[i]); });
+      schedulePersistEdits(next);
+      return next;
+    });
+    setSelectedRows(new Set());
+  }
+
+  function moveArea(from, to) {
+    if (from === to || to < 0) return;
+    setEditableSections(prev => {
+      if (from < 0 || from >= prev.length || to >= prev.length) return prev;
+      const next = JSON.parse(JSON.stringify(prev));
+      const [a] = next.splice(from, 1);
+      next.splice(to, 0, a);
+      schedulePersistEdits(next);
+      return next;
+    });
+    setSelectedRows(new Set());
+  }
+
+  function deleteArea(sIdx) {
+    const area = editableSections[sIdx];
+    if (!area) return;
+    const n = (area.rows || []).length;
+    if (n > 0) { window.alert('Move or remove this area\'s observations first, then delete the area.'); return; }
+    if (!window.confirm(`Delete the area "${area.title}"?`)) return;
+    setEditableSections(prev => {
+      const next = prev.filter((_, i) => i !== sIdx);
+      schedulePersistEdits(next);
+      return next;
+    });
+    setSelectedRows(new Set());
   }
 
   function updateRowField(sectionIdx, rowIdx, field, value) {
@@ -1435,10 +1536,51 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             </div>
           )}
 
+          {/* Area tools */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg)', padding: '6px 0', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {!showAddArea ? (
+              <button onClick={() => setShowAddArea(true)}
+                style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', cursor: 'pointer' }}>
+                ＋ Add area
+              </button>
+            ) : (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <input autoFocus value={newAreaName} placeholder="Area name, e.g. Lounge"
+                  onChange={e => setNewAreaName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addArea(newAreaName); if (e.key === 'Escape') { setShowAddArea(false); setNewAreaName(''); } }}
+                  style={{ ...s.input, fontSize: 13, padding: '5px 8px', width: 190 }} />
+                <button onClick={() => addArea(newAreaName)} disabled={!newAreaName.trim()}
+                  style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99, border: 'none', background: 'var(--blue, #2563eb)', color: '#fff', cursor: 'pointer', opacity: newAreaName.trim() ? 1 : 0.5 }}>Add</button>
+                <button onClick={() => { setShowAddArea(false); setNewAreaName(''); }}
+                  style={{ fontSize: 12, padding: '5px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'none', color: 'var(--text2)', cursor: 'pointer' }}>Cancel</button>
+              </span>
+            )}
+            {selectedRows.size > 0 && (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+                <strong style={{ fontSize: 12 }}>{selectedRows.size} selected</strong>
+                <select value="" onChange={e => moveSelectedRowsTo(e.target.value)}
+                  style={{ ...s.aoSelect, fontSize: 12, padding: '4px 8px', maxWidth: 200 }}>
+                  <option value="">Move to…</option>
+                  {editableSections.map((a, i) => <option key={i} value={a.title}>{a.title}</option>)}
+                </select>
+                <button onClick={() => setSelectedRows(new Set())}
+                  style={{ fontSize: 12, padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'none', color: 'var(--text2)', cursor: 'pointer' }}>Clear</button>
+              </span>
+            )}
+          </div>
+
           {/* Editable sections */}
           {editableSections.map((section, sIdx) => (
-            <div key={sIdx} style={{ marginBottom: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6 }}>
+            <div key={sIdx} style={{ marginBottom: 4 }}
+              onDragOver={e => { if (dragSecIdx !== null) e.preventDefault(); }}
+              onDrop={e => { if (dragSecIdx !== null) { e.preventDefault(); moveArea(dragSecIdx, sIdx); setDragSecIdx(null); } }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '10px 2px 6px', borderBottom: '2px solid var(--border)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6, opacity: dragSecIdx === sIdx ? 0.5 : 1 }}>
+                <span draggable onDragStart={() => setDragSecIdx(sIdx)} onDragEnd={() => setDragSecIdx(null)}
+                  title="Drag to move this area" style={{ cursor: 'grab', color: 'var(--text3)', fontSize: 14, userSelect: 'none', padding: '0 2px' }}>⋮⋮</span>
+                <input type="checkbox" title="Tick all observations in this area"
+                  checked={(section.rows || []).length > 0 && (section.rows || []).every((_, r) => selectedRows.has(`${sIdx}:${r}`))}
+                  disabled={(section.rows || []).length === 0}
+                  onChange={() => toggleAreaSelected(sIdx)} />
                 <input
                   value={section.title}
                   onChange={e => {
@@ -1468,7 +1610,22 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                     ⚠ check no-defects wording
                   </span>
                 )}
+                <span style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
+                  <button onClick={() => moveArea(sIdx, sIdx - 1)} disabled={sIdx === 0} title="Move area up"
+                    style={{ background: 'none', border: 'none', cursor: sIdx === 0 ? 'default' : 'pointer', color: 'var(--text3)', opacity: sIdx === 0 ? 0.3 : 1, fontSize: 13, padding: '2px 4px' }}>▲</button>
+                  <button onClick={() => moveArea(sIdx, sIdx + 1)} disabled={sIdx === editableSections.length - 1} title="Move area down"
+                    style={{ background: 'none', border: 'none', cursor: sIdx === editableSections.length - 1 ? 'default' : 'pointer', color: 'var(--text3)', opacity: sIdx === editableSections.length - 1 ? 0.3 : 1, fontSize: 13, padding: '2px 4px' }}>▼</button>
+                  {(section.rows || []).length === 0 && (
+                    <button onClick={() => deleteArea(sIdx)} title="Delete this empty area"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 12, padding: '2px 4px' }}>✕</button>
+                  )}
+                </span>
               </div>
+              {(section.rows || []).length === 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--text3)', fontStyle: 'italic', padding: '0 2px 8px' }}>
+                  No observations — this area will print as a title only.
+                </div>
+              )}
               {(section.rows || []).map((row, rIdx) => {
                 const flagged = isRowFlagged(row);
                 return (
@@ -1480,6 +1637,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                     marginBottom: 6,
                   }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <input type="checkbox" title="Tick to move with others"
+                        checked={selectedRows.has(`${sIdx}:${rIdx}`)}
+                        onChange={() => toggleRowSelected(sIdx, rIdx)} />
                       <input
                         value={row.ref || ''}
                         onChange={e => updateRowField(sIdx, rIdx, 'ref', e.target.value)}
