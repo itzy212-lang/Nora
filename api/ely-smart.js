@@ -9,9 +9,10 @@ import { waitUntil } from '@vercel/functions';
 // import or by anything V2 does. See docs/nora-v2/NORA_V2_OPERATING_SYSTEM.md.
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
-import { assembleWorkingMemory, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, identifyDiscussedEmail, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
+import { assembleWorkingMemory, CATEGORY_BUDGETS, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, identifyDiscussedEmail, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
 import { assembleV2Prompt, splitDraftFromCommentary } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
+import { findNamedCorrespondentAddresses, formatRecipients, dedupeNearDuplicateEmails, emailEvidenceHeader } from './lib/named-correspondent.js';
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
 import { applyDependencyValidation } from './lib/stage1-dependency-graph.js';
@@ -1225,13 +1226,17 @@ async function runV2Pipeline({
 
   const rawSources = {
     currentInstruction: prompt ? [{ id: 'current_instruction', content: prompt, evidential_status: 'current_request' }] : [],
+    // Fixed 13 Oct 2026: scoped emails arrive already normalised (date/from, not
+    // received_at/sender_name), so the date and author used to be silently
+    // dropped and the model saw email text with no sender or date. Each email now
+    // carries a header line, so a chronology can only be built from labelled records.
     selectedEmail: orderedEmailContext.slice(0, 1).map((e) => ({
-      id: e.id, content: (e.body || e.body_preview || '').slice(0, 4000),
-      date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
+      id: e.id, content: (emailEvidenceHeader(e) + (e.body || e.body_preview || '')).slice(0, 4000 + 400),
+      date: e.date || e.received_at || e.sent_at, author: e.from || e.sender_name || e.sender_email,
     })),
     thread: orderedEmailContext.slice(1).map((e) => ({
-      id: e.id, content: (e.body || e.body_preview || '').slice(0, 2000),
-      date: e.received_at || e.sent_at, author: e.sender_name || e.sender_email,
+      id: e.id, content: (emailEvidenceHeader(e) + (e.body || e.body_preview || '')).slice(0, 2000 + 400),
+      date: e.date || e.received_at || e.sent_at, author: e.from || e.sender_name || e.sender_email,
     })),
     // Protects the most recent accepted draft from the chatHistory
     // per-category cap, so a minor-amendment request can never lose it.
@@ -1253,7 +1258,16 @@ async function runV2Pipeline({
     projectChatHistory,
     chatHistory: (chatHistory || []).slice(-40).map((m, i) => ({ id: `history_${i}`, content: `${m.role}: ${m.content}` })),
   };
-  const workingMemory = assembleWorkingMemory(rawSources);
+  // When the user named a correspondent, all of that person's emails (up to 40)
+  // are the evidence being asked for, so the thread category gets headroom for
+  // them. Every other request keeps the existing limits.
+  const namedCorrespondentMode = orderedEmailContext.some((e) => e && e._named_correspondent);
+  const workingMemory = assembleWorkingMemory(
+    rawSources,
+    namedCorrespondentMode
+      ? { categoryMaxItems: { thread: 40 }, categoryBudgets: { ...CATEGORY_BUDGETS, thread: 40000 } }
+      : {}
+  );
 
   const { prompt: systemPrompt, sections } = assembleV2Prompt({
     universalBrain,
@@ -1519,6 +1533,52 @@ function wantsEmailContext(prompt = '', projectId = null, suppliedEmailContext =
   );
 }
 
+// Named-correspondent retrieval (13 Oct 2026). When the user names someone who
+// has written to this project ("all the correspondence with John Kelly"), load
+// EVERY email to or from that person on this project (newest 40), not just the
+// 30 newest emails of any kind. Mechanical name match only — see
+// api/lib/named-correspondent.js and NORA_V2_OPERATING_SYSTEM.md section 5.
+const NAMED_CORRESPONDENT_EMAIL_LIMIT = 40;
+async function loadNamedCorrespondentEmails({ sb, prompt, projectId }) {
+  if (!sb || !projectId || !prompt) return [];
+  try {
+    const { data: senders } = await sb
+      .from('emails')
+      .select('sender_name, sender_email')
+      .eq('project_id', projectId)
+      .eq('direction', 'incoming')
+      .not('sender_name', 'is', null)
+      .limit(3000);
+    const addresses = findNamedCorrespondentAddresses(prompt, senders || []);
+    if (!addresses.length) return [];
+
+    const cols = 'id, thread_id, project_id, folder, direction, sender_name, sender_email, to_email, to_emails, cc_emails, subject, received_at, sent_at, created_at, body, body_preview';
+    const queries = [
+      sb.from('emails').select(cols).eq('project_id', projectId).in('sender_email', addresses).limit(200),
+      ...addresses.map((a) => sb.from('emails').select(cols).eq('project_id', projectId).ilike('to_email', `%${a}%`).limit(200)),
+      ...addresses.map((a) => sb.from('emails').select(cols).eq('project_id', projectId).contains('to_emails', [{ email: a }]).limit(200)),
+    ];
+    const results = await Promise.all(queries);
+    const byId = new Map();
+    for (const r of results) {
+      if (r.error) { console.warn('[ely-smart] named correspondent query error:', r.error.message); continue; }
+      for (const row of r.data || []) byId.set(row.id, row);
+    }
+    const sorted = [...byId.values()].sort((a, b) =>
+      new Date(a.received_at || a.sent_at || a.created_at) - new Date(b.received_at || b.sent_at || b.created_at));
+    const deduped = dedupeNearDuplicateEmails(sorted).slice(-NAMED_CORRESPONDENT_EMAIL_LIMIT);
+    console.log('[ely-smart] named correspondent retrieval:', JSON.stringify({ addresses, found: sorted.length, used: deduped.length }));
+    return deduped.map((row) => ({
+      ...normaliseEmailRecord({ ...row, to: formatRecipients(row.to_emails, row.to_email) }),
+      direction: row.direction,
+      _named_correspondent: true,
+    })).filter(Boolean);
+  } catch (err) {
+    console.warn('[ely-smart] named correspondent retrieval skipped:', err.message);
+    return [];
+  }
+}
+
 async function buildScopedEmailContext({ prompt, projectId, emailContext = null, threadId = null, emailId = null }) {
   const sb = getSupabase();
   const suppliedEmail = emailContext ? normaliseEmailRecord(emailContext) : null;
@@ -1528,6 +1588,8 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
 
   // Auto-search: detect "open email from [name]" in prompt
   if (!suppliedEmail && !emailId && !threadId) {
+    const namedEmails = await loadNamedCorrespondentEmails({ sb, prompt, projectId });
+    if (namedEmails.length) return namedEmails;
     const senderName = extractEmailSenderFromPrompt(prompt);
     if (senderName) {
       const found = await searchEmailsBySender(senderName, 3);
@@ -2214,7 +2276,10 @@ function extractEmailSenderFromPrompt(prompt = '') {
   for (const re of patterns) {
     const m = prompt.match(re);
     if (m && m[1] && m[1].trim().length > 1) {
-      return m[1].trim().replace(/\s+/g, ' ');
+      // Dictated prompts run on ("John Kelly I want to…"); cut the captured
+      // name at the first word that cannot be part of a name.
+      const cut = m[1].trim().replace(/\s+/g, ' ').split(/\s+(?:i|i'm|i've|i'd|we|you|he|she|they|it|to|that|which|who|so|but|because|when|as|is|was|has|have|had|please)\b/i)[0];
+      if (cut && cut.trim().length > 1) return cut.trim();
     }
   }
   return null;
@@ -2550,7 +2615,10 @@ function parseBookingIntent(prompt = '') {
   const timeMatch = prompt.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)|(?:\d{1,2})(?::\d{2})?\s*(?:o'?clock))\b/i);
 
   // Extract project/address
-  const projectMatch = prompt.match(/project\s+(?:is\s+)?([^,\.]+)|at\s+([^,\.]+(?:road|street|avenue|lane|close|way|drive|place|court|gardens?)[^,\.]*)/i);
+  // An address must start with a number or a capital letter ("at 69 Kettlebaston Road").
+  // The old case-insensitive pattern read "look at all the correspondence … in place"
+  // as an address and sent an email question into the calendar-booking flow.
+  const projectMatch = prompt.match(/\bproject\s+(?:is\s+)?([^,\.]+)|\bat\s+([0-9A-Z][^,\.]*?\b(?:[Rr]oad|[Ss]treet|[Aa]venue|[Ll]ane|[Cc]lose|[Ww]ay|[Dd]rive|[Pp]lace|[Cc]ourt|[Gg]ardens?)\b[^,\.]*)/);
 
   return {
     taskType,
@@ -3652,4 +3720,4 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 // Does not change production behaviour — the default export (the Vercel
 // handler) is unchanged. Exposed only so Phase 2A's Stage 1 logic can be
 // unit-tested without mocking the entire request pipeline.
-export { generateStage1Brief, emptyRetrievedAuthority, STAGE1_VALIDATION_RESULT, semanticSearchProject, runStage1ShadowTask, STAGE1_COMPLETION_TOKEN_LIMIT };
+export { parseBookingIntent, extractEmailSenderFromPrompt, generateStage1Brief, emptyRetrievedAuthority, STAGE1_VALIDATION_RESULT, semanticSearchProject, runStage1ShadowTask, STAGE1_COMPLETION_TOKEN_LIMIT };

@@ -49,6 +49,8 @@ Fixed, per §1. Dynamic Working Memory is assembled **before** the Terra call, n
 - Representation safeguards apply regardless of surface, mode, or voice profile.
 - Progressive context assembly means: gather the strongest available context using surface, linked project, selected email/thread, explicit user instruction, and existing retrieval mechanisms, within strict source-count and budget limits, before the single Terra call. It does **not** mean JavaScript deciding whether an information gap has been substantively answered — that is a model judgment. Where assembled context remains incomplete, Terra identifies the gap; JavaScript never tries to resolve it first. Model-directed iterative retrieval is a distinct future capability requiring its own separate architectural approval under this document — it is not implemented in the initial V2 release, and must not be quietly recreated through JavaScript heuristics.
 
+- Named-correspondent retrieval (13 Oct 2026): when the user's own words contain the full name of someone who has written to the linked project, the Operating System loads every email to or from that person on that project (newest 40) instead of only the newest 30 project emails. The match is plain text against the project's own senders — mechanical, owned by the Operating System's retrieval responsibility, with no judgement about relevance or about whether a gap is answered. Every email in Working Memory carries a Date / From / To / Subject / Direction header so evidence is labelled. Rollback: revert `api/lib/named-correspondent.js` and its call in `buildScopedEmailContext`; no data changes.
+
 ## 6. Amendment rules
 
 A change to Nora's behaviour, prompts, retrieval, memory, reasoning, or assembly must, before implementation:
