@@ -83,7 +83,11 @@ export async function runSocV2Pipeline(supabase, { sessionId, projectId, aoId, a
       notes_failed_processing: 'one or more notes failed to process and have not been retried',
       pending_clarification_unanswered: 'a live clarification question has not been answered yet' + (barrier.pending_clarification?.question ? ` ("${barrier.pending_clarification.question}")` : ''),
     }[barrier.reason] || barrier.reason;
-    const err = new Error(`Cannot generate yet — ${reasonText}. Please wait or resolve this, then try again.`);
+    // Name the blocking note(s) so the surveyor can see exactly what to
+    // look at (added 2026-10-13: previously a bare "one or more notes").
+    const blockingList = (barrier.blocking_notes || []).slice(0, 3)
+      .map(n => `note ${n.sequence}: "${String(n.raw_note || '').slice(0, 80)}"`).join('; ');
+    const err = new Error(`Cannot generate yet — ${reasonText}${blockingList ? ' (' + blockingList + ')' : ''}. Please wait or resolve this, then try again.`);
     err.isBarrierBlock = true;
     throw err;
   }

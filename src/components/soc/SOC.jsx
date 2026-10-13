@@ -826,6 +826,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     if (!text) return;
 
     stopRecording();
+    setGenerationIncomplete(false);
+    setGenerationWarning(null);
     setProcessing(true);
     setProcessingStatus('Extracting notes…');
 
@@ -1653,6 +1655,14 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           >
             {processing ? (processingStatus || 'Generating…') : 'Generate SOC'}
           </button>
+          {/* Added 2026-10-13: the "generation incomplete" warning used to be drawn only
+              on the review screen, so when generation was blocked (e.g. a note that failed
+              to save) nothing at all appeared here and the button looked dead. */}
+          {generationIncomplete && !processing && (
+            <div style={{ marginTop: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.45 }}>
+              ⚠ <strong>Could not generate the Schedule of Condition.</strong> {String(generationWarning || 'Generation incomplete — please retry.').replace(/^GENERATION_INCOMPLETE:\s*/, '')}
+            </div>
+          )}
           {processing && processingStatus && (
             <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
