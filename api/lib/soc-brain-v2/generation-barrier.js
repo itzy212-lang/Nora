@@ -38,7 +38,21 @@ export async function checkGenerationBarrier(supabase, sessionId) {
   if (error) throw new Error(`checkGenerationBarrier: could not load soc_notes: ${error.message}`);
 
   const stillProcessing = (notes || []).filter(n => n.processing_status === 'processing');
-  const failed = (notes || []).filter(n => n.processing_status === 'failed');
+  // Added 2026-10-13: a failed note whose exact words were ALSO saved
+  // and successfully processed elsewhere in this session (a double-save
+  // - e.g. the same dictation arriving twice within a second and losing
+  // the sequence race) has lost nothing: its content is already in the
+  // evidence. Such a duplicate no longer blocks generation forever.
+  // Any failed note with words not captured by a processed note still
+  // blocks, exactly as before.
+  const norm = t => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const processedTexts = new Set(
+    (notes || [])
+      .filter(n => n.processing_status === 'processed' || n.processing_status === 'clarification_required')
+      .map(n => norm(n.raw_note))
+      .filter(Boolean)
+  );
+  const failed = (notes || []).filter(n => n.processing_status === 'failed' && !processedTexts.has(norm(n.raw_note)));
 
   if (stillProcessing.length) {
     return {
