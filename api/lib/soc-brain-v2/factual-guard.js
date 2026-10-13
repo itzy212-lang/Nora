@@ -17,6 +17,7 @@
 
 import { FACTUAL_GUARD_CONTRACT } from './factual-guard-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
+import { mapWithConcurrency } from './concurrency.js';
 
 const numberUnitPattern = /\d+(?:\.\d+)?\s*(?:mm|millimetres?|millimeters?|cm|centimetres?|centimeters?|m|metres?|meters?)\b/gi;
 
@@ -195,8 +196,14 @@ export async function runPostQualityGuard(supabase, { sessionId, d4Draft, d5Draf
     pairsBySection.get(sectionId).push(p);
   }
 
-  for (const [, pairs] of pairsBySection.entries()) {
-    const verdicts = await checkSemanticEquivalence({ apiKey, model, pairs });
+  // One independent model call per section; run several at a time, then
+  // apply the verdicts sequentially in the original order.
+  const pairGroups = [...pairsBySection.values()];
+  const verdictSets = await mapWithConcurrency(pairGroups, 5, (pairs) => checkSemanticEquivalence({ apiKey, model, pairs }));
+
+  for (let gIdx = 0; gIdx < pairGroups.length; gIdx++) {
+    const pairs = pairGroups[gIdx];
+    const verdicts = verdictSets[gIdx];
     for (const p of pairs) {
       const d4Row = d4Rows.get(p.row_id);
       const d5Row = d5Rows.get(p.row_id);

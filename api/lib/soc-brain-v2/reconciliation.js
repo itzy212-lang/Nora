@@ -41,6 +41,7 @@
 import { assembleCanonicalGenerationInput } from './generation-input.js';
 import { RECONCILIATION_CONTRACT } from './reconciliation-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
+import { mapWithConcurrency } from './concurrency.js';
 
 // Dispositions Phase C already assigns that represent a genuine,
 // schedulable property fact. Everything else (superseded, duplicate,
@@ -310,11 +311,29 @@ export async function reconcile(supabase, { sessionId, projectId, aoId, apiKey, 
   }
 
   const recovered = [];
+
+  // Notes that need a model completeness check. These calls are
+  // independent, so they run several at a time (see concurrency.js);
+  // everything that depends on ORDER (recovered-item ids, the output
+  // array) is still built sequentially below in original note order.
+  const checkable = [];
   for (const note of (notes || [])) {
     if (note.structured_response?.type === 'direct_answer') continue; // already excluded, not evidence
     const claims = claimsByNote.get(note.sequence) || [];
     if (!claims.length) continue; // nothing to check completeness against
+    checkable.push({ note, claims });
+  }
 
+  const judgments = apiKey
+    ? await mapWithConcurrency(checkable, 8, ({ note, claims }) => {
+        const sectionId = claims[0]?.section_id || null;
+        const sectionName = sectionById.get(sectionId)?.display_name || null;
+        return checkNoteCompleteness({ apiKey, model, sectionName, note, claims });
+      })
+    : [];
+
+  for (let idx = 0; idx < checkable.length; idx++) {
+    const { note, claims } = checkable[idx];
     const sectionId = claims[0]?.section_id || null;
     const sectionName = sectionById.get(sectionId)?.display_name || null;
     const coverageSignal = wordOverlapSignal(note.raw_note, claims); // diagnostic only
@@ -343,7 +362,7 @@ export async function reconcile(supabase, { sessionId, projectId, aoId, apiKey, 
       continue;
     }
 
-    const judgment = await checkNoteCompleteness({ apiKey, model, sectionName, note, claims });
+    const judgment = judgments[idx];
     for (const r of (judgment.recovered || [])) {
       recovered.push({
         id: `recovered-${note.sequence}-${recovered.length + 1}`,

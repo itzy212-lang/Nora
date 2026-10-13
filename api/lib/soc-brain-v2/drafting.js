@@ -33,6 +33,7 @@ import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { USER_SOC_BRAIN_V2, buildUserSocBrainContext } from './user-soc-brain.js';
 import { DRAFTING_CONTRACT } from './drafting-contract.js';
 import { randomUUID } from 'crypto';
+import { mapWithConcurrency } from './concurrency.js';
 
 // Stable drafted-row identity (Phase D5 requirement): generated once,
 // here, when a row is first created — never recomputed from array
@@ -161,17 +162,18 @@ export async function draft(supabase, { sessionId, projectId, aoId, apiKey, mode
     itemsBySection.get(item.section_id).push(item);
   }
 
-  const sections = [];
-  for (const section of reconciliation.sections) { // already in first-visit order from D2/D1
+  // Sections are independent of each other, so they are drafted several
+  // at a time (see concurrency.js); output order is the input order
+  // (already in first-visit order from D2/D1).
+  const sections = await mapWithConcurrency(reconciliation.sections, 5, (section) => {
     const items = itemsBySection.get(section.id) || [];
-    const drafted = await draftSection({
+    return draftSection({
       apiKey, model,
       universalBrain: UNIVERSAL_SOC_BRAIN_V2,
       userBrainContext,
       section, items,
     });
-    sections.push(drafted);
-  }
+  });
 
   return {
     session_id: sessionId,

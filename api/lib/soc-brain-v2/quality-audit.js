@@ -21,6 +21,7 @@
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { USER_SOC_BRAIN_V2, buildUserSocBrainContext } from './user-soc-brain.js';
 import { QUALITY_AUDIT_CONTRACT } from './quality-audit-contract.js';
+import { mapWithConcurrency } from './concurrency.js';
 
 /**
  * Terra, matching the exact established invocation pattern used by
@@ -93,10 +94,20 @@ export async function runQualityAudit(supabase, { sessionId, projectId, aoId, dr
   const auditTrail = [];
   const allIssuesForUpstreamReview = [];
 
-  for (const section of draftResult.sections) {
+  // Each section's review is an independent model call, so they run
+  // several at a time (see concurrency.js). Everything order-dependent
+  // (audit trail, upstream-issue list, output sections) is still built
+  // sequentially below, in section order.
+  const reviews = await mapWithConcurrency(draftResult.sections, 5, (section) => {
+    const reviewableRows = section.rows.filter(r => !blocked.has(r.row_id));
+    return reviewSection({ apiKey, model, section, reviewableRows, userBrainContext });
+  });
+
+  for (let sIdx = 0; sIdx < draftResult.sections.length; sIdx++) {
+    const section = draftResult.sections[sIdx];
     const reviewableRows = section.rows.filter(r => !blocked.has(r.row_id));
 
-    const result = await reviewSection({ apiKey, model, section, reviewableRows, userBrainContext });
+    const result = reviews[sIdx];
 
     const reviewableIds = new Set(reviewableRows.map(r => r.row_id));
     const editsByRowId = new Map(
