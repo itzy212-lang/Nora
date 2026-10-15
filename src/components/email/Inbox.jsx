@@ -1651,6 +1651,79 @@ function ProjectLinkBanner({ email, onLinked }) {
   );
 }
 
+// ── Folder picker for saving attachments (2026-10-15) ───────────────────────
+// Browses the project's OneDrive folder one level at a time; the person picks
+// where the attachments go. Only folders are listed.
+function FolderPicker({ rootFolderId, busy, onCancel, onChoose }) {
+  const [trail, setTrail] = useState([{ id: rootFolderId, name: 'Project folder' }]);
+  const [folders, setFolders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const current = trail[trail.length - 1];
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr('');
+    (async () => {
+      try {
+        const userEmail = await getCurrentUserEmail();
+        if (!userEmail) throw new Error('Could not determine your account - please refresh and try again.');
+        const res = await fetch('/api/onedrive-folder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userEmail, action: 'get_folder_contents', project_folder_id: current.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not open this folder');
+        if (!cancelled) setFolders((data.items || []).filter(i => !!i.folder).sort((a, b) => String(a.name).localeCompare(String(b.name))));
+      } catch (e) {
+        if (!cancelled) { setErr(e.message); setFolders([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [current.id]);
+
+  const label = trail.map(t => t.name).join(' / ');
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10, background: 'var(--bg)' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Save to which folder?</div>
+      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {trail.map((t, i) => (
+          <span key={t.id}>
+            <button onClick={() => setTrail(trail.slice(0, i + 1))} disabled={i === trail.length - 1}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: i === trail.length - 1 ? 'default' : 'pointer', color: i === trail.length - 1 ? 'var(--text)' : 'var(--blue)', fontSize: 11.5, fontWeight: i === trail.length - 1 ? 700 : 500 }}>
+              {t.name}
+            </button>
+            {i < trail.length - 1 && ' / '}
+          </span>
+        ))}
+      </div>
+      <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 8 }}>
+        {loading && <div style={{ padding: 10, fontSize: 12, color: 'var(--text3)' }}>Loading folders…</div>}
+        {!loading && err && <div style={{ padding: 10, fontSize: 12, color: 'var(--red, #ef4444)' }}>{err}</div>}
+        {!loading && !err && folders.length === 0 && <div style={{ padding: 10, fontSize: 12, color: 'var(--text3)' }}>No sub-folders here - you can save in this folder.</div>}
+        {!loading && folders.map(f => (
+          <div key={f.id} onClick={() => setTrail([...trail, { id: f.id, name: f.name }])}
+            style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', borderBottom: '1px solid var(--border)', color: 'var(--text)', display: 'flex', gap: 6 }}>
+            <span>📁</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={() => onChoose(current.id, label)} disabled={busy || loading}
+          style={{ flex: 2, padding: '7px 0', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (busy || loading) ? 0.6 : 1 }}>
+          {busy ? 'Saving…' : 'Save here'}
+        </button>
+        <button onClick={onCancel} disabled={busy}
+          style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', fontSize: 12, cursor: 'pointer', color: 'var(--text3)' }}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Save / summarize attachment popup ───────────────────────────────────────
 // Rebuilt 2026-08-08: the previous version's only real action was
 // project-linking, despite being titled "Save attachment?" — confirmed
@@ -1663,6 +1736,9 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
   const [confirmedIds, setConfirmedIds] = useState(() => new Set()); // green-tick "summarized" markers
   const [error, setError] = useState('');
   const [projectFolderId, setProjectFolderId] = useState(null);
+  const [picker, setPicker] = useState(null);        // null | 'save' | 'both'
+  const [savedMessage, setSavedMessage] = useState('');
+  const [folderLabel, setFolderLabel] = useState('');
 
   const realAttachments = (attachments || []).filter(a => a.attachment_external_id);
 
@@ -1672,6 +1748,11 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
       .eq('id', email.project_id).maybeSingle()
       .then(({ data }) => setProjectFolderId(data?.onedrive_folder_id || null));
   }, [email?.project_id]);
+
+  // Everything ticked by default, so the common case is one click on Save.
+  useEffect(() => {
+    setSelected(new Set((attachments || []).filter(a => a.attachment_external_id).map(a => a.id)));
+  }, [attachments]);
 
   if (!realAttachments.length) return null;
 
@@ -1683,32 +1764,28 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     });
   };
 
-  const saveSelected = async () => {
-    if (!projectFolderId) { setError('This project has no OneDrive folder configured yet.'); return; }
+  // Rebuilt 2026-10-15, on request: Save asks WHERE (a folder inside the
+  // project's OneDrive folder), then the server copies the files across.
+  const saveSelected = async (folderId) => {
+    if (!folderId) { setError('Choose a folder first.'); return false; }
     setError('');
     const userEmail = await getCurrentUserEmail();
-    if (!userEmail) { setError('Could not determine your account — please refresh and try again.'); return; }
-    for (const id of selected) {
-      const att = realAttachments.find(a => a.id === id);
-      if (!att) continue;
-      const baseRes = await fetch('/api/attachment-base64', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attachment_id: id }),
-      });
-      const base = await baseRes.json();
-      if (!baseRes.ok) throw new Error(base.error || 'Could not fetch attachment');
-      const upRes = await fetch('/api/onedrive-upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userEmail,
-          folder_id: projectFolderId,
-          filename: base.filename || att.filename,
-          content_base64: base.content_base64,
-          content_type: base.content_type || att.content_type,
-        }),
-      });
-      if (!upRes.ok) throw new Error((await upRes.json()).error || 'OneDrive upload failed');
+    if (!userEmail) { setError('Could not determine your account - please refresh and try again.'); return false; }
+    const res = await fetch('/api/save-attachments-to-onedrive', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userEmail, folder_id: folderId, attachment_ids: [...selected] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      const failed = (data.results || []).filter(r => !r.ok).map(r => `${r.name || 'file'}: ${r.error}`).join('; ');
+      throw new Error(failed || data.error || 'Could not save the attachments');
     }
+    if (data.failed) {
+      const failed = (data.results || []).filter(r => !r.ok).map(r => `${r.name || 'file'}: ${r.error}`).join('; ');
+      throw new Error(`Saved ${data.saved}, but ${data.failed} failed - ${failed}`);
+    }
+    setSavedMessage(`Saved ${data.saved} file${data.saved === 1 ? '' : 's'} to ${folderLabel || 'the project folder'}`);
+    return true;
   };
 
   const summarizeSelected = async () => {
@@ -1727,24 +1804,22 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     setConfirmedIds(prev => new Set([...prev, ...newlyConfirmed]));
   };
 
-  const handleSave = async () => {
+  const openPicker = (mode) => {
     if (!selected.size) return;
-    setBusy(true);
-    try {
-      await saveSelected();
-      onDismiss?.(); // Save closes the popup, per spec
-    } catch (err) {
-      setError(err.message);
-    }
-    setBusy(false);
+    if (!projectFolderId) { setError('This project has no OneDrive folder configured yet.'); return; }
+    setError('');
+    setPicker(mode);
   };
+
+  const handleSave = () => openPicker('save');
+  const handleSaveAndSummarize = () => openPicker('both');
 
   const handleSummarize = async () => {
     if (!selected.size) return;
     setBusy(true);
     try {
       await summarizeSelected();
-      // Summarize alone stays open, per spec — lets the user reselect
+      // Summarize alone stays open, per spec - lets the user reselect
       // and save afterward if they choose to.
     } catch (err) {
       setError(err.message);
@@ -1752,15 +1827,20 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     setBusy(false);
   };
 
-  const handleSaveAndSummarize = async () => {
-    if (!selected.size) return;
+  const handleFolderChosen = async (folderId, label) => {
+    setFolderLabel(label);
     setBusy(true);
+    setError('');
     try {
-      await summarizeSelected();
-      await saveSelected();
-      onDismiss?.(); // closes, since it includes Save
+      if (picker === 'both') await summarizeSelected();
+      const ok = await saveSelected(folderId);
+      if (ok) {
+        setPicker(null);
+        setTimeout(() => onDismiss?.(), 1800);
+      }
     } catch (err) {
       setError(err.message);
+      setPicker(null);
     }
     setBusy(false);
   };
@@ -1781,6 +1861,21 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
         <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>
           Link this email to a project to enable summarising. Saving to OneDrive also needs a linked project.
         </div>
+      )}
+
+      {savedMessage && (
+        <div style={{ fontSize: 12.5, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 8, padding: '8px 10px', marginBottom: 10, fontWeight: 600 }}>
+          ✓ {savedMessage}
+        </div>
+      )}
+
+      {picker && (
+        <FolderPicker
+          rootFolderId={projectFolderId}
+          busy={busy}
+          onCancel={() => setPicker(null)}
+          onChoose={handleFolderChosen}
+        />
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 180, overflowY: 'auto' }}>
@@ -2057,6 +2152,12 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
           {attachments.map(att => (
             <AttachmentChip key={att.id} att={att} />
           ))}
+          <button
+            onClick={() => setShowSavePopup(true)}
+            title="Save these attachments to a folder in the project"
+            style={{ marginLeft: 'auto', flexShrink: 0, padding: '4px 12px', borderRadius: 6, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            💾 Save…
+          </button>
         </div>
       )}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: isHtml ? '#fff' : 'transparent' }}>

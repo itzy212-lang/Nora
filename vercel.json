@@ -26,6 +26,9 @@
     }
   ],
   "functions": {
+    "api/save-attachments-to-onedrive.js": {
+      "maxDuration": 60
+    },
     "api/generate-doc.js": {
       "maxDuration": 60
     },
