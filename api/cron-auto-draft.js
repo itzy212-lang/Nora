@@ -321,6 +321,21 @@ function hasWaitedLongEnough(receivedAt, nowMs, minutes) {
 // project + recipient address, and discount any message that lines up with a
 // reply Nora herself sent (email_auto_drafts, status 'sent').
 const PERSONAL_CONTACT_HOLD_MINUTES = 120;
+// Added 2026-10-15, on request ("if I've sent an email and it's responding to my
+// email, Nora shouldn't be responding"): an email that ARRIVES AFTER Itzik
+// personally wrote to that person, within this many hours, is treated as a reply
+// to Itzik and is never answered by Nora - the next move is his. Real case: he
+// asked a client a question, the client answered it, and Nora (once the 2-hour
+// hold-off expired) made a commitment on his behalf.
+const REPLY_TO_ITZIK_WINDOW_HOURS = 72;
+const PERSONAL_REPLY_LOOKBACK_HOURS = 24 * 5;
+
+// Pure: is this email a reply to something Itzik personally sent?
+function isReplyToPersonalMessage(receivedAt, personalMs, windowHours = REPLY_TO_ITZIK_WINDOW_HOURS) {
+  const r = new Date(receivedAt || 0).getTime();
+  if (!r || personalMs === null || personalMs === undefined) return false;
+  return personalMs <= r && (r - personalMs) <= windowHours * 3600 * 1000;
+}
 const NORA_SEND_MATCH_SECONDS = 180;
 
 // Pure: given candidate outgoing rows and Nora's own sent drafts, return the
@@ -344,7 +359,7 @@ function latestPersonalMessageTime(outgoingRows, noraDrafts) {
 async function findLatestPersonalMessageTime(email, supabase) {
   const sender = String(email.sender_email || '').trim().toLowerCase();
   if (!sender || !email.project_id) return null;
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - PERSONAL_REPLY_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
   const cols = 'id, received_at, sent_at, created_at';
   try {
     const [byText, byJson, drafts] = await Promise.all([
@@ -426,6 +441,9 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   const lastPersonalMs = await findLatestPersonalMessageTime(email, supabase);
   if (lastPersonalMs !== null && (Date.now() - lastPersonalMs) < PERSONAL_CONTACT_HOLD_MINUTES * 60 * 1000) {
     return { eligible: false, framing: null, reason: 'personal_contact' };
+  }
+  if (isReplyToPersonalMessage(email.received_at, lastPersonalMs)) {
+    return { eligible: false, framing: null, reason: 'reply_to_itzik' };
   }
 
   // Same-day back-and-forth: has there been a genuine exchange (at
@@ -2264,6 +2282,7 @@ export {
   computeSameDayBackAndForth,
   computeSilenceFallback,
   latestPersonalMessageTime,
+  isReplyToPersonalMessage,
   normaliseSubjectForConversation,
   hasWaitedLongEnough,
   ANSWERED_CONVERSATION_WAIT_MINUTES,

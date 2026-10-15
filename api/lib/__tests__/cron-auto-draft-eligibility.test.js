@@ -615,3 +615,22 @@ describe('wait before answering a conversation Nora has already answered', () =>
     expect(hasWaitedLongEnough(null, Date.now(), 180)).toBe(false);
   });
 });
+
+import { isReplyToPersonalMessage } from '../../cron-auto-draft.js';
+
+describe('an email that answers something Itzik personally sent is his, not Nora\'s', () => {
+  const itzik = new Date('2026-10-15T13:19:43Z').getTime();
+  it('Marie Burak case: her 13:23 answer to his 13:19 question is not answered by Nora', () => {
+    expect(isReplyToPersonalMessage('2026-10-15T13:23:24Z', itzik)).toBe(true);
+  });
+  it('still blocked a day later, but not after the 72-hour window', () => {
+    expect(isReplyToPersonalMessage('2026-10-16T13:00:00Z', itzik)).toBe(true);
+    expect(isReplyToPersonalMessage('2026-10-19T13:00:00Z', itzik)).toBe(false);
+  });
+  it('an email that arrived BEFORE his message is not a reply to it', () => {
+    expect(isReplyToPersonalMessage('2026-10-15T13:00:00Z', itzik)).toBe(false);
+  });
+  it('no personal message means no block', () => {
+    expect(isReplyToPersonalMessage('2026-10-15T13:23:24Z', null)).toBe(false);
+  });
+});
