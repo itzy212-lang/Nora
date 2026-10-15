@@ -1792,10 +1792,11 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     if (!email?.project_id) { setError('Link this email to a project first.'); return; }
     setError('');
     const newlyConfirmed = new Set();
+    const userEmail = await getCurrentUserEmail();
     for (const id of selected) {
       const res = await fetch('/api/summarize-attachment', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attachment_id: id, project_id: email.project_id }),
+        body: JSON.stringify({ attachment_id: id, project_id: email.project_id, user_id: userEmail }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Summarisation failed');

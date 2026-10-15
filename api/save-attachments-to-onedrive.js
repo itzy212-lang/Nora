@@ -9,6 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getValidMicrosoftToken } from './onedrive-helper.js';
+import { loadAttachmentBuffer } from './lib/attachment-source.js';
 
 function getSupabase() {
   return createClient(
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
     const sb = getSupabase();
     const { data: atts, error } = await sb
       .from('email_attachments')
-      .select('id, filename, content_type, storage_path')
+      .select('id, filename, content_type, storage_path, email_external_id, attachment_external_id')
       .in('id', attachment_ids);
     if (error) throw new Error(error.message);
 
@@ -81,9 +82,7 @@ export default async function handler(req, res) {
       const att = (atts || []).find((a) => a.id === id);
       if (!att) { results.push({ id, ok: false, error: 'Attachment not found' }); continue; }
       try {
-        const { data: file, error: dlErr } = await sb.storage.from('email-attachments').download(att.storage_path);
-        if (dlErr || !file) throw new Error('Could not read the stored copy of this attachment');
-        const buffer = Buffer.from(await file.arrayBuffer());
+        const buffer = await loadAttachmentBuffer({ sb, att, token });
         const name = String(att.filename || 'attachment').replace(/[\\/:*?"<>|]/g, '-').trim() || 'attachment';
         const item = await putToFolder({
           token, folderId: folder_id, name, buffer,

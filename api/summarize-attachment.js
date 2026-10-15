@@ -10,6 +10,8 @@
 // working infrastructure rather than a new format.
 
 import { createClient } from '@supabase/supabase-js';
+import { getValidMicrosoftToken } from './onedrive-helper.js';
+import { loadAttachmentBuffer } from './lib/attachment-source.js';
 
 function getSupabase() {
   return createClient(
@@ -21,13 +23,10 @@ function getSupabase() {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-async function extractAttachmentText(sb, attachment) {
-  const { data: fileData, error: dlErr } = await sb.storage
-    .from('email-attachments')
-    .download(attachment.storage_path);
-  if (dlErr || !fileData) throw new Error('Could not download attachment from storage');
-
-  const buffer = Buffer.from(await fileData.arrayBuffer());
+async function extractAttachmentText(sb, attachment, token) {
+  // Fixed 2026-10-15: the "email-attachments" storage bucket this used to read
+  // from does not exist; the file is fetched from Outlook instead.
+  const buffer = await loadAttachmentBuffer({ sb, att: attachment, token });
   const mime = (attachment.content_type || '').toLowerCase();
   const name = (attachment.filename || '').toLowerCase();
 
@@ -51,7 +50,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { attachment_id, project_id } = req.body || {};
+    const { attachment_id, project_id, user_id } = req.body || {};
     if (!attachment_id || !project_id) {
       return res.status(400).json({ error: 'attachment_id and project_id are required' });
     }
@@ -61,19 +60,20 @@ export default async function handler(req, res) {
 
     const { data: attachment, error: attErr } = await sb
       .from('email_attachments')
-      .select('id, filename, content_type, storage_path, email_id')
+      .select('id, filename, content_type, storage_path, email_id, email_external_id, attachment_external_id')
       .eq('id', attachment_id)
       .maybeSingle();
     if (attErr || !attachment) return res.status(404).json({ error: 'Attachment not found' });
 
     let email = null;
     if (attachment.email_id) {
-      const { data } = await sb.from('emails').select('subject, received_at, sent_at, from_address')
+      const { data } = await sb.from('emails').select('subject, received_at, sent_at, sender_email')
         .eq('id', attachment.email_id).maybeSingle();
       email = data;
     }
 
-    const text = await extractAttachmentText(sb, attachment);
+    const token = user_id ? await getValidMicrosoftToken(user_id) : null;
+    const text = await extractAttachmentText(sb, attachment, token);
     if (!text.trim()) {
       return res.status(200).json({ ok: true, saved: 0, message: 'No extractable text found in this attachment' });
     }
