@@ -599,3 +599,19 @@ describe('personal-contact hold-off: Itzik\'s own messages vs Nora\'s', () => {
     expect(latestPersonalMessageTime(out, drafts)).toBe(new Date(t('10:25:04')).getTime());
   });
 });
+
+import { hasWaitedLongEnough, ANSWERED_CONVERSATION_WAIT_MINUTES } from '../../cron-auto-draft.js';
+
+describe('wait before answering a conversation Nora has already answered', () => {
+  const received = '2026-10-15T10:50:15Z';
+  const at = (hhmm) => new Date('2026-10-15T' + hhmm + ':00Z').getTime();
+  it('waits 3 hours', () => {
+    expect(ANSWERED_CONVERSATION_WAIT_MINUTES).toBe(180);
+    expect(hasWaitedLongEnough(received, at('11:20'), 180)).toBe(false);   // 30 min: Adeel's 12:16 reply case
+    expect(hasWaitedLongEnough(received, at('13:49'), 180)).toBe(false);
+    expect(hasWaitedLongEnough(received, at('13:51'), 180)).toBe(true);
+  });
+  it('never treats a missing date as waited', () => {
+    expect(hasWaitedLongEnough(null, Date.now(), 180)).toBe(false);
+  });
+});

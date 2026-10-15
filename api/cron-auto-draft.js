@@ -276,22 +276,36 @@ async function conversationIsMuted(email, supabase) {
   }
 }
 
-// Failsafe 2: ONE automatic reply per conversation. Once a reply has actually
-// been sent (auto or reviewed-then-sent), Nora does not answer further messages
-// in that conversation; a genuinely different subject is a new conversation.
-async function conversationAlreadyAnswered(email, supabase) {
+// Failsafe 2: once Nora has answered a conversation, a further message in it
+// is not answered straight away. Rule (Itzik, 2026-10-15): if Nora has already
+// replied and they write back, she waits ANSWERED_CONVERSATION_WAIT_MINUTES
+// before replying, giving Itzik time to handle it himself; and when she does
+// get to it, the brain's existing "already responded" rule makes her stay
+// silent (<<<SKIP_NOT_ADDRESSED>>>) unless there is a genuine question.
+// Counts Nora's sent replies in the same conversation (same thread, or same
+// project + subject without Re:/Fwd:), because Outlook gives each reply a new
+// thread id.
+const ANSWERED_CONVERSATION_WAIT_MINUTES = 180;
+
+async function countNoraRepliesInConversation(email, supabase) {
   try {
     const since = new Date(Date.now() - CONVERSATION_LOOKBACK_DAYS * 86400000).toISOString();
     let q = supabase.from('email_auto_drafts').select('thread_id, project_id, subject').eq('status', 'sent').gte('updated_at', since).limit(200);
     if (email.project_id) q = q.or('project_id.eq.' + email.project_id + (email.thread_id ? ',thread_id.eq.' + email.thread_id : ''));
     else if (email.thread_id) q = q.eq('thread_id', email.thread_id);
-    else return false;
+    else return 0;
     const { data } = await q;
-    return (data || []).some((d) => isSameConversation(email, d));
+    return (data || []).filter((d) => isSameConversation(email, d)).length;
   } catch (err) {
-    console.warn('[cron-auto-draft] already-answered lookup failed (non-fatal):', err.message);
-    return false;
+    console.warn('[cron-auto-draft] conversation reply count failed (non-fatal):', err.message);
+    return 0;
   }
+}
+
+// Pure: has this email been waiting long enough?
+function hasWaitedLongEnough(receivedAt, nowMs, minutes) {
+  const t = new Date(receivedAt || 0).getTime();
+  return !!t && (nowMs - t) >= minutes * 60 * 1000;
 }
 
 // ── Personal-contact hold-off ──────────────────────────────────────
@@ -380,9 +394,10 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     return { eligible: false, framing: null, reason: 'muted' };
   }
 
-  // ── 0a2. One automatic reply per conversation ────────────────────
-  if (await conversationAlreadyAnswered(email, supabase)) {
-    return { eligible: false, framing: null, reason: 'already_answered' };
+  // ── 0a2. Already answered once: wait before answering again ─────
+  if ((await countNoraRepliesInConversation(email, supabase)) > 0 &&
+      !hasWaitedLongEnough(email.received_at, Date.now(), ANSWERED_CONVERSATION_WAIT_MINUTES)) {
+    return { eligible: false, framing: null, reason: 'answered_wait' };
   }
 
   // ── 0b. No project link ──────────────────────────────────────────
@@ -1752,13 +1767,11 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // flag on outgoing rows distinguishing Nora's own text from
         // Itzik's.
         let priorResponseContext = '';
-        if (email.thread_id) {
-          const { data: priorSent } = await supabase
-            .from('email_auto_drafts')
-            .select('id')
-            .eq('thread_id', email.thread_id)
-            .eq('status', 'sent');
-          const priorCount = (priorSent || []).length;
+        {
+          // Fixed 2026-10-15: counts replies across the whole conversation
+          // (see isSameConversation), not just one thread id - Outlook gives
+          // every reply a new thread id, so this used to read 0 for follow-ups.
+          const priorCount = await countNoraRepliesInConversation(email, supabase);
           if (priorCount > 0) {
             priorResponseContext = '\n\nPRIOR RESPONSES IN THIS THREAD - Nora has already sent ' + priorCount + ' repl' + (priorCount === 1 ? 'y' : 'ies') + ' in this thread already (see the ALREADY RESPONDED brain rule before drafting another).';
           }
@@ -2252,6 +2265,8 @@ export {
   computeSilenceFallback,
   latestPersonalMessageTime,
   normaliseSubjectForConversation,
+  hasWaitedLongEnough,
+  ANSWERED_CONVERSATION_WAIT_MINUTES,
   isSameConversation,
   PERSONAL_CONTACT_HOLD_MINUTES,
   findSameAppointmentMatch,
