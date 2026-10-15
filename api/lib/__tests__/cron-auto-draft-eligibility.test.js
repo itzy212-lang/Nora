@@ -562,3 +562,40 @@ describe('real finish time for non-SOC diary entries', () => {
     expect(realFinishTime({ task_type: 'meeting', end_time: '09:00' })).toBeNull();
   });
 });
+
+import { latestPersonalMessageTime, normaliseSubjectForConversation, isSameConversation } from '../../cron-auto-draft.js';
+
+describe('conversation matching (Outlook gives each reply a new thread id)', () => {
+  it('strips Re:/Fwd: prefixes', () => {
+    expect(normaliseSubjectForConversation('Re: Re: RE: Flat D, 16 Wetherby Place')).toBe('flat d, 16 wetherby place');
+    expect(normaliseSubjectForConversation('FW: Re: X')).toBe('x');
+  });
+  it('treats Adeel Raza\'s two emails as one conversation despite different thread ids', () => {
+    const a = { thread_id: 'AAA', project_id: 'p1', subject: 'Re: Flat D, 16 Wetherby Place, London, SW7 4ND' };
+    const b = { thread_id: 'BBB', project_id: 'p1', subject: 'Re: Re: Re: Flat D, 16 Wetherby Place, London, SW7 4ND' };
+    expect(isSameConversation(a, b)).toBe(true);
+  });
+  it('keeps a different subject, or a different project, as a new conversation', () => {
+    const a = { thread_id: 'AAA', project_id: 'p1', subject: 'Re: Flat D' };
+    expect(isSameConversation(a, { thread_id: 'BBB', project_id: 'p1', subject: 'Invoice 1671' })).toBe(false);
+    expect(isSameConversation(a, { thread_id: 'CCC', project_id: 'p2', subject: 'Flat D' })).toBe(false);
+  });
+});
+
+describe('personal-contact hold-off: Itzik\'s own messages vs Nora\'s', () => {
+  const t = (s) => '2026-10-15T' + s + 'Z';
+  it('finds Itzik\'s own email to the sender', () => {
+    const out = [{ sent_at: t('10:25:04') }];
+    expect(latestPersonalMessageTime(out, [])).toBe(new Date(t('10:25:04')).getTime());
+  });
+  it('ignores rows that line up with a reply Nora herself sent', () => {
+    const out = [{ sent_at: t('10:46:01') }, { sent_at: t('10:46:02') }];
+    const drafts = [{ created_at: t('10:45:57'), updated_at: t('10:45:58') }];
+    expect(latestPersonalMessageTime(out, drafts)).toBeNull();
+  });
+  it('still finds Itzik\'s email when Nora also replied earlier', () => {
+    const out = [{ sent_at: t('10:25:04') }, { sent_at: t('10:46:01') }];
+    const drafts = [{ created_at: t('10:45:57'), updated_at: t('10:45:58') }];
+    expect(latestPersonalMessageTime(out, drafts)).toBe(new Date(t('10:25:04')).getTime());
+  });
+});

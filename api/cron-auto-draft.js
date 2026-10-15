@@ -235,6 +235,121 @@ function realFinishTime(task) {
 // of past calls - the "keep re-asking until something changes"
 // design this whole feature depends on comes entirely from there
 // being no cached decision anywhere, not from this function itself.
+// ── Conversation matching, mute and one-reply failsafes ─────────────
+// Added 2026-10-15, on request. Outlook gives each reply in an exchange a
+// DIFFERENT thread id, so thread id alone cannot say "this is the same
+// conversation" (Adeel Raza's two emails 15 min apart had different ones, and
+// Nora replied to both). Two emails are the same conversation when they share a
+// thread id, OR belong to the same project with the same subject once
+// Re:/Fwd: prefixes are removed.
+const CONVERSATION_LOOKBACK_DAYS = 14;
+
+function normaliseSubjectForConversation(subject) {
+  let s = String(subject || '').toLowerCase().trim();
+  let prev;
+  do { prev = s; s = s.replace(/^\s*(re|fw|fwd|aw|sv)\s*:\s*/i, ''); } while (s !== prev);
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function isSameConversation(a, b) {
+  if (!a || !b) return false;
+  if (a.thread_id && b.thread_id && a.thread_id === b.thread_id) return true;
+  if (!a.project_id || a.project_id !== b.project_id) return false;
+  const sa = normaliseSubjectForConversation(a.subject);
+  return sa.length > 0 && sa === normaliseSubjectForConversation(b.subject);
+}
+
+// Failsafe 1: the "Nora won't reply" switch covers the whole conversation,
+// not only the one email it was clicked on.
+async function conversationIsMuted(email, supabase) {
+  try {
+    const since = new Date(Date.now() - CONVERSATION_LOOKBACK_DAYS * 86400000).toISOString();
+    let q = supabase.from('emails').select('id, thread_id, project_id, subject').eq('nora_no_reply', true).gte('received_at', since).limit(200);
+    if (email.project_id) q = q.or('project_id.eq.' + email.project_id + (email.thread_id ? ',thread_id.eq.' + email.thread_id : ''));
+    else if (email.thread_id) q = q.eq('thread_id', email.thread_id);
+    else return false;
+    const { data } = await q;
+    return (data || []).some((m) => m.id !== email.id && isSameConversation(email, m));
+  } catch (err) {
+    console.warn('[cron-auto-draft] mute-conversation lookup failed (non-fatal):', err.message);
+    return false;
+  }
+}
+
+// Failsafe 2: ONE automatic reply per conversation. Once a reply has actually
+// been sent (auto or reviewed-then-sent), Nora does not answer further messages
+// in that conversation; a genuinely different subject is a new conversation.
+async function conversationAlreadyAnswered(email, supabase) {
+  try {
+    const since = new Date(Date.now() - CONVERSATION_LOOKBACK_DAYS * 86400000).toISOString();
+    let q = supabase.from('email_auto_drafts').select('thread_id, project_id, subject').eq('status', 'sent').gte('updated_at', since).limit(200);
+    if (email.project_id) q = q.or('project_id.eq.' + email.project_id + (email.thread_id ? ',thread_id.eq.' + email.thread_id : ''));
+    else if (email.thread_id) q = q.eq('thread_id', email.thread_id);
+    else return false;
+    const { data } = await q;
+    return (data || []).some((d) => isSameConversation(email, d));
+  } catch (err) {
+    console.warn('[cron-auto-draft] already-answered lookup failed (non-fatal):', err.message);
+    return false;
+  }
+}
+
+// ── Personal-contact hold-off ──────────────────────────────────────
+// Added 2026-10-15, on request: if Itzik has personally emailed this person
+// recently, Nora must not auto-reply to them, even when his diary shows him
+// busy (the case that prompted it: he emailed a surveyor at 11:25, the surveyor
+// answered at 11:35, and Nora sent a holding reply at 11:46).
+//
+// Two real defects are fixed here as well: emails sent from inside Nora are
+// stored with NO thread_id, so every thread-based lookup (silence rule,
+// same-day back-and-forth) was blind to Itzik's own messages; and nothing on an
+// outgoing row says whether Nora or Itzik wrote it. So we match his messages by
+// project + recipient address, and discount any message that lines up with a
+// reply Nora herself sent (email_auto_drafts, status 'sent').
+const PERSONAL_CONTACT_HOLD_MINUTES = 120;
+const NORA_SEND_MATCH_SECONDS = 180;
+
+// Pure: given candidate outgoing rows and Nora's own sent drafts, return the
+// timestamp (ms) of Itzik's most recent personal message, or null.
+function latestPersonalMessageTime(outgoingRows, noraDrafts) {
+  const noraTimes = (noraDrafts || [])
+    .flatMap((d) => [d.updated_at, d.created_at])
+    .filter(Boolean)
+    .map((t) => new Date(t).getTime());
+  let latest = null;
+  for (const row of outgoingRows || []) {
+    const t = new Date(row.sent_at || row.received_at || row.created_at || 0).getTime();
+    if (!t) continue;
+    const isNora = noraTimes.some((n) => Math.abs(n - t) <= NORA_SEND_MATCH_SECONDS * 1000);
+    if (isNora) continue;
+    if (latest === null || t > latest) latest = t;
+  }
+  return latest;
+}
+
+async function findLatestPersonalMessageTime(email, supabase) {
+  const sender = String(email.sender_email || '').trim().toLowerCase();
+  if (!sender || !email.project_id) return null;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const cols = 'id, received_at, sent_at, created_at';
+  try {
+    const [byText, byJson, drafts] = await Promise.all([
+      supabase.from('emails').select(cols).eq('project_id', email.project_id)
+        .or('direction.eq.outgoing,is_sent.eq.true').ilike('to_email', '%' + sender + '%').gte('received_at', since).limit(50),
+      supabase.from('emails').select(cols).eq('project_id', email.project_id)
+        .or('direction.eq.outgoing,is_sent.eq.true').contains('to_emails', [{ email: sender }]).gte('received_at', since).limit(50),
+      supabase.from('email_auto_drafts').select('created_at, updated_at').eq('status', 'sent')
+        .ilike('to_email', '%' + sender + '%').gte('updated_at', since).limit(50),
+    ]);
+    const rows = new Map();
+    for (const r of [...(byText.data || []), ...(byJson.data || [])]) rows.set(r.id, r);
+    return latestPersonalMessageTime([...rows.values()], drafts.data || []);
+  } catch (err) {
+    console.warn('[cron-auto-draft] personal-contact lookup failed (non-fatal):', err.message);
+    return null;
+  }
+}
+
 async function computeSendEligibility(email, supabase, ownerUserId) {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -261,6 +376,14 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   if (email.nora_no_reply) {
     return { eligible: false, framing: null, reason: 'muted' };
   }
+  if (await conversationIsMuted(email, supabase)) {
+    return { eligible: false, framing: null, reason: 'muted' };
+  }
+
+  // ── 0a2. One automatic reply per conversation ────────────────────
+  if (await conversationAlreadyAnswered(email, supabase)) {
+    return { eligible: false, framing: null, reason: 'already_answered' };
+  }
 
   // ── 0b. No project link ──────────────────────────────────────────
   // Added 2026-09-30, on request, after a real and fairly embarrassing
@@ -281,6 +404,15 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
     return { eligible: false, framing: null, reason: 'no_project' };
   }
 
+  // ── 0c. Personal-contact hold-off ────────────────────────────────
+  // See findLatestPersonalMessageTime. Absolute: applies even when the
+  // diary shows Itzik busy, because he is demonstrably handling this
+  // person himself right now.
+  const lastPersonalMs = await findLatestPersonalMessageTime(email, supabase);
+  if (lastPersonalMs !== null && (Date.now() - lastPersonalMs) < PERSONAL_CONTACT_HOLD_MINUTES * 60 * 1000) {
+    return { eligible: false, framing: null, reason: 'personal_contact' };
+  }
+
   // Same-day back-and-forth: has there been a genuine exchange (at
   // least one incoming AND one outgoing message in this thread) on
   // today's calendar date? Computed once here and threaded through so
@@ -288,7 +420,8 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // ("Itzik has been responding to you today") rather than giving the
   // same generic "he's in a meeting" line regardless of context - see
   // computeSameDayBackAndForth.
-  const sameDayBackAndForth = await computeSameDayBackAndForth(email, supabase, todayStr);
+  const sameDayBackAndForth = (await computeSameDayBackAndForth(email, supabase, todayStr)) ||
+    (lastPersonalMs !== null && new Date(lastPersonalMs).toISOString().slice(0, 10) === todayStr);
 
   if (!ownerUserId) {
     // Can't check anyone's diary or hours without knowing whose they
@@ -2117,6 +2250,10 @@ export {
   computeSendEligibility,
   computeSameDayBackAndForth,
   computeSilenceFallback,
+  latestPersonalMessageTime,
+  normaliseSubjectForConversation,
+  isSameConversation,
+  PERSONAL_CONTACT_HOLD_MINUTES,
   findSameAppointmentMatch,
   pickJitenJokeLine,
   JITTEN_EMAIL,
