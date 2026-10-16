@@ -1,3 +1,4 @@
+import { getCurrentUserEmail } from './utils/getCurrentUserEmail';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
@@ -593,6 +594,30 @@ export default function App() {
               onAccept={async () => {
                 if (!window.confirm('Accept this quote and make it a live party wall job?')) return;
                 await sb.from('projects').update({ stage: 'live' }).eq('id', projectView.id);
+                // 2026-10-16: accepting used to only flip the stage, so a lead that
+                // never had a OneDrive folder stayed without one (attachments could
+                // not be saved). Create it now if it is missing - same call the
+                // lead details screen uses; failure is reported, never blocks.
+                let folderNote = '';
+                if (!projectView.onedrive_folder_id) {
+                  try {
+                    const userEmail = await getCurrentUserEmail();
+                    if (!projectView.bo_premise_address) {
+                      folderNote = '\n\nNo OneDrive folder was created because the job has no address yet. Add the address and Nora will create it.';
+                    } else if (userEmail) {
+                      const r = await fetch('/api/onedrive-folder', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userEmail, action: 'create_project_folder', project_address: projectView.bo_premise_address }),
+                      });
+                      const f = await r.json().catch(() => ({}));
+                      if (f.success && f.folder_id) {
+                        await sb.from('projects').update({ onedrive_folder_id: f.folder_id, onedrive_folder_url: f.web_url || null }).eq('id', projectView.id);
+                        folderNote = '\n\nOneDrive folder created: ' + (f.folder_name || projectView.bo_premise_address);
+                      } else folderNote = '\n\nThe OneDrive folder could not be created (' + (f.error || 'unknown reason') + ').';
+                    }
+                  } catch (e) { folderNote = '\n\nThe OneDrive folder could not be created (' + (e.message || 'error') + ').'; }
+                }
+                if (folderNote) alert('Job is now live.' + folderNote);
                 onBack();
               }}
             />
