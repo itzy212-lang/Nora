@@ -4424,7 +4424,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       const aoWorksFromMap = Object.entries(aoWorks).flatMap(([sec, items]) =>
         (items || []).filter(w => w.trim()).map(w => ({ text: w.trim(), sections: [sec] }))
       );
-      const aoWorksItems = aoWorksFromMap.length > 0 ? aoWorksFromMap : (worksItems || []);
+      // Per-owner works only: when the modal supplied a per-owner map, an owner
+      // with none typed gets none - never the other owners' works. The flat list
+      // (every owner's works combined) is only used by callers with no map.
+      const hasPerAoMap = Object.keys(aoWorksMap || {}).length > 0;
+      const aoWorksItems = (hasPerAoMap || aoWorksFromMap.length > 0) ? aoWorksFromMap : (worksItems || []);
       console.log('[batch notice] aoWorks for', ak, ':', JSON.stringify(aoWorks), '| aoWorksItems:', aoWorksItems.length);
 
       // Generate documents — do NOT save workflow state yet
@@ -4443,7 +4447,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           const sectionWorks = aoWorksItems
             .filter(w => { if (key === 'cover') return true; const ws = w?.sections || []; return ws.length === 0 || ws.includes(key); })
             .map(w => (w?.text || w || '').trim())
-            .filter(Boolean);
+            .filter(Boolean)
+            .filter((w, i, arr) => arr.findIndex(x => x.toLowerCase() === w.toLowerCase()) === i);
           const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, allSections: aoSections, worksItems: sectionWorks });
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
@@ -4928,11 +4933,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           prefillData={noticeModal.prefillData || null}
           editingNoticeId={noticeModal.editingNoticeId || null}
           generateDocument={generateDocument}
-          onServe={({ editingNoticeId, aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap }) => {
+          onServe={({ editingNoticeId, aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap, aoSectionMap, aoWorksMap, aoS2SubsMap }) => {
             const aosToServe = servedAOs || (servedAO ? [servedAO] : noticeModal.ao ? [noticeModal.ao] : []);
             return handleServeBatchNoticePack({
               editingNoticeId,
               aos: aosToServe,
+              // 2026-10-16: these three were built by the modal per owner but
+              // dropped here, so every owner fell back to the flat list of ALL
+              // owners' works (duplicated works in each notice).
+              aoSectionMap,
+              aoWorksMap,
+              aoS2SubsMap,
               safeguardingMap,
               sections,
               includeCover,
