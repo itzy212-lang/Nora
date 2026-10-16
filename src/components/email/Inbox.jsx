@@ -1696,8 +1696,8 @@ function ProjectLinkBanner({ email, onLinked }) {
 // ── Folder picker for saving attachments (2026-10-15) ───────────────────────
 // Browses the project's OneDrive folder one level at a time; the person picks
 // where the attachments go. Only folders are listed.
-function FolderPicker({ rootFolderId, busy, onCancel, onChoose }) {
-  const [trail, setTrail] = useState([{ id: rootFolderId, name: 'Project folder' }]);
+function FolderPicker({ rootFolderId, rootLabel = 'Project folder', busy, onCancel, onChoose }) {
+  const [trail, setTrail] = useState([{ id: rootFolderId, name: rootLabel }]);
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -1849,7 +1849,8 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
 
   const openPicker = (mode) => {
     if (!selected.size) return;
-    if (!projectFolderId) { setError('This project has no OneDrive folder configured yet.'); return; }
+    // 2026-10-16: leads and projects without a OneDrive folder used to be refused
+    // outright. The picker now starts at the top of OneDrive instead.
     setError('');
     setPicker(mode);
   };
@@ -1902,7 +1903,7 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
 
       {!email?.project_id && (
         <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>
-          Link this email to a project to enable summarising. Saving to OneDrive also needs a linked project.
+          Link this email to a project to enable summarising.
         </div>
       )}
 
@@ -1914,7 +1915,8 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
 
       {picker && (
         <FolderPicker
-          rootFolderId={projectFolderId}
+          rootFolderId={projectFolderId || 'root'}
+          rootLabel={projectFolderId ? 'Project folder' : 'OneDrive'}
           busy={busy}
           onCancel={() => setPicker(null)}
           onChoose={handleFolderChosen}
