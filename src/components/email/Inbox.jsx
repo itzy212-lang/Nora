@@ -1051,7 +1051,40 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   const [createTask, setCreateTask]             = useState(false);
   const [firmSettings, setFirmSettings]         = useState(null);
   const [attachments, setAttachments]           = useState([]);
+  // Forward: the original email's attachments are loaded in automatically
+  // (added 2026-10-16 - they used to be silently dropped). Each one is
+  // 'loading', loaded (moves into `attachments`), or 'failed' with a reason.
+  const [forwardLoad, setForwardLoad]             = useState([]);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!isForward || !email?.id || !sb) return;
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await sb.from('email_attachments')
+        .select('id, filename')
+        .eq('email_id', email.id)
+        .or('is_inline.is.null,is_inline.eq.false')
+        .not('attachment_external_id', 'is', null);
+      if (cancelled || !rows?.length) return;
+      setForwardLoad(rows.map(r => ({ id: r.id, name: r.filename, status: 'loading' })));
+      for (const row of rows) {
+        let result;
+        try {
+          const resp = await fetch('/api/forward-attachment', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: state.currentUser?.email || state.currentUser?.id, attachment_id: row.id }),
+          });
+          const d = await resp.json().catch(() => ({}));
+          result = resp.ok ? { ok: true, file: d } : { ok: false, error: d.error || `Failed (${resp.status})` };
+        } catch (e) { result = { ok: false, error: e.message || 'Network error' }; }
+        if (cancelled) return;
+        if (result.ok) setAttachments(prev => [...prev, result.file]);
+        setForwardLoad(prev => prev.map(f => f.id === row.id ? { ...f, status: result.ok ? 'done' : 'failed', error: result.error } : f));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isForward, email?.id]);
 
   useEffect(() => {
     sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,email,tel,address_line1,address_line2,city,postcode,website,signature_b64,logo_base64,accreditation_b64').limit(1)
@@ -1398,6 +1431,15 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </div>
             )}
 
+            {isForward && forwardLoad.some(f => f.status !== 'done') && (
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {forwardLoad.filter(f => f.status !== 'done').map(f => (
+                  <div key={f.id} style={{ color: f.status === 'failed' ? '#c0392b' : 'var(--text3)' }}>
+                    {f.status === 'loading' ? `⏳ Adding ${f.name}…` : `⚠️ ${f.name} was not attached: ${f.error}`}
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Footer buttons — two rows on mobile */}
             <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1417,7 +1459,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)', fontWeight: 500 }}>
                   Cancel
                 </button>
-                <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim()} style={{ flex: 2, padding: '10px', borderRadius: 10, background: sending || !body.trim() || !to.trim() ? 'var(--bg3)' : 'var(--blue)', color: sending || !body.trim() || !to.trim() ? 'var(--text3)' : '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                <button onClick={handleSend} disabled={sending || !body.trim() || !to.trim() || forwardLoad.some(f => f.status === 'loading')} style={{ flex: 2, padding: '10px', borderRadius: 10, background: sending || !body.trim() || !to.trim() ? 'var(--bg3)' : 'var(--blue)', color: sending || !body.trim() || !to.trim() ? 'var(--text3)' : '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
                   {sending ? 'Sending…' : '↩ Send reply'}
                 </button>
               </div>
