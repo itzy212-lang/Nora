@@ -13,6 +13,7 @@
  */
 export function logDiag(event, extra = {}) {
   try {
+    import('./crashBreadcrumbs').then(m => m.noteAction('diag: ' + event)).catch(() => {});
     const mem = (typeof performance !== 'undefined' && performance.memory) ? {
       usedJSHeapMB: Math.round(performance.memory.usedJSHeapSize / 1048576),
       totalJSHeapMB: Math.round(performance.memory.totalJSHeapSize / 1048576),
