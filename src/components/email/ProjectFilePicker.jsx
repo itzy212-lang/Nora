@@ -10,6 +10,13 @@ import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 // base64 inflates by a third and Vercel caps a response at 4.5 MB.
 export const MAX_PICK_BYTES = 3 * 1024 * 1024;
 
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? `Today ${time}` : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
+};
 const fmtSize = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`;
 
 export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
@@ -53,7 +60,10 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) throw new Error(data.error || 'Could not open this folder');
         const list = data.items || [];
-        list.sort((a, b) => (!!b.folder - !!a.folder) || String(a.name).localeCompare(String(b.name)));
+        // Folders first (A-Z), then files newest first - the file you just saved is on top.
+        list.sort((a, b) => (!!b.folder - !!a.folder)
+          || (a.folder ? String(a.name).localeCompare(String(b.name))
+                       : new Date(b.lastModifiedDateTime || 0) - new Date(a.lastModifiedDateTime || 0)));
         if (!off) setItems(list);
       } catch (e) { if (!off) { setErr(e.message); setItems([]); } }
       if (!off) setLoading(false);
@@ -104,8 +114,12 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
               <div key={it.id} onClick={() => isFolder ? setTrail([...trail, { id: it.id, name: it.name }]) : (!tooBig && toggle(it))}
                 style={{ padding: '10px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border)', cursor: tooBig ? 'not-allowed' : 'pointer', opacity: tooBig ? 0.5 : 1, background: picked[it.id] ? 'var(--blue-bg, #eef4ff)' : 'transparent' }}>
                 <span>{isFolder ? '📁' : (picked[it.id] ? '☑️' : '📄')}</span>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                {!isFolder && <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{tooBig ? 'over 3 MB' : fmtSize(it.size)}</span>}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', wordBreak: 'break-word' }}>{it.name}</span>
+                  {!isFolder && <span style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    {fmtDate(it.lastModifiedDateTime)} · {tooBig ? 'over 3 MB - too large' : fmtSize(it.size)}
+                  </span>}
+                </span>
               </div>
             );
           })}
