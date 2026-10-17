@@ -153,6 +153,12 @@ function stripHtml(html) {
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
+// 2026-10-17: previews used to run stripHtml over the WHOLE body (some bodies are
+// 1.7 MB) for the main email and every thread email, on every re-render of the
+// composer. Only the first part is ever shown, so only that part is processed.
+function previewText(html, max) {
+  return stripHtml(String(html || '').slice(0, 20000)).slice(0, max);
+}
 function isHtmlEmail(body) {
   return body && (body.trim().startsWith('<') || body.includes('<html') || body.includes('<div') || body.includes('<p>'));
 }
@@ -1057,6 +1063,11 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   // 'loading', loaded (moves into `attachments`), or 'failed' with a reason.
   const [forwardLoad, setForwardLoad]             = useState([]);
   const [showFilePicker, setShowFilePicker]       = useState(false);
+  const [threadOpen, setThreadOpen]               = useState(false);
+  const replyPreview = React.useMemo(() => {
+    const raw = email?.body || email?.body_preview || '';
+    return { text: previewText(raw, 400), more: raw.length > 400 };
+  }, [email?.id]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1372,8 +1383,8 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                   </div>
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>{email.subject}</div>
                   <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text3)' }}>
-                    {stripHtml(email.body || email.body_preview || '').slice(0, 400)}
-                    {(email.body || email.body_preview || '').length > 400 && '…'}
+                    {replyPreview.text}
+                    {replyPreview.more && '…'}
                   </div>
                 </div>
               </div>
@@ -1388,13 +1399,13 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               </div>
             )}
             {threadEmails.length > 1 && (
-              <details style={{ marginTop: 4 }}>
+              <details style={{ marginTop: 4 }} onToggle={e => setThreadOpen(e.currentTarget.open)}>
                 <summary style={{ fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none' }}>Show thread ({threadEmails.length} emails)</summary>
                 <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                  {[...threadEmails].sort((a, b) => new Date(b.received_at) - new Date(a.received_at)).map((e, i) => (
+                  {threadOpen && [...threadEmails].sort((a, b) => new Date(b.received_at) - new Date(a.received_at)).map((e, i) => (
                     <div key={e.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: i < threadEmails.length - 1 ? '1px solid var(--border)' : 'none' }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 2 }}>{e.sender_name || e.sender_email} · {fmtDate(e.received_at)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>{stripHtml(e.body || e.body_preview || '').slice(0, 200)}…</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>{previewText(e.body || e.body_preview || '', 200)}…</div>
                     </div>
                   ))}
                 </div>
@@ -3521,7 +3532,13 @@ if (syncErr) throw syncErr;
               </span>
             </div>
           )}
-          <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />
+          {/* 2026-10-17: on a phone the open email (iframe + every inline image
+              converted to a data URL) sat fully loaded UNDER the composer, doubling
+              memory exactly while drafting - the only place "Aw, Snap!" happens.
+              While a composer is open on mobile it is not mounted; it returns on close. */}
+          {(isMobile && (replyOverlay || draftWithEly))
+            ? <div style={{ flex: 1 }} />
+            : <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />}
 
           {/* Auto-draft panel */}
           {autoDraft && (
