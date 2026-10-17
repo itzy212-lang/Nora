@@ -2058,12 +2058,10 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   // with attachments regardless of link status, since save/summarize
   // are now real actions that make sense whether or not the email is
   // already linked (linking is still offered inline if it isn't).
+  // 2026-10-17: no longer pops up by itself when an email opens - the
+  // '💾 Save…' button in the attachment strip opens it on request.
   useEffect(() => {
-    if (email?.has_attachments) {
-      setShowSavePopup(true);
-    } else {
-      setShowSavePopup(false);
-    }
+    setShowSavePopup(false);
   }, [email?.id]);
 
   useEffect(() => {
