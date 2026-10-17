@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../state/appStore';
 import { useEmails } from '../../hooks/useEmails';
 import DraftWithEly from './DraftWithEly';
+import ProjectFilePicker from './ProjectFilePicker';
 import { uid, escapeHtml } from '../../utils/formatters';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import sb from '../../supabaseClient';
@@ -76,6 +77,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
   const [status, setStatus] = useState('');
   const [sending, setSending] = useState(false);
   const [showDraftWithEly, setShowDraftWithEly] = useState(false);
+  const [showFilePicker, setShowFilePicker] = useState(false);
   const [toSuggestions, setToSuggestions] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [showOriginalPreview, setShowOriginalPreview] = useState(false);
@@ -614,7 +616,9 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
           </div>
           <input type="file" multiple ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileAttach} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => setShowFilePicker(true)}>📁 Project files</button>
             <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>📎 External file</button>
+            {showFilePicker && <ProjectFilePicker projectId={projectId || null} onAttach={(files) => setAttachments(prev => [...prev, ...files])} onClose={() => setShowFilePicker(false)} />}
           </div>
         </div>
 

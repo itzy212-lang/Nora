@@ -10,6 +10,7 @@ import { syncEmails, getUserIntegrations } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
+import ProjectFilePicker from './ProjectFilePicker';
 
 // Added 2026-09-17, same defense-in-depth reasoning as the email
 // query timeout above (and the IndexedDB connection fix before that):
@@ -1055,6 +1056,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
   // (added 2026-10-16 - they used to be silently dropped). Each one is
   // 'loading', loaded (moves into `attachments`), or 'failed' with a reason.
   const [forwardLoad, setForwardLoad]             = useState([]);
+  const [showFilePicker, setShowFilePicker]       = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1440,6 +1442,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                 ))}
               </div>
             )}
+            {showFilePicker && <ProjectFilePicker projectId={email?.project_id || null} onAttach={(files) => setAttachments(prev => [...prev, ...files])} onClose={() => setShowFilePicker(false)} />}
             {/* Footer buttons — two rows on mobile */}
             <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={handleAttachFile} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1447,6 +1450,9 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
                   📎 Attach
+                </button>
+                <button onClick={() => setShowFilePicker(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
+                  📁 Project files
                 </button>
                 {!showEly && (
                   <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
