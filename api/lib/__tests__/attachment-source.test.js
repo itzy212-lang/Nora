@@ -25,4 +25,20 @@ describe('loadAttachmentBuffer', () => {
     const buf = await loadAttachmentBuffer({ sb, att, token: 'T' });
     expect([...buf]).toEqual([9]);
   });
+
+  it('fetches a Gmail attachment (finds the part, then its data)', async () => {
+    const gatt = { email_external_id: 'M1', attachment_external_id: 'gmail:M1:1.2' };
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(url);
+      if (url.includes('format=full')) return { ok: true, json: async () => ({ payload: { partId: '', parts: [{ partId: '0' }, { partId: '1', parts: [{ partId: '1.2', body: { attachmentId: 'AID' } }] }] } }) };
+      return { ok: true, json: async () => ({ data: Buffer.from('hi!').toString('base64').replace(/\+/g, '-').replace(/\//g, '_') }) };
+    }));
+    const buf = await loadAttachmentBuffer({ sb: null, att: gatt, gmailToken: 'G' });
+    expect(buf.toString()).toBe('hi!');
+    expect(calls[1]).toContain('/attachments/AID');
+  });
+  it('says plainly when Gmail is not connected', async () => {
+    await expect(loadAttachmentBuffer({ sb: null, att: { attachment_external_id: 'gmail:M:1' }, gmailToken: null })).rejects.toThrow(/Gmail account is not connected/);
+  });
 });

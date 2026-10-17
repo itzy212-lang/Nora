@@ -8,7 +8,42 @@
 // that is the primary source here; storage is only a fallback for any row that
 // genuinely has a stored copy.
 
-export async function loadAttachmentBuffer({ sb, att, token }) {
+// Gmail attachments are recorded as attachment_external_id = 'gmail:<messageId>:<partId>'
+// (see sync-gmail.js). Gmail's own attachment ids are not stable between fetches,
+// so the part is located again by partId each time and its current id used.
+function findGmailPart(payload, partId) {
+  if (!payload) return null;
+  if (String(payload.partId) === String(partId)) return payload;
+  for (const p of payload.parts || []) {
+    const hit = findGmailPart(p, partId);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+async function loadGmailAttachment(att, gmailToken) {
+  if (!gmailToken) throw new Error('Your Gmail account is not connected or needs reconnecting');
+  const [, messageId, partId] = String(att.attachment_external_id).split(':');
+  const auth = { Authorization: `Bearer ${gmailToken}` };
+  const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`, { headers: auth });
+  if (!mr.ok) throw new Error(mr.status === 404 ? 'Gmail no longer has this message (it may have been deleted)' : `Gmail refused the download (${mr.status})`);
+  const msg = await mr.json();
+  const part = findGmailPart(msg.payload, partId);
+  if (!part) throw new Error('Could not find this attachment in the Gmail message');
+  let data = part.body?.data;
+  if (!data && part.body?.attachmentId) {
+    const ar = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`, { headers: auth });
+    if (!ar.ok) throw new Error(`Gmail refused the download (${ar.status})`);
+    data = (await ar.json()).data;
+  }
+  if (!data) throw new Error('Gmail returned no data for this attachment');
+  return Buffer.from(String(data).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
+export async function loadAttachmentBuffer({ sb, att, token, gmailToken }) {
+  if (String(att?.attachment_external_id || '').startsWith('gmail:')) {
+    return loadGmailAttachment(att, gmailToken);
+  }
   const problems = [];
 
   if (token && att.email_external_id && att.attachment_external_id) {

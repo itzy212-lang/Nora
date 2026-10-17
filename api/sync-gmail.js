@@ -141,6 +141,42 @@ async function embedEmail(emailId) {
   }
 }
 
+
+// Added 2026-10-17: record a Gmail message's attachments (as sync_outlook does
+// for Outlook) so the paperclip, Save, Forward and Project-files features work
+// for Gmail accounts too. Only metadata is stored; bytes are fetched from Gmail
+// when needed. attachment_external_id is 'gmail:<messageId>:<partId>' (unique).
+export function collectGmailAttachments(payload) {
+  const out = [];
+  const walk = (part) => {
+    if (!part) return;
+    const headers = part.headers || [];
+    const h = (n) => headers.find(x => x.name?.toLowerCase() === n)?.value || '';
+    if (part.filename && (part.body?.attachmentId || part.body?.data)) {
+      const contentId = h('content-id').replace(/[<>]/g, '');
+      const inline = /^\s*inline/i.test(h('content-disposition')) && !!contentId && /^image\//i.test(part.mimeType || '');
+      out.push({ partId: part.partId, filename: part.filename, contentType: part.mimeType || 'application/octet-stream', size: part.body?.size || null, inline, contentId: contentId || null });
+    }
+    (part.parts || []).forEach(walk);
+  };
+  walk(payload);
+  return out;
+}
+
+async function recordGmailAttachments(msgData, emailId) {
+  const atts = collectGmailAttachments(msgData.payload);
+  for (const a of atts) {
+    try {
+      await supabase.from('email_attachments').upsert({
+        email_id: emailId, email_external_id: msgData.id,
+        attachment_external_id: `gmail:${msgData.id}:${a.partId}`,
+        filename: a.filename, content_type: a.contentType, size_bytes: a.size,
+        is_inline: a.inline, content_id: a.contentId, thread_id: msgData.threadId || null,
+      }, { onConflict: 'attachment_external_id' });
+    } catch (e) { console.warn('Gmail attachment record failed (non-fatal):', e.message); }
+  }
+}
+
 function extractBody(payload) {
   if (!payload) return { body: '', bodyPreview: '' };
 
@@ -279,6 +315,7 @@ async function syncGmailEmails(userId, accessToken) {
 
       processed++;
       embedEmail(inserted.id);
+      await recordGmailAttachments(msgData, inserted.id);
 
       let linked = false;
       if (msgData.threadId) {

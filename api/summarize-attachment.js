@@ -12,6 +12,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { getValidMicrosoftToken } from './onedrive-helper.js';
 import { loadAttachmentBuffer } from './lib/attachment-source.js';
+import { getProviderContext } from './lib/provider-context.js';
+import { getGoogleToken } from './lib/google-auth.js';
 
 function getSupabase() {
   return createClient(
@@ -23,10 +25,10 @@ function getSupabase() {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-async function extractAttachmentText(sb, attachment, token) {
+async function extractAttachmentText(sb, attachment, token, gmailToken) {
   // Fixed 2026-10-15: the "email-attachments" storage bucket this used to read
   // from does not exist; the file is fetched from Outlook instead.
-  const buffer = await loadAttachmentBuffer({ sb, att: attachment, token });
+  const buffer = await loadAttachmentBuffer({ sb, att: attachment, token, gmailToken });
   const mime = (attachment.content_type || '').toLowerCase();
   const name = (attachment.filename || '').toLowerCase();
 
@@ -50,7 +52,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { attachment_id, project_id, user_id } = req.body || {};
+    const { attachment_id, project_id, user_id, user_uuid } = req.body || {};
     if (!attachment_id || !project_id) {
       return res.status(400).json({ error: 'attachment_id and project_id are required' });
     }
@@ -72,8 +74,10 @@ export default async function handler(req, res) {
       email = data;
     }
 
-    const token = user_id ? await getValidMicrosoftToken(user_id) : null;
-    const text = await extractAttachmentText(sb, attachment, token);
+    const ctx = await getProviderContext({ sb, userEmail: user_id, userUuid: user_uuid });
+    const token = user_id && ctx.mail !== 'gmail' ? await getValidMicrosoftToken(user_id) : null;
+    const gmailToken = ctx.mail === 'gmail' ? await getGoogleToken(sb, ctx.integ, 'gmail') : null;
+    const text = await extractAttachmentText(sb, attachment, token, gmailToken);
     if (!text.trim()) {
       return res.status(200).json({ ok: true, saved: 0, message: 'No extractable text found in this attachment' });
     }

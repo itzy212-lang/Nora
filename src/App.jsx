@@ -1,4 +1,4 @@
-import { getCurrentUserEmail } from './utils/getCurrentUserEmail';
+import { getCurrentUserEmail, getUserStorageInfo } from './utils/getCurrentUserEmail';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
@@ -599,24 +599,26 @@ export default function App() {
                 // not be saved). Create it now if it is missing - same call the
                 // lead details screen uses; failure is reported, never blocks.
                 let folderNote = '';
-                if (!projectView.onedrive_folder_id) {
-                  try {
+                try {
+                  const { uuid, storage, folderColumn } = await getUserStorageInfo();
+                  const urlColumn = storage === 'googledrive' ? 'google_drive_folder_url' : 'onedrive_folder_url';
+                  if (!projectView[folderColumn]) {
                     const userEmail = await getCurrentUserEmail();
                     if (!projectView.bo_premise_address) {
-                      folderNote = '\n\nNo OneDrive folder was created because the job has no address yet. Add the address and Nora will create it.';
-                    } else if (userEmail) {
-                      const r = await fetch('/api/onedrive-folder', {
+                      folderNote = '\n\nNo folder was created because the job has no address yet. Add the address and Nora will create it.';
+                    } else {
+                      const r = await fetch(storage === 'googledrive' ? '/api/create-google-drive-folder' : '/api/onedrive-folder', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: userEmail, action: 'create_project_folder', project_address: projectView.bo_premise_address }),
+                        body: JSON.stringify({ user_id: storage === 'googledrive' ? uuid : userEmail, action: 'create_project_folder', project_address: projectView.bo_premise_address }),
                       });
                       const f = await r.json().catch(() => ({}));
                       if (f.success && f.folder_id) {
-                        await sb.from('projects').update({ onedrive_folder_id: f.folder_id, onedrive_folder_url: f.web_url || null }).eq('id', projectView.id);
-                        folderNote = '\n\nOneDrive folder created: ' + (f.folder_name || projectView.bo_premise_address);
-                      } else folderNote = '\n\nThe OneDrive folder could not be created (' + (f.error || 'unknown reason') + ').';
+                        await sb.from('projects').update({ [folderColumn]: f.folder_id, [urlColumn]: f.web_url || null }).eq('id', projectView.id);
+                        folderNote = '\n\nFolder created: ' + (f.folder_name || projectView.bo_premise_address);
+                      } else folderNote = '\n\nThe folder could not be created (' + (f.error || 'unknown reason') + ').';
                     }
-                  } catch (e) { folderNote = '\n\nThe OneDrive folder could not be created (' + (e.message || 'error') + ').'; }
-                }
+                  }
+                } catch (e) { folderNote = '\n\nThe folder could not be created (' + (e.message || 'error') + ').'; }
                 if (folderNote) alert('Job is now live.' + folderNote);
                 onBack();
               }}

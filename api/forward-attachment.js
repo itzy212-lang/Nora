@@ -10,6 +10,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { getValidMicrosoftToken } from './onedrive-helper.js';
 import { loadAttachmentBuffer } from './lib/attachment-source.js';
+import { getProviderContext } from './lib/provider-context.js';
+import { getGoogleToken } from './lib/google-auth.js';
 
 // base64 inflates by a third; stay safely under the 4.5 MB response limit.
 export const MAX_FORWARD_BYTES = 3 * 1024 * 1024;
@@ -25,13 +27,15 @@ function getSupabase() {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { user_id, attachment_id } = req.body || {};
-    if (!user_id || !attachment_id) return res.status(400).json({ error: 'user_id and attachment_id are required' });
-
-    const token = await getValidMicrosoftToken(user_id);
-    if (!token) return res.status(401).json({ error: 'Your Outlook account is not connected or needs reconnecting.' });
+    const { user_id, user_uuid, attachment_id } = req.body || {};
+    if ((!user_id && !user_uuid) || !attachment_id) return res.status(400).json({ error: 'user_id and attachment_id are required' });
 
     const sb = getSupabase();
+    const ctx = await getProviderContext({ sb, userEmail: user_id, userUuid: user_uuid });
+    const token = ctx.mail === 'gmail' ? null : await getValidMicrosoftToken(user_id);
+    const gmailToken = ctx.mail === 'gmail' ? await getGoogleToken(sb, ctx.integ, 'gmail') : null;
+    if (!token && !gmailToken) return res.status(401).json({ error: 'Your email account is not connected or needs reconnecting.' });
+
     const { data: att, error } = await sb
       .from('email_attachments')
       .select('id, filename, content_type, size_bytes, storage_path, email_external_id, attachment_external_id')
@@ -43,7 +47,7 @@ export default async function handler(req, res) {
     if (Number(att.size_bytes) > MAX_FORWARD_BYTES) {
       return res.status(413).json({ error: 'Too large to forward from here (over 3 MB) - attach it manually', name: att.filename });
     }
-    const buffer = await loadAttachmentBuffer({ sb, att, token });
+    const buffer = await loadAttachmentBuffer({ sb, att, token, gmailToken });
     if (buffer.length > MAX_FORWARD_BYTES) {
       return res.status(413).json({ error: 'Too large to forward from here (over 3 MB) - attach it manually', name: att.filename });
     }

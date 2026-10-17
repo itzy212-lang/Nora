@@ -1,11 +1,11 @@
 // Added 2026-10-17, on request: attach a file to an email straight from the
-// project's OneDrive folder, instead of scrolling a device file picker (which
+// project's folder (OneDrive or Google Drive, per account), instead of scrolling a device file picker (which
 // is slow, and painful on a phone). Opens at the linked project's folder; with
 // no linked project/folder it opens at the top of OneDrive. Tap a folder to go
 // in, tick files, Attach. Returns files as {name,type,size,base64}.
 import { useState, useEffect } from 'react';
 import sb from '../../supabaseClient';
-import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
+import { getCurrentUserEmail, getCurrentUserUuid, getUserStorageInfo } from '../../utils/getCurrentUserEmail';
 
 // base64 inflates by a third and Vercel caps a response at 4.5 MB.
 export const MAX_PICK_BYTES = 3 * 1024 * 1024;
@@ -31,11 +31,12 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
   useEffect(() => {
     let off = false;
     (async () => {
-      let start = { id: 'root', name: 'OneDrive' };
+      const { storage, folderColumn } = await getUserStorageInfo();
+      let start = { id: 'root', name: storage === 'googledrive' ? 'Google Drive' : 'OneDrive' };
       try {
         if (projectId && sb) {
-          const { data } = await sb.from('projects').select('onedrive_folder_id, bo_premise_address').eq('id', projectId).maybeSingle();
-          if (data?.onedrive_folder_id) start = { id: data.onedrive_folder_id, name: data.bo_premise_address || 'Project folder' };
+          const { data } = await sb.from('projects').select(`${folderColumn}, bo_premise_address`).eq('id', projectId).maybeSingle();
+          if (data?.[folderColumn]) start = { id: data[folderColumn], name: data.bo_premise_address || 'Project folder' };
         }
       } catch { /* fall back to the top of OneDrive */ }
       if (!off) setTrail([start]);
@@ -53,9 +54,9 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
       try {
         const userEmail = await getCurrentUserEmail();
         if (!userEmail) throw new Error('Could not determine your account - please refresh and try again.');
-        const res = await fetch('/api/onedrive-folder', {
+        const res = await fetch('/api/storage-list', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userEmail, action: 'get_folder_contents', project_folder_id: current.id }),
+          body: JSON.stringify({ user_id: userEmail, user_uuid: await getCurrentUserUuid(), folder_id: current.id }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) throw new Error(data.error || 'Could not open this folder');
@@ -63,7 +64,7 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
         // Folders first (A-Z), then files newest first - the file you just saved is on top.
         list.sort((a, b) => (!!b.folder - !!a.folder)
           || (a.folder ? String(a.name).localeCompare(String(b.name))
-                       : new Date(b.lastModifiedDateTime || 0) - new Date(a.lastModifiedDateTime || 0)));
+                       : new Date(b.modified || 0) - new Date(a.modified || 0)));
         if (!off) setItems(list);
       } catch (e) { if (!off) { setErr(e.message); setItems([]); } }
       if (!off) setLoading(false);
@@ -80,10 +81,13 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
       const userEmail = await getCurrentUserEmail();
       const files = [];
       for (const it of Object.values(picked)) {
-        const r = await fetch(`/api/onedrive-download?item_id=${encodeURIComponent(it.id)}&user_id=${encodeURIComponent(userEmail)}`);
+        const r = await fetch('/api/storage-file', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userEmail, user_uuid: await getCurrentUserUuid(), item_id: it.id }),
+        });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !d.base64) throw new Error(`${it.name}: ${d.error || 'could not be fetched'}`);
-        files.push({ name: d.name || it.name, type: d.mimeType || 'application/octet-stream', size: it.size || 0, base64: d.base64 });
+        files.push({ name: d.name || it.name, type: d.type || 'application/octet-stream', size: d.size || it.size || 0, base64: d.base64 });
       }
       onAttach(files);
       onClose();
@@ -117,7 +121,7 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', wordBreak: 'break-word' }}>{it.name}</span>
                   {!isFolder && <span style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    {fmtDate(it.lastModifiedDateTime)} · {tooBig ? 'over 3 MB - too large' : fmtSize(it.size)}
+                    {fmtDate(it.modified)} · {tooBig ? 'over 3 MB - too large' : fmtSize(it.size)}
                   </span>}
                 </span>
               </div>

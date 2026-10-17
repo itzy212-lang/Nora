@@ -22,3 +22,27 @@ export async function getCurrentUserEmail() {
     return null;
   }
 }
+
+// Added 2026-10-17: the logged-in user's auth UUID (Google tokens and the
+// user's mail/storage provider settings are keyed by it), and which storage
+// provider they use, so every attachment/file feature behaves per account.
+export async function getCurrentUserUuid() {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    return session?.user?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getUserStorageInfo() {
+  const uuid = await getCurrentUserUuid();
+  let storage = 'onedrive';
+  try {
+    if (uuid) {
+      const { data } = await sb.from('user_integrations').select('storage_provider').eq('user_id', uuid).maybeSingle();
+      if (data?.storage_provider === 'googledrive') storage = 'googledrive';
+    }
+  } catch { /* default to OneDrive */ }
+  return { uuid, storage, folderColumn: storage === 'googledrive' ? 'google_drive_folder_id' : 'onedrive_folder_id' };
+}

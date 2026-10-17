@@ -112,7 +112,7 @@ async function findOrCreateFolder(accessToken, parentFolderId, folderName) {
   return { id: created.id, webViewLink: created.webViewLink };
 }
 
-async function driveUploadFile(accessToken, { parentFolderId, filename, buffer, mimeType }) {
+export async function driveUploadFile(accessToken, { parentFolderId, filename, buffer, mimeType }) {
   const metadata = { name: filename, parents: [parentFolderId] };
 
   // Simple multipart upload for anything reasonably sized (covers

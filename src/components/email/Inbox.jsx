@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import sb from '../../supabaseClient';
-import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
+import { getCurrentUserEmail, getCurrentUserUuid, getUserStorageInfo } from '../../utils/getCurrentUserEmail';
 import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote, logDiag } from '../../utils/draftUtils';
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
@@ -1086,7 +1086,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
         try {
           const resp = await fetch('/api/forward-attachment', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: state.currentUser?.email || state.currentUser?.id, attachment_id: row.id }),
+            body: JSON.stringify({ user_id: state.currentUser?.email || state.currentUser?.id, user_uuid: state.currentUser?.id || null, attachment_id: row.id }),
           });
           const d = await resp.json().catch(() => ({}));
           result = resp.ok ? { ok: true, file: d } : { ok: false, error: d.error || `Failed (${resp.status})` };
@@ -1727,9 +1727,9 @@ function FolderPicker({ rootFolderId, rootLabel = 'Project folder', busy, onCanc
       try {
         const userEmail = await getCurrentUserEmail();
         if (!userEmail) throw new Error('Could not determine your account - please refresh and try again.');
-        const res = await fetch('/api/onedrive-folder', {
+        const res = await fetch('/api/storage-list', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userEmail, action: 'get_folder_contents', project_folder_id: current.id }),
+          body: JSON.stringify({ user_id: userEmail, user_uuid: await getCurrentUserUuid(), folder_id: current.id }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) throw new Error(data.error || 'Could not open this folder');
@@ -1798,14 +1798,19 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
   const [picker, setPicker] = useState(null);        // null | 'save' | 'both'
   const [savedMessage, setSavedMessage] = useState('');
   const [folderLabel, setFolderLabel] = useState('');
+  const [storageName, setStorageName] = useState('OneDrive');
 
   const realAttachments = (attachments || []).filter(a => a.attachment_external_id);
 
   useEffect(() => {
     if (!email?.project_id) { setProjectFolderId(null); return; }
-    sb.from('projects').select('onedrive_folder_id')
-      .eq('id', email.project_id).maybeSingle()
-      .then(({ data }) => setProjectFolderId(data?.onedrive_folder_id || null));
+    // The project's folder is in whichever storage this account uses.
+    getUserStorageInfo().then(({ storage, folderColumn }) => {
+      setStorageName(storage === 'googledrive' ? 'Google Drive' : 'OneDrive');
+      sb.from('projects').select(folderColumn)
+        .eq('id', email.project_id).maybeSingle()
+        .then(({ data }) => setProjectFolderId(data?.[folderColumn] || null));
+    });
   }, [email?.project_id]);
 
   // Everything ticked by default, so the common case is one click on Save.
@@ -1830,9 +1835,9 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     setError('');
     const userEmail = await getCurrentUserEmail();
     if (!userEmail) { setError('Could not determine your account - please refresh and try again.'); return false; }
-    const res = await fetch('/api/save-attachments-to-onedrive', {
+    const res = await fetch('/api/save-attachments-to-storage', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userEmail, folder_id: folderId, attachment_ids: [...selected] }),
+      body: JSON.stringify({ user_id: userEmail, user_uuid: await getCurrentUserUuid(), folder_id: folderId, attachment_ids: [...selected] }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) {
@@ -1855,7 +1860,7 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
     for (const id of selected) {
       const res = await fetch('/api/summarize-attachment', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attachment_id: id, project_id: email.project_id, user_id: userEmail }),
+        body: JSON.stringify({ attachment_id: id, project_id: email.project_id, user_id: userEmail, user_uuid: await getCurrentUserUuid() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Summarisation failed');
@@ -1933,7 +1938,7 @@ function SaveAttachmentPopup({ email, attachments, onDismiss }) {
       {picker && (
         <FolderPicker
           rootFolderId={projectFolderId || 'root'}
-          rootLabel={projectFolderId ? 'Project folder' : 'OneDrive'}
+          rootLabel={projectFolderId ? 'Project folder' : storageName}
           busy={busy}
           onCancel={() => setPicker(null)}
           onChoose={handleFolderChosen}
