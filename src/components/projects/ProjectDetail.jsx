@@ -4725,7 +4725,12 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // 2026-10-26: an owner who CONSENTED has no award coming - nothing further to
     // serve - so they no longer block completing the project. Only owners still
     // needing an award (dissent / no response yet / awaiting award) do.
-    const unservedAOs = aos.filter(ao => !(ao.award_served_date || ao.awardServedDate || ['complete', 'award_served', 'consent'].includes((ao.status || '').toLowerCase())));
+    // 2026-10-26: when acting as the ADJOINING owner's surveyor the award is
+    // prepared and served by the other side (or jointly), so Nora cannot expect an
+    // "award served" mark on the owner's card - that surveyor decides when their
+    // own job is finished. Only the building-owner side is held to the check.
+    const actingForAO = role === 'AO';
+    const unservedAOs = actingForAO ? [] : aos.filter(ao => !(ao.award_served_date || ao.awardServedDate || ['complete', 'award_served', 'consent'].includes((ao.status || '').toLowerCase())));
     if (unservedAOs.length > 0) {
       const names = unservedAOs.map(ao => ao.name || 'an adjoining owner').join(', ');
       window.alert(`Not every adjoining owner has had their award served yet: ${names}. Use the "Award Served" button on each AO's own card first — this marks the whole project served and moves it out of the active list, so it should only be used once every AO is actually done.`);
