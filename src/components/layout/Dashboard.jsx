@@ -165,8 +165,10 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const needsAttention = projects.filter(p => !isProjectClosed(p) && !isProjectPaused(p)).reduce((sum, p) =>
     sum + (p.aos || []).filter(aoIsRed).length, 0);
 
+  // 2026-10-26: leads are stored as projects (stage 'lead') but have their
+  // own Lead pipeline - they must not also count in the fee pipeline.
   const feePipeline = projects
-    .filter(p => !isProjectClosed(p))
+    .filter(p => p.stage !== 'lead' && !isProjectClosed(p))
     .reduce((s, p) => s + Math.max(0, parseFloat(p.fee || 0) - parseFloat(p.fee_invoiced || 0)), 0);
 
   // Fixed 2026-08-21, on direct correction: pipeline value comes from
