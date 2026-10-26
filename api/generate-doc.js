@@ -37,7 +37,7 @@ function joinHuman(items){const a=items.filter(Boolean);if(!a.length)return'';if
 function noticeKey(row){const r=normaliseNoticeRow(row);return[clean(r.notice_date),r.section_1?'1':'',r.section_2?'2':'',r.section_6?'6':'',clean(r.section_2_subsections)].join('|');}
 function buildNoticeMerge(runs=[]){const ordered=[...runs].map(normaliseNoticeRow).filter(r=>r.notice_date&&!r.section_10).sort((a,b)=>String(a.notice_date).localeCompare(String(b.notice_date))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
   const out={};ordered.forEach((r,i)=>{const n=i+1;out[`NOTICE_RUN_${n}_SECTIONS`]=sectionsForRun(r);out[`NOTICE_RUN_${n}_DATE`]=longDate(r.notice_date);out[`notice_run_${n}_sections`]=out[`NOTICE_RUN_${n}_SECTIONS`];out[`notice_run_${n}_date`]=out[`NOTICE_RUN_${n}_DATE`];});
-  const phrases=ordered.map(sectionsForRun).filter(Boolean);let fullRuns='';if(phrases.length){fullRuns=phrases[0];for(let i=1;i<phrases.length;i++)fullRuns+=` and a further Notice under ${phrases[i]}`;}
+  const phrases=ordered.map(r=>{const sec=sectionsForRun(r);const d=longDate(r.notice_date);return sec?(d?`${sec} dated ${d}`:sec):'';}).filter(Boolean);const fullRuns=joinHuman(phrases);
   const dates=ordered.map(r=>longDate(r.notice_date)).filter(Boolean);const fullDates=dates.length>1?`${joinHuman(dates)} respectively`:(dates[0]||'');
   const fullHistory=buildFullNoticeHistory(ordered);
   out.FULL_NOTICE_RUNS=fullRuns;out.full_notice_runs=fullRuns;out.FULL_NOTICE_DATES=fullDates;out.full_notice_dates=fullDates;out.FULL_NOTICE_HISTORY=fullHistory;out.full_notice_history=fullHistory;
