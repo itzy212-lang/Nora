@@ -4,8 +4,10 @@ import { AppProvider } from './state/appStore';
 import App from './App';
 import './index.css';
 import { initCrashBreadcrumbs } from './utils/crashBreadcrumbs';
+import { initUpdateNotice } from './utils/updateNotice';
 
 initCrashBreadcrumbs();
+initUpdateNotice();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
