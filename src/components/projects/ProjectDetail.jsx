@@ -4722,13 +4722,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     // action should only be able to close out the whole project once
     // every AO has actually gone through that individually.
     const aos = project.aos || [];
-    const unservedAOs = aos.filter(ao => !(ao.award_served_date || ao.awardServedDate || (ao.status || '').toLowerCase() === 'complete'));
+    // 2026-10-26: an owner who CONSENTED has no award coming - nothing further to
+    // serve - so they no longer block completing the project. Only owners still
+    // needing an award (dissent / no response yet / awaiting award) do.
+    const unservedAOs = aos.filter(ao => !(ao.award_served_date || ao.awardServedDate || ['complete', 'award_served', 'consent'].includes((ao.status || '').toLowerCase())));
     if (unservedAOs.length > 0) {
       const names = unservedAOs.map(ao => ao.name || 'an adjoining owner').join(', ');
       window.alert(`Not every adjoining owner has had their award served yet: ${names}. Use the "Award Served" button on each AO's own card first — this marks the whole project served and moves it out of the active list, so it should only be used once every AO is actually done.`);
       return;
     }
-    if (!window.confirm('Mark this project as Award Served? It will move out of the active project list.')) return;
+    if (!window.confirm('Mark this project as complete? It will move out of the active project list.')) return;
     try {
       const { error } = await sb
         .from('projects')
