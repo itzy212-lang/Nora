@@ -98,6 +98,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
         .from('emails')
         .select('id, sender_name, sender_email, subject, received_at, is_read, is_replied, flagged, project_id, body_preview, folder')
         .not('folder', 'eq', 'sent')
+        .is('junk_at', null)
         .or('is_sent.is.null,is_sent.eq.false')
         .or('is_draft.is.null,is_draft.eq.false')
         .gte('received_at', since)

@@ -2,8 +2,10 @@
 // holds, returns the ids that were deleted elsewhere (e.g. on another device).
 // Never reports an email it cannot judge: ones older than the window the database
 // returned, ones without a real database id, or ones without a date.
-export function findDeletedEmailIds(local = [], dbRows = [], limit = 500) {
-  const present = new Set((dbRows || []).map(r => r.id));
+// `keep(row)` lets the caller treat a row that still exists but no longer belongs in
+// the current view (e.g. moved to Junk on another device) as gone.
+export function findDeletedEmailIds(local = [], dbRows = [], limit = 500, keep = () => true) {
+  const present = new Set((dbRows || []).filter(r => keep(r)).map(r => r.id));
   const cutoff = (dbRows || []).length >= limit
     ? Date.parse(dbRows[dbRows.length - 1]?.received_at || '') || Infinity
     : -Infinity;

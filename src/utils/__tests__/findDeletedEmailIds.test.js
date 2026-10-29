@@ -26,3 +26,10 @@ describe('findDeletedEmailIds', () => {
     expect(findDeletedEmailIds([{ id: 'temp-1', received_at: '2026-10-29T00:00:00Z' }, { id: id(5) }], [])).toEqual([]);
   });
 });
+
+describe('findDeletedEmailIds with keep()', () => {
+  it('treats a row moved to junk elsewhere as gone from the normal views', () => {
+    const rows = [{ ...mk(1, 29), junk_at: null }, { ...mk(2, 28), junk_at: '2026-10-30T00:00:00Z' }];
+    expect(findDeletedEmailIds([mk(1, 29), mk(2, 28)], rows, 500, r => !r.junk_at)).toEqual([id(2)]);
+  });
+});

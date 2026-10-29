@@ -145,7 +145,7 @@ function useWindowWidth() {
 
 const isMobileWidth = (w) => w < 768;
 
-const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent'];
+const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent', 'Junk'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function stripHtml(html) {
@@ -2533,6 +2533,9 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
       if (folder === 'Sent')    q = q.eq('is_sent', true);
+      // Added 2026-10-30: emails the user marked as junk live only in the Junk
+      // folder (and are deleted automatically after 30 days by the database).
+      q = folder === 'Junk' ? q.not('junk_at', 'is', null) : q.is('junk_at', null);
       // Fixed 2026-09-08, real, confirmed root cause of the refresh
       // button reporting success (spinner ran, sync genuinely
       // succeeded, new emails genuinely existed in the database) but
@@ -2798,6 +2801,8 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // to the foreground.
   const emailsRef = useRef([]);
   useEffect(() => { emailsRef.current = state.emails || []; }, [state.emails]);
+  const activeFolderRef = useRef('Inbox');
+  useEffect(() => { activeFolderRef.current = folder; }, [folder]);
   const reconcileDeletedEmails = useCallback(async () => {
     if (!sb) return;
     const local = emailsRef.current;
@@ -2805,11 +2810,12 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     try {
       const LIMIT = 500;
       const { data, error } = await sb.from('emails')
-        .select('id, received_at')
+        .select('id, received_at, junk_at')
         .order('received_at', { ascending: false, nullsFirst: false })
         .limit(LIMIT);
       if (error || !Array.isArray(data)) return; // never remove anything on a failed check
-      const gone = findDeletedEmailIds(local, data, LIMIT);
+      const inJunk = activeFolderRef.current === 'Junk';
+      const gone = findDeletedEmailIds(local, data, LIMIT, r => (inJunk ? !!r.junk_at : !r.junk_at));
       if (!gone.length) return;
       const goneSet = new Set(gone);
       dispatch({ type: 'SET_EMAILS', payload: (emailsRef.current || []).filter(e => !goneSet.has(e.id)) });
@@ -3293,6 +3299,22 @@ if (syncErr) throw syncErr;
     }
   };
 
+  // Added 2026-10-30, on request: select emails and mark them as junk. They move
+  // to the Junk folder and the database deletes them 30 days later (purge_junk_emails).
+  // "Not junk" in the Junk folder puts them back. Works the same for every user and
+  // either mail provider because it only changes Nora's own copy.
+  const handleMarkJunk = async (junk) => {
+    if (!sb || checkedIds.size === 0) return;
+    const ids = [...checkedIds];
+    const { error } = await sb.from('emails').update({ junk_at: junk ? new Date().toISOString() : null }).in('id', ids);
+    if (error) { alert('Could not update these emails: ' + error.message); return; }
+    const idSet = new Set(ids);
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !idSet.has(e.id)) });
+    deleteCachedEmails(ids); // they leave the current folder either way; the next load fetches the right copy
+    if (idSet.has(selectedEmail?.id)) setSelectedEmail(null);
+    setCheckedIds(new Set());
+  };
+
   const handleMassDelete = async () => {
     if (!sb || checkedIds.size === 0 || !window.confirm(`Delete ${checkedIds.size} emails?`)) return;
     await sb.from('emails').delete().in('id', [...checkedIds]);
@@ -3312,6 +3334,9 @@ if (syncErr) throw syncErr;
     ? (searchResults || [])
     : (state?.emails || []);
   const filtered = emailsToFilter.filter(e => {
+    // Junk is shown only in the Junk folder, and nothing else is shown there
+    if (folder === 'Junk') return !!e.junk_at;
+    if (e.junk_at) return false;
     // Filter by active folder first
     if (folder === 'Inbox') {
       const f = (e.folder || '').toLowerCase();
@@ -3352,7 +3377,7 @@ if (syncErr) throw syncErr;
   // the data arrived.
   filtered.sort((a, b) => new Date(b.received_at || b.created_at || 0) - new Date(a.received_at || a.created_at || 0));
 
-  const unreadCount = (state.emails || []).filter(e => !e.is_read).length;
+  const unreadCount = (state.emails || []).filter(e => !e.is_read && !e.junk_at).length;
   const allChecked  = filtered.length > 0 && checkedIds.size === filtered.length;
 
   return (
@@ -3492,6 +3517,9 @@ if (syncErr) throw syncErr;
                 <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
                   {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
+                </button>
+                <button onClick={() => handleMarkJunk(folder !== 'Junk')} title={folder === 'Junk' ? 'Move back out of Junk' : 'Move to Junk — deleted automatically after 30 days'} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
+                  {folder === 'Junk' ? `↩ Not junk ${checkedIds.size}` : `🚫 Junk ${checkedIds.size}`}
                 </button>
                 <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
                   🗑 Delete {checkedIds.size}

@@ -927,6 +927,7 @@ export default async function handler(req, res) {
       .select('id, subject, body, sender_email, sender_name, received_at, project_id, folder, is_replied, ai_category, thread_id, direction, user_id, is_read, nora_no_reply')
       .eq('direction', 'incoming')
       .eq('is_draft', false)
+      .is('junk_at', null)
       .gte('received_at', since)
       .order('received_at', { ascending: false })
       .limit(20);
