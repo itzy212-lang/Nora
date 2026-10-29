@@ -5,6 +5,7 @@ import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote, logDiag } from '../
 import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
+import { findDeletedEmailIds } from '../../utils/findDeletedEmailIds';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails, isCacheReconciledFor, markCacheReconciled } from '../../utils/emailCache';
 import { syncEmails, getUserIntegrations } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
@@ -2786,6 +2787,46 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
 
     return () => clearInterval(interval);
   }, [loadEmails]);
+
+  // Added 2026-10-30, on request: deleting an email on one device (e.g. the
+  // phone) removed it from the database but the other device (desktop) kept
+  // showing it, because the background checks only ever look for NEWER mail
+  // and never notice that something has gone. This asks the database which of
+  // the latest emails still exist and drops any local copy that doesn't.
+  // Emails are shared per account, so it behaves the same for every user and
+  // either mail provider. Runs every 3 minutes and whenever the app comes back
+  // to the foreground.
+  const emailsRef = useRef([]);
+  useEffect(() => { emailsRef.current = state.emails || []; }, [state.emails]);
+  const reconcileDeletedEmails = useCallback(async () => {
+    if (!sb) return;
+    const local = emailsRef.current;
+    if (!local.length) return;
+    try {
+      const LIMIT = 500;
+      const { data, error } = await sb.from('emails')
+        .select('id, received_at')
+        .order('received_at', { ascending: false, nullsFirst: false })
+        .limit(LIMIT);
+      if (error || !Array.isArray(data)) return; // never remove anything on a failed check
+      const gone = findDeletedEmailIds(local, data, LIMIT);
+      if (!gone.length) return;
+      const goneSet = new Set(gone);
+      dispatch({ type: 'SET_EMAILS', payload: (emailsRef.current || []).filter(e => !goneSet.has(e.id)) });
+      deleteCachedEmails(gone);
+      setSelectedEmail(prev => (prev && goneSet.has(prev.id) ? null : prev));
+      setCheckedIds(prev => { const n = new Set([...prev].filter(id => !goneSet.has(id))); return n.size === prev.size ? prev : n; });
+    } catch (err) {
+      console.warn('[Inbox] deleted-email check failed:', err?.message || err);
+    }
+  }, [dispatch]);
+  useEffect(() => {
+    const interval = setInterval(reconcileDeletedEmails, 3 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') reconcileDeletedEmails(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const first = setTimeout(reconcileDeletedEmails, 5000);
+    return () => { clearInterval(interval); clearTimeout(first); document.removeEventListener('visibilitychange', onVisible); };
+  }, [reconcileDeletedEmails]);
 
   // Load draft IDs for inbox badge — reload periodically
   const [draftEmailIds, setDraftEmailIds] = useState(new Set());
