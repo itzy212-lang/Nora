@@ -881,6 +881,8 @@ function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
       email: project.bo_2_email || '',
       phone: project.bo_2_phone || '',
     },
+    // The building owner's surveyor (recorded when we act for the adjoining owner).
+    bos: { name: project.bos_name || '', firm: project.bos_firm || '', email: project.bos_email || '', phone: project.bos_phone || '' },
     ref: project.ref || '',
     status: project.status || 'active',
     works: project.works || '',
@@ -889,6 +891,7 @@ function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
 
   const [saving, setSaving] = useState(false);
 
+  const setBos = (k, v) => setForm(f => ({ ...f, bos: { ...f.bos, [k]: v } }));
   const setBo1 = (k, v) => setForm(f => ({ ...f, bo1: { ...f.bo1, [k]: v } }));
   const setBo2 = (k, v) => setForm(f => ({ ...f, bo2: { ...f.bo2, [k]: v } }));
 
@@ -902,6 +905,7 @@ function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
     setSaving(true);
 
     try {
+      if (form.role === 'AO') await maybeSaveSurveyor(form.bos);
       await onSave({ ...form, service: sameAddr ? form.premise : form.service });
       onClose();
     } catch (err) {
@@ -993,6 +997,23 @@ function ProjectEditModal({ project, onSave, onClose, onGenerateLoa }) {
             <OwnerBlock title="Owner 2" optional form={form.bo2} set={setBo2} />
           </div>
         </div>
+
+        {form.role === 'AO' && (
+          <div style={mSection}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: 'var(--text3)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              marginBottom: 12,
+            }}>
+              Building owner's surveyor
+            </div>
+
+            <SurveyorBlock title="BO Surveyor" form={form.bos} set={setBos} />
+          </div>
+        )}
 
         <div style={mSection}>
           <div style={{
@@ -3626,6 +3647,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       bo_2_name: form.bo2?.name || null,
       bo_2_email: form.bo2?.email || null,
 
+      bos_name: form.bos?.name?.trim() || null,
+      bos_firm: form.bos?.firm?.trim() || null,
+      bos_email: form.bos?.email?.trim() || null,
+      bos_phone: form.bos?.phone?.trim() || null,
+
       works: form.works || null,
       fee: Number.isFinite(fee) ? fee : null,
       status: form.status || 'active',
@@ -5263,6 +5289,36 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   {boEmail && (
                     <div style={{ fontSize: 12.5, color: 'var(--blue)', marginTop: 2 }}>
                       {boEmail}
+                    </div>
+                  )}
+
+                  {role === 'AO' && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>
+                        BO's surveyor
+                      </div>
+                      {project.bos_name || project.bos_email ? (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>
+                            {project.bos_name || project.bos_email}
+                            {project.bos_firm ? <span style={{ fontWeight: 400, color: 'var(--text3)' }}> · {project.bos_firm}</span> : null}
+                          </div>
+                          {project.bos_email && project.bos_name && (
+                            <div style={{ fontSize: 12.5, color: 'var(--blue)', marginTop: 2 }}>{project.bos_email}</div>
+                          )}
+                          {project.bos_phone && (
+                            <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 2 }}>{project.bos_phone}</div>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowProjectEdit(true)}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--blue)' }}
+                        >
+                          + Add BO's surveyor
+                        </button>
+                      )}
                     </div>
                   )}
 
