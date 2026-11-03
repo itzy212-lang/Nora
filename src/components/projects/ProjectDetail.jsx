@@ -20,6 +20,7 @@ import { createAOFolder, uploadDocument } from '../../utils/providers';
 import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 import { daysSinceProgress } from '../../utils/aoProgress';
+import { splitDraftMessage } from './splitDraftMessage.js';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -2713,6 +2714,47 @@ function ProjectChat({ project, onOpenComposer }) {
         </button>
       )}
 
+      {/* Every assistant reply gets Copy + Email, even when no draft was
+          detected in it. */}
+      {msg.role !== 'user' && !split.draft && split.intro && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+          <button
+            type="button"
+            className="ely-draft-action-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(split.intro);
+                flashDraftAction('Copied');
+              } catch {
+                flashDraftAction('Copy failed');
+              }
+            }}
+            style={{ border: '1px solid var(--border)', background: 'var(--bg2)', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', fontSize: 11, color: 'var(--text2)' }}
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            className="ely-draft-action-btn"
+            onClick={() => {
+              const detail = { body: split.intro, to: inferredRecipient, subject: inferredSubject || '' };
+              if (typeof onOpenComposer === 'function') {
+                onOpenComposer({ mode: 'compose', ...detail, projectId: project?.id || projectId });
+              } else {
+                window.dispatchEvent(new CustomEvent('ely-compose-draft', { detail }));
+              }
+              flashDraftAction('Sent to email composer');
+            }}
+            style={{ border: '1px solid var(--blue)', background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }}
+          >
+            Open in email composer
+          </button>
+          {draftActionStatus && (
+            <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>{draftActionStatus}</span>
+          )}
+        </div>
+      )}
+
       {split.draft && (
         <div style={{
           background: '#fff',
@@ -3084,55 +3126,6 @@ function getProjectDraftRecipient({ project, draft = '', intro = '' }) {
 }
 
 
-function splitDraftMessage(content = '') {
-  let text = String(content || '').trim();
-
-  // Extract and strip AO_SUBJECT_REF tag before any other processing
-  let aoSubjectRef = '';
-  const aoRefMatch = text.match(/^AO_SUBJECT_REF:\s*(.+)$/m);
-  if (aoRefMatch) {
-    aoSubjectRef = aoRefMatch[1].trim();
-    text = text.replace(/\n?AO_SUBJECT_REF:\s*.+$/m, '').trim();
-  }
-
-  const markers = ['Subject:', 'Dear ', 'Hi ', 'Hello '];
-  let idx = -1;
-
-  for (const marker of markers) {
-    const found = text.indexOf(marker);
-    if (found !== -1 && (idx === -1 || found < idx)) idx = found;
-  }
-
-  if (idx === -1) {
-    return { intro: text, draft: '', outro: '', aoSubjectRef };
-  }
-
-  const intro = text.slice(0, idx).trim();
-  let draft = text.slice(idx).trim();
-  let outro = '';
-
-  const outroPatterns = [
-    /\n\s*Let me know if[\s\S]*$/i,
-    /\n\s*Please let me know if[\s\S]*$/i,
-    /\n\s*Happy to amend[\s\S]*$/i,
-    /\n\s*I can amend[\s\S]*$/i,
-    /\n\s*I can revise[\s\S]*$/i,
-    /\n\s*I can also[\s\S]*$/i,
-    /\n\s*This keeps[\s\S]*$/i,
-    /\n\s*That should[\s\S]*$/i,
-  ];
-
-  for (const rx of outroPatterns) {
-    const match = draft.match(rx);
-    if (match) {
-      outro = match[0].trim();
-      draft = draft.replace(rx, '').trim();
-      break;
-    }
-  }
-
-  return { intro, draft, outro, aoSubjectRef };
-}
 
 export default function ProjectDetail({ project: initialProject, onBack, onOpenComposer, onRaiseInvoice, onOpenSOC, onOpenDisputeAgreement, onActiveTabChange }) {
   // Added 2026-09-10, real, confirmed gap found while investigating a
