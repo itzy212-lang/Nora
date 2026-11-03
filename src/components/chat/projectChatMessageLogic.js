@@ -16,7 +16,106 @@
 
 import { uid } from '../../utils/formatters';
 
-function splitAssistantResponse(raw = '') {
+function findDraftStart(text = '') {
+  const markers = [
+    /\bSubject\s*:/i,
+    /\bDear\s+[A-Z0-9]/i,
+    /\bDear\s+(Sir|Madam|Sirs)/i,
+    /\bHi\s+[A-Z0-9]/i,
+    /\bHi\s*,/i,
+    /\bHello\s+[A-Z0-9]/i,
+    /\bHello\s*,/i,
+    /\bGood\s+(morning|afternoon|evening)\s*,?\s*[A-Z]?/i,
+    /\bTo\s+whom\s+it\s+may\s+concern/i,
+  ];
+
+  const positions = markers
+    .map(rx => {
+      const match = String(text || '').match(rx);
+      return match ? match.index : -1;
+    })
+    .filter(index => index >= 0);
+
+  if (!positions.length) return -1;
+  return Math.min(...positions);
+}
+
+function cleanBrief(raw = '') {
+  let text = String(raw || '').trim();
+
+  text = text
+    .replace(/^Thanks for the direction\.?\s*/i, '')
+    .replace(/^Sure,?\s*/i, '')
+    .replace(/Here(?:'s| is)\s+the\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
+    .replace(/Here(?:'s| is)\s+my\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
+    .replace(/^\s*-{3,}\s*/g, '')
+    .replace(/\s*-{3,}\s*$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (/^(thanks|thank you)$/i.test(text)) return '';
+  if (/^thanks for the direction/i.test(text)) return '';
+  if (/^here(?:'s| is) the draft/i.test(text)) return '';
+
+  return text;
+}
+
+function normaliseProjectDraftText(raw = '') {
+  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!text) return '';
+
+  text = text
+    .replace(/^```[a-z]*\s*/i, '')
+    .replace(/```$/i, '')
+    .replace(/^Draft\s*:\s*/i, '')
+    .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
+    .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
+    .trim();
+
+  [
+    /\n-{3,}\s*\n\s*I included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*I've included[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*This draft[\s\S]*$/i,
+    /\n-{3,}\s*\n\s*Let me know[\s\S]*$/i,
+    /\n\s*I included the[\s\S]*$/i,
+    /\n\s*I've included the[\s\S]*$/i,
+    /\n\s*Let me know if this tone[\s\S]*$/i,
+    /\n\s*Let me know if this suits[\s\S]*$/i,
+  ].forEach(rx => {
+    text = text.replace(rx, '').trim();
+  });
+
+  return text
+    .replace(/\n\s*-{3,}\s*$/g, '')
+    .replace(/^\s*-{3,}\s*\n/g, '')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
+    .replace(/(Subject\s*:[^\n]+)\s*(?=Hello\s+)/i, '$1\n\n')
+    .replace(/\s*(Kind regards,|Best regards,|Regards,)\s*/i, '\n\n$1\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+
+/**
+ * True when a plain reply is really an email/letter the user can send:
+ * opens with a greeting and closes with a sign-off. The backend sometimes
+ * returns a follow-up version ("another version for the building owner")
+ * as ordinary chat text without draft delimiters, which used to leave it
+ * with no draft buttons (copy / send / open in composer).
+ */
+export function looksLikeEmailDraft(text = '') {
+  const s = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (s.length < 60) return false;
+  const greeting = /^(?:[^\n]{0,80}\n+)?\s*(?:Subject\s*:[^\n]*\n+\s*)?(Dear\b|Hi\b|Hello\b|Good (?:morning|afternoon|evening)\b)/i.test(s);
+  const signoff = /\n\s*(Kind regards|Best regards|Regards|Many thanks|Thanks|Yours sincerely|Yours faithfully|Best wishes|Warm regards)\s*,?/i.test(s);
+  return greeting && signoff;
+}
+
+export function splitAssistantResponse(raw = '') {
   const text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
   if (!text) return { brief: '', draft: '', after: '' };
@@ -69,7 +168,7 @@ function splitAssistantResponse(raw = '') {
   };
 }
 
-function extractSubjectFromDraft(draftText = '') {
+export function extractSubjectFromDraft(draftText = '') {
   // If draft starts with Subject: line, pull it out
   const match = draftText.match(/^Subject:\s*(.+)\n+/i);
   if (match) {
@@ -97,6 +196,17 @@ function extractSubjectFromDraft(draftText = '') {
 export function computeAssistantMessagesFromResult(result, wantsDraft, projectId) {
   if (result.invoice_generated) return { newMessages: [], updatedLastDraft: undefined, doneCause: null };
   const cleanReply = (s) => String(s || '').replace(/<invoice_data>[\s\S]*?<\/invoice_data>/g, '').trim();
+
+  // A reply that is really a sendable email but came back as ordinary chat
+  // text (no draft delimiters) is promoted to a draft, so it gets the same
+  // copy / send / open-in-composer buttons as the first draft in the chat.
+  if (!result.draft && !result.documentText && !result.replyText && looksLikeEmailDraft(cleanReply(result.reply))) {
+    const parts = splitAssistantResponse(cleanReply(result.reply));
+    if (parts.draft) {
+      result = { ...result, draft: parts.draft, reply: [parts.brief, parts.after].filter(Boolean).join('\n\n') };
+      wantsDraft = true;
+    }
+  }
 
   if (!wantsDraft) {
     if (result.draft) {

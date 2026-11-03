@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
-import { splitAssistantResponse, extractSubjectFromDraft, computeAssistantMessagesFromResult, isDraftRequest } from './projectChatMessageLogic.js';
+import { computeAssistantMessagesFromResult, isDraftRequest } from './projectChatMessageLogic.js';
 import UnifiedVoice from '../shared/UnifiedVoice';
 import VoiceInput from '../shared/VoiceInput';
 import DictationOverlay from '../shared/DictationOverlay';
@@ -152,89 +152,6 @@ function getUserId(state = {}) {
 }
 
 
-
-function findDraftStart(text = '') {
-  const markers = [
-    /\bSubject\s*:/i,
-    /\bDear\s+[A-Z0-9]/i,
-    /\bDear\s+(Sir|Madam|Sirs)/i,
-    /\bHi\s+[A-Z0-9]/i,
-    /\bHi\s*,/i,
-    /\bHello\s+[A-Z0-9]/i,
-    /\bHello\s*,/i,
-    /\bGood\s+(morning|afternoon|evening)\s*,?\s*[A-Z]?/i,
-    /\bTo\s+whom\s+it\s+may\s+concern/i,
-  ];
-
-  const positions = markers
-    .map(rx => {
-      const match = String(text || '').match(rx);
-      return match ? match.index : -1;
-    })
-    .filter(index => index >= 0);
-
-  if (!positions.length) return -1;
-  return Math.min(...positions);
-}
-
-function cleanBrief(raw = '') {
-  let text = String(raw || '').trim();
-
-  text = text
-    .replace(/^Thanks for the direction\.?\s*/i, '')
-    .replace(/^Sure,?\s*/i, '')
-    .replace(/Here(?:'s| is)\s+the\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
-    .replace(/Here(?:'s| is)\s+my\s+draft(?:\s+for\s+.+?)?:?\s*$/i, '')
-    .replace(/^\s*-{3,}\s*/g, '')
-    .replace(/\s*-{3,}\s*$/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  if (/^(thanks|thank you)$/i.test(text)) return '';
-  if (/^thanks for the direction/i.test(text)) return '';
-  if (/^here(?:'s| is) the draft/i.test(text)) return '';
-
-  return text;
-}
-
-function normaliseProjectDraftText(raw = '') {
-  let text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-
-  if (!text) return '';
-
-  text = text
-    .replace(/^```[a-z]*\s*/i, '')
-    .replace(/```$/i, '')
-    .replace(/^Draft\s*:\s*/i, '')
-    .replace(/^Here(?:'s| is)\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
-    .replace(/^Sure,?\s+.*?(?=\bSubject\s*:|\bDear\s+|\bHi\s+|\bHello\s+)/is, '')
-    .trim();
-
-  [
-    /\n-{3,}\s*\n\s*I included[\s\S]*$/i,
-    /\n-{3,}\s*\n\s*I've included[\s\S]*$/i,
-    /\n-{3,}\s*\n\s*This draft[\s\S]*$/i,
-    /\n-{3,}\s*\n\s*Let me know[\s\S]*$/i,
-    /\n\s*I included the[\s\S]*$/i,
-    /\n\s*I've included the[\s\S]*$/i,
-    /\n\s*Let me know if this tone[\s\S]*$/i,
-    /\n\s*Let me know if this suits[\s\S]*$/i,
-  ].forEach(rx => {
-    text = text.replace(rx, '').trim();
-  });
-
-  return text
-    .replace(/\n\s*-{3,}\s*$/g, '')
-    .replace(/^\s*-{3,}\s*\n/g, '')
-    .replace(/(Subject\s*:[^\n]+)\s*(?=Dear\s+)/i, '$1\n\n')
-    .replace(/(Subject\s*:[^\n]+)\s*(?=Hi\s+)/i, '$1\n\n')
-    .replace(/(Subject\s*:[^\n]+)\s*(?=Hello\s+)/i, '$1\n\n')
-    .replace(/\s*(Kind regards,|Best regards,|Regards,)\s*/i, '\n\n$1\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n[ \t]+/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 
 // ── Invoice Preview Card ──────────────────────────────────────────────────
