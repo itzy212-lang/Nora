@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { sortAOsNumerically } from '../../utils/aoUtils';
+import VoiceInput from '../shared/VoiceInput';
+import VoiceStatus from '../shared/VoiceStatus';
 
 const NOTICE_TYPES = [
   { key: 's6', label: 'Section 6(1) Notice', deadlineDays: 14 },
@@ -124,7 +126,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
   });
 
   const [polishingIndex, setPolishingIndex] = useState(null);
-  const [dictatingIndex, setDictatingIndex] = useState(null);
+  const [dictation, setDictation] = useState({}); // { [itemKey]: { status, message } }
   const [libraryOpenFor, setLibraryOpenFor] = useState(null); // workKey(sec, ak), or null
 
   const selectedAOs = availableAOs.filter(item => selectedAOKeys.includes(aoKey(item)));
@@ -193,24 +195,16 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
     }
   };
 
-  const startDictation = (sec, ak, index) => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser.');
-      return;
-    }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SR();
-    recognition.lang = 'en-GB';
-    recognition.interimResults = false;
-    const dKey = `${workKey(sec, ak)}-${index}`;
-    recognition.onresult = (e) => {
-      updateWork(sec, ak, index, e.results[0][0].transcript);
-      setDictatingIndex(null);
-    };
-    recognition.onerror = () => setDictatingIndex(null);
-    recognition.onend = () => setDictatingIndex(null);
-    setDictatingIndex(dKey);
-    recognition.start();
+  // Dictation uses the same shared mic as the chat bars: it records, Whisper
+  // transcribes, and the text is added to the end of the work item.
+  const setItemDictation = (key, status, info = {}) =>
+    setDictation(prev => ({ ...prev, [key]: { status, message: info.message || '' } }));
+
+  const appendDictation = (sec, ak, index, current, text) => {
+    const spoken = (text || '').trim();
+    if (!spoken) return;
+    const existing = (current || '').trim();
+    updateWork(sec, ak, index, existing ? `${existing} ${spoken}` : spoken);
   };
 
   const toggleAO = item => {
@@ -473,16 +467,17 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {items.map((item, index) => (
-                          <div key={index} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                          <div key={index}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                             <div style={{ width: 20, paddingTop: 10, color: '#9ca3af', fontSize: 13, flexShrink: 0 }}>•</div>
                             <textarea value={item} onChange={e => updateWork(sec, ak, index, e.target.value)}
                               placeholder="Describe the work item..." rows={2}
                               style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
-                              <button type="button" onClick={() => startDictation(sec, ak, index)} title="Dictate"
-                                style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', background: dictatingIndex === `${workKey(sec, ak)}-${index}` ? '#fee2e2' : '#f9fafb', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>
-                                {dictatingIndex === `${workKey(sec, ak)}-${index}` ? 'stop' : 'mic'}
-                              </button>
+                              <VoiceInput
+                                onTranscript={(text) => appendDictation(sec, ak, index, item, text)}
+                                onStatus={(status, info) => setItemDictation(`${workKey(sec, ak)}-${index}`, status, info)}
+                              />
                               <button type="button" onClick={() => polishWork(sec, ak, index)} title="Polish with AI"
                                 disabled={polishingIndex === `${workKey(sec, ak)}-${index}` || !item.trim()}
                                 style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', background: '#f0fdf4', cursor: 'pointer', fontSize: 13, lineHeight: 1, opacity: !item.trim() ? 0.4 : 1 }}>
@@ -493,6 +488,13 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                                 X
                               </button>
                             </div>
+                          </div>
+                          <div style={{ paddingLeft: 26, marginTop: 6 }}>
+                            <VoiceStatus
+                              status={dictation[`${workKey(sec, ak)}-${index}`]?.status || 'idle'}
+                              message={dictation[`${workKey(sec, ak)}-${index}`]?.message || ''}
+                            />
+                          </div>
                           </div>
                         ))}
                       </div>

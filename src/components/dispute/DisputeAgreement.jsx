@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../state/appStore';
+import VoiceInput from '../shared/VoiceInput';
+import VoiceStatus from '../shared/VoiceStatus';
 
 function uid() { return Math.random().toString(36).slice(2); }
 
@@ -10,8 +12,10 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
   const [phase, setPhase] = useState(defaultProjectId ? 'input' : 'setup');
   const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [messages, setMessages] = useState([]);
-  const [interimText, setInterimText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('idle');
+  const [voiceMessage, setVoiceMessage] = useState('');
+  const isRecording = voiceStatus === 'recording';
+  const isTranscribing = voiceStatus === 'transcribing';
   const [textInput, setTextInput] = useState('');
   const [processing, setProcessing] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -21,12 +25,6 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
   const [refining, setRefining] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
-  const recognitionRef = useRef(null);
-  const accumulatedRef = useRef('');
-  const committedRef = useRef('');
-  const interimRef = useRef('');
-  const restartTimerRef = useRef(null);
-  const shouldRecordRef = useRef(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -49,108 +47,29 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
     return p?.address || p?.premise_address || p?.bo_premise_address || p?.ref || 'Project';
   }
 
-  // ── Recording ──────────────────────────────────────────────────────────────
+  // ── Dictation (shared mic: records, Whisper transcribes) ─────────────────
 
-  const buildRecognition = useCallback(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return null;
-
-    const rec = new SR();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = 'en-GB';
-    rec.maxAlternatives = 1;
-
-    rec.onstart = () => setIsRecording(true);
-
-    rec.onresult = (event) => {
-      let finalText = '';
-      let interim = '';
-      for (let i = 0; i < event.results.length; i++) {
-        const r = event.results[i];
-        const text = (r[0]?.transcript || '').trim();
-        if (!text) continue;
-        if (r.isFinal) finalText = [finalText, text].filter(Boolean).join(' ');
-        else interim = text;
-      }
-      if (finalText) committedRef.current = finalText;
-      interimRef.current = interim;
-      const preview = [accumulatedRef.current, committedRef.current, interim].filter(Boolean).join(' ');
-      setInterimText(preview);
-    };
-
-    rec.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      console.warn('[DisputeAgreement] speech error:', e.error);
-    };
-
-    rec.onend = () => {
-      if (committedRef.current) {
-        accumulatedRef.current = [accumulatedRef.current, committedRef.current].filter(Boolean).join(' ');
-        committedRef.current = '';
-      }
-      if (shouldRecordRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = setTimeout(() => {
-          if (!shouldRecordRef.current) return;
-          const newRec = buildRecognition();
-          if (!newRec) return;
-          recognitionRef.current = newRec;
-          try { newRec.start(); } catch {}
-        }, 150);
-      } else {
-        setIsRecording(false);
-      }
-    };
-
-    return rec;
+  const handleVoiceStatus = useCallback((status, info = {}) => {
+    setVoiceStatus(status);
+    setVoiceMessage(info.message || '');
   }, []);
 
-  const startRecording = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('Voice recording requires Chrome or Edge.');
-      return;
-    }
-    committedRef.current = '';
-    accumulatedRef.current = '';
-    interimRef.current = '';
-    setInterimText('');
-    shouldRecordRef.current = true;
-    const rec = buildRecognition();
-    if (!rec) return;
-    recognitionRef.current = rec;
-    try { rec.start(); } catch {}
-  }, [buildRecognition]);
-
-  const stopRecording = useCallback(() => {
-    shouldRecordRef.current = false;
-    clearTimeout(restartTimerRef.current);
-    try { recognitionRef.current?.stop(); } catch {}
-    recognitionRef.current = null;
-    setIsRecording(false);
+  const handleVoiceTranscript = useCallback((text) => {
+    const spoken = (text || '').trim();
+    if (!spoken) return;
+    setTextInput(prev => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken));
   }, []);
 
   const handleSend = useCallback((overrideText) => {
-    const voiceNote = [accumulatedRef.current, committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
-    const note = overrideText || voiceNote || textInput.trim();
-    if (!note) return;
-    stopRecording();
-    setInterimText('');
+    const note = overrideText || textInput.trim();
+    if (!note || isTranscribing) return;
     setTextInput('');
-    committedRef.current = '';
-    accumulatedRef.current = '';
-    interimRef.current = '';
     setMessages(prev => [
       ...prev,
       { id: uid(), role: 'user', content: note },
       { id: uid(), role: 'ely', content: 'Noted.' },
     ]);
-  }, [stopRecording, textInput]);
-
-  const handleMicClick = useCallback(() => {
-    if (isRecording) handleSend();
-    else startRecording();
-  }, [isRecording, handleSend, startRecording]);
+  }, [textInput, isTranscribing]);
 
   // ── File upload ────────────────────────────────────────────────────────────
 
@@ -188,8 +107,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
       .map(m => m.content)
       .join('\n\n');
 
-    const currentNote = [committedRef.current, interimRef.current].filter(Boolean).join(' ').trim();
-    const text = [allNotes, currentNote].filter(Boolean).join('\n\n');
+    const text = [allNotes, textInput.trim()].filter(Boolean).join('\n\n');
 
     if (!text.trim() && !uploadedFiles.length) {
       alert('Please add some notes or upload a document first.');
@@ -197,7 +115,6 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
     }
     if (!projectId) { alert('Please select a project first.'); return; }
 
-    stopRecording();
     setProcessing(true);
 
     try {
@@ -228,7 +145,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
     } finally {
       setProcessing(false);
     }
-  }, [messages, projectId, uploadedFiles, stopRecording]);
+  }, [messages, projectId, uploadedFiles, textInput]);
 
   // ── Refine ─────────────────────────────────────────────────────────────────
 
@@ -379,11 +296,6 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
               </div>
             </div>
           ))}
-          {interimText && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-              <div style={{ ...s.userBubble, opacity: 0.55, fontStyle: 'italic' }}>{interimText}</div>
-            </div>
-          )}
           {processing && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', color: 'var(--blue)', fontSize: 13 }}>
               <div style={s.spinner} /> Generating Party Agreement…
@@ -405,26 +317,17 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
               📎
             </button>
 
-            {/* Mic */}
-            <button onClick={handleMicClick} style={isRecording ? s.micActive : s.micIdle} title={isRecording ? 'Stop recording' : 'Start recording'}>
-              {isRecording ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="6" width="12" height="12" rx="2"/>
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="23"/>
-                  <line x1="8" y1="23" x2="16" y2="23"/>
-                </svg>
-              )}
-            </button>
+            {/* Mic — the shared dictation button */}
+            <VoiceInput
+              onTranscript={handleVoiceTranscript}
+              onStatus={handleVoiceStatus}
+              disabled={processing}
+            />
 
             {/* Text input */}
             <textarea
               style={{ ...s.input, flex: 1, minHeight: 38, maxHeight: 120, resize: 'vertical', fontSize: 13, padding: '8px 10px', lineHeight: 1.4 }}
-              placeholder={isRecording ? '● Recording… or type/paste here' : 'Describe the agreement — type, paste or tap mic…'}
+              placeholder={isRecording ? '🔴 Recording… tap mic to stop' : isTranscribing ? 'Transcribing…' : 'Describe the agreement — type, paste or tap mic…'}
               value={textInput}
               onChange={e => setTextInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -433,10 +336,10 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
             {/* Send */}
             <button
               onClick={() => handleSend()}
-              disabled={!textInput.trim() && !isRecording && !interimText}
+              disabled={!textInput.trim() || isRecording || isTranscribing}
               style={{
                 ...s.micIdle,
-                opacity: (!textInput.trim() && !isRecording && !interimText) ? 0.35 : 1,
+                opacity: (!textInput.trim() || isRecording || isTranscribing) ? 0.35 : 1,
                 background: 'var(--accent, #6366f1)',
                 color: '#fff',
                 borderRadius: 8,
@@ -454,11 +357,7 @@ export default function DisputeAgreement({ defaultProjectId, onOpenComposer }) {
             </button>
           </div>
 
-          {(isRecording || interimText) && (
-            <div style={{ fontSize: 12, color: 'var(--red, #ef4444)', fontStyle: 'italic', paddingLeft: 4 }}>
-              {interimText || '● Recording… speak now'}
-            </div>
-          )}
+          <VoiceStatus status={voiceStatus} message={voiceMessage} />
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
       </div>

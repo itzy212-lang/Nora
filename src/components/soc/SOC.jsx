@@ -4,63 +4,9 @@ import { useApp } from '../../state/appStore';
 import ChatInputBar from '../shared/ChatInputBar';
 import SaveToOneDriveOverlay from '../shared/SaveToOneDriveOverlay';
 import { sortAOsNumerically } from '../../utils/aoUtils';
+import { decodeAndResampleMono, encodeWavChunk } from '../../utils/transcribeAudio';
 
 function uid() { return Math.random().toString(36).slice(2); }
-
-// Added 2026-09-24 — Vercel's serverless functions have a hard ~4.5MB
-// request body limit, enforced at the platform level regardless of
-// function config (bodyParser: false doesn't change it). An uploaded
-// recording of any real length exceeds this easily, so a direct
-// upload fails with a non-JSON "Request Entity Too Large" response
-// before the function code even runs. Fixed by decoding and
-// resampling the recording to 16kHz mono in-browser (Whisper doesn't
-// need more than that for speech, and it cuts file size dramatically),
-// then slicing it into ~100-second WAV chunks (~3.2MB each, safely
-// under the limit) and transcribing each in a separate request,
-// concatenating the results in order. Works for a recording of any
-// length, not just files that happen to fit under one request.
-async function decodeAndResampleMono(arrayBuffer, targetSampleRate) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AudioCtx();
-  let audioBuffer;
-  try {
-    audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-  } finally {
-    ctx.close();
-  }
-  const offlineCtx = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetSampleRate) + 1, targetSampleRate);
-  const source = offlineCtx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(offlineCtx.destination);
-  source.start(0);
-  const rendered = await offlineCtx.startRendering();
-  return rendered.getChannelData(0); // mono Float32Array at targetSampleRate
-}
-
-function encodeWavChunk(samples, sampleRate) {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-  const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);       // PCM
-  view.setUint16(22, 1, true);       // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true); // byte rate (mono, 16-bit)
-  view.setUint16(32, 2, true);       // block align
-  view.setUint16(34, 16, true);      // bits per sample
-  writeString(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
-  let offset = 44;
-  for (let i = 0; i < samples.length; i++, offset += 2) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-  }
-  return new Blob([view], { type: 'audio/wav' });
-}
 
 // Added 2026-10-01, tightened the same day on real evidence from 20
 // Selborne Road — see the call site in handleUploadRecording below.

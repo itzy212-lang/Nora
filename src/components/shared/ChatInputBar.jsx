@@ -19,6 +19,7 @@
 
 import { useRef, useCallback, useState, useEffect } from 'react';
 import VoiceInput from './VoiceInput';
+import VoiceStatus from './VoiceStatus';
 import { logDiag } from '../../utils/draftUtils';
 
 export default function ChatInputBar({
@@ -33,13 +34,13 @@ export default function ChatInputBar({
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('idle'); // idle | recording | transcribing | error
+  const [voiceMessage, setVoiceMessage] = useState('');
   const [stoppedRecording, setStoppedRecording] = useState(false);
-  const [interimText, setInterimText] = useState('');
   const [internalStop, setInternalStop] = useState(0);
   const [attachedFile, setAttachedFile] = useState(null); // { name, text }
-  const voiceBaseRef = useRef('');
+  const isRecording = voiceStatus === 'recording';
+  const isTranscribing = voiceStatus === 'transcribing';
 
   // Auto-resize textarea
   const resize = useCallback(() => {
@@ -51,22 +52,13 @@ export default function ChatInputBar({
 
   useEffect(() => { resize(); }, [value, resize]);
 
-  // Safety net — clear transcribing after 8s
-  useEffect(() => {
-    if (!isTranscribing) return;
-    const t = setTimeout(() => setIsTranscribing(false), 8000);
-    return () => clearTimeout(t);
-  }, [isTranscribing]);
-
   const handleChange = useCallback((e) => {
-    voiceBaseRef.current = '';
     onChange?.(e.target.value);
   }, [onChange]);
 
   const handleSend = useCallback(() => {
     const text = (value || '').trim();
     if (!text || disabled || loading) return;
-    voiceBaseRef.current = '';
     setInternalStop(s => s + 1);
     setAttachedFile(null);
     setStoppedRecording(false);
@@ -99,71 +91,24 @@ export default function ChatInputBar({
     reader.readAsText(file);
   }, []);
 
-  // Voice handlers
-  const wasRecordingRef = useRef(false);
-  const handleVoice = useCallback((transcript, meta) => {
-    // Ignore restart gaps — VoiceInput restarts Web Speech sessions continuously
-    // while recording. restarting=true means still recording, not finished.
-    if (meta?.restarting) return;
-
-    if (meta?.recording) {
-      if (!wasRecordingRef.current) {
-        wasRecordingRef.current = true;
-        logDiag('mic_engaged', { existingTextLen: (value || '').length });
-      }
-      setIsRecording(true);
-      setIsTranscribing(false);
-      // Write finalised transcript to textarea during recording.
-      // Only update if transcript has actually changed to avoid repetition.
-      if (transcript) {
-        if (!voiceBaseRef.current) voiceBaseRef.current = (value || '').trim();
-        const next = voiceBaseRef.current
-          ? `${voiceBaseRef.current} ${transcript}`
-          : transcript;
-        // Only call onChange if text actually changed — prevents redundant re-renders
-        // that cause the repetition loop on Android Chrome
-        if (next !== value) {
-          onChange?.(next);
-        }
-      }
-    } else {
-      // recording === false — truly finished
-      wasRecordingRef.current = false;
-      logDiag('mic_stopped', { transcriptLen: (transcript || '').length });
-      setIsRecording(false);
-      setStoppedRecording(true);
-      setInterimText('');
-      if (transcript) {
-        setIsTranscribing(false);
-        const base = voiceBaseRef.current;
-        const next = base ? `${base} ${transcript}` : transcript;
-        voiceBaseRef.current = '';
-        onChange?.(next);
-      } else {
-        // No final transcript — keep whatever is in the textarea already
-        setIsTranscribing(false);
-        voiceBaseRef.current = '';
-      }
+  // Voice: the mic records, Whisper transcribes, and the finished text is
+  // added to whatever is already in the box (typed text is never replaced).
+  const handleVoiceStatus = useCallback((status, info = {}) => {
+    setVoiceStatus(status);
+    setVoiceMessage(info.message || '');
+    if (status === 'recording') {
+      logDiag('mic_engaged', { existingTextLen: (value || '').length });
     }
+  }, [value]);
+
+  const handleVoice = useCallback((transcript) => {
+    const text = (transcript || '').trim();
+    logDiag('mic_stopped', { transcriptLen: text.length });
+    if (!text) return;
+    setStoppedRecording(true);
+    const existing = (value || '').trim();
+    onChange?.(existing ? `${existing} ${text}` : text);
   }, [value, onChange]);
-
-  const handleVoicePreview = useCallback((preview, meta = {}) => {
-    if (meta?.restarting) return;
-    if (meta?.recording) {
-      setIsRecording(true);
-      // Only set interim text if there's actual speech content — not status messages
-      const phrase = meta.currentPhrase || meta.interim || '';
-      const isStatusMessage = phrase.startsWith('🔴') || phrase.toLowerCase().includes('recording');
-      if (phrase && !isStatusMessage) {
-        setInterimText(phrase);
-      }
-    } else {
-      // recording stopped — show send button immediately
-      setIsRecording(false);
-      setStoppedRecording(true);
-      setInterimText('');
-    }
-  }, []);
 
   const combinedStop = stopSignal + internalStop;
   const hasText = (value || '').trim().length > 0;
@@ -171,17 +116,8 @@ export default function ChatInputBar({
   return (
     <div style={{ width: '100%' }}>
 
-      {/* Live interim preview */}
-      {interimText && isRecording && (
-        <div style={{
-          padding: '4px 14px 6px',
-          fontSize: 12,
-          color: 'var(--text3)',
-          fontStyle: 'italic',
-        }}>
-          🎤 {interimText}
-        </div>
-      )}
+      {/* Dictation status — one look everywhere (shared/VoiceStatus) */}
+      <VoiceStatus status={voiceStatus} message={voiceMessage} />
 
       {/* Attached file badge */}
       {attachedFile && (
@@ -280,7 +216,7 @@ export default function ChatInputBar({
           {/* VoiceInput — always rendered and always tappable, even after recording stops */}
           <VoiceInput
             onTranscript={handleVoice}
-            onPreview={handleVoicePreview}
+            onStatus={handleVoiceStatus}
             disabled={disabled || loading}
             stopSignal={combinedStop}
           />
