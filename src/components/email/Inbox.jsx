@@ -12,7 +12,8 @@ import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hoo
 import { createLongPressCopyHandlers, longPressBubbleStyle } from '../../hooks/useLongPressCopy';
 import QuickRefOverlay from '../shared/QuickRefOverlay';
 import ProjectFilePicker from './ProjectFilePicker';
-import { saveDiaryTask, sortProjectsByAddress, projectLabelOf, aosOf, aoKeyOf, aoAddressOf, guessAoId } from '../../utils/diaryTask';
+import { saveTaskFromForm, guessAoId } from '../../utils/diaryTask';
+import { TaskModal } from '../calendar/Calendar';
 
 // Added 2026-09-17, same defense-in-depth reasoning as the email
 // query timeout above (and the IndexedDB connection fix before that):
@@ -30,131 +31,6 @@ async function invokeSyncOutlookWithTimeout(timeoutMs = 15000) {
     sb.functions.invoke('sync_outlook', { body: {} }),
     new Promise((_, reject) => setTimeout(() => reject(new Error('Outlook sync timed out')), timeoutMs)),
   ]);
-}
-
-// "Add to diary" pop-up for an appointment found in an email. It saves through
-// the same helper the Calendar uses (utils/diaryTask), so the task is owned by
-// the user, linked to the project and — for a Schedule of Condition — to the
-// right adjoining owner, whose card gets the SOC date.
-function BookingOverlay({ booking, projects = [], onConfirm, onClose }) {
-  const startProject = projects.find(p => String(p.id) === String(booking.project_id)) || null;
-  const [form, setForm] = useState({
-    title: booking.title || '',
-    date: booking.date || '',
-    time: booking.time || '',
-    task_type: booking.task_type || 'appointment',
-    project_id: booking.project_id || '',
-    ao_id: startProject ? guessAoId(startProject, booking.address, booking.project_address, booking.title) : '',
-    description: booking.description || '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const sortedProjects = sortProjectsByAddress(projects);
-  const selectedProject = projects.find(p => String(p.id) === String(form.project_id)) || null;
-  const projectAos = aosOf(selectedProject || {});
-  const showAoSelect = form.task_type === 'soc' && !!selectedProject && projectAos.length > 0;
-
-  const changeProject = (projectId) => {
-    const proj = projects.find(p => String(p.id) === String(projectId)) || null;
-    setForm(f => ({
-      ...f,
-      project_id: projectId,
-      ao_id: proj ? guessAoId(proj, booking.address, booking.project_address, f.title) : '',
-    }));
-  };
-
-  const confirm = async () => {
-    if (form.task_type === 'soc' && !form.project_id) { setError('Choose the project for this Schedule of Condition.'); return; }
-    if (showAoSelect && !form.ao_id) { setError('Choose which adjoining owner this Schedule of Condition is for.'); return; }
-    setSaving(true);
-    setError('');
-    try {
-      await onConfirm(form, selectedProject);
-    } catch (err) {
-      setError(err?.message || 'Could not add this to the diary.');
-      setSaving(false);
-    }
-  };
-
-  const inp = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: 'var(--bg)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>📅 Add to diary</div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TITLE</div>
-            <input style={inp} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
-          </div>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>DATE</div>
-              <input type="date" style={inp} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TIME</div>
-              <input type="time" style={inp} value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>TYPE</div>
-            <select style={inp} value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}>
-              <option value="appointment">Appointment</option>
-              <option value="soc">Schedule of Condition</option>
-              <option value="site_visit">Site Visit</option>
-              <option value="meeting">Meeting</option>
-              <option value="reminder">Reminder</option>
-              <option value="deadline">Deadline</option>
-            </select>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>PROJECT</div>
-            <select style={inp} value={form.project_id} onChange={e => changeProject(e.target.value)}>
-              <option value="">No project linked</option>
-              {sortedProjects.map(p => (
-                <option key={p.id} value={p.id}>{projectLabelOf(p)}</option>
-              ))}
-            </select>
-          </div>
-
-          {showAoSelect && (
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>ADJOINING OWNER / SOC PROPERTY</div>
-              <select style={inp} value={form.ao_id} onChange={e => setForm(f => ({ ...f, ao_id: e.target.value }))}>
-                <option value="">Select adjoining owner</option>
-                {projectAos.map((ao, i) => (
-                  <option key={aoKeyOf(ao) || i} value={aoKeyOf(ao)}>{aoAddressOf(ao, selectedProject) || ao.name || `Adjoining owner ${i + 1}`}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>NOTES</div>
-            <input style={inp} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-          </div>
-        </div>
-
-        {error && <div role="alert" style={{ marginTop: 12, fontSize: 12.5, color: '#b91c1c' }}>{error}</div>}
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text3)' }}>
-            Cancel
-          </button>
-          <button onClick={confirm} disabled={!form.title || !form.date || saving}
-            style={{ padding: '8px 20px', background: form.title && form.date && !saving ? '#10b981' : 'var(--border)', color: form.title && form.date && !saving ? '#fff' : 'var(--text3)', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: form.title && form.date && !saving ? 'pointer' : 'not-allowed' }}>
-            {saving ? 'Saving…' : '✅ Book it in'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function useWindowWidth() {
@@ -3680,24 +3556,23 @@ if (syncErr) throw syncErr;
                 )}
                 <button onClick={() => {
                   setAppointmentPrompt(null);
+                  const linkedProject = (state.projects || []).find(p => String(p.id) === String(selectedEmail?.project_id)) || null;
+                  const detectedType = ['soc', 'site_visit', 'meeting', 'call'].includes(appointmentPrompt.type) ? appointmentPrompt.type : 'meeting';
                   setBookingOverlay({
                     title: (appointmentPrompt.type === 'soc' ? 'SOC' : appointmentPrompt.title || 'Appointment') + (appointmentPrompt.address ? ' — ' + appointmentPrompt.address : ''),
-                    date: (() => {
-                    const d = appointmentPrompt.iso_date || '';
-                    if (!d) return '';
-                    // Correct wrong year — if year is in the past, use current year
-                    const currentYear = new Date().getFullYear();
-                    const parts = d.split('-');
-                    if (parts.length === 3 && parseInt(parts[0]) < currentYear) {
-                      parts[0] = String(currentYear);
-                    }
-                    return parts.join('-');
-                  })(),
+                    due_date: (() => {
+                      const d = appointmentPrompt.iso_date || '';
+                      if (!d) return '';
+                      // Correct wrong year — if year is in the past, use current year
+                      const currentYear = new Date().getFullYear();
+                      const parts = d.split('-');
+                      if (parts.length === 3 && parseInt(parts[0]) < currentYear) parts[0] = String(currentYear);
+                      return parts.join('-');
+                    })(),
                     time: appointmentPrompt.time || '',
                     project_id: selectedEmail?.project_id || '',
-                    project_address: appointmentPrompt.project_address || '',
-                    address: appointmentPrompt.address || '',
-                    task_type: 'appointment',
+                    ao_id: linkedProject ? guessAoId(linkedProject, appointmentPrompt.address, appointmentPrompt.project_address) : '',
+                    task_type: detectedType,
                     description: `From email: ${selectedEmail?.subject || ''}`,
                   });
                 }}
@@ -3717,18 +3592,26 @@ if (syncErr) throw syncErr;
 
       {/* ── Booking confirmation overlay ───────────────────────────────── */}
       {bookingOverlay && (
-        <BookingOverlay
-          booking={bookingOverlay}
-          projects={state.projects || []}
-          onConfirm={async (confirmed, project) => {
-            // Throws on failure, so the pop-up stays open and shows the real error
-            await saveDiaryTask(confirmed, project);
-            setBookingOverlay(null);
-            window.dispatchEvent(new Event('nora:task-added'));
-            alert('✅ Added to diary — check your calendar.');
-          }}
-          onClose={() => setBookingOverlay(null)}
-        />
+        // The very same "Add task / appointment" form the Calendar uses, so an
+        // entry made from an email is identical to one made in the calendar.
+        <div style={{ position: 'relative', zIndex: 1000 }}>
+          <TaskModal
+            task={bookingOverlay}
+            defaultDate={bookingOverlay.due_date}
+            projects={state.projects || []}
+            onSave={async (form, existing) => {
+              // Throws on failure, so the form stays open and shows the real error
+              const project = (state.projects || []).find(p => String(p.id) === String(form.project_id)) || null;
+              await saveTaskFromForm(form, existing, project);
+              setBookingOverlay(null);
+              window.dispatchEvent(new Event('nora:task-added'));
+              alert('✅ Added to diary — check your calendar.');
+            }}
+            onDelete={() => {}}
+            onComplete={() => {}}
+            onClose={() => setBookingOverlay(null)}
+          />
+        </div>
       )}
 
     </>

@@ -36,15 +36,6 @@ const streetNumber = (addr) => {
   return m ? parseInt(m[1], 10) : Infinity;
 };
 
-export function sortProjectsByAddress(projects = []) {
-  return [...(Array.isArray(projects) ? projects : [])].sort((a, b) => {
-    const nA = streetNumber(projectLabelOf(a));
-    const nB = streetNumber(projectLabelOf(b));
-    if (nA !== nB) return nA - nB;
-    return projectLabelOf(a).localeCompare(projectLabelOf(b));
-  });
-}
-
 export function aosOf(project = {}) {
   const aos = Array.isArray(project?.aos) ? project.aos : [];
   return [...aos].sort((a, b) => {
@@ -75,49 +66,49 @@ export function guessAoId(project, ...hints) {
 }
 
 /**
- * Save the task. Throws if the database refuses it, so the caller can show the
- * real error instead of telling the user it was added.
+ * Save a task from the Calendar's task form (new or existing). Used by the
+ * Calendar itself AND by the email "Add to diary" pop-up, which now opens the
+ * very same form — so a diary entry is identical wherever it is created.
  *
- * @param {{title:string,date:string,time?:string,end_time?:string,task_type?:string,
- *          project_id?:string,ao_id?:string,description?:string}} form
- * @param {object|null} project the full project (with .aos) for form.project_id
+ * Throws if the database refuses it, so the caller can show the real error.
+ *
+ * @param form         the Calendar task form: { title, date, time, end_time, type,
+ *                     project_id, ao_id, notes, end_date }
+ * @param existingTask the task being edited, or null for a new one
+ * @param project      the full project (with .aos) for form.project_id, or null
  */
-export async function saveDiaryTask(form, project) {
+export async function saveTaskFromForm(form, existingTask, project) {
   const { data: { user } } = await sb.auth.getUser();
-  if (!user?.id) throw new Error('You are signed out. Please sign in again and retry.');
-
-  const type = form.task_type || 'appointment';
-  const aos = aosOf(project || {});
-  const ao = aos.find(a => aoKeyOf(a) === clean(form.ao_id)) || null;
-
-  if (type === 'soc' && project && aos.length > 0 && !ao) {
-    throw new Error('Select which adjoining owner this Schedule of Condition is for.');
-  }
+  const type = form.type || 'todo';
+  const ao = aosOf(project || {}).find(a => aoKeyOf(a) === clean(form.ao_id)) || null;
 
   const payload = {
-    title: clean(form.title) || (type === 'soc' ? 'Schedule of Condition' : 'Task'),
-    due_date: form.date || null,
-    end_date: null,
+    title: form.title,
+    due_date: form.date,
+    end_date: type === 'holiday' ? (form.end_date || form.date) : null,
     time: form.time || null,
     end_time: (['meeting', 'call', 'site_visit', 'appointment'].includes(type) && form.time && form.end_time && form.end_time > form.time) ? form.end_time : null,
-    status: 'pending',
+    status: existingTask?.status || 'pending',
     task_type: type,
-    description: form.description || '',
+    description: form.notes || '',
     project_id: form.project_id || null,
-    ao_id: ao ? aoKeyOf(ao) : null,
-    user_id: user.id,
-    project_address_snapshot: project ? projectLabelOf(project) : '',
-    ao_address_snapshot: ao ? aoAddressOf(ao, project) : '',
+    ao_id: form.ao_id || null,
+    user_id: user?.id || existingTask?.user_id || null,
+    project_address_snapshot: form.project_address_snapshot || (project ? projectLabelOf(project) : ''),
+    ao_address_snapshot: form.ao_address_snapshot || (ao ? aoAddressOf(ao, project) : ''),
   };
 
-  const { data: saved, error } = await sb.from('tasks').insert([payload]).select('*').single();
+  const query = existingTask?.id
+    ? sb.from('tasks').update(payload).eq('id', existingTask.id)
+    : sb.from('tasks').insert([payload]);
+  const { data: saved, error } = await query.select('*').single();
   if (error) throw error;
 
-  if (type === 'soc' && project && ao) {
-    await syncSocToAO(project, aoKeyOf(ao), {
+  if (type === 'soc' && project && form.ao_id) {
+    await syncSocToAO(project, form.ao_id, {
       date: form.date,
       time: form.time || '',
-      taskId: saved?.id || '',
+      taskId: saved?.id || existingTask?.id || '',
       status: 'booked',
     });
   }

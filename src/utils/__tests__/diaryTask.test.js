@@ -1,17 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const insert = vi.fn();
+const update = vi.fn();
 const syncSocToAO = vi.fn();
 vi.mock('../../supabaseClient', () => ({
   default: {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
-    from: () => ({ insert: (rows) => { insert(rows); return { select: () => ({ single: async () => insertResult }) }; } }),
+    from: () => ({
+      insert: (rows) => { insert(rows); return { select: () => ({ single: async () => insertResult }) }; },
+      update: (row) => { update(row); return { eq: () => ({ select: () => ({ single: async () => insertResult }) }) }; },
+    }),
   },
 }));
 vi.mock('../adjoiningOwners', () => ({ syncSocToAO: (...a) => syncSocToAO(...a) }));
 
 let insertResult;
-const { saveDiaryTask, guessAoId } = await import('../diaryTask.js');
+const { saveTaskFromForm, guessAoId } = await import('../diaryTask.js');
 
 const project = {
   id: 'p1',
@@ -22,7 +26,7 @@ const project = {
   ],
 };
 
-beforeEach(() => { insert.mockClear(); syncSocToAO.mockClear(); insertResult = { data: { id: 't1' }, error: null }; });
+beforeEach(() => { insert.mockClear(); update.mockClear(); syncSocToAO.mockClear(); insertResult = { data: { id: 't1' }, error: null }; });
 
 describe('guessAoId', () => {
   it('picks the AO whose address appears in the email text', () => {
@@ -36,28 +40,34 @@ describe('guessAoId', () => {
   });
 });
 
-describe('saveDiaryTask', () => {
+describe('saveTaskFromForm', () => {
   it('saves an owned, project-linked task with address snapshots', async () => {
-    await saveDiaryTask({ title: 'Call with Colin', date: '2026-11-20', time: '10:00', task_type: 'meeting', project_id: 'p1', description: 'From email: x' }, project);
+    await saveTaskFromForm({ title: 'Call with Colin', date: '2026-11-20', time: '10:00', type: 'meeting', project_id: 'p1', notes: 'From email: x' }, null, project);
     const row = insert.mock.calls[0][0][0];
-    expect(row).toMatchObject({ user_id: 'user-1', project_id: 'p1', task_type: 'meeting', due_date: '2026-11-20', project_address_snapshot: '18 Ickleford Road, Hitchin', status: 'pending' });
+    expect(row).toMatchObject({ user_id: 'user-1', project_id: 'p1', task_type: 'meeting', due_date: '2026-11-20', description: 'From email: x', project_address_snapshot: '18 Ickleford Road, Hitchin', status: 'pending' });
     expect(syncSocToAO).not.toHaveBeenCalled();
   });
 
   it('links a Schedule of Condition to its adjoining owner and updates the AO card', async () => {
-    await saveDiaryTask({ title: 'SOC', date: '2026-11-20', time: '09:30', task_type: 'soc', project_id: 'p1', ao_id: 'ao-16' }, project);
+    await saveTaskFromForm({ title: 'SOC', date: '2026-11-20', time: '09:30', type: 'soc', project_id: 'p1', ao_id: 'ao-16' }, null, project);
     const row = insert.mock.calls[0][0][0];
     expect(row).toMatchObject({ ao_id: 'ao-16', ao_address_snapshot: '16 Ickleford Road, Hitchin' });
     expect(syncSocToAO).toHaveBeenCalledWith(project, 'ao-16', { date: '2026-11-20', time: '09:30', taskId: 't1', status: 'booked' });
   });
 
-  it('refuses a Schedule of Condition with no adjoining owner chosen', async () => {
-    await expect(saveDiaryTask({ title: 'SOC', date: '2026-11-20', task_type: 'soc', project_id: 'p1' }, project)).rejects.toThrow(/adjoining owner/i);
+  it('keeps a holiday as a date range', async () => {
+    await saveTaskFromForm({ title: 'Leave', date: '2026-12-01', end_date: '2026-12-05', type: 'holiday' }, null, null);
+    expect(insert.mock.calls[0][0][0]).toMatchObject({ due_date: '2026-12-01', end_date: '2026-12-05' });
+  });
+
+  it('updates an existing task instead of adding a new one', async () => {
+    await saveTaskFromForm({ title: 'Moved', date: '2026-11-21', type: 'meeting' }, { id: 't9', status: 'open' }, null);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ title: 'Moved', status: 'open' }));
     expect(insert).not.toHaveBeenCalled();
   });
 
   it('throws the database error instead of pretending it worked', async () => {
     insertResult = { data: null, error: new Error('new row violates row-level security policy') };
-    await expect(saveDiaryTask({ title: 'x', date: '2026-11-20', task_type: 'appointment' }, null)).rejects.toThrow(/row-level security/);
+    await expect(saveTaskFromForm({ title: 'x', date: '2026-11-20', type: 'meeting' }, null, null)).rejects.toThrow(/row-level security/);
   });
 });

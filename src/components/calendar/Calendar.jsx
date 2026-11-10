@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import { saveAdjoiningOwners, syncSocToAO } from '../../utils/adjoiningOwners';
+import { saveTaskFromForm } from '../../utils/diaryTask';
 
 const EVENT_TYPES = {
   consent_deadline:  { label: 'Consent deadline', colour: '#ef4444', bg: '#fee2e2' },
@@ -158,29 +159,6 @@ function taskToEvent(task = {}, projects = []) {
   };
 }
 
-async function safeInsert(table, payload) {
-  let working = { ...(payload || {}) };
-  let lastError = null;
-
-  for (let i = 0; i < 14; i += 1) {
-    const { data, error } = await sb.from(table).insert([working]).select('*').single();
-    if (!error) return data || null;
-
-    lastError = error;
-    const missing = error.message?.match(/Could not find the '([^']+)' column/)?.[1];
-    if (missing && Object.prototype.hasOwnProperty.call(working, missing)) {
-      const next = { ...working };
-      delete next[missing];
-      working = next;
-      continue;
-    }
-
-    throw error;
-  }
-
-  throw lastError || new Error('Could not insert record.');
-}
-
 async function safeUpdate(table, id, payload) {
   let working = { ...(payload || {}) };
   let lastError = null;
@@ -227,7 +205,7 @@ function Field({ label, children }) {
   );
 }
 
-function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, onClose }) {
+export function TaskModal({ task, defaultDate, projects, onSave, onDelete, onComplete, onClose }) {
   const isEdit = Boolean(task?.id);
   const initialProjectId = clean(task?.project_id || task?.projectId || '');
   const initialAOId = clean(task?.ao_id || task?.aoId || '');
@@ -676,39 +654,8 @@ export default function Calendar({ onOpenProject }) {
   };
 
   const handleSaveTask = async (form, existingTask) => {
-    const { data: { user } } = await sb.auth.getUser();
-    const selectedProject = findProject(projects, form.project_id);
-    const selectedAO = findAO(selectedProject || {}, form.ao_id);
-
-    const payload = {
-      title: form.title,
-      due_date: form.date,
-      end_date: form.type === 'holiday' ? (form.end_date || form.date) : null,
-      time: form.time || null,
-      end_time: (['meeting', 'call', 'site_visit', 'appointment'].includes(form.type) && form.time && form.end_time && form.end_time > form.time) ? form.end_time : null,
-      status: existingTask?.status || 'pending',
-      task_type: form.type,
-      description: form.notes || '',
-      project_id: form.project_id || null,
-      ao_id: form.ao_id || null,
-      user_id: user?.id || existingTask?.user_id || null,
-      project_address_snapshot: form.project_address_snapshot || (selectedProject ? projectDisplay(selectedProject) : ''),
-      ao_address_snapshot: form.ao_address_snapshot || (selectedAO ? aoAddress(selectedAO, selectedProject) : ''),
-    };
-
-    const saved = existingTask?.id
-      ? await safeUpdate('tasks', existingTask.id, payload)
-      : await safeInsert('tasks', payload);
-
-    if (form.type === 'soc' && selectedProject && form.ao_id) {
-      await syncSocToAO(selectedProject, form.ao_id, {
-        date: form.date,
-        time: form.time || '',
-        taskId: saved?.id || existingTask?.id || '',
-        status: 'booked',
-      });
-    }
-
+    // Shared with the email "Add to diary" pop-up (utils/diaryTask)
+    await saveTaskFromForm(form, existingTask, findProject(projects, form.project_id));
     closeTaskModal();
     await loadTasks();
   };
