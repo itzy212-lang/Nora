@@ -93,6 +93,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
 
   // Which sections are globally selected (at least one AO assigned)
   const [selected, setSelected] = useState(defaultSections || []);
+  const [section1Is2, setSection1Is2] = useState(!!prefillData?.section1Is2);
 
   // Fixed 2026-08-28, real, confirmed gap found while building notice
   // history/edit: prefillData was already being passed by the
@@ -291,6 +292,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
         aoSectionMap,
         aoWorksMap,
         aoS2SubsMap,
+        section1Is2,
         includeCover,
         createDeadlineTask,
         noticeDate,
@@ -404,6 +406,13 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
               })}
             </div>
 
+            {selected.includes('s1') && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={section1Is2} onChange={e => setSection1Is2(e.target.checked)} />
+                Is this a Section 1(2) notice? (unticked: Section 1(5))
+              </label>
+            )}
+
             {/* S6 safeguarding — per AO */}
             {selected.includes('s6') && getSectionAOs('s6').length > 0 && (
               <div style={{ marginTop: 10, padding: '12px 14px', background: '#fef9f0', borderRadius: 12, border: '1px solid #fcd34d' }}>
@@ -428,7 +437,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
           </div>
 
           {/* Notifiable works — per section, per AO */}
-          {['s6', 's2', 's1'].filter(sec => selected.includes(sec)).map(sec => {
+          {['s6', 's2'].filter(sec => selected.includes(sec)).map(sec => {
             const secLabel = sec === 's1' ? 'Section 1' : sec === 's2' ? 'Section 2' : 'Section 6';
             const aosForSection = getSectionAOs(sec);
 
