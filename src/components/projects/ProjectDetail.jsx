@@ -187,7 +187,7 @@ function joinOwnerNames(name1, name2) {
   return a || b || '';
 }
 
-function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '', worksItems = [], extraOptions = {} }) {
+function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, noticeDate: suppliedNoticeDate, allSections = [], section2Subsections = '', section1Is2 = false, worksItems = [], extraOptions = {} }) {
   const noticeDate = suppliedNoticeDate || todayIso();
   const boPremise = project?.bo_premise_address || project?.address || '';
   const aoPremise = aoAddress(ao);
@@ -244,6 +244,7 @@ function buildNoticeMergeData({ project, ao, sectionKey, includeCover = false, n
     includeCover,
     allSections: allSections.length ? allSections : [sectionKey],
     section2Subsections,
+    section1Is2,
   });
 
   return {
@@ -4410,6 +4411,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     aoSectionMap = {},
     aoWorksMap = {},
     aoS2SubsMap = {},
+    section1Is2 = false,
     sections,
     includeCover,
     noticeDate: suppliedNoticeDate,
@@ -4425,7 +4427,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     const allWarnings = [];
 
     // Store form data so "Back to Edit" can reopen the modal pre-filled
-    const formData = { batchAOs, aoSectionMap, aoWorksMap, aoS2SubsMap, sections,
+    const formData = { batchAOs, aoSectionMap, aoWorksMap, aoS2SubsMap, section1Is2, sections,
       includeCover, noticeDate, createDeadlineTask, section2Subsections,
       worksItems, safeguarding, tenureMap };
 
@@ -4468,7 +4470,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             .map(w => (w?.text || w || '').trim())
             .filter(Boolean)
             .filter((w, i, arr) => arr.findIndex(x => x.toLowerCase() === w.toLowerCase()) === i);
-          const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, allSections: aoSections, worksItems: sectionWorks });
+          const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, section1Is2, allSections: aoSections, worksItems: sectionWorks });
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
             mergeData,
@@ -4960,7 +4962,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           prefillData={noticeModal.prefillData || null}
           editingNoticeId={noticeModal.editingNoticeId || null}
           generateDocument={generateDocument}
-          onServe={({ editingNoticeId, aos: servedAOs, ao: servedAO, sections, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap, aoSectionMap, aoWorksMap, aoS2SubsMap }) => {
+          onServe={({ editingNoticeId, aos: servedAOs, ao: servedAO, sections, section1Is2, includeCover, noticeDate, createDeadlineTask, section2Subsections, worksItems, safeguarding, safeguardingMap, tenureMap, aoSectionMap, aoWorksMap, aoS2SubsMap }) => {
             const aosToServe = servedAOs || (servedAO ? [servedAO] : noticeModal.ao ? [noticeModal.ao] : []);
             return handleServeBatchNoticePack({
               editingNoticeId,
@@ -4971,6 +4973,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               aoSectionMap,
               aoWorksMap,
               aoS2SubsMap,
+              section1Is2,
               safeguardingMap,
               sections,
               includeCover,
