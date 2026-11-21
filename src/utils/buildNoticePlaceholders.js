@@ -93,10 +93,10 @@ function formatS2Subsections(raw) {
  * Order: Section 6(1) first, Section 1(5) second, Section 2(2)(subsections) last.
  * e.g. "Sections 6(1), 1(5) and 2(2)(a)(f)(j)(k)"
  */
-function buildSectionsString(sections, s2Subsections = '') {
+function buildSectionsString(sections, s2Subsections = '', section1Is2 = false) {
   const parts = [];
   if (sections.includes('s6')) parts.push('6(1)');
-  if (sections.includes('s1')) parts.push('1(5)');
+  if (sections.includes('s1')) parts.push(section1Is2 ? '1(2)' : '1(5)');
   if (sections.includes('s2')) {
     const sub = formatS2Subsections(s2Subsections);
     parts.push(`2(2)${sub}`);
@@ -226,9 +226,10 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
   // Order: Section 6(1) first, Section 1(5) second, Section 2(2)(subsections) last
   const allSections = options.allSections || [noticeType];
   const s2Subsections = clean(options.section2Subsections || options.section_2_subsections || '');
-  const noticeSectionsFull = buildSectionsString(allSections, s2Subsections);
+  const section1Is2 = options.section1Is2 === true;
+  const noticeSectionsFull = buildSectionsString(allSections, s2Subsections, section1Is2);
   // Fallback for single-section documents
-  const sectionFallbacks = { s1: 'Section 1(5)', s2: 'Section 2(2)', s6: 'Section 6(1)', s10: 'Section 10', cover: '' };
+  const sectionFallbacks = { s1: section1Is2 ? 'Section 1(2)' : 'Section 1(5)', s2: 'Section 2(2)', s6: 'Section 6(1)', s10: 'Section 10', cover: '' };
   const noticeSection = noticeSectionsFull || sectionFallbacks[noticeType] || clean(options.noticeSection || options.notice_section || noticeType);
 
   const originalNoticeDate = clean(options.originalNoticeDate || options.original_notice_date || options.previousNoticeDate || options.previous_notice_date || ao.notice_served_date || ao.noticeServedDate || ao.notice_date || noticeDate);
@@ -261,6 +262,9 @@ export function buildNoticePlaceholders(project = {}, ao = {}, options = {}) {
     SECTION_10_NOTICE_DATE: longDate(section10NoticeDate),
     SECTION_10_NOTICE_DATE_LONG: longDate(section10NoticeDate),
     SECTION_10_NOTICE_DATE_SHORT: section10NoticeDate,
+    SUB_SECTION_2_5: section1Is2 ? '2' : '5',
+    S1_WALL_POSITION: section1Is2 ? 'astride the line of junction' : 'wholly on my/our own land',
+    S1_WORK_DESCRIPTION: section1Is2 ? 'the construction of a party wall astride the line of junction' : "the construction of a wall wholly on the Building Owner's land at the line of junction",
     NOTICE_TYPE: noticeType,
     NOTICE_SECTION: noticeSection,
     NOTICE_SECTION_FULL: noticeSection,
