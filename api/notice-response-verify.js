@@ -14,12 +14,12 @@ export default async function handler(req,res){
  try{
   const sb=createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,
    process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
-  const {data:link}=await sb.from('notice_response_links').select('id,revoked_at,expires_at')
+  const {data:link}=await sb.from('notice_response_links').select('id,user_id,revoked_at,expires_at')
    .eq('token_hash',sha(token)).maybeSingle();
   if(!link||link.revoked_at||(link.expires_at&&Date.parse(link.expires_at)<Date.now()))
    return respond(res,404,{error:'Notice unavailable'});
   const {data:submission}=await sb.from('notice_response_submissions')
-   .select('id,link_id,signer_email,verification_hash,verification_expires_at,verification_attempts,status,audit')
+   .select('id,link_id,choice,surveyor,signer_email,verification_hash,verification_expires_at,verification_attempts,status,audit')
    .eq('id',submissionId).eq('link_id',link.id).maybeSingle();
   if(!submission||submission.status!=='pending_verification'||
    !submission.verification_hash||submission.verification_attempts>=5||Date.parse(submission.verification_expires_at)<Date.now())
@@ -37,6 +37,20 @@ export default async function handler(req,res){
   }).eq('id',submission.id).eq('status','pending_verification').select('id');
   if(error){if(error.code==='23505')return respond(res,409,{error:'This notice already has a verified response'});throw error;}
   if(!updated?.length)return respond(res,409,{error:'This response has already been processed'});
+  if(['dissent_own','dissent_agreed'].includes(submission.choice)&&submission.surveyor?.name){
+    try{
+      const s=submission.surveyor;
+      let match=sb.from('contacts').select('id').eq('user_id',link.user_id).eq('type','surveyor');
+      match=s.email?match.ilike('email',s.email):match.ilike('name',s.name);
+      const {data:existing}=await match.limit(1);
+      if(!existing?.length){
+        const {error:contactError}=await sb.from('contacts').insert({
+          user_id:link.user_id,type:'surveyor',name:s.name,firm:s.firm||null,email:s.email||null,phone:s.phone||null
+        });
+        if(contactError)console.error('notice-response-contact:',contactError.message);
+      }
+    }catch(contactError){console.error('notice-response-contact:',contactError.message);}
+  }
   let documentsSaved=false,emailed=false,surveyorNotified=false,boNotified=false;
   try{
    const files=await finaliseNoticeResponse(sb,submission.id);
