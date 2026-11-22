@@ -111,6 +111,10 @@
     "api/loa-create.js": {
       "maxDuration": 60,
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+    },
+    "api/loa-verify.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
     }
   },
   "crons": [
