@@ -35,6 +35,16 @@ export default async function handler(req,res){
   const {error:servedError}=await sb.from('notices').update({status:'served'})
     .eq('id',noticeId).eq('user_id',user.id).in('status',['draft','prepared']);
   if(servedError)throw servedError;
+  // The permanent QR token belongs to the AO, while each finalisation may
+  // create a new notice row. Point it at the archived, finalised notice.
+  const {data:verified,error:verifiedError}=await sb.from('notice_response_submissions')
+    .select('id').eq('link_id',link.id).in('status',['verified','finalised']).limit(1);
+  if(verifiedError)throw verifiedError;
+  if(!verified?.length){
+    const {error:relinkError}=await sb.from('notice_response_links')
+      .update({notice_id:noticeId}).eq('id',link.id).eq('user_id',user.id);
+    if(relinkError)throw relinkError;
+  }
   return res.status(200).json({success:true,noticeId,pdfSha256:sha(bytes)});
  }catch(error){console.error('notice-activate:',error.message);return res.status(500).json({error:'Could not archive original served notice'});}
 }
