@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { finaliseNoticeResponse, emailFinalisedResponse } from './_lib/notice-response-documents.js';
+import { updateProjectFromVerifiedNotice } from './_lib/notice-response-project.js';
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const respond=(res,s,b)=>res.status(s).json(b);
 export default async function handler(req,res){
@@ -51,6 +52,9 @@ export default async function handler(req,res){
       }
     }catch(contactError){console.error('notice-response-contact:',contactError.message);}
   }
+  let projectUpdated=false;
+  try{projectUpdated=await updateProjectFromVerifiedNotice(sb,{linkId:link.id,userId:link.user_id,choice:submission.choice,surveyor:submission.surveyor,appointServingSurveyor:submission.audit?.appoint_serving_surveyor===true});}
+  catch(projectError){console.error('notice-response-project:',projectError.message);}
   let documentsSaved=false,emailed=false,surveyorNotified=false,boNotified=false;
   try{
    const files=await finaliseNoticeResponse(sb,submission.id);
@@ -58,7 +62,7 @@ export default async function handler(req,res){
    try{const delivery=await emailFinalisedResponse(sb,files);emailed=delivery.ownerEmailed===true;surveyorNotified=delivery.surveyorNotified===true;boNotified=delivery.boNotified===true;}
    catch(deliveryError){console.error('notice-response-email:',deliveryError.message);}
   }catch(documentError){console.error('notice-response-documents:',documentError.message);}
-  return respond(res,200,{verified:true,signedAt:now,documentsSaved,emailed,surveyorNotified,boNotified,
+  return respond(res,200,{verified:true,signedAt:now,projectUpdated,documentsSaved,emailed,surveyorNotified,boNotified,
    message:documentsSaved?'Your response has been verified and filed':'Your response was verified. Document generation is pending.'});
  }catch(e){console.error('notice-response-verify:',e.message);return respond(res,500,{error:'Could not verify response'});}
 }
