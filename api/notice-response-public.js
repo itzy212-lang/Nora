@@ -32,6 +32,18 @@ export default async function handler(req,res) {
    notice_id:link.notice_id,pdf_bucket:link.pdf_bucket,pdf_path:link.pdf_path,pdf_sha256:link.original_pdf_sha256,notices:link.notices
   }:null);
   if(!active)return respond(res,404,{error:'Notice unavailable'});
+  if (typeof req.query.surveyorSearch === 'string') {
+    const query = req.query.surveyorSearch.trim().slice(0,80);
+    if(query.length<2) return respond(res,200,{surveyors:[]});
+    const {data:matches,error:contactsError}=await sb.from('contacts')
+      .select('id,name,firm,email,phone').eq('user_id',link.user_id).eq('type','surveyor')
+      .ilike('name','%'+query.replace(/[%_]/g,'')+'%').limit(6);
+    if(contactsError)throw contactsError;
+    return respond(res,200,{surveyors:matches||[]});
+  }
+  const {data:firm}=await sb.from('firm_settings').select('firm_name,logo_base64').eq('user_id',link.user_id).maybeSingle();
+  const rawLogo=firm?.logo_base64||'';
+  const firmLogoUrl=rawLogo ? (rawLogo.startsWith('data:image/') ? rawLogo : 'data:image/png;base64,'+rawLogo) : null;
   const {data:completed,error:completedError}=await sb.from('notice_response_submissions')
    .select('choice,signer_name,signed_at,status').eq('link_id',link.id)
    .in('status',['verified','finalised']).order('signed_at',{ascending:false}).limit(1);
@@ -42,7 +54,7 @@ export default async function handler(req,res) {
   if(sha256(bytes)!==active.pdf_sha256) return respond(res,409,{error:'The served notice document has changed'});
   const {data:signed,error:signError}=await sb.storage.from(active.pdf_bucket).createSignedUrl(active.pdf_path,300);
   if(signError || !signed) throw signError || new Error('Could not sign URL');
-  return respond(res,200,{notice:{id:active.notice_id,reference:'Party Wall Notice',pdfUrl:signed.signedUrl,
+  return respond(res,200,{notice:{id:active.notice_id,firmName:firm?.firm_name||null,firmLogoUrl,reference:'Party Wall Notice',pdfUrl:signed.signedUrl,
    existingResponse:completed?.[0]?{choice:completed[0].choice,signerName:completed[0].signer_name,signedAt:completed[0].signed_at}:null,
    sections:{section1:active.notices.section_1,section2:active.notices.section_2,section3:active.notices.section_3,section6:active.notices.section_6,section10:active.notices.section_10}}});
  }catch(e){console.error('notice-response-public:',e.message);return respond(res,500,{error:'Notice temporarily unavailable'});}
