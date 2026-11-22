@@ -56,10 +56,12 @@ export default async function handler(req,res){
   const readable=(door+'-'+(postcode.replace(/\s+/g,'')||'NOTICE')).toUpperCase().replace(/[^A-Z0-9-]/g,'');
   const suffix=createHmac('sha256',secret).update('short:'+token).digest('hex').slice(0,10).toUpperCase();
   const slug=(readable+'-'+suffix).slice(0,90);
-  const {error:aliasError}=await sb.from('notice_response_short_links').upsert({
-   slug,token_hash:hash(token),response_token:token,user_id:user.id
-  },{onConflict:'token_hash'});
-  if(aliasError)throw aliasError;
-  return res.status(201).json({noticeId:notice.id,url:'https://'+domain+'/n/'+slug,token});
+  const {data:previous,error:previousError}=await sb.from('notice_response_short_links').select('slug').eq('token_hash',hash(token)).maybeSingle();
+  if(previousError)throw previousError;
+  if(!previous){
+   const {error:aliasError}=await sb.from('notice_response_short_links').insert({slug,token_hash:hash(token),response_token:token,user_id:user.id});
+   if(aliasError&&aliasError.code!=='23505')throw aliasError;
+  }
+  return res.status(201).json({noticeId:notice.id,url:'https://'+domain+'/n/'+(previous?.slug||slug),token});
  }catch(error){console.error('notice-prepare:',error.message);return res.status(500).json({error:'Unable to prepare response link'});}
 }
