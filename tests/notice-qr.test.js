@@ -18,6 +18,7 @@ test('notice QR is embedded as a valid DOCX drawing and media relationship',asyn
   const xml=result.file('word/document.xml').asText();
   const rel=result.file('word/_rels/document.xml.rels').asText();
   assert.match(xml,/<w:drawing>/);
+  assert.match(xml,/<wp:extent cx="594360" cy="594360"\/>/);
   assert.doesNotMatch(xml,/NORA_NOTICE_QR_IMAGE_SENTINEL/);
   assert.match(rel,/relationships\/image/);
   assert.ok(result.file(/word\/media\/notice-response-qr-/).length===1);
