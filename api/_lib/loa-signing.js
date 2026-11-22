@@ -64,12 +64,12 @@ export async function appendLOAAuditPage(pdfBytes, {signers,documentHash,project
     page.drawText(v,{x:45,y:y-16,size:10,font:regular});
   };
   page.drawText('ELECTRONIC SIGNATURE AUDIT RECORD',{x:45,y:790,size:17,font:bold,color:rgb(.08,.19,.34)});
-  draw('Appointment',appointmentType,747);
+  draw('Appointment',appointmentType.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment',747);
   draw('Project reference',projectReference,700);
   draw('Original LOA SHA-256',documentHash,653);
   let y=587;
   for (const signer of signers.sort((a,b)=>a.position-b.position)){
-    page.drawText('SIGNATORY '+signer.position,{x:45,y,size:12,font:bold});
+    page.drawText('SIGNER '+signer.position,{x:45,y,size:12,font:bold});
     y-=32;
     for (const [label,value] of [['Name',signer.name],['Verified email',signer.email],['Date entered',signer.signedDate],['Email verified (UTC)',signer.verifiedAt],['Verification method','Six-digit email one-time code']]){
       draw(label,value,y);y-=43;
