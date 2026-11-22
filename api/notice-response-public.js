@@ -18,7 +18,7 @@ export default async function handler(req,res) {
  try {
   const sb=client();
   const {data:link,error}=await sb.from('notice_response_links')
-   .select('id,notice_id,pdf_bucket,pdf_path,original_pdf_sha256,expires_at,revoked_at,notices(id,section_1,section_2,section_3,section_6,section_10,status)')
+   .select('id,user_id,notice_id,pdf_bucket,pdf_path,original_pdf_sha256,expires_at,revoked_at,notices(id,section_1,section_2,section_3,section_6,section_10,status)')
    .eq('token_hash',sha256(token)).maybeSingle();
   if(error || !link || link.revoked_at || (link.expires_at && new Date(link.expires_at)<new Date()))
     return respond(res,404,{error:'Notice unavailable'});
@@ -37,7 +37,7 @@ export default async function handler(req,res) {
     if(query.length<2) return respond(res,200,{surveyors:[]});
     const {data:matches,error:contactsError}=await sb.from('contacts')
       .select('id,name,firm,email,phone').eq('user_id',link.user_id).eq('type','surveyor')
-      .ilike('name','%'+query.replace(/[%_]/g,'')+'%').limit(6);
+      .or('name.ilike.%'+query.replace(/[%_,().]/g,'')+'%,firm.ilike.%'+query.replace(/[%_,().]/g,'')+'%').order('name').limit(8);
     if(contactsError)throw contactsError;
     return respond(res,200,{surveyors:matches||[]});
   }
