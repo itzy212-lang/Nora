@@ -4458,6 +4458,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         allWarnings.push(`AO${ao.num || ''}: no sections assigned`);
         continue;
       }
+      // Reserve the notice and its response URL before producing the Word/PDF.
+      const { data: { session: noticeSession } } = await sb.auth.getSession();
+      if(!noticeSession?.access_token)throw Error('Sign in to generate an online-response notice');
+      const prepareResponse=await fetch('/api/notice-response-prepare',{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+noticeSession.access_token},
+        body:JSON.stringify({projectId:project.id,aoId:String(ao?.id||ao?.num||''),sections:aoSections,noticeDate})
+      });
+      const prepared=await prepareResponse.json();
+      if(!prepareResponse.ok||!prepared?.noticeId||!prepared?.url)
+        throw Error(prepared?.error||'Could not create notice response QR link');
       const generatedDocs = [];
       const zip = new PizZip();
       const keysToGenerate = [...aoSections];
@@ -4471,6 +4481,10 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             .filter(Boolean)
             .filter((w, i, arr) => arr.findIndex(x => x.toLowerCase() === w.toLowerCase()) === i);
           const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, section1Is2, allSections: aoSections, worksItems: sectionWorks });
+          if(key===keysToGenerate[0]){
+            mergeData.NOTICE_RESPONSE_URL=prepared.url;
+            mergeData.notice_response_url=prepared.url;
+          }
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
             mergeData,
@@ -4496,7 +4510,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
         });
         // Store per-AO metadata needed for workflow save on confirm
-        aoQueue.push({ ao, sortedDocs: sorted, aoSections, aoWorksItems, aoS2Subs });
+        aoQueue.push({ ao, sortedDocs: sorted, aoSections, aoWorksItems, aoS2Subs, noticeId:prepared.noticeId, responseToken:prepared.token });
       }
 
       allWarnings.push(...warnings);
