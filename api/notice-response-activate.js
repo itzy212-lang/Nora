@@ -32,6 +32,9 @@ export default async function handler(req,res){
    const {error:linkError}=await sb.from('notice_response_links').update({pdf_bucket:'documents',pdf_path:path,original_pdf_sha256:sha(bytes),original_pdf_bytes:bytes.length}).eq('id',link.id).is('pdf_path',null);
    if(linkError)throw linkError;
   }
+  const {error:servedError}=await sb.from('notices').update({status:'served'})
+    .eq('id',noticeId).eq('user_id',user.id).in('status',['draft','prepared']);
+  if(servedError)throw servedError;
   return res.status(200).json({success:true,noticeId,pdfSha256:sha(bytes)});
  }catch(error){console.error('notice-activate:',error.message);return res.status(500).json({error:'Could not archive original served notice'});}
 }
