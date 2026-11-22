@@ -21,7 +21,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
   ];
   const section1 = Boolean(notice?.sections?.section1);
   const existingResponse=notice?.existingResponse;
-  const ready = notice && !existingResponse && !section1 && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+  const ready = notice && !existingResponse && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
     authorised && (choice !== 'dissent_own' || (surveyor.name.trim() && surveyor.email.trim()));
   const field = (label, value, change, type = 'text') => (
     <label className="nora-response-field">{label}<input type={type} value={value} onChange={e => change(e.target.value)} /></label>
@@ -68,8 +68,8 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
         <h2>Your response</h2>
         {existingResponse && <p role="status" style={{padding:12,background:'#eff6ff',borderRadius:8}}>Your previous response has been received and verified. You do not need to sign again for this notice. {existingResponse.signerName ? 'Signed by '+existingResponse.signerName+'.' : ''}</p>}
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
-        {section1 && <p role="alert" style={{padding:12,background:'#fff7ed',borderRadius:8}}>Section 1 notices require a different statutory response process. Electronic responses are temporarily disabled for this notice.</p>}
-        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || section1 || !!existingResponse}/>{label}</label>)}
+        {section1 && <p className="nora-response-muted">For a Section 1(2) notice, confirm whether you agree to the proposed wall being built astride the boundary. If you do not agree, the building owner may proceed with a wall wholly on their own land under Section 1(5).</p>}
+        {(section1 ? [['section1_agree','I agree to the proposed wall being built astride the boundary under Section 1(2)'],['section1_refuse','I do not agree to building astride the boundary under Section 1(2)']] : options).map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || !!existingResponse}/>{label}</label>)}
         {choice === 'dissent_own' && <section><h2>Your appointed surveyor</h2>
           {field('Surveyor name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
           {field('Practice',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
