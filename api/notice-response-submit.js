@@ -33,6 +33,8 @@ export default async function handler(req,res){
   if(!link)return reply(res,404,{error:'Notice unavailable'});
   // Section 1 notices have different statutory consent rules; refuse generic response flow.
   if(link.notices.section_1)return reply(res,409,{error:'Section 1 notices require a dedicated statutory response form'});
+  await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
+   .eq('status','pending_verification').lt('verification_expires_at',new Date().toISOString());
   const {count}=await sb.from('notice_response_submissions').select('id',{count:'exact',head:true})
    .eq('link_id',link.id).gte('submitted_at',new Date(Date.now()-3600000).toISOString());
   if((count||0)>=5)return reply(res,429,{error:'Too many attempts. Please try again later'});
