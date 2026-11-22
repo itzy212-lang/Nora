@@ -19,7 +19,7 @@ export function validateLOASigners(signers) {
   return signers.map((s,i) => {
     const email = String(s.email || '').trim().toLowerCase();
     const name = String(s.name || '').trim();
-    if (!name || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || seen.has(email)) throw Error('Each LOA signatory requires a unique valid email and name');
+    if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) throw Error('Each LOA signatory requires a unique valid email and name');
     seen.add(email);
     return { position:i+1, name, email, status:'pending' };
   });
@@ -60,7 +60,7 @@ export async function appendLOAAuditPage(pdfBytes, {signers,documentHash,project
   const bold=await pdf.embedFont(StandardFonts.HelveticaBold);
   const draw=(label,value,y)=>{
     page.drawText(label,{x:45,y,size:10,font:bold});
-    const v=String(value??'').replace(/[\\r\\n]/g,' ').slice(0,105);
+    const v=String(value??'').replace(/[\r\n]/g,' ').slice(0,105);
     page.drawText(v,{x:45,y:y-16,size:10,font:regular});
   };
   page.drawText('ELECTRONIC SIGNATURE AUDIT RECORD',{x:45,y:790,size:17,font:bold,color:rgb(.08,.19,.34)});
