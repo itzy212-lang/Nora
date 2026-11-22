@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    {"source": "/n/:slug", "destination": "/api/notice-short-redirect?slug=:slug"},
     {
       "source": "/api/ely-ai",
       "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/ai_router"
