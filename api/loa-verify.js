@@ -39,10 +39,25 @@ export default async function handler(req,res){
    if(uploaded.error)throw uploaded.error;
    const {error:re}=await sb.from('loa_signing_requests').update({status:'completed',completed_at:verifiedAt,final_path:path}).eq('id',request.id).eq('status','pending');
    if(re)throw re;
-   await fileCompletedLOA({request:{...request,final_path:path,completed_at:verifiedAt},signers,final});
-   const emails=[...new Set(signers.map(x=>x.email))];
-   const message='The Letter of Appointment has now been signed and verified by all required parties.\n\nPlease find the completed LOA and electronic signature audit record attached.';
-   const deliveries=await Promise.allSettled([sendLOAEmail({userId:request.user_id,to:emails,subject:'Nora: Your signed Letter of Appointment',text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]}),sendLOAEmail({userId:request.user_id,to:[(await sb.auth.admin.getUserById(request.user_id)).data.user?.email].filter(Boolean),subject:'Nora: LOA fully signed - '+request.project_id,text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]})]);
+   const filing=await fileCompletedLOA({request:{...request,final_path:path,completed_at:verifiedAt},signers,final});
+   const appointmentLabel=request.appointment_type.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment';
+   const attachment=[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}];
+   const signerEmails=[...new Set(signers.map(x=>x.email))];
+   const signerDeliveries=await Promise.allSettled(signerEmails.map(to=>sendLOAEmail({
+    userId:request.user_id,to:[to],subject:'Your signed '+appointmentLabel,
+    text:'Thank you for signing the '+appointmentLabel+'.\\n\\nPlease see the attached signed Letter of Appointment.',
+    attachments:attachment
+   })));
+   const {data:ownerLookup}=await sb.auth.admin.getUserById(request.user_id);
+   const ownerEmail=ownerLookup?.user?.email;
+   const signedNames=signers.map(x=>x.name).join(' and ');
+   const filingDescription=request.appointment_type.startsWith('bo_')?'main project file':'relevant Adjoining Owner project file';
+   const ownerDelivery=ownerEmail?await Promise.allSettled([sendLOAEmail({
+    userId:request.user_id,to:[ownerEmail],subject:appointmentLabel+' signed: '+signedNames,
+    text:signedNames+' '+(signers.length===1?'has':'have')+' signed the '+appointmentLabel+'.\\n\\nThe completed document has been saved to the '+filingDescription+'.\\n\\nPlease see the attached signed Letter of Appointment.',
+    attachments:attachment
+   })]):[];
+   const deliveries=[...signerDeliveries,...ownerDelivery];
    return res.status(200).json({success:true,completed:true,delivery:deliveries.map(x=>x.status==='fulfilled'?x.value:{sent:false})});
   }
   const path=folder+'/partially-signed.pdf';
@@ -54,8 +69,16 @@ export default async function handler(req,res){
   const nextToken=loaToken();
   const {data:activated,error:ae}=await sb.from('loa_signers').update({status:'invited',invited_at:verifiedAt,token_hash:loaTokenHash(nextToken)}).eq('id',next.id).eq('status','waiting').select('id').maybeSingle();
   if(ae||!activated)throw Error('Could not activate next signatory');
-  const message='Dear '+next.name.split(' ')[0]+',\n\nThe previous signatory has signed the Letter of Appointment. It is now ready for you to review and sign.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+nextToken+'';
-  const sent=await sendLOAEmail({userId:request.user_id,to:[next.email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
+  const appointmentLabel=request.appointment_type.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment';
+  const previous=signers.find(x=>x.position===next.position-1);
+  const nextName=next.name;
+  const nextMessage='Hi '+nextName.split(' ')[0]+',\\n\\nPlease click the link below to review and sign the '+appointmentLabel+':\\n'+host+'/loa/sign/'+nextToken;
+  const messages=await Promise.allSettled([
+   sendLOAEmail({userId:request.user_id,to:[next.email],subject:'Please sign your '+appointmentLabel,text:nextMessage}),
+   ...(previous?[sendLOAEmail({userId:request.user_id,to:[previous.email],subject:'Thank you for signing the '+appointmentLabel,text:'Hi '+previous.name.split(' ')[0]+',\\n\\nThank you for signing the '+appointmentLabel+'.\\n\\nAs soon as '+nextName+' signs, you will receive a copy of the completed signed document.'})]:[])
+  ]);
+  const sent=messages[0].status==='fulfilled'?messages[0].value:{sent:false};
+  if(!sent?.sent)console.error('[loa-verify] Next signer invitation delivery failed',messages[0]);
   return res.status(200).json({success:true,completed:false,nextInvitationSent:sent.sent});
  }catch(e){console.error('[loa-verify]',e);return res.status(500).json({error:'Verification could not be finalised. Please contact the surveyor.'});}
 }
