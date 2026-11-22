@@ -1,0 +1,20 @@
+name: Notice response tests
+on:
+  push:
+    branches: [feature/notice-online-response]
+  pull_request:
+    paths:
+      - 'api/notice-response-*.js'
+      - 'api/_lib/notice-response-*.js'
+      - 'tests/notice-response.test.js'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/notice-response.test.js
