@@ -23,7 +23,7 @@ export default async function handler(req,res){
   }
   const {data:firm}=await sb.from('firm_settings').select('firm_name,logo_base64,logo_url').eq('user_id',request.user_id).maybeSingle();
   const rawLogo=firm?.logo_base64||firm?.logo_url||'';
-  const firmLogoUrl=rawLogo ? (/^(data:image\\/|https?:\\/\\/)/.test(rawLogo) ? rawLogo : 'data:image/png;base64,'+rawLogo) : null;
+  const firmLogoUrl=rawLogo ? (rawLogo.startsWith('data:image/') || rawLogo.startsWith('https://') || rawLogo.startsWith('http://') ? rawLogo : 'data:image/png;base64,'+rawLogo) : null;
   return res.status(200).json({firmName:firm?.firm_name||null,firmLogoUrl,name:s.name,email:s.email,position:s.position,status:s.status,documentName:request.document_name,appointmentType:request.appointment_type,completed:request.status==='completed'});
  }catch(e){return res.status(500).json({error:'Could not load appointment'});}
 }
