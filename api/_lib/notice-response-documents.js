@@ -13,18 +13,39 @@ const choices = {
  section1_refuse: 'No agreement to build astride the boundary under Section 1(2); Section 1(5) applies'
 };
 const clean = value => String(value ?? '').replace(/[\r\n\t]/g,' ').slice(0,500);
+const surveyorDetails = surveyor => {
+ if(!surveyor || typeof surveyor!=='object')return clean(surveyor);
+ return [
+  surveyor.name,
+  surveyor.firm,
+  surveyor.address,
+  surveyor.email ? 'Email: '+surveyor.email : '',
+  surveyor.phone ? 'Telephone: '+surveyor.phone : ''
+ ].filter(value=>typeof value==='string'&&value.trim()).map(value=>value.trim()).join('\n');
+};
 export async function makePdf(title, rows) {
  const doc=await PDFDocument.create();
- const page=doc.addPage([595,842]);
+ let page=doc.addPage([595,842]);
  const font=await doc.embedFont(StandardFonts.Helvetica);
  const bold=await doc.embedFont(StandardFonts.HelveticaBold);
  page.drawText(title,{x:48,y:785,size:18,font:bold,color:rgb(.09,.2,.35)});
  let y=740;
  for(const [label,value] of rows) {
   page.drawText(clean(label),{x:48,y,size:10,font:bold});
-  const text=clean(value);
-  for(let i=0;i<text.length;i+=75) {
-   page.drawText(text.slice(i,i+75),{x:48,y:y-17,size:10,font});
+  const lines=String(value??'').split(/\r?\n/).flatMap(line=>{
+   const words=clean(line).split(' ');
+   const result=[];let current='';
+   for(const word of words){
+    const candidate=current?current+' '+word:word;
+    if(font.widthOfTextAtSize(candidate,10)>499&&current){result.push(current);current=word;}
+    else current=candidate;
+   }
+   result.push(current);
+   return result;
+  });
+  for(const line of lines){
+   if(y<60){y=740;const next=doc.addPage([595,842]);page=next;}
+   page.drawText(line,{x:48,y:y-17,size:10,font});
    y-=16;
   }
   y-=21;
@@ -50,7 +71,7 @@ export async function finaliseNoticeResponse(sb, submissionId) {
   ['Electronic signature',record.signer_name],
   ['Signed at (UTC)',record.signed_at],['Email verified at (UTC)',record.email_verified_at]
  ];
- if(record.surveyor)common.push(['Appointed surveyor',JSON.stringify(record.surveyor)]);
+ if(record.surveyor)common.push([record.choice==='dissent_agreed'?'Proposed agreed surveyor':'Appointed surveyor',surveyorDetails(record.surveyor)]);
  const acknowledgement=await makePdf('Party Wall Notice - Response Acknowledgement',common);
  const acknowledgementHash=hash(acknowledgement);
  const certificate=await makePdf('Electronic Signature Audit Certificate',[
