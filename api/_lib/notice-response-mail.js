@@ -2,7 +2,7 @@ import { getValidMicrosoftToken } from '../onedrive-helper.js';
 import { createClient } from '@supabase/supabase-js';
 
 /** Uses the NORA user's existing Outlook connection; never sends through another user's account. */
-export async function sendNoticeEmail({ userId, to, subject, text, attachments = [] }) {
+export async function sendNoticeEmail({ userId, to, subject, text, html, attachments = [], inlineImages = [] }) {
  const sb=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
  const {data:{user},error}=await sb.auth.admin.getUserById(userId);
  if(error||!user?.email)return {sent:false,reason:'Notice owner email unavailable'};
@@ -13,14 +13,14 @@ export async function sendNoticeEmail({ userId, to, subject, text, attachments =
  if (!recipients.length) throw Error('No valid email recipients');
  const message = {
   subject,
-  body: { contentType: 'Text', content: text },
+  body: { contentType: html ? 'HTML' : 'Text', content: html || text },
   toRecipients: recipients.map(address => ({ emailAddress: { address } })),
-  attachments: attachments.map(a => ({
+  attachments: [...attachments.map(a => ({
    '@odata.type': '#microsoft.graph.fileAttachment',
    name: a.filename,
    contentType: 'application/pdf',
    contentBytes: a.content
-  }))
+  })),...inlineImages.map(a=>({'@odata.type':'#microsoft.graph.fileAttachment',name:a.filename,contentType:a.contentType,contentBytes:a.content,isInline:true,contentId:a.cid}))]
  };
  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
   method:'POST',
