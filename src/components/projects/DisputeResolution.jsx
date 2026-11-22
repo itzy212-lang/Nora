@@ -367,7 +367,6 @@ export default function DisputeResolution({project, onBack, onRaiseInvoice}){
             <input type="date" style={{...input,width:150}} value={caseRow?.mediation_date||''} onChange={e=>saveMediationDateTime('mediation_date',e.target.value)}/>
             <input type="time" style={{...input,width:110}} value={caseRow?.mediation_time||''} onChange={e=>saveMediationDateTime('mediation_time',e.target.value)}/>
           </div>
-        )}
         {parties.length>=2&&(
           <button style={primary} onClick={generateMediationAgreement} disabled={generatingAgreement}>
             {generatingAgreement?'Generating…':'📄 Generate mediation agreement'}
