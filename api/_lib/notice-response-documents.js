@@ -221,8 +221,8 @@ export async function emailFinalisedResponse(sb,result){
  let surveyorDelivery={sent:false};
  if(user?.user?.email&&user.user.email.toLowerCase()!==record.signer_email.toLowerCase()){
   surveyorDelivery=await sendNoticeEmail({userId:link.user_id,to:[user.user.email],
-   subject:'NORA: Notice response signed and saved',
-   text:'An adjoining owner has signed and verified a party wall notice response.\\nProject ID: '+projectId+'\\nResponse: '+outcome(record.choice)+'\\nOpen the project in NORA to view the saved records.'});
+   subject:'NORA: Notice response verified - '+adjoiningAddress,
+   text:'An adjoining owner has signed and verified a party wall notice response.\\n\\nAdjoining owner property: '+adjoiningAddress+'\\nResponse: '+outcome(record.choice)+'\\n\\nOpen the project in NORA to view the saved records.'});
  }
  const boNotified=boPeople.length>0&&boSent===seen.size;
  await sb.from('notice_response_submissions').update({
