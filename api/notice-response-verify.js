@@ -18,14 +18,17 @@ export default async function handler(req,res){
   if(!link||link.revoked_at||(link.expires_at&&Date.parse(link.expires_at)<Date.now()))
    return respond(res,404,{error:'Notice unavailable'});
   const {data:submission}=await sb.from('notice_response_submissions')
-   .select('id,link_id,signer_email,verification_hash,verification_expires_at,status,audit')
+   .select('id,link_id,signer_email,verification_hash,verification_expires_at,verification_attempts,status,audit')
    .eq('id',submissionId).eq('link_id',link.id).maybeSingle();
   if(!submission||submission.status!=='pending_verification'||
-   !submission.verification_hash||Date.parse(submission.verification_expires_at)<Date.now())
+   !submission.verification_hash||submission.verification_attempts>=5||Date.parse(submission.verification_expires_at)<Date.now())
    return respond(res,400,{error:'Verification code expired or invalid'});
   const expected=Buffer.from(submission.verification_hash,'hex');
   const actual=Buffer.from(sha(link.id+':'+submission.signer_email+':'+code),'hex');
-  if(!timingSafeEqual(expected,actual))return respond(res,400,{error:'Incorrect verification code'});
+  if(!timingSafeEqual(expected,actual)){
+   await sb.from('notice_response_submissions').update({verification_attempts:submission.verification_attempts+1}).eq('id',submission.id).eq('verification_attempts',submission.verification_attempts);
+   return respond(res,400,{error:'Incorrect verification code'});
+  }
   const now=new Date().toISOString();
   const {error}=await sb.from('notice_response_submissions').update({
    email_verified_at:now,signed_at:now,status:'verified',verification_hash:null,
