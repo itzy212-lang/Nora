@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { loaHash, loaToken, loaTokenHash, locateLOAAnchors, stampLOASignatures, appendLOAAuditPage } from './_lib/loa-signing.js';
 import { sendLOAEmail } from './_lib/loa-email.js';
+import { fileCompletedLOA } from './_lib/loa-filing.js';
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const host=process.env.LOA_SIGNING_BASE_URL || (process.env.VERCEL_ENV==='production'?'https://loa.sq1consulting.co.uk':'https://'+process.env.VERCEL_URL);
 export default async function handler(req,res){
@@ -38,6 +39,7 @@ export default async function handler(req,res){
    if(uploaded.error)throw uploaded.error;
    const {error:re}=await sb.from('loa_signing_requests').update({status:'completed',completed_at:verifiedAt,final_path:path}).eq('id',request.id).eq('status','pending');
    if(re)throw re;
+   await fileCompletedLOA({request:{...request,final_path:path,completed_at:verifiedAt},signers,final});
    const emails=[...new Set(signers.map(x=>x.email))];
    const message='The Letter of Appointment has now been signed and verified by all required parties.\n\nPlease find the completed LOA and electronic signature audit record attached.';
    const deliveries=await Promise.allSettled([sendLOAEmail({userId:request.user_id,to:emails,subject:'Nora: Your signed Letter of Appointment',text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]}),sendLOAEmail({userId:request.user_id,to:[(await sb.auth.admin.getUserById(request.user_id)).data.user?.email].filter(Boolean),subject:'Nora: LOA fully signed - '+request.project_id,text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]})]);
