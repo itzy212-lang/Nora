@@ -20,14 +20,30 @@ export default async function handler(req,res) {
   const {data:link,error}=await sb.from('notice_response_links')
    .select('id,notice_id,pdf_bucket,pdf_path,original_pdf_sha256,expires_at,revoked_at,notices(id,section_1,section_2,section_3,section_6,section_10,status)')
    .eq('token_hash',sha256(token)).maybeSingle();
-  if(error || !link || link.revoked_at || (link.expires_at && new Date(link.expires_at)<new Date()) || link.notices?.status!=='served')
+  if(error || !link || link.revoked_at || (link.expires_at && new Date(link.expires_at)<new Date()))
     return respond(res,404,{error:'Notice unavailable'});
-  const {data:file,error:downloadError}=await sb.storage.from(link.pdf_bucket).download(link.pdf_path);
+  const {data:archives,error:archiveError}=await sb.from('notice_response_archives')
+   .select('notice_id,pdf_bucket,pdf_path,pdf_sha256,archived_at,notices(id,status,section_1,section_2,section_3,section_6,section_10)')
+   .eq('link_id',link.id).order('archived_at',{ascending:false});
+  if(archiveError)throw archiveError;
+  const current=(archives||[]).find(a=>a.notices?.status==='served');
+  // Legacy notices created before the per-owner archive table remain readable.
+  const active=current||((link.notices?.status==='served'&&link.pdf_path)?{
+   notice_id:link.notice_id,pdf_bucket:link.pdf_bucket,pdf_path:link.pdf_path,pdf_sha256:link.original_pdf_sha256,notices:link.notices
+  }:null);
+  if(!active)return respond(res,404,{error:'Notice unavailable'});
+  const {data:completed,error:completedError}=await sb.from('notice_response_submissions')
+   .select('choice,signer_name,signed_at,status').eq('link_id',link.id)
+   .in('status',['verified','finalised']).order('signed_at',{ascending:false}).limit(1);
+  if(completedError)throw completedError;
+  const {data:file,error:downloadError}=await sb.storage.from(active.pdf_bucket).download(active.pdf_path);
   if(downloadError || !file) return respond(res,404,{error:'Notice document unavailable'});
   const bytes=Buffer.from(await file.arrayBuffer());
-  if(sha256(bytes)!==link.original_pdf_sha256) return respond(res,409,{error:'The served notice document has changed'});
-  const {data:signed,error:signError}=await sb.storage.from(link.pdf_bucket).createSignedUrl(link.pdf_path,300);
+  if(sha256(bytes)!==active.pdf_sha256) return respond(res,409,{error:'The served notice document has changed'});
+  const {data:signed,error:signError}=await sb.storage.from(active.pdf_bucket).createSignedUrl(active.pdf_path,300);
   if(signError || !signed) throw signError || new Error('Could not sign URL');
-  return respond(res,200,{notice:{id:link.notice_id,reference:'Party Wall Notice',pdfUrl:signed.signedUrl,sections:{section1:link.notices.section_1,section2:link.notices.section_2,section3:link.notices.section_3,section6:link.notices.section_6,section10:link.notices.section_10}}});
+  return respond(res,200,{notice:{id:active.notice_id,reference:'Party Wall Notice',pdfUrl:signed.signedUrl,
+   existingResponse:completed?.[0]?{choice:completed[0].choice,signerName:completed[0].signer_name,signedAt:completed[0].signed_at}:null,
+   sections:{section1:active.notices.section_1,section2:active.notices.section_2,section3:active.notices.section_3,section6:active.notices.section_6,section10:active.notices.section_10}}});
  }catch(e){console.error('notice-response-public:',e.message);return respond(res,500,{error:'Notice temporarily unavailable'});}
 }
