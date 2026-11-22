@@ -38,7 +38,7 @@ export default async function handler(req,res){
   if(link.notices.section_1 && ['consent','consent_soc'].includes(choice) && !['agree','refuse'].includes(astrideConsent))
     return reply(res,400,{error:'Confirm whether you consent to building astride the boundary'});
   let recordedSurveyor=surveyor;
-  if(choice==='dissent_agreed'&&appointServingSurveyor===true){
+  if(choice==='dissent_agreed'){
     const {data:firm,error:firmError}=await sb.from('firm_settings')
       .select('surveyor_name,firm_name,email,tel').eq('user_id',link.user_id).maybeSingle();
     if(firmError)throw firmError;
@@ -59,7 +59,7 @@ export default async function handler(req,res){
    link_id:link.id,choice,signer_name:name.trim(),signer_email:email.trim().toLowerCase(),
    surveyor:['dissent_own','dissent_agreed'].includes(choice)&&recordedSurveyor?.name?.trim()?{name:String(recordedSurveyor.name).slice(0,180),firm:String(recordedSurveyor.firm||'').slice(0,180),email:String(recordedSurveyor.email||'').slice(0,254),phone:String(recordedSurveyor.phone||'').slice(0,80),address:String(recordedSurveyor.address||'').slice(0,400)}:null,
    verification_hash:verificationHash,verification_expires_at:new Date(Date.now()+10*60000).toISOString(),
-   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,appoint_serving_surveyor:choice==='dissent_agreed'&&appointServingSurveyor===true,section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
+   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,appoint_serving_surveyor:choice==='dissent_agreed',section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
   }).select('id').single();
   if(insertError){if(insertError.code==='23505')return reply(res,409,{error:'A verification code is already pending for this email address'});throw insertError;}
   const result=await sendNoticeEmail({userId:link.user_id,to:[email.trim()],
