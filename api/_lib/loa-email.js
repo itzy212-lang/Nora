@@ -34,6 +34,6 @@ export async function sendLOAEmail({userId,to,subject,text,attachments=[]}){
   inlineImages.push({filename:key+'.png',contentType:match?.[1]||'image/png',content:content.replace(/\s/g,''),cid});
   images[key]='cid:'+cid;
  }
- const html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">'+esc(text).replace(/\n/g,'<br>')+'</div><div style="margin-top:18px">'+firmSignature(firm||{},images)+'</div>';
+ const html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">'+esc(text).replace(/\\n/g,'\n').replace(/\n/g,'<br>')+'</div><div style="margin-top:18px">'+firmSignature(firm||{},images)+'</div>';
  return sendNoticeEmail({userId,to,subject,html,attachments,inlineImages});
 }
