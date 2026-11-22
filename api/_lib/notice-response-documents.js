@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createHash } from 'node:crypto';
 import { sendNoticeEmail } from './notice-response-mail.js';
+import { getAoFolderInfo, uploadToOneDrive, saveDocumentRecord } from '../onedrive-helper.js';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const choices = {
@@ -65,18 +66,35 @@ export async function finaliseNoticeResponse(sb, submissionId) {
   });
   if(uploadError && !String(uploadError.message).toLowerCase().includes('already exists'))throw uploadError;
  }
+ const folder=await getAoFolderInfo(projectId,link.notices.ao_id);
+ if(!folder?.folder_id)throw Error('Adjoining owner OneDrive folder is not linked');
+ const {data:accountUser}=await sb.auth.admin.getUserById(link.user_id);
+ if(!accountUser?.user?.email)throw Error('Notice owner account email missing');
+ const saved=[];
+ for(const [name,bytes,category] of [
+  ['Notice Response - '+record.id+'.pdf',acknowledgement,'notice_response'],
+  ['Notice Response Audit - '+record.id+'.pdf',certificate,'notice_response_audit']
+ ]){
+  const upload=await uploadToOneDrive({userId:accountUser.user.email,folderId:folder.folder_id,fileName:name,buffer:bytes});
+  if(!upload?.item_id)throw Error('Failed to save '+name+' to the adjoining owner OneDrive folder');
+  const documentId=await saveDocumentRecord({projectId,aoId:link.notices.ao_id,fileName:name,category,
+   mimeType:'application/pdf',oneDriveItemId:upload.item_id,oneDriveUrl:upload.web_url,
+   metadata:{notice_id:link.notice_id,submission_id:record.id,notice_sha256:link.original_pdf_sha256}});
+  if(!documentId)throw Error('OneDrive file uploaded but NORA document index failed');
+  saved.push({name,documentId,oneDriveItemId:upload.item_id,oneDriveUrl:upload.web_url});
+ }
  const {error:updateError}=await sb.from('notice_response_submissions').update({
   status:'finalised',acknowledgement_path:aPath,certificate_path:cPath,
   finalised_at:new Date().toISOString(),delivery_status:'pending',
   audit:{...record.audit,original_notice_sha256:link.original_pdf_sha256,
    acknowledgement_sha256:acknowledgementHash,certificate_sha256:hash(certificate),
-   acknowledgement_path:aPath,certificate_path:cPath}
+   acknowledgement_path:aPath,certificate_path:cPath,onedrive_documents:saved}
  }).eq('id',record.id).eq('status','verified');
  if(updateError)throw updateError;
- return {record,link,acknowledgement,certificate,acknowledgementPath:aPath,certificatePath:cPath};
+ return {record,link,acknowledgement,certificate,acknowledgementPath:aPath,certificatePath:cPath,oneDriveDocuments:saved};
 }
 export async function emailFinalisedResponse(sb, result) {
- const {record,link,acknowledgement,certificate,acknowledgementPath,certificatePath}=result;
+ const {record,link,acknowledgement,certificate,acknowledgementPath,certificatePath,oneDriveDocuments}=result;
  // The adjoining owner receives their signed records. The surveyor receives notification only.
  const ownerDelivery=await sendNoticeEmail({
   userId:link.user_id,
@@ -105,9 +123,8 @@ export async function emailFinalisedResponse(sb, result) {
     'Signed by: '+record.signer_name,
     'Signed at (UTC): '+record.signed_at,
     '',
-    'The signed acknowledgement and audit certificate have been saved against the relevant project and notice files in NORA.',
-    'Acknowledgement: '+acknowledgementPath,
-    'Audit certificate: '+certificatePath,
+    'The signed acknowledgement and audit certificate have been saved in the adjoining owner folder linked to this project in OneDrive and indexed in NORA.',
+    ...oneDriveDocuments.map(doc=>doc.name+': '+(doc.oneDriveUrl||'Saved to OneDrive')),
     '',
     'Open the project in NORA to view the saved records.'
    ].join('\\n'),
