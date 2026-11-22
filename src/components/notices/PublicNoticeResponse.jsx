@@ -20,7 +20,8 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     ['dissent_own', 'I dissent and wish to appoint my own surveyor']
   ];
   const section1 = Boolean(notice?.sections?.section1);
-  const ready = notice && !section1 && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+  const existingResponse=notice?.existingResponse;
+  const ready = notice && !existingResponse && !section1 && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
     authorised && (choice !== 'dissent_own' || (surveyor.name.trim() && surveyor.email.trim()));
   const field = (label, value, change, type = 'text') => (
     <label className="nora-response-field">{label}<input type={type} value={value} onChange={e => change(e.target.value)} /></label>
@@ -65,9 +66,10 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       </section>
       <form className="nora-response-panel nora-response-body" onSubmit={submit}>
         <h2>Your response</h2>
+        {existingResponse && <p role="status" style={{padding:12,background:'#eff6ff',borderRadius:8}}>Your previous response has been received and verified. You do not need to sign again for this notice. {existingResponse.signerName ? 'Signed by '+existingResponse.signerName+'.' : ''}</p>}
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
         {section1 && <p role="alert" style={{padding:12,background:'#fff7ed',borderRadius:8}}>Section 1 notices require a different statutory response process. Electronic responses are temporarily disabled for this notice.</p>}
-        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || section1}/>{label}</label>)}
+        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || section1 || !!existingResponse}/>{label}</label>)}
         {choice === 'dissent_own' && <section><h2>Your appointed surveyor</h2>
           {field('Surveyor name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
           {field('Practice',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
@@ -75,7 +77,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
           {field('Telephone',surveyor.phone,v=>setSurveyor(s=>({...s,phone:v})),'tel')}
           {field('Address',surveyor.address,v=>setSurveyor(s=>({...s,address:v})))}
         </section>}
-        <h2>Electronic signature</h2>
+        {!existingResponse && <><h2>Electronic signature</h2>
         {field('Your full legal name',name,setName)}
         <div className="nora-response-signature" aria-label="Signature preview">{name || 'Your signature appears here'}</div>
         <p className="nora-response-muted">Typing your name and confirming below expresses your intention to sign electronically.</p>
@@ -83,7 +85,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
         <label className="nora-response-option"><input type="checkbox" checked={authorised} onChange={e=>setAuthorised(e.target.checked)} />I confirm I am the adjoining owner or authorised to respond and intend this electronic signature to authenticate my response.</label>
         <button className="nora-response-button" disabled={!ready || !onSubmit || busy}>{busy?'Submitting…':'Sign and submit response'}</button>
         {error && <p role="alert">{error}</p>}
-        <p className="nora-response-muted">Submission will require server-side notice validation and email verification before a signed certificate is issued.</p>
+        <p className="nora-response-muted">Submission will require server-side notice validation and email verification before a signed certificate is issued.</p></>}
       </form>
     </main>
   </div>;
