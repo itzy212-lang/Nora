@@ -4484,10 +4484,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             .filter(Boolean)
             .filter((w, i, arr) => arr.findIndex(x => x.toLowerCase() === w.toLowerCase()) === i);
           const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, section1Is2, allSections: aoSections, worksItems: sectionWorks });
-          if(key===keysToGenerate[0]){
-            mergeData.NOTICE_RESPONSE_URL=prepared.url;
-            mergeData.notice_response_url=prepared.url;
-          }
+          // Every notice in this pack uses the same permanent AO response link.
+          mergeData.NOTICE_RESPONSE_URL=prepared.url;
+          mergeData.notice_response_url=prepared.url;
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
             mergeData,
