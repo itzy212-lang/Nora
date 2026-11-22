@@ -41,7 +41,7 @@ export async function insertNoticeQr(docxBuffer, url) {
  // Keep all the original text in order. Anchor the QR at the right-hand
  // margin of the placeholder paragraph, rather than inserting it before text.
  let inserted=0;
- xml=xml.replace(/<w:p(?:\\s[^>]*)?>[\\s\\S]*?<\\/w:p>/g,paragraph=>{
+ xml=xml.replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g,paragraph=>{
   if(!paragraph.includes(SENTINEL))return paragraph;
   inserted++;
   const cleaned=paragraph.replace(SENTINEL,'');
