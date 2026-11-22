@@ -23,8 +23,12 @@ export default async function handler(req,res){
    if(!data||data.status==='served')return res.status(409).json({error:'Existing notice cannot be prepared'});
    notice=data;
   }else{
+   const {data:runs,error:runsError}=await sb.from('notices').select('run_number')
+    .eq('project_id',projectId).eq('ao_id',aoId).order('run_number',{ascending:false}).limit(1);
+   if(runsError)throw runsError;
+   const runNumber=(Number(runs?.[0]?.run_number)||0)+1;
    const {data,error}=await sb.from('notices').insert({
-    project_id:projectId,ao_id:aoId,user_id:user.id,status:'draft',notice_date:noticeDate,
+    project_id:projectId,ao_id:aoId,user_id:user.id,status:'draft',notice_date:noticeDate,run_number:runNumber,
     section_1:sections.includes('s1'),section_2:sections.includes('s2'),
     section_3:sections.includes('s3'),section_6:sections.includes('s6'),section_10:sections.includes('s10'),
     template_type:'notice_pack'
