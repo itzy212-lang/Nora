@@ -4499,9 +4499,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
             addDocxToZip(zip, mergeData.file_name, result.docx_b64);
           } else {
+            if(key===keysToGenerate[0])throw Error(result?.error||'Notice QR document could not be generated');
             warnings.push(`${key}: ${result?.error || 'document not generated'}`);
           }
         } catch (err) {
+          if(key===keysToGenerate[0])throw Error('Online-response QR notice generation failed: '+err.message);
           warnings.push(`${key}: ${err.message}`);
         }
       }
