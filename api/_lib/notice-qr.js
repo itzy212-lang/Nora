@@ -32,8 +32,22 @@ export async function insertNoticeQr(docxBuffer, url) {
  const drawing=`<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1371600" cy="1371600"/><wp:docPr id="948271" name="Notice response QR code"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Notice response QR"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1371600" cy="1371600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
  const matches=(xml.match(new RegExp(SENTINEL,'g'))||[]).length;
  if(matches!==1)throw Error('QR placeholder must appear exactly once in the Word template');
- xml=xml.replace(new RegExp('<w:t([^>]*)>'+SENTINEL+'</w:t>'),drawing);
- if(xml.includes(SENTINEL))throw Error('QR placeholder must be in its own Word text run');
+ // Word often keeps the QR placeholder in the same text run as the URL or a space.
+ // Split the text run around the image rather than requiring a dedicated run.
+ const textNode=/<w:t([^>]*)>([^<]*)<\/w:t>/g;
+ let inserted=0;
+ xml=xml.replace(textNode,(whole,attrs,content)=>{
+  if(!content.includes(SENTINEL))return whole;
+  inserted++;
+  const [before,after]=content.split(SENTINEL);
+  const open='<w:t'+attrs+'>';
+  const pieces=[];
+  if(before)pieces.push(open+before+'</w:t>');
+  pieces.push('</w:r><w:r>'+drawing+'</w:r><w:r>');
+  if(after)pieces.push(open+after+'</w:t>');
+  return pieces.join('');
+ });
+ if(inserted!==1||xml.includes(SENTINEL))throw Error('Could not place QR image into Word text');
  zip.file('word/document.xml',xml);
  return zip.generate({type:'nodebuffer',compression:'DEFLATE'});
 }
