@@ -20,6 +20,18 @@ export async function updateProjectFromVerifiedNotice(sb,{linkId,userId,choice,s
   const consent=choice==='consent'||choice==='consent_soc';
   if(!dissent&&!consent)throw Error('Unsupported notice response');
   ao.status=dissent?'dissent':'consent';
+  ao.last_status_change=new Date().toISOString();
+  if(dissent){
+    const date=new Date().toISOString().slice(0,10);
+    ao.dissent_received_date=date;
+    ao.dissentReceivedDate=date;
+    ao.s10_deadline='';ao.s10Deadline='';
+    ao.consent_deadline='';ao.consentDeadline='';
+  }else{
+    const date=new Date().toISOString().slice(0,10);
+    ao.consent_received_date=date;
+    ao.consentReceivedDate=date;
+  }
   if(consent){
     ao.soc_required=choice==='consent_soc';
     ao.agreed_surveyor=false;
