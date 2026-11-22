@@ -35,9 +35,10 @@ test('QR placeholder shares a Word text run with the response URL',async()=>{
  const original=globalThis.fetch;
  globalThis.fetch=async()=>({ok:true,arrayBuffer:async()=>png});
  try{
-  const result=new PizZip(await insertNoticeQr(zip.generate({type:'nodebuffer'}),'https://notices.sq1consulting.co.uk/respond/'+'b'.repeat(32)));
+  const result=new PizZip(await insertNoticeQr(zip.generate({type:'nodebuffer'}),'https://notices.sq1consulting.co.uk/n/121-N128AV-A1B2C3D4E5'));
   const xml=result.file('word/document.xml').asText();
   assert.match(xml,/Respond online: https:\/\/example.test/);
+  assert.ok(xml.indexOf('<w:drawing>') < xml.indexOf('Respond online:'));
   assert.match(xml,/<w:drawing>/);
   assert.match(xml,/end<\/w:t>/);
   assert.doesNotMatch(xml,/NORA_NOTICE_QR_IMAGE_SENTINEL/);
