@@ -15,7 +15,7 @@ export default async function handler(req,res){
   const sb=db(),{data:{user},error}=await sb.auth.getUser(auth[1]);
   if(error||!user)return reply(res,401,{error:'Invalid session'});
   const {project_id,appointment_type,document_name,pdf_b64,signers}=req.body||{};
-  if(!/^proj_[a-zA-Z0-9_]+$/.test(project_id||'')||!['bo_loa','ao_loa','ao_agreed_surveyor_loa','bo_agreed_surveyor_loa'].includes(appointment_type))return reply(res,400,{error:'Invalid appointment'});
+  if(typeof project_id!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(project_id)||!['bo_loa','ao_loa','ao_agreed_surveyor_loa','bo_agreed_surveyor_loa'].includes(appointment_type))return reply(res,400,{error:'Invalid appointment'});
   const {data:project,error:pe}=await sb.from('projects').select('id,user_id').eq('id',project_id).maybeSingle();
   if(pe||!project||project.user_id!==user.id)return reply(res,403,{error:'Project not accessible'});
   const people=validateLOASigners(signers);
