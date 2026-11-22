@@ -57,12 +57,12 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       .nora-response *{box-sizing:border-box}
       .nora-response-header{background:#fff;color:#0b2346;padding:18px 24px;display:flex;justify-content:center;align-items:center;border-bottom:3px solid #1764d1;min-height:105px}
       .nora-response-header strong{font-size:23px;letter-spacing:2px}
-      .nora-response-main{display:block;max-width:900px;margin:28px auto;padding:0 18px}
+      .nora-response-main{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(390px,1fr);gap:20px;max-width:1600px;margin:24px auto;padding:0 22px;align-items:start}
       .nora-response-panel{background:white;border:1px solid #dce4ef;border-radius:12px;overflow:hidden}
       .nora-response-panel h2{font-size:19px;margin:0 0 8px}
-      .nora-response-pdf{display:none}
-      .nora-response-pdf iframe{border:0;flex:1;width:100%;background:#f8fafc}
-      .nora-response-body{padding:28px}
+      .nora-response-pdf{display:flex;flex-direction:column;height:calc(100vh - 165px);min-height:570px;position:sticky;top:18px}
+      .nora-response-pdf iframe{border:0;flex:1;width:100%;min-height:0;background:#f8fafc}
+      .nora-response-body{padding:24px;max-height:calc(100vh - 165px);overflow-y:auto;overscroll-behavior:contain}
       .nora-response-field{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;margin:12px 0}
       .nora-response-field input{width:100%;padding:11px;border:1px solid #b9c8d8;border-radius:7px;font:inherit}
       .nora-response-option{display:flex;gap:10px;align-items:start;border:1px solid #dce4ef;padding:12px;margin:8px 0;border-radius:8px;cursor:pointer}
@@ -71,6 +71,8 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       .nora-response-button{background:#0963ce;color:white;padding:17px;width:100%;border:0;border-radius:9px;font-weight:700;font-size:16px;cursor:pointer}
       .nora-preview-button{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:18px 22px;margin:22px 0 30px;border:3px solid #1261d2;border-radius:12px;background:white;color:#0b357a;font:700 19px system-ui,sans-serif;cursor:pointer}
       .nora-preview-button:hover,.nora-preview-button:focus-visible{background:#eff6ff}
+      .nora-response-desktop-pdf-title{padding:16px 20px;font-weight:700;color:#0b2346;border-bottom:1px solid #dce4ef}
+      .nora-response-mobile-preview{display:none}
       .nora-response-heading{display:flex;align-items:center;gap:15px;margin-bottom:10px}
       .nora-response-heading h1{font-size:29px;line-height:1.15;margin:0;color:#071b39}
       .nora-response-heading p{margin:0;color:#66758b}
@@ -78,15 +80,16 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       .nora-response-section1{padding:20px;border:1px solid #d8e2f1;background:#f5f8fc;border-radius:12px;margin:24px 0}
       .nora-response-button:disabled{opacity:.5;cursor:not-allowed}
       .nora-response-muted{font-size:12px;color:#64748b}
-      @media(max-width:780px){.nora-response-header{min-height:84px;padding:12px}.nora-response-main{margin:16px auto;padding:0 10px}.nora-response-panel{width:100%}.nora-response-body{padding:18px}.nora-response-heading h1{font-size:24px}.nora-preview-button{padding:15px;font-size:17px;margin:18px 0 24px}}
+      @media(max-width:900px){.nora-response-header{min-height:84px;padding:12px}.nora-response-main{display:block;max-width:900px;margin:16px auto;padding:0 10px}.nora-response-panel{width:100%}.nora-response-pdf{display:none}.nora-response-body{padding:18px;max-height:none;overflow:visible}.nora-response-heading h1{font-size:24px}.nora-response-mobile-preview{display:block}.nora-preview-button{padding:15px;font-size:17px;margin:18px 0 24px}}
     `}</style>
     <header className="nora-response-header">{notice?.firmLogoUrl ? <img src={notice.firmLogoUrl} alt={notice.firmName || 'Surveyor firm'} style={{maxHeight:70,maxWidth:'min(85vw,360px)',objectFit:'contain'}}/> : <strong style={{fontSize:24,letterSpacing:0}}>{notice?.firmName || 'Party Wall Notices'}</strong>}</header>
     <main className="nora-response-main">
+      <section className="nora-response-panel nora-response-pdf" aria-label="Notice document preview"><div className="nora-response-desktop-pdf-title">Notice preview</div>{notice?.pdfUrl ? <iframe title="Notice document" src={notice.pdfUrl}/> : <p style={{padding:20}}>Notice preview unavailable</p>}</section>
       <form className="nora-response-panel nora-response-body" onSubmit={submit}>
         <div className="nora-response-heading"><span aria-hidden="true" style={{fontSize:38,color:'#1261d2'}}>▤</span><div><p>Notice acknowledgement</p><h1>Party Wall Notice</h1></div></div>
         <p className="nora-response-intro">Please review the notice and select your response below.</p>
-        <button className="nora-preview-button" type="button" aria-expanded={previewOpen} onClick={()=>setPreviewOpen(v=>!v)}><span aria-hidden="true">▤</span>{previewOpen ? 'Hide notice preview' : 'Preview notice'}<span aria-hidden="true" style={{marginLeft:'auto'}}>›</span></button>
-        {previewOpen && notice?.pdfUrl && <iframe title="Notice preview" src={notice.pdfUrl} style={{width:'100%',height:'55vh',border:'1px solid #dce4ef',borderRadius:8,marginBottom:12}}/>}
+        <div className="nora-response-mobile-preview"><button className="nora-preview-button" type="button" aria-expanded={previewOpen} onClick={()=>setPreviewOpen(v=>!v)}><span aria-hidden="true">▤</span>{previewOpen ? 'Hide notice preview' : 'Preview notice'}<span aria-hidden="true" style={{marginLeft:'auto'}}>›</span></button>
+        {previewOpen && notice?.pdfUrl && <iframe title="Notice preview" src={notice.pdfUrl} style={{width:'100%',height:'55vh',border:'1px solid #dce4ef',borderRadius:8,marginBottom:12}}/>}</div>
         <h2>Your response</h2>
         {existingResponse && <p role="status" style={{padding:12,background:'#eff6ff',borderRadius:8}}>Your previous response has been received and verified. You do not need to sign again for this notice. {existingResponse.signerName ? 'Signed by '+existingResponse.signerName+'.' : ''}</p>}
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
