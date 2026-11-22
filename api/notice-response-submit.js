@@ -48,7 +48,7 @@ export default async function handler(req,res){
    verification_hash:verificationHash,verification_expires_at:new Date(Date.now()+10*60000).toISOString(),
    audit:{consent_to_electronic_signature:true,notice_id:link.notice_id}
   }).select('id').single();
-  if(insertError)throw insertError;
+  if(insertError){if(insertError.code==='23505')return reply(res,409,{error:'A verification code is already pending for this email address'});throw insertError;}
   const result=await fetch('https://api.resend.com/emails',{
    method:'POST',headers:{Authorization:'Bearer '+process.env.RESEND_API_KEY,'Content-Type':'application/json'},
    body:JSON.stringify({from:process.env.NOTICE_RESPONSE_FROM_EMAIL,to:[email.trim()],
