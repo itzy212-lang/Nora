@@ -31,7 +31,7 @@ export function validateLOASigners(signers) {
  */
 export async function stampLOASignatures(pdfBytes, signatures, placements) {
   const pdf = await PDFDocument.load(pdfBytes);
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
   for (const s of signatures) {
     if (!s.verifiedAt || !s.signedDate) throw Error('Unverified signature cannot be applied');
     const place = placements[s.position];
