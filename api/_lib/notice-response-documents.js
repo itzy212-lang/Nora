@@ -131,9 +131,38 @@ export async function emailFinalisedResponse(sb, result) {
    attachments:[]
   });
  }
+ const {data:project,error:projectError}=await sb.from('projects')
+  .select('bo_1_name,bo_1_email,bo_2_name,bo_2_email,bo_premise_address')
+  .eq('id',link.notices.project_id).maybeSingle();
+ if(projectError)console.error('notice-response-bo-project:',projectError.message);
+ const boRecipients=[project?.bo_1_email,project?.bo_2_email]
+  .filter(value=>typeof value==='string' && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.trim()))
+  .map(value=>value.trim().toLowerCase())
+  .filter((value,index,array)=>array.indexOf(value)===index);
+ let boDelivery={sent:false,reason:'No BO email address recorded on project'};
+ if(boRecipients.length){
+  boDelivery=await sendNoticeEmail({
+   userId:link.user_id,
+   to:boRecipients,
+   subject:'Party wall notice response received: '+(project.bo_premise_address||'Your property'),
+   text:[
+    'A response has been received to the party wall notice relating to '+(project.bo_premise_address||'your property')+'.',
+    '',
+    'Notice outcome: '+(choices[record.choice]||record.choice),
+    'Response signed by: '+record.signer_name,
+    'Date and time (UTC): '+record.signed_at,
+    '',
+    'The signed response and audit certificate have been saved in the relevant adjoining owner file in the project OneDrive folder.',
+    '',
+    'Your appointed surveyor will advise you of any next steps.'
+   ].join('\\n'),
+   attachments:[]
+  });
+ }
  await sb.from('notice_response_submissions').update({
-  delivery_status:ownerDelivery.sent && surveyorDelivery.sent ? 'sent' : 'partial'
+  delivery_status:ownerDelivery.sent && surveyorDelivery.sent && (!boRecipients.length || boDelivery.sent) ? 'sent' : 'partial'
  }).eq('id',record.id);
- return {sent:ownerDelivery.sent && surveyorDelivery.sent,
-  ownerEmailed:ownerDelivery.sent,surveyorNotified:surveyorDelivery.sent};
+ return {sent:ownerDelivery.sent && surveyorDelivery.sent && (!boRecipients.length || boDelivery.sent),
+  ownerEmailed:ownerDelivery.sent,surveyorNotified:surveyorDelivery.sent,
+  boNotified:boDelivery.sent,boNotificationConfigured:boRecipients.length>0};
 }
