@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { loaToken, loaTokenHash, loaHash, validateLOASigners, locateLOAAnchors } from './_lib/loa-signing.js';
-import { sendNoticeEmail } from './_lib/notice-response-mail.js';
+import { sendLOAEmail } from './_lib/loa-email.js';
 
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const reply=(r,s,b)=>r.status(s).json(b);
@@ -32,8 +32,8 @@ export default async function handler(req,res){
   const {data:rows,error:se}=await sb.from('loa_signers').insert(people.map((p,i)=>({...p,request_id:id,token_hash:loaTokenHash(tokens[i]),status:i===0?'invited':'waiting',invited_at:i===0?new Date().toISOString():null}))).select('id');
   if(se)throw se;
   const intro=people.length>1?'There is more than one person required to sign this appointment. Once you have signed and verified your signature, the next signatory will automatically receive their invitation.':'';
-  const message='Dear '+people[0].name.split(' ')[0]+',\n\nYour Letter of Appointment is ready for review and electronic signature.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+tokens[0]+'\n\n'+intro+'\n\nKind regards,\nNora';
-  const sent=await sendNoticeEmail({userId:user.id,to:[people[0].email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
+  const message='Dear '+people[0].name.split(' ')[0]+',\n\nYour Letter of Appointment is ready for review and electronic signature.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+tokens[0]+'\n\n'+intro+'';
+  const sent=await sendLOAEmail({userId:user.id,to:[people[0].email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
   if(!sent.sent)return reply(res,502,{error:'LOA created, but invitation delivery failed: '+sent.reason,signing_request_id:id});
   return reply(res,200,{success:true,provider:'nora',signing_request_id:id,signers:rows?.length});
  }catch(e){console.error('[loa-create]',e);return reply(res,500,{error:e.message||'Could not create LOA signing request'});}
