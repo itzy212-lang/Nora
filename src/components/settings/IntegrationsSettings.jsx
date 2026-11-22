@@ -5,7 +5,7 @@ export default function IntegrationsSettings() {
   const [integrations, setIntegrations] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [loaProvider, setLoaProvider] = useState(() => window.localStorage.getItem('nora_loa_signing_provider') || import.meta.env.VITE_LOA_SIGNING_PROVIDER || 'firma');
+  const [loaProvider, setLoaProvider] = useState(() => window.localStorage.getItem('nora_loa_signing_provider') || import.meta.env.VITE_LOA_SIGNING_PROVIDER || (window.location.hostname.endsWith('.vercel.app') ? 'nora' : 'firma'));
 
   useEffect(() => {
     loadIntegrations();
