@@ -15,6 +15,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
   const [surveyor, setSurveyor] = useState({ name: '', firm: '', email: '', phone: '', address: '' });
   const [suggestions, setSuggestions] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
+  const [appointServingSurveyor, setAppointServingSurveyor] = useState(false);
   const [suggestionError, setSuggestionError] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,7 +47,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     if (!ready || !onSubmit) return;
     setBusy(true); setError('');
     try {
-      await onSubmit({ noticeId: notice.id, choice, astrideConsent: section1Astride && ['consent','consent_soc'].includes(choice) ? astrideConsent : null, name: name.trim(), email: email.trim(), authorised, surveyor: ['dissent_own','dissent_agreed'].includes(choice) ? surveyor : null });
+      await onSubmit({ noticeId: notice.id, choice, astrideConsent: section1Astride && ['consent','consent_soc'].includes(choice) ? astrideConsent : null, name: name.trim(), email: email.trim(), authorised, surveyor: ['dissent_own','dissent_agreed'].includes(choice) ? (choice==='dissent_agreed'&&appointServingSurveyor ? notice.servingSurveyor : surveyor) : null, appointServingSurveyor:choice==='dissent_agreed'&&appointServingSurveyor });
     } catch (err) { setError(err.message || 'Could not submit response'); }
     finally { setBusy(false); }
   }
@@ -89,14 +90,15 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
         <h2>Your response</h2>
         {existingResponse && <p role="status" style={{padding:12,background:'#eff6ff',borderRadius:8}}>Your previous response has been received and verified. You do not need to sign again for this notice. {existingResponse.signerName ? 'Signed by '+existingResponse.signerName+'.' : ''}</p>}
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
-        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>{setChoice(value);setAstrideConsent('');}} disabled={!notice || !!existingResponse}/>{label}</label>)}
+        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>{setChoice(value);setAstrideConsent('');setAppointServingSurveyor(false);setSelectedContact(null);}} disabled={!notice || !!existingResponse}/>{label}</label>)}
         {section1Astride && ['consent','consent_soc'].includes(choice) && <section aria-label="Section 1(2) consent" className="nora-response-section1">
           <h2>Section 1(2): Wall astride the boundary</h2>
           <p>Do you expressly consent to the proposed wall being built astride the boundary?</p>
           {[['agree','Yes, I consent to building astride the boundary'],['refuse','No, I do not consent to building astride the boundary']].map(([v,label])=><label key={v} className="nora-response-option"><input type="radio" name="astrideConsent" checked={astrideConsent===v} onChange={()=>setAstrideConsent(v)}/>{label}</label>)}
           {astrideConsent==='refuse' && <p className="nora-response-muted">Your response to the other works remains as selected above. The Building Owner may consider a wall wholly on their own land under Section 1(5).</p>}
         </section>}
-        {['dissent_own','dissent_agreed'].includes(choice) && <section><h2>{choice==='dissent_agreed'?'Proposed agreed surveyor':'Your appointed surveyor'}</h2>
+        {choice==='dissent_agreed' && notice?.servingSurveyor?.name && <label className="nora-response-option"><input type="checkbox" checked={appointServingSurveyor} onChange={e=>{setAppointServingSurveyor(e.target.checked);setSuggestions([]);}}/>I wish to appoint {notice.servingSurveyor.name} ({notice.servingSurveyor.firm||'the serving surveyor'}) as the agreed surveyor.</label>}
+        {['dissent_own','dissent_agreed'].includes(choice) && !(choice==='dissent_agreed'&&appointServingSurveyor) && <section><h2>{choice==='dissent_agreed'?'Proposed agreed surveyor':'Your appointed surveyor'}</h2>
           {field('Surveyor Name',surveyor.name,v=>{setSelectedContact(null);setSurveyor(s=>({...s,name:v}));})}
           {suggestions.length>0 && <div role="listbox" aria-label="Existing surveyor contacts" style={{border:'1px solid #dce4ef',borderRadius:8}}>{suggestions.map(s=><button type="button" key={s.id} onClick={()=>{setSelectedContact(s.id);setSurveyor({name:s.name||'',firm:s.firm||'',email:s.email||'',phone:s.phone||'',address:''});setSuggestions([]);}} style={{display:'block',width:'100%',padding:10,textAlign:'left',background:'white',border:0,borderBottom:'1px solid #eee',cursor:'pointer'}}>{s.name}{s.firm?' · '+s.firm:''}</button>)}</div>}
           {selectedContact && <p className="nora-response-muted">Existing Nora contact selected. You can edit the fields below.</p>}
