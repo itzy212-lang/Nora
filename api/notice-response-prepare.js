@@ -39,13 +39,16 @@ export default async function handler(req,res){
   const secret=process.env.NOTICE_RESPONSE_LINK_SECRET||process.env.SUPABASE_SERVICE_ROLE_KEY;
   if(!secret)throw Error('Response link signing key missing');
   // One unguessable, stable link per adjoining owner within a project.
-  const token=createHmac('sha256',secret).update(JSON.stringify([projectId,aoId])).digest('base64url').slice(0,32);
+  const token=createHmac('sha256',secret).update(JSON.stringify([user.id,projectId,aoId])).digest('base64url').slice(0,32);
   const {data:existing,error:lookupError}=await sb.from('notice_response_links').select('id').eq('token_hash',hash(token)).is('revoked_at',null).maybeSingle();
   if(lookupError)throw lookupError;
   if(!existing){
    const {error:linkError}=await sb.from('notice_response_links').insert({notice_id:notice.id,user_id:user.id,token_hash:hash(token)});
    if(linkError&&linkError.code!=='23505')throw linkError;
   }
-  return res.status(201).json({noticeId:notice.id,url:'https://notices.sq1consulting.co.uk/respond/'+token,token});
+  const {data:settings,error:settingsError}=await sb.from('firm_settings').select('notice_response_domain,notice_response_domain_verified').eq('user_id',user.id).maybeSingle();
+  if(settingsError)throw settingsError;
+  const domain=settings?.notice_response_domain_verified&&/^[a-z0-9.-]+$/.test(settings.notice_response_domain||'')?settings.notice_response_domain:'nora-d9wy.vercel.app';
+  return res.status(201).json({noticeId:notice.id,url:'https://'+domain+'/respond/'+token,token});
  }catch(error){console.error('notice-prepare:',error.message);return res.status(500).json({error:'Unable to prepare response link'});}
 }
