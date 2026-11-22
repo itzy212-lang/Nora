@@ -5,7 +5,7 @@ const escapeXml=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replac
 
 /** Embed an image into the actual DOCX media and relationships, not a linked image. */
 export async function insertNoticeQr(docxBuffer, url) {
- if(!/^https:\/\/notices\.sq1consulting\.co\.uk\/respond\/[A-Za-z0-9_-]{32}$/.test(url))
+ if(!/^https:\/\/[a-z0-9.-]+\/respond\/[A-Za-z0-9_-]{32}$/.test(url))
   throw Error('A valid unique notice response URL is required');
  const zip=new PizZip(docxBuffer);
  let xml=zip.file('word/document.xml')?.asText();
