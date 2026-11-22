@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createHash } from 'node:crypto';
 import { sendNoticeEmail } from './notice-response-mail.js';
-import { getAoFolderInfo, uploadToOneDrive, saveDocumentRecord } from '../onedrive-helper.js';
+import { uploadToOneDrive, saveDocumentRecord } from '../onedrive-helper.js';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const choices = {
@@ -66,8 +66,12 @@ export async function finaliseNoticeResponse(sb, submissionId) {
   });
   if(uploadError && !String(uploadError.message).toLowerCase().includes('already exists'))throw uploadError;
  }
- const folder=await getAoFolderInfo(projectId,link.notices.ao_id);
- if(!folder?.folder_id)throw Error('Adjoining owner OneDrive folder is not linked');
+ const {data:projectFolders,error:folderError}=await sb.from('projects').select('aos').eq('id',projectId).single();
+ if(folderError)throw folderError;
+ const ao=(Array.isArray(projectFolders?.aos)?projectFolders.aos:[]).find(a=>
+  String(a.id)===String(link.notices.ao_id)||String(a.num)===String(link.notices.ao_id));
+ const folderId=ao?.onedrive_folder_id;
+ if(!folderId)throw Error('Specific adjoining owner OneDrive folder is not linked');
  const {data:accountUser}=await sb.auth.admin.getUserById(link.user_id);
  if(!accountUser?.user?.email)throw Error('Notice owner account email missing');
  const saved=[];
@@ -75,7 +79,7 @@ export async function finaliseNoticeResponse(sb, submissionId) {
   ['Notice Response - '+record.id+'.pdf',acknowledgement,'notice_response'],
   ['Notice Response Audit - '+record.id+'.pdf',certificate,'notice_response_audit']
  ]){
-  const upload=await uploadToOneDrive({userId:accountUser.user.email,folderId:folder.folder_id,fileName:name,buffer:bytes});
+  const upload=await uploadToOneDrive({userId:accountUser.user.email,folderId,fileName:name,buffer:bytes});
   if(!upload?.item_id)throw Error('Failed to save '+name+' to the adjoining owner OneDrive folder');
   const documentId=await saveDocumentRecord({projectId,aoId:link.notices.ao_id,fileName:name,category,
    mimeType:'application/pdf',oneDriveItemId:upload.item_id,oneDriveUrl:upload.web_url,
