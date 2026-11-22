@@ -136,7 +136,7 @@ export async function emailFinalisedResponse(sb, result) {
   .eq('id',link.notices.project_id).maybeSingle();
  if(projectError)console.error('notice-response-bo-project:',projectError.message);
  const boRecipients=[project?.bo_1_email,project?.bo_2_email]
-  .filter(value=>typeof value==='string' && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.trim()))
+  .filter(value=>typeof value==='string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
   .map(value=>value.trim().toLowerCase())
   .filter((value,index,array)=>array.indexOf(value)===index);
  let boDelivery={sent:false,reason:'No BO email address recorded on project'};
