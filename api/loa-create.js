@@ -4,7 +4,7 @@ import { sendNoticeEmail } from './_lib/notice-response-mail.js';
 
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const reply=(r,s,b)=>r.status(s).json(b);
-const host='https://loa.sq1consulting.co.uk';
+const host=process.env.LOA_SIGNING_BASE_URL || (process.env.VERCEL_ENV==='production'?'https://loa.sq1consulting.co.uk':'https://'+process.env.VERCEL_URL);
 const clean=s=>String(s||'').replace(/[\\r\\n]/g,' ').slice(0,180);
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
