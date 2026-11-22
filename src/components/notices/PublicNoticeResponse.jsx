@@ -7,6 +7,8 @@ import React, { useState } from 'react';
  */
 export default function PublicNoticeResponse({ notice, onSubmit }) {
   const [choice, setChoice] = useState('');
+  const [astrideConsent, setAstrideConsent] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [authorised, setAuthorised] = useState(false);
@@ -20,10 +22,11 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     ['dissent_own', 'I dissent and wish to appoint my own surveyor']
   ];
   const section1 = Boolean(notice?.sections?.section1);
+  const section1Astride = section1 && notice?.sections?.section1Astride !== false;
   const existingResponse=notice?.existingResponse;
   const otherSections=Boolean(notice?.sections?.section2||notice?.sections?.section3||notice?.sections?.section6||notice?.sections?.section10);
   const ready = notice && !existingResponse && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
-    authorised && (choice !== 'dissent_own' || (surveyor.name.trim() && surveyor.email.trim()));
+    authorised && (!section1Astride || !['consent','consent_soc'].includes(choice) || !!astrideConsent) && (choice !== 'dissent_own' || (surveyor.name.trim() && surveyor.email.trim()));
   const field = (label, value, change, type = 'text') => (
     <label className="nora-response-field">{label}<input type={type} value={value} onChange={e => change(e.target.value)} /></label>
   );
@@ -32,7 +35,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     if (!ready || !onSubmit) return;
     setBusy(true); setError('');
     try {
-      await onSubmit({ noticeId: notice.id, choice, name: name.trim(), email: email.trim(), authorised, surveyor: choice === 'dissent_own' ? surveyor : null });
+      await onSubmit({ noticeId: notice.id, choice, astrideConsent: section1Astride && ['consent','consent_soc'].includes(choice) ? astrideConsent : null, name: name.trim(), email: email.trim(), authorised, surveyor: choice === 'dissent_own' ? surveyor : null });
     } catch (err) { setError(err.message || 'Could not submit response'); }
     finally { setBusy(false); }
   }
@@ -56,9 +59,9 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       .nora-response-button{background:#1764b1;color:white;padding:14px;width:100%;border:0;border-radius:8px;font-weight:700;cursor:pointer}
       .nora-response-button:disabled{opacity:.5;cursor:not-allowed}
       .nora-response-muted{font-size:12px;color:#64748b}
-      @media(max-width:780px){.nora-response-main{display:flex;flex-direction:column;margin:10px auto;padding:0 10px}.nora-response-panel{width:100%}.nora-response-pdf{position:static;height:auto;min-height:0}.nora-response-pdf iframe{height:65vh;min-height:420px;flex:none}.nora-response-body{padding:17px}}
+      @media(max-width:780px){.nora-response-main{display:flex;flex-direction:column;margin:10px auto;padding:0 10px}.nora-response-panel{width:100%}.nora-response-pdf{position:static;height:auto;min-height:0}.nora-response-pdf{display:none}.nora-response-pdf iframe{height:65vh;min-height:420px;flex:none}.nora-response-body{padding:17px}}
     `}</style>
-    <header className="nora-response-header"><strong>NORA</strong><span>Party Wall Notice Response</span></header>
+    <header className="nora-response-header">{notice?.firmLogoUrl ? <img src={notice.firmLogoUrl} alt={notice.firmName || 'Surveyor firm'} style={{maxHeight:52,maxWidth:200,objectFit:'contain'}}/> : <strong>{notice?.firmName || 'Party Wall Notices'}</strong>}<span>Party Wall Notice Response</span></header>
     <main className="nora-response-main">
       <section className="nora-response-panel nora-response-pdf" aria-label="Notice PDF">
         <div className="nora-response-body"><h2>Read your notice</h2><div className="nora-response-muted">{notice?.reference || 'Notice reference unavailable'}</div></div>
@@ -66,16 +69,23 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
           <div className="nora-response-body" role="status">This notice is not available. Please use the unique link supplied with your notice.</div>}
       </section>
       <form className="nora-response-panel nora-response-body" onSubmit={submit}>
+        <button type="button" onClick={()=>setPreviewOpen(v=>!v)} style={{padding:'10px 14px',marginBottom:14,border:'1px solid #b9c8d8',borderRadius:8,background:'#fff',cursor:'pointer'}}>{previewOpen ? 'Hide notice preview' : 'Preview notice'}</button>
+        {previewOpen && notice?.pdfUrl && <iframe title="Notice preview" src={notice.pdfUrl} style={{width:'100%',height:'55vh',border:'1px solid #dce4ef',borderRadius:8,marginBottom:12}}/>}
         <h2>Your response</h2>
         {existingResponse && <p role="status" style={{padding:12,background:'#eff6ff',borderRadius:8}}>Your previous response has been received and verified. You do not need to sign again for this notice. {existingResponse.signerName ? 'Signed by '+existingResponse.signerName+'.' : ''}</p>}
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
-        {section1 && <p className="nora-response-muted">For a Section 1(2) notice, confirm whether you agree to the proposed wall being built astride the boundary. If you do not agree, the building owner may proceed with a wall wholly on their own land under Section 1(5).</p>}
-        {(section1 ? [...(otherSections?options:[]),['section1_agree','I agree to the proposed wall being built astride the boundary under Section 1(2)'],['section1_refuse','I do not agree to building astride the boundary under Section 1(2)']] : options).map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || !!existingResponse}/>{label}</label>)}
+        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>{setChoice(value);setAstrideConsent('');}} disabled={!notice || !!existingResponse}/>{label}</label>)}
+        {section1Astride && ['consent','consent_soc'].includes(choice) && <section aria-label="Section 1(2) consent" style={{padding:14,border:'1px solid #dce4ef',borderRadius:8,margin:'12px 0'}}>
+          <h2>Section 1(2): Wall astride the boundary</h2>
+          <p>Do you expressly consent to the proposed wall being built astride the boundary?</p>
+          {[['agree','Yes, I consent to building astride the boundary'],['refuse','No, I do not consent to building astride the boundary']].map(([v,label])=><label key={v} className="nora-response-option"><input type="radio" name="astrideConsent" checked={astrideConsent===v} onChange={()=>setAstrideConsent(v)}/>{label}</label>)}
+          {astrideConsent==='refuse' && <p className="nora-response-muted">Your response to the other works remains as selected above. The Building Owner may consider a wall wholly on their own land under Section 1(5).</p>}
+        </section>}
         {choice === 'dissent_own' && <section><h2>Your appointed surveyor</h2>
-          {field('Surveyor name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
-          {field('Practice',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
-          {field('Email',surveyor.email,v=>setSurveyor(s=>({...s,email:v})),'email')}
-          {field('Telephone',surveyor.phone,v=>setSurveyor(s=>({...s,phone:v})),'tel')}
+          {field('Surveyor Name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
+          {field('Surveyor Firm',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
+          {field('Email Address',surveyor.email,v=>setSurveyor(s=>({...s,email:v})),'email')}
+          {field('Telephone Number',surveyor.phone,v=>setSurveyor(s=>({...s,phone:v})),'tel')}
           {field('Address',surveyor.address,v=>setSurveyor(s=>({...s,address:v})))}
         </section>}
         {!existingResponse && <><h2>Electronic signature</h2>
