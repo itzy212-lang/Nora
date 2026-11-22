@@ -3,7 +3,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { sendNoticeEmail } from './_lib/notice-response-mail.js';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const reply=(res,status,body)=>res.status(status).json(body);
-const choices=new Set(['consent','consent_soc','dissent_agreed','dissent_own']);
+const choices=new Set(['consent','consent_soc','dissent_agreed','dissent_own','section1_agree','section1_refuse']);
 function db(){
  const url=process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL;
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,8 +31,9 @@ export default async function handler(req,res){
     return reply(res,400,{error:'Appointed surveyor name and email required'});
   const sb=db(),link=await getLink(sb,token);
   if(!link)return reply(res,404,{error:'Notice unavailable'});
-  // Section 1 notices have different statutory consent rules; refuse generic response flow.
-  if(link.notices.section_1)return reply(res,409,{error:'Section 1 notices require a dedicated statutory response form'});
+  // Section 1(2) is agreement to build astride the line of junction, not a generic consent/dissent.
+  const section1Choice=choice==='section1_agree'||choice==='section1_refuse';
+  if(Boolean(link.notices.section_1)!==section1Choice)return reply(res,400,{error:'Select a response appropriate to the notice section'});
   await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
    .eq('status','pending_verification').lt('verification_expires_at',new Date().toISOString());
   const {count}=await sb.from('notice_response_submissions').select('id',{count:'exact',head:true})
