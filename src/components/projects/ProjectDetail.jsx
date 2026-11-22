@@ -1765,7 +1765,7 @@ function AOCard({
             {/* Dissent only makes sense once a notice has genuinely
                 been served — cannot dissent to a notice that was
                 never served. */}
-            {!isAOAppointment && noticed && (
+            {!isAOAppointment && noticed && !['dissent','award','award_served','complete'].includes((ao.status || '').toLowerCase()) && (
               <button
                 onClick={() => onSetAOStatus?.(ao, 'dissent')}
                 style={{
