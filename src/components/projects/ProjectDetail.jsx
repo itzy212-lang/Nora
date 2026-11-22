@@ -4092,9 +4092,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // Fixed 2026-08-28, on request: an edited notice should update
       // its existing record, not create a duplicate alongside it.
       if (editingNoticeId) {
-        await sb.from('notices').update(record).eq('id', editingNoticeId);
+        const {error}=await sb.from('notices').update(record).eq('id', editingNoticeId);
+        if(error)throw error;
       } else {
-        await sb.from('notices').insert([{ ...record, run_number: runNumber }]);
+        const {error}=await sb.from('notices').insert([{ ...record, run_number: runNumber }]);
+        if(error)throw error;
       }
     } catch (err) {
       console.warn('Could not save notices table record:', err?.message || err);
@@ -4872,7 +4874,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               const ak = String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '');
 
               const aoSafeguarding = safeguardingMap[ak] !== undefined ? !!safeguardingMap[ak] : !!safeguarding;
-      await saveNoticeRecord({ editingNoticeId: rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
+      if(pack.noticeId&&pack.responseToken){
+        const {data:{session:finalSession}}=await sb.auth.getSession();
+        if(!finalSession?.access_token)throw Error('Session expired before notice could be archived');
+        const activation=await fetch('/api/notice-response-activate',{
+          method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+finalSession.access_token},
+          body:JSON.stringify({noticeId:pack.noticeId,token:pack.responseToken,pdfB64:pack.pdf_b64})
+        });
+        const activated=await activation.json();
+        if(!activation.ok||!activated?.success)throw Error(activated?.error||'Could not archive original notice PDF');
+      }
+      await saveNoticeRecord({ editingNoticeId: pack.noticeId||rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
 
               const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
               if (nonS10.length > 0) {
