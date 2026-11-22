@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createHash } from 'node:crypto';
+import { sendNoticeEmail } from './notice-response-mail.js';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const choices = {
@@ -75,22 +76,17 @@ export async function finaliseNoticeResponse(sb, submissionId) {
  return {record,link,acknowledgement,certificate,acknowledgementPath:aPath,certificatePath:cPath};
 }
 export async function emailFinalisedResponse(sb, result) {
- const key=process.env.RESEND_API_KEY,from=process.env.NOTICE_RESPONSE_FROM_EMAIL;
- if(!key||!from)return {sent:false,reason:'Email delivery not configured'};
  const {record,link,acknowledgement,certificate}=result;
  const to=[record.signer_email];
  // The surveyor's registered account email may be different from the signatory.
  const {data:user}=await sb.auth.admin.getUserById(link.user_id);
  if(user?.user?.email && user.user.email.toLowerCase()!==record.signer_email.toLowerCase())to.push(user.user.email);
- const response=await fetch('https://api.resend.com/emails',{
-  method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
-  body:JSON.stringify({from,to,subject:'NORA - verified party wall notice response',
-   text:'Attached are the verified notice response acknowledgement and NORA electronic signature audit record.',
-   attachments:[{filename:'notice-response-acknowledgement.pdf',content:acknowledgement.toString('base64')},
-    {filename:'notice-response-audit-certificate.pdf',content:certificate.toString('base64')}]})
- });
- const resultBody=await response.json().catch(()=>({}));
- if(!response.ok)throw Error('Response email delivery failed: '+response.status);
+ const delivery=await sendNoticeEmail({userId:link.user_id,to,
+  subject:'NORA - verified party wall notice response',
+  text:'Attached are the verified notice response acknowledgement and NORA electronic signature audit record.',
+  attachments:[{filename:'notice-response-acknowledgement.pdf',content:acknowledgement.toString('base64')},
+   {filename:'notice-response-audit-certificate.pdf',content:certificate.toString('base64')}]});
+ if(!delivery.sent)return delivery;
  await sb.from('notice_response_submissions').update({delivery_status:'sent'}).eq('id',record.id);
- return {sent:true,messageId:resultBody.id};
+ return {sent:true};
 }
