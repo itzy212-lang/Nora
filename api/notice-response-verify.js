@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { finaliseNoticeResponse, emailFinalisedResponse } from './notice-response-documents.js';
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const respond=(res,s,b)=>res.status(s).json(b);
 export default async function handler(req,res){
@@ -30,11 +31,20 @@ export default async function handler(req,res){
    return respond(res,400,{error:'Incorrect verification code'});
   }
   const now=new Date().toISOString();
-  const {error}=await sb.from('notice_response_submissions').update({
+  const {data:updated,error}=await sb.from('notice_response_submissions').update({
    email_verified_at:now,signed_at:now,status:'verified',verification_hash:null,
    audit:{...submission.audit,verification_method:'email_otp',verified_at:now,signed_at:now}
-  }).eq('id',submission.id).eq('status','pending_verification');
+  }).eq('id',submission.id).eq('status','pending_verification').select('id');
   if(error){if(error.code==='23505')return respond(res,409,{error:'This notice already has a verified response'});throw error;}
-  return respond(res,200,{verified:true,signedAt:now,message:'Your response has been verified and recorded'});
+  if(!updated?.length)return respond(res,409,{error:'This response has already been processed'});
+  let documentsSaved=false,emailed=false;
+  try{
+   const files=await finaliseNoticeResponse(sb,submission.id);
+   documentsSaved=true;
+   try{const delivery=await emailFinalisedResponse(sb,files);emailed=delivery.sent;}
+   catch(deliveryError){console.error('notice-response-email:',deliveryError.message);}
+  }catch(documentError){console.error('notice-response-documents:',documentError.message);}
+  return respond(res,200,{verified:true,signedAt:now,documentsSaved,emailed,
+   message:documentsSaved?'Your response has been verified and filed':'Your response was verified. Document generation is pending.'});
  }catch(e){console.error('notice-response-verify:',e.message);return respond(res,500,{error:'Could not verify response'});}
 }
