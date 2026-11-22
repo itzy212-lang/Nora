@@ -191,7 +191,7 @@ export default function useDocumentGenerator() {
 
       // Preserve Firma.dev as the default and reversible fallback.
       // In-house signing is opt-in via the Vite environment configuration.
-      const selectedProvider = 'nora';
+      const selectedProvider = window.localStorage.getItem('nora_loa_signing_provider') || 'nora';
       const inHouse = selectedProvider === 'nora';
       let accessToken = null;
       if (inHouse) {
