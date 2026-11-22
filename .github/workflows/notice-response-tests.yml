@@ -20,3 +20,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --test tests/notice-response.test.js tests/notice-qr.test.js
+      - run: npm run build
