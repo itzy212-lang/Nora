@@ -46,7 +46,7 @@ export default function PublicLOASigning(){
  const button={padding:'12px 24px',background:'#173b68',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:600};
  return <main style={{fontFamily:'Arial,sans-serif',background:'#f4f7fb',minHeight:'100vh',padding:'24px 12px',color:'#192b3d'}}>
  <div style={{maxWidth:1100,margin:'auto'}}>
- <header style={{background:'#153960',color:'white',padding:'18px 24px',borderRadius:10,marginBottom:16}}><strong style={{fontSize:24}}>Nora</strong><span style={{marginLeft:16}}>Letter of Appointment</span></header>
+ <header style={{background:'#fff',color:'#0b2346',padding:'18px 24px',display:'flex',justifyContent:'center',alignItems:'center',borderBottom:'3px solid #1764d1',minHeight:90,marginBottom:16}}>{data?.firmLogoUrl?<img src={data.firmLogoUrl} alt={data.firmName||'Surveyor firm'} style={{maxHeight:70,maxWidth:'min(85vw,360px)',objectFit:'contain'}}/>:<strong style={{fontSize:24}}>{data?.firmName||'Letter of Appointment'}</strong>}</header>
  {error&&<div role="alert" style={{background:'#fff1f0',padding:15,marginBottom:16,borderRadius:8,color:'#a11'}}>{error}</div>}
  {!data&&!error&&<p>Loading your appointment…</p>}
  {data&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,440px),1fr))',gap:16}}>
