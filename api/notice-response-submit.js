@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomInt } from 'node:crypto';
+import { sendNoticeEmail } from './_lib/notice-response-mail.js';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const reply=(res,status,body)=>res.status(status).json(body);
 const choices=new Set(['consent','consent_soc','dissent_agreed','dissent_own']);
@@ -11,7 +12,7 @@ function db(){
 }
 async function getLink(sb,token){
  const {data,error}=await sb.from('notice_response_links')
- .select('id,notice_id,revoked_at,expires_at,notices(section_1,section_2,section_3,section_6,section_10,status)')
+ .select('id,notice_id,user_id,revoked_at,expires_at,notices(section_1,section_2,section_3,section_6,section_10,status)')
  .eq('token_hash',sha(token)).maybeSingle();
  if(error||!data||data.revoked_at||(data.expires_at&&Date.parse(data.expires_at)<Date.now())||data.notices?.status!=='served')return null;
  return data;
@@ -38,8 +39,6 @@ export default async function handler(req,res){
   const {data:completed}=await sb.from('notice_response_submissions').select('id')
    .eq('link_id',link.id).in('status',['verified','finalised']).limit(1);
   if(completed?.length)return reply(res,409,{error:'This notice already has a verified response'});
-  if(!process.env.RESEND_API_KEY||!process.env.NOTICE_RESPONSE_FROM_EMAIL)
-   return reply(res,503,{error:'Email verification is not configured'});
   const code=String(randomInt(100000,1000000));
   const verificationHash=sha(link.id+':'+email.toLowerCase()+':'+code);
   const {data:submission,error:insertError}=await sb.from('notice_response_submissions').insert({
@@ -49,14 +48,11 @@ export default async function handler(req,res){
    audit:{consent_to_electronic_signature:true,notice_id:link.notice_id}
   }).select('id').single();
   if(insertError){if(insertError.code==='23505')return reply(res,409,{error:'A verification code is already pending for this email address'});throw insertError;}
-  const result=await fetch('https://api.resend.com/emails',{
-   method:'POST',headers:{Authorization:'Bearer '+process.env.RESEND_API_KEY,'Content-Type':'application/json'},
-   body:JSON.stringify({from:process.env.NOTICE_RESPONSE_FROM_EMAIL,to:[email.trim()],
-    subject:'NORA notice response verification code',
-    text:'Your NORA verification code is '+code+'. It expires in 10 minutes. If you did not request this, ignore this email.'})
-  });
-  if(!result.ok){await sb.from('notice_response_submissions').delete().eq('id',submission.id);
-   return reply(res,503,{error:'Could not send verification email'});}
+  const result=await sendNoticeEmail({userId:link.user_id,to:[email.trim()],
+   subject:'NORA notice response verification code',
+   text:'Your NORA verification code is '+code+'. It expires in 10 minutes. If you did not request this, ignore this email.'});
+  if(!result.sent){await sb.from('notice_response_submissions').delete().eq('id',submission.id);
+   return reply(res,503,{error:'Could not send verification email. Connect your Outlook account in NORA.'});}
   return reply(res,202,{submissionId:submission.id,message:'Verification code sent'});
  }catch(e){console.error('notice-response-submit:',e.message);return reply(res,500,{error:'Unable to start verification'});}
 }
