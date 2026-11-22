@@ -4099,7 +4099,8 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         if(error)throw error;
       }
     } catch (err) {
-      console.warn('Could not save notices table record:', err?.message || err);
+      console.error('Could not save notices table record:', err?.message || err);
+      throw err;
     }
 
     try {
