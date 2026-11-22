@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
 import { loaHash, loaToken, loaTokenHash, locateLOAAnchors, stampLOASignatures, appendLOAAuditPage } from './_lib/loa-signing.js';
-import { sendNoticeEmail } from './_lib/notice-response-mail.js';
+import { sendLOAEmail } from './_lib/loa-email.js';
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const host=process.env.LOA_SIGNING_BASE_URL || (process.env.VERCEL_ENV==='production'?'https://loa.sq1consulting.co.uk':'https://'+process.env.VERCEL_URL);
 export default async function handler(req,res){
@@ -39,8 +39,8 @@ export default async function handler(req,res){
    const {error:re}=await sb.from('loa_signing_requests').update({status:'completed',completed_at:verifiedAt,final_path:path}).eq('id',request.id).eq('status','pending');
    if(re)throw re;
    const emails=[...new Set(signers.map(x=>x.email))];
-   const message='The Letter of Appointment has now been signed and verified by all required parties.\n\nPlease find the completed LOA and electronic signature audit record attached.\n\nKind regards,\nNora';
-   const deliveries=await Promise.allSettled([sendNoticeEmail({userId:request.user_id,to:emails,subject:'Nora: Your signed Letter of Appointment',text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]}),sendNoticeEmail({userId:request.user_id,to:[(await sb.auth.admin.getUserById(request.user_id)).data.user?.email].filter(Boolean),subject:'Nora: LOA fully signed - '+request.project_id,text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]})]);
+   const message='The Letter of Appointment has now been signed and verified by all required parties.\n\nPlease find the completed LOA and electronic signature audit record attached.';
+   const deliveries=await Promise.allSettled([sendLOAEmail({userId:request.user_id,to:emails,subject:'Nora: Your signed Letter of Appointment',text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]}),sendLOAEmail({userId:request.user_id,to:[(await sb.auth.admin.getUserById(request.user_id)).data.user?.email].filter(Boolean),subject:'Nora: LOA fully signed - '+request.project_id,text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]})]);
    return res.status(200).json({success:true,completed:true,delivery:deliveries.map(x=>x.status==='fulfilled'?x.value:{sent:false})});
   }
   const path=folder+'/partially-signed.pdf';
@@ -52,8 +52,8 @@ export default async function handler(req,res){
   const nextToken=loaToken();
   const {data:activated,error:ae}=await sb.from('loa_signers').update({status:'invited',invited_at:verifiedAt,token_hash:loaTokenHash(nextToken)}).eq('id',next.id).eq('status','waiting').select('id').maybeSingle();
   if(ae||!activated)throw Error('Could not activate next signatory');
-  const message='Dear '+next.name.split(' ')[0]+',\n\nThe previous signatory has signed the Letter of Appointment. It is now ready for you to review and sign.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+nextToken+'\n\nKind regards,\nNora';
-  const sent=await sendNoticeEmail({userId:request.user_id,to:[next.email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
+  const message='Dear '+next.name.split(' ')[0]+',\n\nThe previous signatory has signed the Letter of Appointment. It is now ready for you to review and sign.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+nextToken+'';
+  const sent=await sendLOAEmail({userId:request.user_id,to:[next.email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
   return res.status(200).json({success:true,completed:false,nextInvitationSent:sent.sent});
  }catch(e){console.error('[loa-verify]',e);return res.status(500).json({error:'Verification could not be finalised. Please contact the surveyor.'});}
 }
