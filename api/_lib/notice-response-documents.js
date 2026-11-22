@@ -8,7 +8,9 @@ const choices = {
  consent: 'Consent to the proposed works',
  consent_soc: 'Consent subject to a Schedule of Condition',
  dissent_agreed: 'Dissent and appointment of an agreed surveyor',
- dissent_own: 'Dissent and appointment of an adjoining owner surveyor'
+ dissent_own: 'Dissent and appointment of an adjoining owner surveyor',
+ section1_agree: 'Agreement to build astride the boundary under Section 1(2)',
+ section1_refuse: 'No agreement to build astride the boundary under Section 1(2); Section 1(5) applies'
 };
 const clean = value => String(value ?? '').replace(/[\r\n\t]/g,' ').slice(0,500);
 export async function makePdf(title, rows) {
