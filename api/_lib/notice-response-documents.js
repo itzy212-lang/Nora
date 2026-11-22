@@ -187,10 +187,11 @@ export async function emailFinalisedResponse(sb,result){
   'Kind regards,',
   'Nora'
  ].join('\\n');
+ const ownerHtml=ownerText.split('\\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html;
  const ownerDelivery=await sendNoticeEmail({
   userId:link.user_id,to:[record.signer_email],
   subject:'Your verified party wall notice acknowledgement',
-  text:ownerText,attachments:pdfAttachments
+  text:ownerText,html:ownerHtml,inlineImages:signature.images,attachments:pdfAttachments
  });
  const boPeople=[{name:project?.bo_1_name,email:project?.bo_1_email},{name:project?.bo_2_name,email:project?.bo_2_email}]
   .filter(p=>typeof p.email==='string'&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(p.email.trim()));
@@ -220,9 +221,11 @@ export async function emailFinalisedResponse(sb,result){
  const {data:user}=await sb.auth.admin.getUserById(link.user_id);
  let surveyorDelivery={sent:false};
  if(user?.user?.email&&user.user.email.toLowerCase()!==record.signer_email.toLowerCase()){
+  const surveyorText='An adjoining owner has signed and verified a party wall notice response.\\n\\nAdjoining owner property: '+adjoiningAddress+'\\nResponse: '+outcome(record.choice)+'\\n\\nOpen the project in NORA to view the saved records.\\n\\nKind regards,\\nNora';
   surveyorDelivery=await sendNoticeEmail({userId:link.user_id,to:[user.user.email],
    subject:'NORA: Notice response verified - '+adjoiningAddress,
-   text:'An adjoining owner has signed and verified a party wall notice response.\\n\\nAdjoining owner property: '+adjoiningAddress+'\\nResponse: '+outcome(record.choice)+'\\n\\nOpen the project in NORA to view the saved records.'});
+   text:surveyorText,html:surveyorText.split('\\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html,
+   inlineImages:signature.images});
  }
  const boNotified=boPeople.length>0&&boSent===seen.size;
  await sb.from('notice_response_submissions').update({
