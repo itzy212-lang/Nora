@@ -7,6 +7,8 @@ on:
       - 'api/notice-response-*.js'
       - 'api/_lib/notice-response-*.js'
       - 'tests/notice-response.test.js'
+      - 'tests/notice-qr.test.js'
+      - 'api/_lib/notice-qr.js'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,4 +19,4 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test tests/notice-response.test.js
+      - run: node --test tests/notice-response.test.js tests/notice-qr.test.js
