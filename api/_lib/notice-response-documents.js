@@ -168,7 +168,7 @@ export async function emailFinalisedResponse(sb,result){
   .eq('id',projectId).maybeSingle();
  if(projectError)throw projectError;
  const ao=(Array.isArray(project?.aos)?project.aos:[]).find(a=>String(a.id)===String(link.notices.ao_id)||String(a.num)===String(link.notices.ao_id));
- const adjoiningAddress=ao?.premise_address||ao?.property_address||ao?.address||ao?.site_address||'the adjoining property';
+ const adjoiningAddress=ao?.premise||ao?.premise_address||ao?.property_address||ao?.address||ao?.site_address||'the adjoining property';
  const {data:firm,error:firmError}=await sb.from('firm_settings').select('*').eq('user_id',link.user_id).maybeSingle();
  if(firmError)throw firmError;
  const servingName=firm?.surveyor_name||'Your surveyor';
