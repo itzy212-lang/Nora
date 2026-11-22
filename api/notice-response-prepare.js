@@ -14,7 +14,7 @@ export default async function handler(req,res){
   if(typeof projectId!=='string'||typeof aoId!=='string'||!Array.isArray(sections)||!sections.length||
      !sections.every(s=>['s1','s2','s3','s6','s10'].includes(s))||!/^\d{4}-\d{2}-\d{2}$/.test(noticeDate||''))
    return res.status(400).json({error:'Invalid notice details'});
-  const {data:project}=await sb.from('projects').select('id,user_id').eq('id',projectId).maybeSingle();
+  const {data:project}=await sb.from('projects').select('id,user_id,aos').eq('id',projectId).maybeSingle();
   if(!project||String(project.user_id)!==user.id)return res.status(403).json({error:'Project access denied'});
   let notice;
   if(noticeId){
@@ -49,6 +49,17 @@ export default async function handler(req,res){
   const {data:settings,error:settingsError}=await sb.from('firm_settings').select('notice_response_domain,notice_response_domain_verified').eq('user_id',user.id).maybeSingle();
   if(settingsError)throw settingsError;
   const domain=settings?.notice_response_domain_verified&&/^[a-z0-9.-]+$/.test(settings.notice_response_domain||'')?settings.notice_response_domain:'nora-d9wy.vercel.app';
-  return res.status(201).json({noticeId:notice.id,url:'https://'+domain+'/respond/'+token,token});
+  const ao=(Array.isArray(project.aos)?project.aos:[]).find(item=>String(item.id||item.num||'')===aoId);
+  const address=String(ao?.address||ao?.premise||ao?.service_address||'');
+  const postcode=(address.match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i)||[])[0]||'';
+  const door=(address.match(/\b\d+[A-Za-z]?\b/)||[])[0]||String(ao?.num||'AO');
+  const readable=(door+'-'+(postcode.replace(/\s+/g,'')||'NOTICE')).toUpperCase().replace(/[^A-Z0-9-]/g,'');
+  const suffix=createHmac('sha256',secret).update('short:'+token).digest('hex').slice(0,10).toUpperCase();
+  const slug=(readable+'-'+suffix).slice(0,90);
+  const {error:aliasError}=await sb.from('notice_response_short_links').upsert({
+   slug,token_hash:hash(token),response_token:token,user_id:user.id
+  },{onConflict:'token_hash'});
+  if(aliasError)throw aliasError;
+  return res.status(201).json({noticeId:notice.id,url:'https://'+domain+'/n/'+slug,token});
  }catch(error){console.error('notice-prepare:',error.message);return res.status(500).json({error:'Unable to prepare response link'});}
 }
