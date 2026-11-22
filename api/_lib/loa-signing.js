@@ -41,6 +41,7 @@ export async function stampLOASignatures(pdfBytes, signatures, placements) {
     for (const rect of [place.signature, place.date]) {
       if (![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite) || rect.x<0 || rect.y<0 || rect.width<=0 || rect.height<=0 || rect.x+rect.width>width || rect.y+rect.height>height) throw Error('LOA signature position is outside the page');
     }
+    for(const key of ['signatureAnchor','dateAnchor'])if(place[key])page.drawRectangle({x:place[key].x-2,y:place[key].y-3,width:place[key].width+4,height:place[key].height+5,color:rgb(1,1,1)});
     const signature = String(s.signature || '').trim();
     if (!signature || signature.length>180) throw Error('Signature is missing or too long');
     const size = Math.min(22, place.signature.height*0.65, place.signature.width / Math.max(1,font.widthOfTextAtSize(signature,1)));
@@ -77,4 +78,33 @@ export async function appendLOAAuditPage(pdfBytes, {signers,documentHash,project
   }
   if(y<40)throw Error('Too many signatories for audit page');
   return Buffer.from(await pdf.save());
+}
+
+/** Resolve PDF anchor positions from the actual generated document, rather than hardcoding page numbers. */
+export async function locateLOAAnchors(pdfBytes, appointmentType, signerCount){
+ const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
+ const task=pdfjs.getDocument({data:new Uint8Array(pdfBytes),useSystemFonts:true,disableFontFace:true});
+ const doc=await task.promise;
+ const prefix=appointmentType.startsWith('ao_')?'AO':'BO';
+ const placements={};
+ for(let pageNumber=1;pageNumber<=doc.numPages;pageNumber++){
+  const page=await doc.getPage(pageNumber);
+  const content=await page.getTextContent();
+  for(const item of content.items){
+   if(typeof item.str!=='string')continue;
+   for(let i=1;i<=signerCount;i++){
+    const sign=prefix+'_'+i+'_SIGN_HERE',date=prefix+'_'+i+'_DATE_HERE';
+    const key=item.str.includes(sign)?'signature':item.str.includes(date)?'date':null;
+    if(!key)continue;
+    const x=item.transform[4],y=item.transform[5];
+    const target=placements[i]||(placements[i]={page:pageNumber-1});
+    if(target.page!==pageNumber-1)throw Error('LOA anchors for a signatory must be on the same page');
+    target[key]=key==='signature'?{x,y:y+14,width:Math.min(210,page.view[2]-x-12),height:34}:{x,y:y-2,width:Math.min(210,page.view[2]-x-12),height:18};
+    target[key+'Anchor']={x,y,width:Math.max(item.width,100),height:14};
+   }
+  }
+ }
+ await task.destroy();
+ for(let i=1;i<=signerCount;i++)if(!placements[i]?.signature||!placements[i]?.date)throw Error('The LOA template is missing signature or date anchors for signatory '+i);
+ return placements;
 }
