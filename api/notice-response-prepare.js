@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { randomBytes,createHash } from 'node:crypto';
+import { createHmac,createHash } from 'node:crypto';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
@@ -36,11 +36,16 @@ export default async function handler(req,res){
    if(error)throw error;
    notice=data;
   }
-  const token=randomBytes(24).toString('base64url');
-  const {error:linkError}=await sb.from('notice_response_links').insert({
-   notice_id:notice.id,user_id:user.id,token_hash:hash(token)
-  });
-  if(linkError)throw linkError;
+  const secret=process.env.NOTICE_RESPONSE_LINK_SECRET||process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(!secret)throw Error('Response link signing key missing');
+  // One unguessable, stable link per adjoining owner within a project.
+  const token=createHmac('sha256',secret).update(JSON.stringify([projectId,aoId])).digest('base64url').slice(0,32);
+  const {data:existing,error:lookupError}=await sb.from('notice_response_links').select('id').eq('token_hash',hash(token)).is('revoked_at',null).maybeSingle();
+  if(lookupError)throw lookupError;
+  if(!existing){
+   const {error:linkError}=await sb.from('notice_response_links').insert({notice_id:notice.id,user_id:user.id,token_hash:hash(token)});
+   if(linkError&&linkError.code!=='23505')throw linkError;
+  }
   return res.status(201).json({noticeId:notice.id,url:'https://notices.sq1consulting.co.uk/respond/'+token,token});
  }catch(error){console.error('notice-prepare:',error.message);return res.status(500).json({error:'Unable to prepare response link'});}
 }
