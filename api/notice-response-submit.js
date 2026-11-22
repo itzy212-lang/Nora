@@ -34,7 +34,7 @@ export default async function handler(req,res){
   // Section 1(2) is agreement to build astride the line of junction, not a generic consent/dissent.
   const section1Choice=choice==='section1_agree'||choice==='section1_refuse';
   if(section1Choice&&!link.notices.section_1)return reply(res,400,{error:'Section 1(2) response is not available for this notice'});
-  if(!section1Choice&&link.notices.section_1&&!link.notices.section_2&&!link.notices.section_3&&!link.notices.section_6&&!link.notices.section_10)return reply(res,400,{error:'Select a Section 1(2) response for this notice'});
+
   if(link.notices.section_1 && ['consent','consent_soc'].includes(choice) && !['agree','refuse'].includes(astrideConsent))
     return reply(res,400,{error:'Confirm whether you consent to building astride the boundary'});
   await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
