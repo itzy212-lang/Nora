@@ -37,14 +37,14 @@ export default async function handler(req,res){
   }).eq('id',submission.id).eq('status','pending_verification').select('id');
   if(error){if(error.code==='23505')return respond(res,409,{error:'This notice already has a verified response'});throw error;}
   if(!updated?.length)return respond(res,409,{error:'This response has already been processed'});
-  let documentsSaved=false,emailed=false,surveyorNotified=false;
+  let documentsSaved=false,emailed=false,surveyorNotified=false,boNotified=false;
   try{
    const files=await finaliseNoticeResponse(sb,submission.id);
    documentsSaved=true;
-   try{const delivery=await emailFinalisedResponse(sb,files);emailed=delivery.ownerEmailed===true;surveyorNotified=delivery.surveyorNotified===true;}
+   try{const delivery=await emailFinalisedResponse(sb,files);emailed=delivery.ownerEmailed===true;surveyorNotified=delivery.surveyorNotified===true;boNotified=delivery.boNotified===true;}
    catch(deliveryError){console.error('notice-response-email:',deliveryError.message);}
   }catch(documentError){console.error('notice-response-documents:',documentError.message);}
-  return respond(res,200,{verified:true,signedAt:now,documentsSaved,emailed,surveyorNotified,
+  return respond(res,200,{verified:true,signedAt:now,documentsSaved,emailed,surveyorNotified,boNotified,
    message:documentsSaved?'Your response has been verified and filed':'Your response was verified. Document generation is pending.'});
  }catch(e){console.error('notice-response-verify:',e.message);return respond(res,500,{error:'Could not verify response'});}
 }
