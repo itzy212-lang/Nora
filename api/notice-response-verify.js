@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { finaliseNoticeResponse, emailFinalisedResponse } from './notice-response-documents.js';
+import { finaliseNoticeResponse, emailFinalisedResponse } from './_lib/notice-response-documents.js';
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const respond=(res,s,b)=>res.status(s).json(b);
 export default async function handler(req,res){
