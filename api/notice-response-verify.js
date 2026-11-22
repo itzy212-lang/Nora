@@ -38,7 +38,7 @@ export default async function handler(req,res){
   }).eq('id',submission.id).eq('status','pending_verification').select('id');
   if(error){if(error.code==='23505')return respond(res,409,{error:'This notice already has a verified response'});throw error;}
   if(!updated?.length)return respond(res,409,{error:'This response has already been processed'});
-  if(['dissent_own','dissent_agreed'].includes(submission.choice)&&submission.surveyor?.name){
+  if(['dissent_own','dissent_agreed'].includes(submission.choice)&&submission.surveyor?.name&&!submission.audit?.appoint_serving_surveyor){
     try{
       const s=submission.surveyor;
       let match=sb.from('contacts').select('id').eq('user_id',link.user_id).eq('type','surveyor');
