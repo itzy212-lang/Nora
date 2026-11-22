@@ -127,7 +127,7 @@ export async function emailFinalisedResponse(sb, result) {
     ...oneDriveDocuments.map(doc=>doc.name+': '+(doc.oneDriveUrl||'Saved to OneDrive')),
     '',
     'Open the project in NORA to view the saved records.'
-   ].join('\\n'),
+   ].join('\n'),
    attachments:[]
   });
  }
@@ -155,7 +155,7 @@ export async function emailFinalisedResponse(sb, result) {
     'The signed response and audit certificate have been saved in the relevant adjoining owner file in the project OneDrive folder.',
     '',
     'Your appointed surveyor will advise you of any next steps.'
-   ].join('\\n'),
+   ].join('\n'),
    attachments:[]
   });
  }
