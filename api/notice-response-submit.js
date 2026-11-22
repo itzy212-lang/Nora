@@ -33,7 +33,8 @@ export default async function handler(req,res){
   if(!link)return reply(res,404,{error:'Notice unavailable'});
   // Section 1(2) is agreement to build astride the line of junction, not a generic consent/dissent.
   const section1Choice=choice==='section1_agree'||choice==='section1_refuse';
-  if(Boolean(link.notices.section_1)!==section1Choice)return reply(res,400,{error:'Select a response appropriate to the notice section'});
+  if(section1Choice&&!link.notices.section_1)return reply(res,400,{error:'Section 1(2) response is not available for this notice'});
+  if(!section1Choice&&link.notices.section_1&&!link.notices.section_2&&!link.notices.section_3&&!link.notices.section_6&&!link.notices.section_10)return reply(res,400,{error:'Select a Section 1(2) response for this notice'});
   await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
    .eq('status','pending_verification').lt('verification_expires_at',new Date().toISOString());
   const {count}=await sb.from('notice_response_submissions').select('id',{count:'exact',head:true})
