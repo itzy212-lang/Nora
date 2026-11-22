@@ -9,7 +9,7 @@ function serverClient() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 function json(res, status, body) { return res.status(status).json(body); }
-const allowedBuckets = new Set(['project-files', 'documents', 'notice-pdfs']);
+const allowedBuckets = new Set(['documents']);
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -25,9 +25,11 @@ export default async function handler(req, res) {
         !allowedBuckets.has(bucket) || typeof path !== 'string' || !path || path.includes('..'))
       return json(res, 400, { error: 'Invalid notice or PDF location' });
     const { data: notice, error: noticeError } = await sb.from('notices')
-      .select('id,user_id,status,section_1,section_2,section_3,section_6,section_10')
+      .select('id,user_id,project_id,status,section_1,section_2,section_3,section_6,section_10')
       .eq('id', noticeId).eq('user_id', user.id).single();
     if (noticeError || !notice) return json(res, 404, { error: 'Notice not found' });
+    if (!path.startsWith(notice.project_id + '/') && !path.startsWith(user.id + '/' + notice.project_id + '/'))
+      return json(res, 403, { error: 'PDF must be stored under the notice project directory' });
     if (notice.status !== 'served') return json(res, 409, { error: 'Only served notices can have response links' });
     const { data: pdf, error: fileError } = await sb.storage.from(bucket).download(path);
     if (fileError || !pdf || pdf.type !== 'application/pdf')
