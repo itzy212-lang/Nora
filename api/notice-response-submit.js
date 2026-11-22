@@ -21,7 +21,7 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='POST')return reply(res,405,{error:'Method not allowed'});
  try{
-  const {token,choice,name,email,surveyor,authorised}=req.body||{};
+  const {token,choice,astrideConsent,name,email,surveyor,authorised}=req.body||{};
   if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(token))return reply(res,404,{error:'Notice unavailable'});
   if(!choices.has(choice)||typeof name!=='string'||name.trim().length<2||name.length>180||
     typeof email!=='string'||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||authorised!==true)
@@ -35,6 +35,8 @@ export default async function handler(req,res){
   const section1Choice=choice==='section1_agree'||choice==='section1_refuse';
   if(section1Choice&&!link.notices.section_1)return reply(res,400,{error:'Section 1(2) response is not available for this notice'});
   if(!section1Choice&&link.notices.section_1&&!link.notices.section_2&&!link.notices.section_3&&!link.notices.section_6&&!link.notices.section_10)return reply(res,400,{error:'Select a Section 1(2) response for this notice'});
+  if(link.notices.section_1 && ['consent','consent_soc'].includes(choice) && !['agree','refuse'].includes(astrideConsent))
+    return reply(res,400,{error:'Confirm whether you consent to building astride the boundary'});
   await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
    .eq('status','pending_verification').lt('verification_expires_at',new Date().toISOString());
   const {count}=await sb.from('notice_response_submissions').select('id',{count:'exact',head:true})
@@ -49,7 +51,7 @@ export default async function handler(req,res){
    link_id:link.id,choice,signer_name:name.trim(),signer_email:email.trim().toLowerCase(),
    surveyor:choice==='dissent_own'?{name:String(surveyor.name).slice(0,180),firm:String(surveyor.firm||'').slice(0,180),email:String(surveyor.email).slice(0,254),phone:String(surveyor.phone||'').slice(0,80),address:String(surveyor.address||'').slice(0,400)}:null,
    verification_hash:verificationHash,verification_expires_at:new Date(Date.now()+10*60000).toISOString(),
-   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id}
+   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
   }).select('id').single();
   if(insertError){if(insertError.code==='23505')return reply(res,409,{error:'A verification code is already pending for this email address'});throw insertError;}
   const result=await sendNoticeEmail({userId:link.user_id,to:[email.trim()],
