@@ -45,7 +45,7 @@ export default async function handler(req,res){
    const signerEmails=[...new Set(signers.map(x=>x.email))];
    const signerDeliveries=await Promise.allSettled(signerEmails.map(to=>sendLOAEmail({
     userId:request.user_id,to:[to],subject:'Your signed '+appointmentLabel,
-    text:'Thank you for signing the '+appointmentLabel+'.\\n\\nPlease see the attached signed Letter of Appointment.',
+    text:'Thank you for signing the '+appointmentLabel+'.\n\nPlease see the attached signed Letter of Appointment.',
     attachments:attachment
    })));
    const {data:ownerLookup}=await sb.auth.admin.getUserById(request.user_id);
@@ -54,7 +54,7 @@ export default async function handler(req,res){
    const filingDescription=request.appointment_type.startsWith('bo_')?'main project file':'relevant Adjoining Owner project file';
    const ownerDelivery=ownerEmail?await Promise.allSettled([sendLOAEmail({
     userId:request.user_id,to:[ownerEmail],subject:appointmentLabel+' signed: '+signedNames,
-    text:signedNames+' '+(signers.length===1?'has':'have')+' signed the '+appointmentLabel+'.\\n\\nThe completed document has been saved to the '+filingDescription+'.\\n\\nPlease see the attached signed Letter of Appointment.',
+    text:signedNames+' '+(signers.length===1?'has':'have')+' signed the '+appointmentLabel+'.\n\nThe completed document has been saved to the '+filingDescription+'.\n\nPlease see the attached signed Letter of Appointment.',
     attachments:attachment
    })]):[];
    const deliveries=[...signerDeliveries,...ownerDelivery];
@@ -72,10 +72,10 @@ export default async function handler(req,res){
   const appointmentLabel=request.appointment_type.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment';
   const previous=signers.find(x=>x.position===next.position-1);
   const nextName=next.name;
-  const nextMessage='Hi '+nextName.split(' ')[0]+',\\n\\nPlease click the link below to review and sign the '+appointmentLabel+':\\n'+host+'/loa/sign/'+nextToken;
+  const nextMessage='Hi '+nextName.split(' ')[0]+',\n\nPlease click the link below to review and sign the '+appointmentLabel+':\n'+host+'/loa/sign/'+nextToken;
   const messages=await Promise.allSettled([
    sendLOAEmail({userId:request.user_id,to:[next.email],subject:'Please sign your '+appointmentLabel,text:nextMessage}),
-   ...(previous?[sendLOAEmail({userId:request.user_id,to:[previous.email],subject:'Thank you for signing the '+appointmentLabel,text:'Hi '+previous.name.split(' ')[0]+',\\n\\nThank you for signing the '+appointmentLabel+'.\\n\\nAs soon as '+nextName+' signs, you will receive a copy of the completed signed document.'})]:[])
+   ...(previous?[sendLOAEmail({userId:request.user_id,to:[previous.email],subject:'Thank you for signing the '+appointmentLabel,text:'Hi '+previous.name.split(' ')[0]+',\n\nThank you for signing the '+appointmentLabel+'.\n\nAs soon as '+nextName+' signs, you will receive a copy of the completed signed document.'})]:[])
   ]);
   const sent=messages[0].status==='fulfilled'?messages[0].value:{sent:false};
   if(!sent?.sent)console.error('[loa-verify] Next signer invitation delivery failed',messages[0]);
