@@ -37,6 +37,14 @@ export default async function handler(req,res){
 
   if(link.notices.section_1 && ['consent','consent_soc'].includes(choice) && !['agree','refuse'].includes(astrideConsent))
     return reply(res,400,{error:'Confirm whether you consent to building astride the boundary'});
+  let recordedSurveyor=surveyor;
+  if(choice==='dissent_agreed'&&appointServingSurveyor===true){
+    const {data:firm,error:firmError}=await sb.from('firm_settings')
+      .select('surveyor_name,firm_name,email,tel').eq('user_id',link.user_id).maybeSingle();
+    if(firmError)throw firmError;
+    if(!firm?.surveyor_name)return reply(res,400,{error:'The serving surveyor has not been configured in Nora settings'});
+    recordedSurveyor={name:firm.surveyor_name,firm:firm.firm_name||'',email:firm.email||'',phone:firm.tel||''};
+  }
   await sb.from('notice_response_submissions').delete().eq('link_id',link.id)
    .eq('status','pending_verification').lt('verification_expires_at',new Date().toISOString());
   const {count}=await sb.from('notice_response_submissions').select('id',{count:'exact',head:true})
@@ -49,7 +57,7 @@ export default async function handler(req,res){
   const verificationHash=sha(link.id+':'+email.toLowerCase()+':'+code);
   const {data:submission,error:insertError}=await sb.from('notice_response_submissions').insert({
    link_id:link.id,choice,signer_name:name.trim(),signer_email:email.trim().toLowerCase(),
-   surveyor:['dissent_own','dissent_agreed'].includes(choice)&&surveyor?.name?.trim()?{name:String(surveyor.name).slice(0,180),firm:String(surveyor.firm||'').slice(0,180),email:String(surveyor.email).slice(0,254),phone:String(surveyor.phone||'').slice(0,80),address:String(surveyor.address||'').slice(0,400)}:null,
+   surveyor:['dissent_own','dissent_agreed'].includes(choice)&&recordedSurveyor?.name?.trim()?{name:String(recordedSurveyor.name).slice(0,180),firm:String(recordedSurveyor.firm||'').slice(0,180),email:String(recordedSurveyor.email||'').slice(0,254),phone:String(recordedSurveyor.phone||'').slice(0,80),address:String(recordedSurveyor.address||'').slice(0,400)}:null,
    verification_hash:verificationHash,verification_expires_at:new Date(Date.now()+10*60000).toISOString(),
    audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,appoint_serving_surveyor:choice==='dissent_agreed'&&appointServingSurveyor===true,section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
   }).select('id').single();
