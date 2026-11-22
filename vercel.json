@@ -1,6 +1,9 @@
 {
   "rewrites": [
-    {"source": "/n/:slug", "destination": "/api/notice-short-redirect?slug=:slug"},
+    {
+      "source": "/n/:slug",
+      "destination": "/api/notice-short-redirect?slug=:slug"
+    },
     {
       "source": "/api/ely-ai",
       "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/ai_router"
@@ -104,6 +107,10 @@
     },
     "api/cron-sync-gmail.js": {
       "maxDuration": 120
+    },
+    "api/loa-create.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
     }
   },
   "crons": [
