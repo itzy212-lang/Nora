@@ -578,6 +578,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       aoSections: currentEntry.aoSections,
       aoWorksItems: currentEntry.aoWorksItems,
       aoS2Subs: currentEntry.aoS2Subs,
+      noticeId: currentEntry.noticeId,
+      responseToken: currentEntry.responseToken,
       pdf_b64: pdfB64,
       fileName,
       saveTarget,
