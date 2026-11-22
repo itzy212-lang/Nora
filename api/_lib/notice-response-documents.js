@@ -10,7 +10,7 @@ const choices = {
  dissent_own: 'Dissent and appointment of an adjoining owner surveyor'
 };
 const clean = value => String(value ?? '').replace(/[\r\n\t]/g,' ').slice(0,500);
-async function makePdf(title, rows) {
+export async function makePdf(title, rows) {
  const doc=await PDFDocument.create();
  const page=doc.addPage([595,842]);
  const font=await doc.embedFont(StandardFonts.Helvetica);
