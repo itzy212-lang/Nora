@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { loaToken, loaTokenHash, loaHash, validateLOASigners } from './_lib/loa-signing.js';
+import { loaToken, loaTokenHash, loaHash, validateLOASigners, locateLOAAnchors } from './_lib/loa-signing.js';
 import { sendNoticeEmail } from './_lib/notice-response-mail.js';
 
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -21,6 +21,8 @@ export default async function handler(req,res){
   const people=validateLOASigners(signers);
   const bytes=Buffer.from(String(pdf_b64||'').replace(/^data:application\\/pdf;base64,/,'').trim(),'base64');
   if(bytes.length<100||bytes.length>12_000_000||bytes.subarray(0,5).toString()!=='%PDF-')return reply(res,400,{error:'A valid PDF is required'});
+  // Reject unsupported templates before sending any signing invitation.
+  await locateLOAAnchors(bytes,appointment_type,people.length);
   const id=crypto.randomUUID(),path=project_id+'/loa/in-house/'+id+'/original.pdf';
   const uploaded=await sb.storage.from('documents').upload(path,bytes,{contentType:'application/pdf',upsert:false});
   if(uploaded.error)throw uploaded.error;
