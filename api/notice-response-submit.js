@@ -21,7 +21,7 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='POST')return reply(res,405,{error:'Method not allowed'});
  try{
-  const {token,choice,astrideConsent,name,email,surveyor,authorised}=req.body||{};
+  const {token,choice,astrideConsent,name,email,surveyor,appointServingSurveyor,authorised}=req.body||{};
   if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(token))return reply(res,404,{error:'Notice unavailable'});
   if(!choices.has(choice)||typeof name!=='string'||name.trim().length<2||name.length>180||
     typeof email!=='string'||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||authorised!==true)
@@ -51,7 +51,7 @@ export default async function handler(req,res){
    link_id:link.id,choice,signer_name:name.trim(),signer_email:email.trim().toLowerCase(),
    surveyor:['dissent_own','dissent_agreed'].includes(choice)&&surveyor?.name?.trim()?{name:String(surveyor.name).slice(0,180),firm:String(surveyor.firm||'').slice(0,180),email:String(surveyor.email).slice(0,254),phone:String(surveyor.phone||'').slice(0,80),address:String(surveyor.address||'').slice(0,400)}:null,
    verification_hash:verificationHash,verification_expires_at:new Date(Date.now()+10*60000).toISOString(),
-   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
+   audit:{consent_to_electronic_signature:true,notice_id:link.notice_id,appoint_serving_surveyor:choice==='dissent_agreed'&&appointServingSurveyor===true,section1_astride_consent:link.notices.section_1&&['consent','consent_soc'].includes(choice)?astrideConsent:null}
   }).select('id').single();
   if(insertError){if(insertError.code==='23505')return reply(res,409,{error:'A verification code is already pending for this email address'});throw insertError;}
   const result=await sendNoticeEmail({userId:link.user_id,to:[email.trim()],
