@@ -19,7 +19,8 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     ['dissent_agreed', 'I dissent and wish to appoint an agreed surveyor'],
     ['dissent_own', 'I dissent and wish to appoint my own surveyor']
   ];
-  const ready = notice && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+  const section1 = Boolean(notice?.sections?.section1);
+  const ready = notice && !section1 && choice && name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
     authorised && (choice !== 'dissent_own' || (surveyor.name.trim() && surveyor.email.trim()));
   const field = (label, value, change, type = 'text') => (
     <label className="nora-response-field">{label}<input type={type} value={value} onChange={e => change(e.target.value)} /></label>
@@ -65,7 +66,8 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
       <form className="nora-response-panel nora-response-body" onSubmit={submit}>
         <h2>Your response</h2>
         <p className="nora-response-muted">Read the notice before selecting your response. The available statutory options will be confirmed for this notice.</p>
-        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice}/>{label}</label>)}
+        {section1 && <p role="alert" style={{padding:12,background:'#fff7ed',borderRadius:8}}>Section 1 notices require a different statutory response process. Electronic responses are temporarily disabled for this notice.</p>}
+        {options.map(([value,label]) => <label key={value} className="nora-response-option"><input type="radio" name="response" value={value} checked={choice===value} onChange={()=>setChoice(value)} disabled={!notice || section1}/>{label}</label>)}
         {choice === 'dissent_own' && <section><h2>Your appointed surveyor</h2>
           {field('Surveyor name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
           {field('Practice',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
