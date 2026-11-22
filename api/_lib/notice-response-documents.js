@@ -146,7 +146,7 @@ export async function emailFinalisedResponse(sb, result) {
    to:boRecipients,
    subject:'Party wall notice response received: '+(project.bo_premise_address||'Your property'),
    text:[
-    'A response has been received to the party wall notice relating to '+(project.bo_premise_address||'your property')+'.',
+    'Please find attached the signed response and confirmation record for the party wall notice relating to '+(project.bo_premise_address||'your property')+'.',
     '',
     'Notice outcome: '+(choices[record.choice]||record.choice),
     'Response signed by: '+record.signer_name,
@@ -156,7 +156,10 @@ export async function emailFinalisedResponse(sb, result) {
     '',
     'Your appointed surveyor will advise you of any next steps.'
    ].join('\n'),
-   attachments:[]
+   attachments:[
+    {filename:'signed-notice-response.pdf',content:acknowledgement.toString('base64')},
+    {filename:'notice-response-confirmation.pdf',content:certificate.toString('base64')}
+   ]
   });
  }
  await sb.from('notice_response_submissions').update({
