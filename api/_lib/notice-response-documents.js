@@ -76,17 +76,47 @@ export async function finaliseNoticeResponse(sb, submissionId) {
  return {record,link,acknowledgement,certificate,acknowledgementPath:aPath,certificatePath:cPath};
 }
 export async function emailFinalisedResponse(sb, result) {
- const {record,link,acknowledgement,certificate}=result;
- const to=[record.signer_email];
- // The surveyor's registered account email may be different from the signatory.
+ const {record,link,acknowledgement,certificate,acknowledgementPath,certificatePath}=result;
+ // The adjoining owner receives their signed records. The surveyor receives notification only.
+ const ownerDelivery=await sendNoticeEmail({
+  userId:link.user_id,
+  to:[record.signer_email],
+  subject:'Your signed party wall notice response',
+  text:'Your response has been signed and verified. Attached are your acknowledgement and electronic signature audit certificate.',
+  attachments:[
+   {filename:'notice-response-acknowledgement.pdf',content:acknowledgement.toString('base64')},
+   {filename:'notice-response-audit-certificate.pdf',content:certificate.toString('base64')}
+  ]
+ });
  const {data:user}=await sb.auth.admin.getUserById(link.user_id);
- if(user?.user?.email && user.user.email.toLowerCase()!==record.signer_email.toLowerCase())to.push(user.user.email);
- const delivery=await sendNoticeEmail({userId:link.user_id,to,
-  subject:'NORA - verified party wall notice response',
-  text:'Attached are the verified notice response acknowledgement and NORA electronic signature audit record.',
-  attachments:[{filename:'notice-response-acknowledgement.pdf',content:acknowledgement.toString('base64')},
-   {filename:'notice-response-audit-certificate.pdf',content:certificate.toString('base64')}]});
- if(!delivery.sent)return delivery;
- await sb.from('notice_response_submissions').update({delivery_status:'sent'}).eq('id',record.id);
- return {sent:true};
+ let surveyorDelivery={sent:false,reason:'Surveyor email unavailable'};
+ if(user?.user?.email && user.user.email.toLowerCase()!==record.signer_email.toLowerCase()) {
+  surveyorDelivery=await sendNoticeEmail({
+   userId:link.user_id,
+   to:[user.user.email],
+   subject:'NORA: Notice response signed and saved',
+   text:[
+    'An adjoining owner has signed and verified their party wall notice response.',
+    '',
+    'Project ID: '+link.notices.project_id,
+    'Adjoining owner ID: '+(link.notices.ao_id||'Not specified'),
+    'Notice ID: '+link.notice_id,
+    'Response: '+(choices[record.choice]||record.choice),
+    'Signed by: '+record.signer_name,
+    'Signed at (UTC): '+record.signed_at,
+    '',
+    'The signed acknowledgement and audit certificate have been saved against the relevant project and notice files in NORA.',
+    'Acknowledgement: '+acknowledgementPath,
+    'Audit certificate: '+certificatePath,
+    '',
+    'Open the project in NORA to view the saved records.'
+   ].join('\\n'),
+   attachments:[]
+  });
+ }
+ await sb.from('notice_response_submissions').update({
+  delivery_status:ownerDelivery.sent && surveyorDelivery.sent ? 'sent' : 'partial'
+ }).eq('id',record.id);
+ return {sent:ownerDelivery.sent && surveyorDelivery.sent,
+  ownerEmailed:ownerDelivery.sent,surveyorNotified:surveyorDelivery.sent};
 }
