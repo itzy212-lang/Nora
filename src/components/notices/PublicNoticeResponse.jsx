@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * Public notice-response screen. A notice must be resolved and validated by
@@ -13,8 +13,17 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
   const [email, setEmail] = useState('');
   const [authorised, setAuthorised] = useState(false);
   const [surveyor, setSurveyor] = useState({ name: '', firm: '', email: '', phone: '', address: '' });
+  const [suggestions, setSuggestions] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(()=>{
+    if(!['dissent_own','dissent_agreed'].includes(choice) || surveyor.name.trim().length<2){setSuggestions([]);return;}
+    const controller=new AbortController();
+    const token=window.location.pathname.split('/').filter(Boolean)[1];
+    fetch('/api/notice-response-public?token='+encodeURIComponent(token)+'&surveyorSearch='+encodeURIComponent(surveyor.name),{signal:controller.signal})
+      .then(r=>r.ok?r.json():{surveyors:[]}).then(data=>setSuggestions(data.surveyors||[])).catch(()=>{});
+    return ()=>controller.abort();
+  },[choice,surveyor.name]);
   const options = [
     ['consent', 'I consent to the proposed works'],
     ['consent_soc', 'I consent, subject to a Schedule of Condition'],
@@ -35,7 +44,7 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
     if (!ready || !onSubmit) return;
     setBusy(true); setError('');
     try {
-      await onSubmit({ noticeId: notice.id, choice, astrideConsent: section1Astride && ['consent','consent_soc'].includes(choice) ? astrideConsent : null, name: name.trim(), email: email.trim(), authorised, surveyor: choice === 'dissent_own' ? surveyor : null });
+      await onSubmit({ noticeId: notice.id, choice, astrideConsent: section1Astride && ['consent','consent_soc'].includes(choice) ? astrideConsent : null, name: name.trim(), email: email.trim(), authorised, surveyor: ['dissent_own','dissent_agreed'].includes(choice) ? surveyor : null });
     } catch (err) { setError(err.message || 'Could not submit response'); }
     finally { setBusy(false); }
   }
@@ -81,8 +90,9 @@ export default function PublicNoticeResponse({ notice, onSubmit }) {
           {[['agree','Yes, I consent to building astride the boundary'],['refuse','No, I do not consent to building astride the boundary']].map(([v,label])=><label key={v} className="nora-response-option"><input type="radio" name="astrideConsent" checked={astrideConsent===v} onChange={()=>setAstrideConsent(v)}/>{label}</label>)}
           {astrideConsent==='refuse' && <p className="nora-response-muted">Your response to the other works remains as selected above. The Building Owner may consider a wall wholly on their own land under Section 1(5).</p>}
         </section>}
-        {choice === 'dissent_own' && <section><h2>Your appointed surveyor</h2>
+        {['dissent_own','dissent_agreed'].includes(choice) && <section><h2>{choice==='dissent_agreed'?'Proposed agreed surveyor':'Your appointed surveyor'}</h2>
           {field('Surveyor Name',surveyor.name,v=>setSurveyor(s=>({...s,name:v})))}
+          {suggestions.length>0 && <div role="listbox" aria-label="Existing surveyor contacts" style={{border:'1px solid #dce4ef',borderRadius:8}}>{suggestions.map(s=><button type="button" key={s.id} onClick={()=>{setSurveyor({name:s.name||'',firm:s.firm||'',email:s.email||'',phone:s.phone||'',address:''});setSuggestions([]);}} style={{display:'block',width:'100%',padding:10,textAlign:'left',background:'white',border:0,borderBottom:'1px solid #eee',cursor:'pointer'}}>{s.name}{s.firm?' · '+s.firm:''}</button>)}</div>}
           {field('Surveyor Firm',surveyor.firm,v=>setSurveyor(s=>({...s,firm:v})))}
           {field('Email Address',surveyor.email,v=>setSurveyor(s=>({...s,email:v})),'email')}
           {field('Telephone Number',surveyor.phone,v=>setSurveyor(s=>({...s,phone:v})),'tel')}
