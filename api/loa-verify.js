@@ -9,7 +9,7 @@ export default async function handler(req,res){
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
  try{
   const {token,code}=req.body||{};
-  if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(token)||typeof code!=='string'||!/^\\d{6}$/.test(code))return res.status(400).json({error:'Invalid verification code'});
+  if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(token)||typeof code!=='string'||!/^\d{6}$/.test(code))return res.status(400).json({error:'Invalid verification code'});
   const sb=db(),{data:s}=await sb.from('loa_signers').select('*,loa_signing_requests(*)').eq('token_hash',loaTokenHash(token)).maybeSingle();
   if(!s||s.status!=='pending_verification'||s.loa_signing_requests?.status!=='pending'||!s.otp_hash||s.otp_attempts>=5||Date.parse(s.otp_expires_at)<Date.now())return res.status(409).json({error:'Verification code expired or invitation unavailable'});
   const a=Buffer.from(s.otp_hash,'hex'),b=Buffer.from(loaHash(Buffer.from(s.id+':'+s.email+':'+code)),'hex');
@@ -39,7 +39,7 @@ export default async function handler(req,res){
    const {error:re}=await sb.from('loa_signing_requests').update({status:'completed',completed_at:verifiedAt,final_path:path}).eq('id',request.id).eq('status','pending');
    if(re)throw re;
    const emails=[...new Set(signers.map(x=>x.email))];
-   const message='The Letter of Appointment has now been signed and verified by all required parties.\\n\\nPlease find the completed LOA and electronic signature audit record attached.\\n\\nKind regards,\\nNora';
+   const message='The Letter of Appointment has now been signed and verified by all required parties.\n\nPlease find the completed LOA and electronic signature audit record attached.\n\nKind regards,\nNora';
    const deliveries=await Promise.allSettled([sendNoticeEmail({userId:request.user_id,to:emails,subject:'Nora: Your signed Letter of Appointment',text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]}),sendNoticeEmail({userId:request.user_id,to:[(await sb.auth.admin.getUserById(request.user_id)).data.user?.email].filter(Boolean),subject:'Nora: LOA fully signed - '+request.project_id,text:message,attachments:[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}]})]);
    return res.status(200).json({success:true,completed:true,delivery:deliveries.map(x=>x.status==='fulfilled'?x.value:{sent:false})});
   }
@@ -52,7 +52,7 @@ export default async function handler(req,res){
   const nextToken=loaToken();
   const {data:activated,error:ae}=await sb.from('loa_signers').update({status:'invited',invited_at:verifiedAt,token_hash:loaTokenHash(nextToken)}).eq('id',next.id).eq('status','waiting').select('id').maybeSingle();
   if(ae||!activated)throw Error('Could not activate next signatory');
-  const message='Dear '+next.name.split(' ')[0]+',\\n\\nThe previous signatory has signed the Letter of Appointment. It is now ready for you to review and sign.\\n\\nPlease use this secure link:\\n'+host+'/loa/sign/'+nextToken+'\\n\\nKind regards,\\nNora';
+  const message='Dear '+next.name.split(' ')[0]+',\n\nThe previous signatory has signed the Letter of Appointment. It is now ready for you to review and sign.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+nextToken+'\n\nKind regards,\nNora';
   const sent=await sendNoticeEmail({userId:request.user_id,to:[next.email],subject:'Nora: Your Letter of Appointment is ready to sign',text:message});
   return res.status(200).json({success:true,completed:false,nextInvitationSent:sent.sent});
  }catch(e){console.error('[loa-verify]',e);return res.status(500).json({error:'Verification could not be finalised. Please contact the surveyor.'});}
