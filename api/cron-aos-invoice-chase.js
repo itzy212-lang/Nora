@@ -23,7 +23,7 @@ async function listPdfs(token,folder,depth=0){
 async function run(email,job){
  const {data:p,error:pe}=await sb.from('projects').select('id,user_id,role,bo_1_email,bo_1_name,bo_2_email,bo_2_name,bo_premise_address,onedrive_folder_id,aos').eq('id',email.project_id).single();
  if(pe||!p||!p.onedrive_folder_id)throw Error('Project or OneDrive folder unavailable');
- if(p.role&&p.role!=='BO')throw Error('Not a building owner appointment');
+ if(p.role&&!['bo','building owner'].includes(String(p.role).toLowerCase()))throw Error('Not a building owner appointment');
  const aos=Array.isArray(p.aos)?p.aos:[];
  const surveyors=aos.filter(a=>[a.surv_email,a.surveyorEmail].some(v=>addr(v)===addr(email.sender_email)));
  if(surveyors.length!==1)throw Error('Chaser not uniquely matched to recorded AOS');
@@ -82,7 +82,7 @@ export default async function handler(req,res){
   if(results.length>=3)break;
   if(!/invoice|payment|fee|outstanding|overdue|reminder|settle/i.test(clean(email.subject+' '+email.body).slice(0,3000)))continue;
   const {data:existing}=await sb.from('aos_invoice_chase_jobs').select('*').eq('email_id',email.id).maybeSingle();
-  if(existing?.status==='completed'||existing?.status==='not_a_chase')continue;
+  if(['completed','not_a_chase','needs_review'].includes(existing?.status))continue;
   if(existing?.status==='processing'&&Date.now()-new Date(existing.updated_at).getTime()<15*60000)continue;
   const {error:upsertError}=await sb.from('aos_invoice_chase_jobs').upsert({email_id:email.id,project_id:email.project_id,status:'processing',updated_at:new Date().toISOString()},{onConflict:'email_id'});
   if(upsertError){results.push({id:email.id,error:upsertError.message});continue;}
