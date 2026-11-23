@@ -22,7 +22,7 @@ async function listPdfs(token,folder,depth=0){
 }
 async function run(email,job){
  const {data:p,error:pe}=await sb.from('projects').select('id,user_id,role,bo_1_email,bo_1_name,bo_2_email,bo_2_name,bo_premise_address,onedrive_folder_id,aos').eq('id',email.project_id).single();
- if(pe||!p||!p.onedrive_folder_id)throw Error('Project or OneDrive folder unavailable');
+ if(pe||!p)throw Error('Project unavailable');
  if(p.role&&!['bo','building owner'].includes(String(p.role).toLowerCase()))throw Error('Not a building owner appointment');
  const aos=Array.isArray(p.aos)?p.aos:[];
  const surveyors=aos.filter(a=>[a.surv_email,a.surveyorEmail].some(v=>addr(v)===addr(email.sender_email)));
@@ -34,12 +34,14 @@ async function run(email,job){
  if(!classification.chase)return 'not_a_chase';
  const {data:payment}=await sb.from('emails').select('id,subject,body').eq('project_id',p.id).gt('received_at',email.received_at).limit(30);
  if((payment||[]).some(x=>/paid|payment made|settled|remittance/i.test(clean(x.subject+' '+x.body).slice(0,600))))throw Error('Possible payment confirmation after chase: review required');
- const token=await getValidMicrosoftToken(String(p.user_id));
- if(!token)throw Error('OneDrive authentication unavailable');
- const files=await listPdfs(token,p.onedrive_folder_id);
+ let files=[];
+ if(p.onedrive_folder_id){
+  try{const token=await getValidMicrosoftToken(String(p.user_id));if(token)files=await listPdfs(token,p.onedrive_folder_id);}catch(err){console.warn('[aos-chase] Invoice search unavailable:',err.message);}
+ }
  const candidates=files.filter(f=>/inv|invoice|fee/i.test(f.name));
  let matched=[];
  for(const file of candidates.slice(0,35)){
+  const token=await getValidMicrosoftToken(String(p.user_id));
   const response=await graph(token,'items/'+encodeURIComponent(file.id)+'/content');
   const buffer=Buffer.from(await response.arrayBuffer());
   if(buffer.length>8*1024*1024)continue;
@@ -51,18 +53,18 @@ async function run(email,job){
   if(name&&name.length>3&&!txt.toLowerCase().includes(name.toLowerCase())&&!file.name.toLowerCase().includes(name.toLowerCase()))continue;
   matched.push({file,buffer,txt});
  }
- if(matched.length!==1)throw Error('Could not uniquely verify AOS invoice PDF ('+matched.length+' matches)');
- const {file,buffer}=matched[0];
- if(job.invoice_item_id&&job.invoice_item_id!==file.id)throw Error('Invoice changed after initial send');
- const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\nPlease find the invoice attached. Would you arrange payment directly to the surveyor using the payment details on the invoice and confirm once settled?\n\nKind regards,\nNora\nSquare One Consulting';
- const reply='Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your reminder. I have forwarded your invoice to the Building Owner and requested payment. I will let you know when payment is confirmed.\n\nKind regards,\nNora\nSquare One Consulting';
+ const found=matched.length===1;
+ const {file,buffer}=found?matched[0]:{file:null,buffer:null};
+ if(found&&job.invoice_item_id&&job.invoice_item_id!==file.id)throw Error('Invoice changed after initial send');
+ const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\n'+(found?'Please find the invoice attached. Would you arrange payment directly to the surveyor using the payment details on the invoice and confirm once settled?':'Please arrange payment of the surveyor\'s outstanding invoice. If you need another copy of the invoice, please let us know and we will arrange to send it to you.')+'\n\nKind regards,\nNora\nSquare One Consulting';
+ const reply='Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your reminder. '+(found?'I have sent a copy of your invoice to the Building Owner with a reminder to arrange payment.':'I have reminded the Building Owner to arrange payment. If they require another copy of your invoice, we will arrange for it to be sent.')+' I will follow up as necessary.\n\nKind regards,\nNora\nSquare One Consulting';
  const send=async(to,subject,body,attachments=[])=>{
   const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(p.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>'),attachments}});
   if(error||data?.error)throw Error('Email delivery failed: '+(error?.message||data?.error));
  };
  if(!job.bo_sent_at){
-  await send(bos[0],'AOS surveyor fee invoice: '+(p.bo_premise_address||email.subject),body,[{name:file.name,type:'application/pdf',base64:buffer.toString('base64')}]);
-  const {error}=await sb.from('aos_invoice_chase_jobs').update({bo_sent_at:new Date().toISOString(),invoice_item_id:file.id,invoice_name:file.name,status:'bo_sent',updated_at:new Date().toISOString()}).eq('email_id',email.id);
+  await send(bos[0],'AOS surveyor fee invoice: '+(p.bo_premise_address||email.subject),body,found?[{name:file.name,type:'application/pdf',base64:buffer.toString('base64')}]:[]);
+  const {error}=await sb.from('aos_invoice_chase_jobs').update({bo_sent_at:new Date().toISOString(),invoice_item_id:file?.id||null,invoice_name:file?.name||null,status:'bo_sent',updated_at:new Date().toISOString()}).eq('email_id',email.id);
   if(error)throw Error('BO sent but ledger update failed: '+error.message);
  }
  if(!job.aos_sent_at){
