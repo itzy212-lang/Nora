@@ -393,9 +393,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // handling it myself." This is checked first, before any diary or
   // timing logic, because it's absolute and doesn't depend on any of
   // that.
-  if (email.is_read) {
-    return { eligible: false, framing: null, reason: 'read' };
-  }
+  // Reading is not an opt-out. The explicit Nora-no-reply switch below is.
 
   // ── 0a. Manual "Nora must not respond" switch ────────────────────
   // Added 2026-10-12, on request: a per-email switch in the inbox
@@ -439,11 +437,14 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // diary shows Itzik busy, because he is demonstrably handling this
   // person himself right now.
   const lastPersonalMs = await findLatestPersonalMessageTime(email, supabase);
-  if (lastPersonalMs !== null && (Date.now() - lastPersonalMs) < PERSONAL_CONTACT_HOLD_MINUTES * 60 * 1000) {
-    return { eligible: false, framing: null, reason: 'personal_contact' };
-  }
-  if (isReplyToPersonalMessage(email.received_at, lastPersonalMs)) {
-    return { eligible: false, framing: null, reason: 'reply_to_itzik' };
+  // Established correspondence belongs to Itzik. After three hours Nora may
+  // answer independently verifiable NEW questions or give one brief holding reply.
+  // Do not suppress the entire email indefinitely merely because Itzik wrote before.
+  const establishedPersonalConversation = lastPersonalMs !== null &&
+    (new Date(email.received_at).getTime() - lastPersonalMs) < PERSONAL_REPLY_LOOKBACK_HOURS * 3600000 &&
+    (new Date(email.received_at).getTime() - lastPersonalMs) > -3600000;
+  if (establishedPersonalConversation && !hasWaitedLongEnough(email.received_at, Date.now(), 180)) {
+    return { eligible: false, framing: null, reason: 'itzik_conversation_wait' };
   }
 
   // Same-day back-and-forth: has there been a genuine exchange (at
@@ -598,6 +599,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   }
 
   // ── 5. Fallback: silence gate ────────────────────────────────────
+  if (establishedPersonalConversation) return { eligible: true, framing: null, reason: 'established_conversation' };
   return computeSilenceFallback(email, supabase, sameDayBackAndForth);
 }
 
@@ -1677,6 +1679,13 @@ If the thread shows that a specific call or meeting time has been confirmed (eit
 3. Keep it short — 2-3 sentences maximum.
 Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
 
+ESTABLISHED CONVERSATION / PARTIAL OWNERSHIP (HIGHEST PRIORITY):
+When THREAD HISTORY or OTHER CORRESPONDENCE shows Itzik personally exchanging messages with this sender about the current issue, Itzik owns that discussion. Do not take it over, restate his arguments, recap agreed facts, repeat procedural explanations already given, or promise to resolve his outstanding decisions. Treat each distinct point in the CURRENT email separately.
+- If the latest message merely continues Itzik's discussion, shares documents, confirms something, or contains no genuinely new answerable question, normally output <<<SKIP_NOT_ADDRESSED>>> and nothing else. Silence is better than bot-like acknowledgments. If a direct response from Itzik is clearly awaited and this email has been unanswered at least three hours (the eligibility gate ensures this for established personal conversations), you MAY instead send ONE short holding acknowledgment: Itzik has received the email but has not yet had a chance to respond, and he will come back when able. Never claim he has personally read or reviewed it; never promise a time. Do not send another holding acknowledgment if Nora already acknowledged this pending matter in the conversation.
+- If the latest message raises a NEW, distinct, independently answerable factual or procedural question, answer ONLY that new question using verified project records. Where another point still awaits Itzik, briefly acknowledge that he will come back to it. Do not repeat the existing discussion or take ownership of it.
+- Explain statutory or procedural next steps conditionally, not as actions already authorised. Section 10(4)(b): after the actual statutory request and its applicable response period, if the adjoining owner still fails to appoint, the building owner may appoint a separate surveyor on their behalf; Itzik will discuss the decision with the building owner before proceeding. Never state Itzik can act as agreed surveyor without both owners' agreement. Use a specific expiry or chase date ONLY if confirmed in structured project data or a real scheduled task. Never invent an appointment or promise that Itzik will chase on a particular day.
+- Be brief, human and useful. No unnecessary explanations of the Act. Do not use a generic availability or holding paragraph when it adds nothing. No follow-up holding emails simply because another three hours have passed.
+
 ALREADY RESPONDED IN THIS THREAD — DON'T KEEP A CONVERSATION GOING JUST BECAUSE YOU KEEP GETTING REPLIES:
 When PRIOR RESPONSES IN THIS THREAD is shown above, you have already replied in this thread at least once. This is a real, confirmed pattern that happened repeatedly on one real day: threads with Maxime, with Gabriel, and others kept extending purely because you kept replying to every further message - a "thanks", a "here's a copy of the revised drawings", a simple FYI - when the conversation had already been properly closed out by your first reply. Being replied to is not, by itself, a reason to reply again.
 Once you've already responded in a thread, check the CURRENT email carefully before drafting again:
@@ -1684,8 +1693,8 @@ Once you've already responded in a thread, check the CURRENT email carefully bef
 - If it's a closing-type message - a thanks, an acknowledgment, "noted", a document or update sent with no question attached, a "here's X for your records" - do not draft a further reply. Output the exact marker <<<SKIP_NOT_ADDRESSED>>> and nothing else. This applies even if the message contains a small new detail (a phone number, a document, a date) - noting new information for Itzik doesn't require an email reply confirming you've noted it every single time; a plain "thank you, noted" is itself often the unnecessary reply, not the correct one, once the thread is already closed out.
 The one thing that lifts this caution: if Itzik has personally sent something into the thread since your last reply - check the THREAD HISTORY above for a message labelled "FROM ITZIK (personally)" rather than "FROM NORA (auto-reply)" after your own last reply - the conversation is now his to drive, not yours to keep closing out - respond normally as the current email warrants.
 
-NO GENUINE QUESTION OR REQUEST IN THE CURRENT EMAIL — JUST ACKNOWLEDGE, NOTHING MORE:
-Before drafting anything substantive, check whether the CURRENT email actually contains a genuine question, request, or something that needs a decision or action from Itzik. If it does not - it is purely information being passed through, a thank-you, a document sent with no question attached, or conversational remarks with nothing to action - the entire reply should be one brief, plain acknowledgment: confirm receipt and that Itzik will see it (e.g. "Thank you - I'll make sure Itzik gets this."). Do not add anything else - no project update, no process explanation, no status summary - just because the data is available to you; none of that was asked for. This is distinct from ALREADY RESPONDED below, which is about whether to reply again once a thread you've already replied in has been properly closed out - this rule applies to any email, including the first one in a thread, whenever nothing was actually asked.
+NO GENUINE QUESTION OR REQUEST IN THE CURRENT EMAIL — DON'T GENERATE AN UNNECESSARY REPLY:
+Before drafting anything substantive, check whether the CURRENT email actually contains a genuine question, request, or something that needs a decision or action from Itzik. If it does not - it is purely information being passed through, a thank-you, a document sent with no question attached, or conversational remarks with nothing to action - normally output <<<SKIP_NOT_ADDRESSED>>>. Only where the sender is clearly awaiting Itzik's personal response and the three-hour established-conversation wait has passed, one brief holding acknowledgment is allowed, provided Nora has not already acknowledged that outstanding point. Do not add anything else - no project update, no process explanation, no status summary - just because the data is available to you; none of that was asked for. This is distinct from ALREADY RESPONDED below, which is about whether to reply again once a thread you've already replied in has been properly closed out - this rule applies to any email, including the first one in a thread, whenever nothing was actually asked.
 
 If there IS a genuine question, answer it from real project data/correspondence wherever you can (see FACTUAL RESOLUTION and GENERAL STATUS UPDATE REQUESTS above) - a confident, fact-based answer is always the right outcome when the data supports it, this rule only restrains what you add on top, not what you're able to answer. Only when a genuine question has no real evidence behind it at all - not even enough for the cautious hedge described in FACTUAL RESOLUTION - should the reply fall back to a plain acknowledgment that it will be passed on to Itzik to come back on, marked <<<NEEDS_FOLLOWUP>>> so a reminder is created; this is a different, broader case than the specific date/document hedge in FACTUAL RESOLUTION; that one still applies as written, unchanged, for a scheduled-date or document-status question.
 
