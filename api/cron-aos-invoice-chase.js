@@ -91,6 +91,9 @@ export default async function handler(req,res){
   try{
    let outcome;
    if(!email.project_id){
+    const {data:knownProjects}=await sb.from('projects').select('aos').eq('user_id',email.user_id).limit(200);
+    const knownSurveyor=(knownProjects||[]).some(p=>Array.isArray(p.aos)&&p.aos.some(a=>[a.surv_email,a.surveyorEmail].some(v=>addr(v)===addr(email.sender_email))));
+    if(!knownSurveyor)throw Error('Unlinked sender is not a verified AOS; no automatic reply');
     const classification=await classify(email);
     if(!classification.chase){outcome='not_a_chase';}
     else {
