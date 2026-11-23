@@ -1541,10 +1541,10 @@ export default async function handler(req, res) {
               .order('received_at', { ascending: false })
               .limit(12);
             if (recentProjectEmails?.length) {
-              projectContext += '\\n\\nRECENT PROJECT CORRESPONDENCE (newest first; check this before giving any project progress update):\\n' +
+              projectContext += '\n\nRECENT PROJECT CORRESPONDENCE (newest first; check this before giving any project progress update):\n' +
                 recentProjectEmails.map(t => '[' + new Date(t.received_at).toLocaleDateString('en-GB') +
                   ' | ' + (t.direction === 'incoming' ? 'FROM ' + (t.sender_name || t.sender_email) : 'SENT BY OFFICE') +
-                  ' | ' + (t.subject || '') + ']\\n' + plainTextBody(t).slice(0, 1100)).join('\\n---\\n');
+                  ' | ' + (t.subject || '') + ']\n' + plainTextBody(t).slice(0, 1100)).join('\n---\n');
             }
           }
 
