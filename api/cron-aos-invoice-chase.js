@@ -36,7 +36,7 @@ async function run(email,job){
  if((payment||[]).some(x=>/paid|payment made|settled|remittance/i.test(clean(x.subject+' '+x.body).slice(0,600))))throw Error('Possible payment confirmation after chase: review required');
  let files=[];
  if(p.onedrive_folder_id){
-  try{const token=await getValidMicrosoftToken(String(p.user_id));if(token)files=await listPdfs(token,p.onedrive_folder_id);}catch(err){console.warn('[aos-chase] Invoice search unavailable:',err.message);}
+  try{const token=await getValidMicrosoftToken(String(email.user_id));if(token)files=await listPdfs(token,p.onedrive_folder_id);}catch(err){console.warn('[aos-chase] Invoice search unavailable:',err.message);}
  }
  const candidates=files.filter(f=>/inv|invoice|fee/i.test(f.name));
  let matched=[];
@@ -59,7 +59,7 @@ async function run(email,job){
  const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\n'+(found?'Please find the invoice attached. Please arrange payment directly to the surveyor as soon as possible, using the payment details on the invoice.':'Please arrange payment of the surveyor\'s outstanding invoice as soon as possible.')+'\n\nKind regards,\nNora\nSquare One Consulting';
  const reply='Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your reminder. '+(found?'I have sent a copy of your invoice to the Building Owner and advised them to make payment as soon as possible.':'I have advised the Building Owner to make payment as soon as possible.')+' I will follow up as necessary.\n\nKind regards,\nNora\nSquare One Consulting';
  const send=async(to,subject,body,attachments=[])=>{
-  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(p.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>'),attachments}});
+  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(email.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>'),attachments}});
   if(error||data?.error)throw Error('Email delivery failed: '+(error?.message||data?.error));
  };
  if(!job.bo_sent_at){
