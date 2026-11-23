@@ -42,8 +42,10 @@ export default async function handler(req,res){
  const now=new Date().toISOString(), results=[];
  // Reclaim abandoned jobs from interrupted serverless executions.
  await db.from('email_memory_jobs').update({status:'pending',next_attempt_at:now}).eq('status','processing').lt('locked_at',new Date(Date.now()-10*60*1000).toISOString());
- const {data:jobs,error}=await db.from('email_memory_jobs').select('email_id,project_id,attempts').in('status',['pending','failed']).lte('next_attempt_at',now).order('next_attempt_at',{ascending:true}).limit(3);
- if(error)return res.status(500).json({error:error.message});
+ const query=()=>db.from('email_memory_jobs').select('email_id,project_id,attempts').in('status',['pending','failed']).lte('next_attempt_at',now);
+ const [oldest,newest]=await Promise.all([query().order('next_attempt_at',{ascending:true}).limit(2),query().order('next_attempt_at',{ascending:false}).limit(2)]);
+ if(oldest.error||newest.error)return res.status(500).json({error:oldest.error?.message||newest.error?.message});
+ const jobs=[...new Map([...(newest.data||[]),...(oldest.data||[])].map(j=>[j.email_id,j])).values()];
  for(const job of jobs||[]){
   const {data:claimed,error:claimError}=await db.from('email_memory_jobs').update({status:'processing',locked_at:now,attempts:job.attempts+1,updated_at:now}).eq('email_id',job.email_id).in('status',['pending','failed']).select('email_id').maybeSingle();
   if(claimError||!claimed)continue;
