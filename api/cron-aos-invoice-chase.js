@@ -77,7 +77,7 @@ async function run(email,job){
 export default async function handler(req,res){
  if(!process.env.CRON_SECRET||req.headers.authorization!=='Bearer '+process.env.CRON_SECRET)return res.status(401).json({error:'Unauthorized'});
  const since=new Date(Date.now()-72*3600000).toISOString();
- const {data:emails,error}=await sb.from('emails').select('id,project_id,subject,body,sender_email,sender_name,received_at,direction').eq('direction','incoming').not('project_id','is',null).gte('received_at',since).order('received_at',{ascending:false}).limit(100);
+ const {data:emails,error}=await sb.from('emails').select('id,project_id,user_id,subject,body,sender_email,sender_name,received_at,direction').eq('direction','incoming').gte('received_at',since).order('received_at',{ascending:false}).limit(100);
  if(error)return res.status(500).json({error:error.message});
  const results=[];
  for(const email of emails||[]){
@@ -86,10 +86,22 @@ export default async function handler(req,res){
   const {data:existing}=await sb.from('aos_invoice_chase_jobs').select('*').eq('email_id',email.id).maybeSingle();
   if(['completed','not_a_chase','needs_review'].includes(existing?.status))continue;
   if(existing?.status==='processing'&&Date.now()-new Date(existing.updated_at).getTime()<15*60000)continue;
-  const {error:upsertError}=await sb.from('aos_invoice_chase_jobs').upsert({email_id:email.id,project_id:email.project_id,status:'processing',updated_at:new Date().toISOString()},{onConflict:'email_id'});
+  const {error:upsertError}=await sb.from('aos_invoice_chase_jobs').upsert({email_id:email.id,project_id:email.project_id||'unlinked',status:'processing',updated_at:new Date().toISOString()},{onConflict:'email_id'});
   if(upsertError){results.push({id:email.id,error:upsertError.message});continue;}
   try{
-   const outcome=await run(email,existing||{});
+   let outcome;
+   if(!email.project_id){
+    const classification=await classify(email);
+    if(!classification.chase){outcome='not_a_chase';}
+    else {
+     // No project can be verified: do not approach a Building Owner or promise forwarding.
+     // Send only a neutral acknowledgement to the original surveyor.
+     const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:email.user_id,to_email:email.sender_email,subject:'Re: '+email.subject,body:'Dear '+(email.sender_name||'Colleague')+',<br><br>Thank you for your email. I will follow this up and come back to you.<br><br>Kind regards,<br>Nora<br>Square One Consulting'}});
+     if(error||data?.error)throw Error('Holding reply failed: '+(error?.message||data?.error));
+     await sb.from('aos_invoice_chase_jobs').update({aos_sent_at:new Date().toISOString(),status:'completed',updated_at:new Date().toISOString()}).eq('email_id',email.id);
+     outcome='holding_reply_sent';
+    }
+   }else outcome=await run(email,existing||{});
    if(outcome==='not_a_chase')await sb.from('aos_invoice_chase_jobs').update({status:'not_a_chase',updated_at:new Date().toISOString()}).eq('email_id',email.id);
    results.push({id:email.id,outcome});
   }catch(e){
