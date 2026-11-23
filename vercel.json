@@ -118,6 +118,9 @@
     },
     "api/cron-memory-reconcile.js": {
       "maxDuration": 120
+    },
+    "api/cron-aos-invoice-chase.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -136,6 +139,10 @@
     {
       "path": "/api/cron-memory-reconcile",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron-aos-invoice-chase",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
