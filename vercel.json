@@ -135,7 +135,7 @@
     },
     {
       "path": "/api/cron-memory-reconcile",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     }
   ]
 }
