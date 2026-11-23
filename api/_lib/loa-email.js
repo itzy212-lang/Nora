@@ -34,6 +34,8 @@ export async function sendLOAEmail({userId,to,subject,text,attachments=[]}){
   inlineImages.push({filename:key+'.png',contentType:match?.[1]||'image/png',content:content.replace(/\s/g,''),cid});
   images[key]='cid:'+cid;
  }
- const html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">'+esc(text).replace(/\\n/g,'\n').replace(/\n/g,'<br>')+'</div><div style="margin-top:18px">'+firmSignature(firm||{},images)+'</div>';
+ const noraSignoff='Kind regards,\nNora\nOn behalf of Itzik Darel\nhelp@sq1consulting.co.uk';
+ const cleanText=String(text||'').replace(/\\n/g,'\n').trim().replace(/(?:\n\s*)*(?:Kind regards,?\s*\n)?Nora\s*\nOn behalf of Itzik Darel(?:\s*\nhelp@sq1consulting.co.uk)?\s*$/i,'').trim();
+ const html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">'+esc(cleanText+'\n\n'+noraSignoff).replace(/\n/g,'<br>')+'</div><div style="margin-top:18px">'+firmSignature({...firm,surveyor_name:'',qualifications:''},{...images,signature:''})+'</div>';
  return sendNoticeEmail({userId,to,subject,html,attachments,inlineImages});
 }
