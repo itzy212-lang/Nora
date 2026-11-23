@@ -1933,7 +1933,7 @@ function AttachmentChip({ att }) {
   );
 }
 
-function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onBackToInbox, onOpenProject }) {
   // Fixed URGENTLY 2026-09-22, real confirmed regression from the
   // recipients-popup fix: this component referenced state.currentUser
   // without ever getting state from useApp() in this scope - state
@@ -2010,6 +2010,10 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
       {showSavePopup && <SaveAttachmentPopup email={email} attachments={attachments} onDismiss={() => setShowSavePopup(false)} />}
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderBottom:'1px solid var(--border)',flexShrink:0,background:'var(--bg2)'}}>
+        <button onClick={onBackToInbox} style={{border:'1px solid var(--border)',borderRadius:99,background:'var(--bg3)',padding:'7px 12px',color:'var(--text)',fontWeight:600,cursor:'pointer'}}>← Back to inbox</button>
+        {email.project_id && <button onClick={() => onOpenProject?.(email.project_id)} style={{border:'1px solid var(--blue)',borderRadius:99,background:'var(--blue-bg)',padding:'7px 12px',color:'var(--blue)',fontWeight:600,cursor:'pointer'}}>📁 Open project</button>}
+      </div>
       <ProjectLinkBanner email={email} onLinked={(projectId) => onEmailLinked?.(email, projectId)} />
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
@@ -3522,7 +3526,7 @@ if (syncErr) throw syncErr;
               While a composer is open on mobile it is not mounted; it returns on close. */}
           {(isMobile && (replyOverlay || draftWithEly))
             ? <div style={{ flex: 1 }} />
-            : <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />}
+            : <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} onBackToInbox={restoreInboxPosition} onOpenProject={onOpenProject} />}
 
           {/* Auto-draft panel */}
           {autoDraft && (
