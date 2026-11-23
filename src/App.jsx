@@ -673,7 +673,7 @@ export default function App() {
       case 'projects':
         return <ProjectList onOpenProject={handleOpenProject} />;
       case 'inbox':
-        return <Inbox onOpenComposer={openComposer} onNavigate={handleNavigate} resetKey={inboxResetKey} onLoadMore={loadMoreEmails} loadingMore={loadingMore} hasMore={hasMoreEmails} onOverlayChange={(isOpen, closeFn) => setInboxOverlayClose(isOpen ? () => closeFn : null)} />;
+        return <Inbox onOpenComposer={openComposer} onOpenProject={(projectId) => { const project = (state.projects || []).find(p => String(p.id) === String(projectId)); if (project) handleOpenProject(project); else { setPendingProjectId(projectId); handleNavigate('projects'); } }} onNavigate={handleNavigate} resetKey={inboxResetKey} onLoadMore={loadMoreEmails} loadingMore={loadingMore} hasMore={hasMoreEmails} onOverlayChange={(isOpen, closeFn) => setInboxOverlayClose(isOpen ? () => closeFn : null)} />;
       case 'chat':
         return <MainChat onOpenComposer={openComposer} onClose={handleCloseMainChat} />;
       case 'awards':
