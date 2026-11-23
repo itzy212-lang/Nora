@@ -1529,6 +1529,25 @@ export default async function handler(req, res) {
             }
           }
 
+          // Always include recent cross-thread correspondence, even on large projects.
+          // Semantic memory may lag behind newly received or sent emails.
+          if (!usedDirectRead) {
+            const { data: recentProjectEmails } = await supabase
+              .from('emails')
+              .select('subject, sender_email, sender_name, body, direction, received_at, thread_id')
+              .eq('project_id', email.project_id)
+              .neq('thread_id', email.thread_id || '__none__')
+              .lt('received_at', email.received_at || new Date().toISOString())
+              .order('received_at', { ascending: false })
+              .limit(12);
+            if (recentProjectEmails?.length) {
+              projectContext += '\\n\\nRECENT PROJECT CORRESPONDENCE (newest first; check this before giving any project progress update):\\n' +
+                recentProjectEmails.map(t => '[' + new Date(t.received_at).toLocaleDateString('en-GB') +
+                  ' | ' + (t.direction === 'incoming' ? 'FROM ' + (t.sender_name || t.sender_email) : 'SENT BY OFFICE') +
+                  ' | ' + (t.subject || '') + ']\\n' + plainTextBody(t).slice(0, 1100)).join('\\n---\\n');
+            }
+          }
+
           // Added 2026-09-21, on request: genuine semantic search over
           // project_memory (a real, already-embedded per-project fact
           // store - confirmed 100% embedding coverage on what exists in
