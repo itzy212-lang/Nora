@@ -1031,6 +1031,17 @@ export default async function handler(req, res) {
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of scopedEmails) {
+      // AOS invoice payment chases are handled by the dedicated two-stage
+      // invoice workflow, never by the general automatic reply generator.
+      if (email.project_id && /invoice|payment|fees|outstanding|overdue/i.test((email.subject || '') + ' ' + (email.body || '').slice(0,1500))) {
+        const { data: chaseProject } = await supabase.from('projects').select('aos').eq('id', email.project_id).maybeSingle();
+        const chaseAOs = Array.isArray(chaseProject?.aos) ? chaseProject.aos : [];
+        const from = String(email.sender_email || '').toLowerCase().trim();
+        if (chaseAOs.some(a => [a.surv_email, a.surveyorEmail].some(v => String(v || '').toLowerCase().trim() === from))) {
+          results.skipped++;
+          continue;
+        }
+      }
       // Fixed URGENTLY 2026-09-20, real, confirmed historical bug -
       // traced directly: seven emails from July/August 2026
       // accumulated between 24 and 105 duplicate 'pending' drafts
