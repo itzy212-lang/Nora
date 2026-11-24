@@ -16,7 +16,7 @@ async function listPdfs(token,folder,depth=0){
  const data=await r.json();let out=[];
  for(const x of data.value||[]){
   if(x.file&&/\.pdf$/i.test(x.name))out.push(x);
-  if(x.folder&&depth<2&&/invoice|fee|surveyor|document|aos|adjoining/i.test(x.name))out.push(...await listPdfs(token,x.id,depth+1));
+  if(x.folder&&depth<3&&(depth===0||/invoice|fee|surveyor|document|aos|adjoining|award/i.test(x.name)))out.push(...await listPdfs(token,x.id,depth+1));
  }
  return out;
 }
@@ -75,6 +75,8 @@ async function run(email,job){
   await send(email.sender_email,'Re: '+email.subject,reply);
   const {error}=await sb.from('aos_invoice_chase_jobs').update({aos_sent_at:new Date().toISOString(),status:'completed',updated_at:new Date().toISOString()}).eq('email_id',email.id);
   if(error)throw Error('AOS sent but ledger update failed: '+error.message);
+  const {error:flagError}=await sb.from('emails').update({is_replied:true,ai_auto_responded:true,ai_auto_responded_at:new Date().toISOString(),replied_at:new Date().toISOString()}).eq('id',email.id);
+  if(flagError)console.warn('[aos-chase] Reply status update failed:',flagError.message);
  }
  return 'sent';
 }
