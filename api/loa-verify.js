@@ -39,7 +39,8 @@ export default async function handler(req,res){
    if(uploaded.error)throw uploaded.error;
    const {error:re}=await sb.from('loa_signing_requests').update({status:'completed',completed_at:verifiedAt,final_path:path}).eq('id',request.id).eq('status','pending');
    if(re)throw re;
-   const filing=await fileCompletedLOA({request:{...request,final_path:path,completed_at:verifiedAt},signers,final});
+   let filing=null;
+   try { filing=await fileCompletedLOA({request:{...request,final_path:path,completed_at:verifiedAt},signers,final}); } catch(e) { console.error('[loa-verify] Signed PDF saved but OneDrive filing failed',e); }
    const appointmentLabel=request.appointment_type.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment';
    const attachment=[{filename:'Signed-Letter-of-Appointment.pdf',content:final.toString('base64')}];
    const signerEmails=[...new Set(signers.map(x=>x.email))];
@@ -51,10 +52,10 @@ export default async function handler(req,res){
    const {data:ownerLookup}=await sb.auth.admin.getUserById(request.user_id);
    const ownerEmail=ownerLookup?.user?.email;
    const signedNames=signers.map(x=>x.name).join(' and ');
-   const filingDescription=request.appointment_type.startsWith('bo_')?'main project file':'relevant Adjoining Owner project file';
+   const filingDescription='appropriate project file';
    const ownerDelivery=ownerEmail?await Promise.allSettled([sendLOAEmail({
     userId:request.user_id,to:[ownerEmail],subject:appointmentLabel+' signed: '+signedNames,
-    text:signedNames+' '+(signers.length===1?'has':'have')+' signed the '+appointmentLabel+'.\n\nThe completed document has been saved to the '+filingDescription+'.\n\nPlease see the attached signed Letter of Appointment.',
+    text:signedNames+' '+(signers.length===1?'has':'have')+' signed the '+appointmentLabel+'.\n\n'+(filing?'The completed document has been saved to the '+filingDescription+'.':'The completed document is attached, but automatic OneDrive filing failed.')+'\n\nPlease see the attached signed Letter of Appointment.',
     attachments:attachment
    })]):[];
    const deliveries=[...signerDeliveries,...ownerDelivery];
