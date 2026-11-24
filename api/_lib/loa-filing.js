@@ -5,7 +5,7 @@ export async function fileCompletedLOA({request,signers,final}){
  const sb=db(),isBO=request.appointment_type.startsWith('bo_');
  const {data:{user},error:ue}=await sb.auth.admin.getUserById(request.user_id);
  if(ue||!user?.email)throw Error('Cannot identify connected OneDrive owner');
- const {data:project,error:pe}=await sb.from('projects').select('onedrive_folder_id,bo_premise_address,aos').eq('id',request.project_id).single();
+ const {data:project,error:pe}=await sb.from('projects').select('onedrive_folder_id,bo_premise_address,aos,role').eq('id',request.project_id).single();
  if(pe||!project?.onedrive_folder_id)throw Error('Project OneDrive folder unavailable');
  let aoId=null,folderId=project.onedrive_folder_id;
  if(!isBO){
@@ -21,7 +21,8 @@ export async function fileCompletedLOA({request,signers,final}){
   if(matching.length!==1)throw Error('Cannot uniquely identify the adjoining owner for this LOA');
   aoId=matching[0].id;
   folderId=matching[0].onedrive_folder_id||matching[0].embedded?.onedrive_folder_id;
-  if(!folderId||folderId===project.onedrive_folder_id)throw Error('Adjoining Owner has no separate OneDrive folder');
+  if(project.role==='AO')folderId=project.onedrive_folder_id;
+  else if(!folderId||folderId===project.onedrive_folder_id)throw Error('Adjoining Owner has no separate OneDrive folder');
  }
  const fileName=(isBO?'Building Owner':'Adjoining Owner')+' - Signed Letter of Appointment - '+request.id.slice(0,8)+'.pdf';
  const existing=await sb.from('documents').select('id,metadata').eq('project_id',request.project_id).eq('file_name',fileName).maybeSingle();
