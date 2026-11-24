@@ -23,7 +23,7 @@ async function listPdfs(token,folder,depth=0){
 }
 async function run(email,job){
  const {data:p,error:pe}=await sb.from('projects').select('id,user_id,role,bo_1_email,bo_1_name,bo_2_email,bo_2_name,bo_premise_address,onedrive_folder_id,aos').eq('id',email.project_id).single();
- if(pe||!p)throw Error('Project unavailable');
+ if(pe||!p||p.user_id!=='3bd1f331-e8ce-477a-8a5d-c5dcdd901434')throw Error('Project unavailable or automatic response not authorised');
  if(p.role&&!['bo','building owner'].includes(String(p.role).toLowerCase()))throw Error('Not a building owner appointment');
  const aos=Array.isArray(p.aos)?p.aos:[];
  const surveyors=aos.filter(a=>[a.surv_email,a.surveyorEmail].some(v=>addr(v)===addr(email.sender_email)));
@@ -91,6 +91,13 @@ export default async function handler(req,res){
  if(error)return res.status(500).json({error:error.message});
  const results=[];
  for(const email of emails||[]){
+  // Temporary owner-only entitlement; fail closed for all other mailboxes.
+  const allowedOwner='3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
+  const {data:ownerData,error:ownerError}=await sb.auth.admin.getUserById(allowedOwner);
+  if(ownerError||!ownerData?.user)continue;
+  if(String(email.user_id)!==allowedOwner && String(email.user_id).toLowerCase()!==String(ownerData.user.email||'').toLowerCase())continue;
+  const {data:settings,error:settingsError}=await sb.from('firm_settings').select('nora_auto_send').eq('user_id',allowedOwner).maybeSingle();
+  if(settingsError||settings?.nora_auto_send!==true)continue;
   if(results.length>=3)break;
   if(!/invoice|payment|fee|outstanding|overdue|reminder|settle/i.test(clean(email.subject+' '+email.body).slice(0,3000)))continue;
   const {data:existing}=await sb.from('aos_invoice_chase_jobs').select('*').eq('email_id',email.id).maybeSingle();
