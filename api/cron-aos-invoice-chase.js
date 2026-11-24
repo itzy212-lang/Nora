@@ -41,9 +41,13 @@ async function run(email,job){
  const candidates=files.filter(f=>/inv|invoice|fee/i.test(f.name));
  let matched=[];
  for(const file of candidates.slice(0,35)){
-  const token=await getValidMicrosoftToken(String(p.user_id));
-  const response=await graph(token,'items/'+encodeURIComponent(file.id)+'/content');
-  const buffer=Buffer.from(await response.arrayBuffer());
+  let buffer;
+  try{
+   const token=await getValidMicrosoftToken(String(email.user_id));
+   if(!token)continue;
+   const response=await graph(token,'items/'+encodeURIComponent(file.id)+'/content');
+   buffer=Buffer.from(await response.arrayBuffer());
+  }catch(err){console.warn('[aos-chase] PDF download unavailable:',err.message);continue;}
   if(buffer.length>8*1024*1024)continue;
   let txt;try{txt=clean((await pdfParse(buffer)).text);}catch{continue;}
   const ref=classification.invoice_reference?.trim();
