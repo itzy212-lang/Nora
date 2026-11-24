@@ -25,14 +25,14 @@ function signatureHtml(f){
  const rows=[];
  if(f.surveyor_name)rows.push('<strong>'+htmlEscape(f.surveyor_name)+'</strong>');
  if(f.qualifications)rows.push(htmlEscape(f.qualifications));
- if(f.logo_base64)rows.push('<img src="cid:nora-firm-logo" alt="'+htmlEscape(f.firm_name||'Firm logo')+'" style="max-width:190px;max-height:52px;display:block;margin:8px 0">');
+ if(f.logo_base64)rows.push('<img src="cid:nora-firm-logo" alt="'+htmlEscape(f.firm_name||'Firm logo')+'" width="190" style="width:190px;height:auto;display:block;margin:8px 0">');
  rows.push('<strong>'+htmlEscape(f.firm_name||f.trading_name||'Square One Consulting')+'</strong>');
  if(f.tel)rows.push('Tel | '+htmlEscape(f.tel));
  if(f.email)rows.push('Email | '+htmlEscape(f.email));
  if(f.website)rows.push(htmlEscape(f.website));
  const address=[f.address_line1,f.address_line2,f.city,f.postcode].filter(Boolean).join(' | ');
  if(address)rows.push(htmlEscape(address));
- if(f.accreditation_b64)rows.push('<img src="cid:nora-accreditation" alt="Accreditations" style="max-width:260px;max-height:46px;display:block;margin-top:10px">');
+ if(f.accreditation_b64)rows.push('<img src="cid:nora-accreditation" alt="Accreditations" width="260" style="width:260px;height:auto;display:block;margin-top:10px">');
  return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.55">'+rows.map(r=>'<div>'+r+'</div>').join('')+'</div>';
 }
 function inlineImages(f){return [['logo_base64','nora-firm-logo','firm-logo.png'],['accreditation_b64','nora-accreditation','accreditation.png']].filter(([key])=>f[key]).map(([key,contentId,name])=>({name,type:'image/png',base64:String(f[key]).replace(/^data:[^;]+;base64,/,''),isInline:true,contentId}));}
