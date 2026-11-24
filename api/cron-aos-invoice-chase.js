@@ -79,10 +79,10 @@ async function run(email,job){
  const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\n'+(found?'Please find the invoice attached. Please arrange payment directly to the surveyor as soon as possible, using the payment details on the invoice.':'Please arrange payment of the surveyor\'s outstanding invoice as soon as possible.')+'\n\nKind regards,\nNora\nSquare One Consulting';
  const reply='Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your reminder. '+(found?'I have sent a copy of your invoice to the Building Owner and advised them to make payment as soon as possible.':'I have advised the Building Owner to make payment as soon as possible.')+' I will follow up as necessary.\n\nKind regards,\nNora\nSquare One Consulting';
  const {data:firm}=await sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,tel,email,website,address_line1,address_line2,city,postcode,logo_base64,accreditation_b64').eq('user_id',p.user_id).maybeSingle();
- const signature=firm?signatureHtml(firm):'Kind regards,<br>Nora<br>Square One Consulting';
+ const signature=firm?signatureHtml(firm):'Square One Consulting';
  const images=firm?inlineImages(firm):[];
  const send=async(to,subject,body,attachments=[])=>{
-  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(email.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>').replace(/<br>Kind regards,<br>Nora<br>Square One Consulting$/, '<br><br>Kind regards,<br>'+signature),attachments:[...attachments,...images]}});
+  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(email.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>').replace(/<br>Kind regards,<br>Nora<br>Square One Consulting$/, '<br><br>Kind regards,<br><br>Nora on behalf of '+htmlEscape(firm?.surveyor_name||'Itzik Darel')+'<br><br>'+signature),attachments:[...attachments,...images]}});
   if(error||data?.error)throw Error('Email delivery failed: '+(error?.message||data?.error));
  };
  if(!job.bo_sent_at){
