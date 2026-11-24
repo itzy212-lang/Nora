@@ -1,4 +1,8 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import { createHash, randomBytes } from 'node:crypto';
 
 export const loaHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -31,7 +35,9 @@ export function validateLOASigners(signers) {
  */
 export async function stampLOASignatures(pdfBytes, signatures, placements) {
   const pdf = await PDFDocument.load(pdfBytes);
-  const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(await readFile(require.resolve('@fontsource/allura/files/allura-latin-400-normal.woff')), {subset:true});
+  const dateFont = await pdf.embedFont(StandardFonts.TimesRomanItalic);
   for (const s of signatures) {
     if (!s.verifiedAt || !s.signedDate) throw Error('Unverified signature cannot be applied');
     const place = placements[s.position];
@@ -44,9 +50,9 @@ export async function stampLOASignatures(pdfBytes, signatures, placements) {
     for(const key of ['signatureAnchor','dateAnchor'])if(place[key])page.drawRectangle({x:place[key].x-2,y:place[key].y-3,width:place[key].width+4,height:place[key].height+5,color:rgb(1,1,1)});
     const signature = String(s.signature || '').trim();
     if (!signature || signature.length>180) throw Error('Signature is missing or too long');
-    const size = Math.min(22, place.signature.height*0.65, place.signature.width / Math.max(1,font.widthOfTextAtSize(signature,1)));
+    const size = Math.min(29, place.signature.height*0.85, place.signature.width / Math.max(1,font.widthOfTextAtSize(signature,1)));
     page.drawText(signature,{x:place.signature.x,y:place.signature.y+4,size,font,color:rgb(.05,.13,.29)});
-    page.drawText(String(s.signedDate),{x:place.date.x,y:place.date.y+3,size:Math.min(11,place.date.height*.7),font,color:rgb(.1,.1,.1)});
+    page.drawText(String(s.signedDate),{x:place.date.x,y:place.date.y+3,size:Math.min(11,place.date.height*.7),font:dateFont,color:rgb(.1,.1,.1)});
   }
   return Buffer.from(await pdf.save());
 }
