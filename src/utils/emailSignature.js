@@ -1,4 +1,4 @@
-import { escapeHtml } from './formatters';
+import { escapeHtml } from './formatters.js';
 
 export function imageSrcFromBase64(value) {
   if (!value) return '';
