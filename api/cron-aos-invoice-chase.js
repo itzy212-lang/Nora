@@ -1,3 +1,4 @@
+import {renderNoraEmail} from './_lib/loa-email.js';
 import {createClient} from '@supabase/supabase-js';
 import {getValidMicrosoftToken} from './onedrive-helper.js';
 import pdfParse from 'pdf-parse';
@@ -20,22 +21,6 @@ async function listPdfs(token,folder,depth=0){
  }
  return out;
 }
-const htmlEscape=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-function signatureHtml(f){
- const rows=[];
- if(f.surveyor_name)rows.push('<strong>'+htmlEscape(f.surveyor_name)+'</strong>');
- if(f.qualifications)rows.push(htmlEscape(f.qualifications));
- if(f.logo_base64)rows.push('<img src="cid:nora-firm-logo" alt="'+htmlEscape(f.firm_name||'Firm logo')+'" width="190" style="width:190px;height:auto;display:block;margin:8px 0">');
- rows.push('<strong>'+htmlEscape(f.firm_name||f.trading_name||'Square One Consulting')+'</strong>');
- if(f.tel)rows.push('Tel | '+htmlEscape(f.tel));
- if(f.email)rows.push('Email | '+htmlEscape(f.email));
- if(f.website)rows.push(htmlEscape(f.website));
- const address=[f.address_line1,f.address_line2,f.city,f.postcode].filter(Boolean).join(' | ');
- if(address)rows.push(htmlEscape(address));
- if(f.accreditation_b64)rows.push('<img src="cid:nora-accreditation" alt="Accreditations" width="260" style="width:260px;height:auto;display:block;margin-top:10px">');
- return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.55">'+rows.map(r=>'<div>'+r+'</div>').join('')+'</div>';
-}
-function inlineImages(f){return [['logo_base64','nora-firm-logo','firm-logo.png'],['accreditation_b64','nora-accreditation','accreditation.png']].filter(([key])=>f[key]).map(([key,contentId,name])=>({name,type:'image/png',base64:String(f[key]).replace(/^data:[^;]+;base64,/,''),isInline:true,contentId}));}
 async function run(email,job){
  const {data:p,error:pe}=await sb.from('projects').select('id,user_id,role,bo_1_email,bo_1_name,bo_2_email,bo_2_name,bo_premise_address,onedrive_folder_id,aos').eq('id',email.project_id).single();
  if(pe||!p)throw Error('Project unavailable');
@@ -76,13 +61,13 @@ async function run(email,job){
  const found=matched.length===1;
  const {file,buffer}=found?matched[0]:{file:null,buffer:null};
  if(found&&job.invoice_item_id&&job.invoice_item_id!==file.id)throw Error('Invoice changed after initial send');
- const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\n'+(found?'Please find the invoice attached. Please arrange payment directly to the surveyor as soon as possible, using the payment details on the invoice.':'Please arrange payment of the surveyor\'s outstanding invoice as soon as possible.')+'\n\nKind regards,\nNora\nSquare One Consulting';
+ const body='Dear '+(p.bo_1_name||'Building Owner')+',\n\nWe have received a payment reminder from the Adjoining Owner\'s Surveyor in relation to their professional fees for '+(p.bo_premise_address||'your property')+'.\n\n'+(found?'Please find the invoice attached. Please arrange payment directly to the surveyor as soon as possible, using the payment details on the invoice.':'Please arrange payment of the surveyor\'s outstanding invoice as soon as possible.');
  const reply='Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your reminder. '+(found?'I have sent a copy of your invoice to the Building Owner and advised them to make payment as soon as possible.':'I have advised the Building Owner to make payment as soon as possible.')+' I will follow up as necessary.\n\nKind regards,\nNora\nSquare One Consulting';
- const {data:firm}=await sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,tel,email,website,address_line1,address_line2,city,postcode,logo_base64,accreditation_b64').eq('user_id',p.user_id).maybeSingle();
- const signature=firm?signatureHtml(firm):'Square One Consulting';
- const images=firm?inlineImages(firm):[];
+ const {data:firm}=await sb.from('firm_settings').select('surveyor_name,qualifications,firm_name,trading_name,tel,email,website,address_line1,address_line2,city,postcode,logo_base64,accreditation_b64,signature_b64').eq('user_id',p.user_id).maybeSingle();
  const send=async(to,subject,body,attachments=[])=>{
-  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(email.user_id),to_email:to,subject,body:body.replace(/\n/g,'<br>').replace(/<br>Kind regards,<br>Nora<br>Square One Consulting$/, '<br><br>Kind regards,<br><br>Nora on behalf of '+htmlEscape(firm?.surveyor_name||'Itzik Darel')+'<br><br>'+signature),attachments:[...attachments,...images]}});
+  const {html,inlineImages}=renderNoraEmail(body,firm);
+  const images=inlineImages.map(a=>({name:a.filename,type:a.contentType,base64:a.content,isInline:true,contentId:a.cid}));
+  const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:String(email.user_id),to_email:to,subject,body:html,attachments:[...attachments,...images]}});
   if(error||data?.error)throw Error('Email delivery failed: '+(error?.message||data?.error));
  };
  if(!job.bo_sent_at){
