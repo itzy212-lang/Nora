@@ -1,4 +1,4 @@
-import {renderNoraEmail} from './_lib/loa-email.js';
+import {renderNoraEmail,configuredNoraEmail} from './_lib/loa-email.js';
 import {createClient} from '@supabase/supabase-js';
 import {getValidMicrosoftToken} from './onedrive-helper.js';
 import pdfParse from 'pdf-parse';
@@ -101,7 +101,7 @@ export default async function handler(req,res){
   try{
    let outcome;
    if(!email.project_id){
-    const {data:knownProjects}=await sb.from('projects').select('aos').eq('user_id',email.user_id).limit(200);
+    const {data:knownProjects}=await sb.from('projects').select('aos,user_id').eq('user_id',email.user_id).limit(200);
     const knownSurveyor=(knownProjects||[]).some(p=>Array.isArray(p.aos)&&p.aos.some(a=>[a.surv_email,a.surveyorEmail].some(v=>addr(v)===addr(email.sender_email))));
     if(!knownSurveyor)throw Error('Unlinked sender is not a verified AOS; no automatic reply');
     const classification=await classify(email);
@@ -109,7 +109,8 @@ export default async function handler(req,res){
     else {
      // No project can be verified: do not approach a Building Owner or promise forwarding.
      // Send only a neutral acknowledgement to the original surveyor.
-     const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:email.user_id,to_email:email.sender_email,subject:'Re: '+email.subject,body:'Dear '+(email.sender_name||'Colleague')+',<br><br>Thank you for your email. I will follow this up and come back to you.<br><br>Kind regards,<br>Nora<br>Square One Consulting'}});
+     const mail=await configuredNoraEmail(sb,knownProjects[0].user_id,'Dear '+(email.sender_name||'Colleague')+',\n\nThank you for your email. I will follow this up and come back to you.');
+     const {data,error}=await sb.functions.invoke('send_email_via_microsoft',{body:{user_id:email.user_id,to_email:email.sender_email,subject:'Re: '+email.subject,body:mail.html,attachments:mail.attachments}});
      if(error||data?.error)throw Error('Holding reply failed: '+(error?.message||data?.error));
      await sb.from('aos_invoice_chase_jobs').update({aos_sent_at:new Date().toISOString(),status:'completed',updated_at:new Date().toISOString()}).eq('email_id',email.id);
      outcome='holding_reply_sent';
