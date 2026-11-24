@@ -8,7 +8,7 @@ import sb from '../../supabaseClient';
 import { getCurrentUserEmail, getCurrentUserUuid, getUserStorageInfo } from '../../utils/getCurrentUserEmail';
 
 // base64 inflates by a third and Vercel caps a response at 4.5 MB.
-export const MAX_PICK_BYTES = 3 * 1024 * 1024;
+export const MAX_PICK_BYTES = 25 * 1024 * 1024;
 
 const fmtDate = (iso) => {
   if (!iso) return '';
@@ -81,13 +81,21 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
       const userEmail = await getCurrentUserEmail();
       const files = [];
       for (const it of Object.values(picked)) {
+        let offset=0, chunks=[], meta=null;
+        const userUuid=await getCurrentUserUuid();
+        do {
         const r = await fetch('/api/storage-file', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userEmail, user_uuid: await getCurrentUserUuid(), item_id: it.id }),
+          body: JSON.stringify({ user_id: userEmail, user_uuid: userUuid, item_id: it.id, offset }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !d.base64) throw new Error(`${it.name}: ${d.error || 'could not be fetched'}`);
-        files.push({ name: d.name || it.name, type: d.type || 'application/octet-stream', size: d.size || it.size || 0, base64: d.base64 });
+        if(meta && meta.size!==d.size)throw new Error('File changed during download; please retry');
+        meta=d; chunks.push(d.base64);
+        if(d.nextOffset!=null && (!Number.isSafeInteger(d.nextOffset)||d.nextOffset<=offset))throw new Error('Invalid download continuation');
+        offset=d.nextOffset ?? null;
+        } while(offset!==null);
+        files.push({ name: meta.name || it.name, type: meta.type || 'application/octet-stream', size: meta.size || it.size || 0, base64: chunks.join('') });
       }
       onAttach(files);
       onClose();
@@ -121,7 +129,7 @@ export default function ProjectFilePicker({ projectId, onAttach, onClose }) {
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', wordBreak: 'break-word' }}>{it.name}</span>
                   {!isFolder && <span style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    {fmtDate(it.modified)} · {tooBig ? 'over 3 MB - too large' : fmtSize(it.size)}
+                    {fmtDate(it.modified)} · {tooBig ? 'over 25 MB - too large' : fmtSize(it.size)}
                   </span>}
                 </span>
               </div>
