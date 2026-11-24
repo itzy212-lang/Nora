@@ -1032,6 +1032,7 @@ export default async function handler(req, res) {
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of scopedEmails) {
+      const automaticResponseAllowed = (await resolveOwnerUserId(email.user_id)) === '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
       // AOS invoice payment chases are handled by the dedicated two-stage
       // invoice workflow, never by the general automatic reply generator.
       if (email.project_id && /invoice|payment|fees|outstanding|overdue/i.test((email.subject || '') + ' ' + (email.body || '').slice(0,1500))) {
@@ -1089,7 +1090,7 @@ export default async function handler(req, res) {
       // once, ever, across all future runs, and never again after
       // that, until someone flips JITTEN_ONE_OFF_ENABLED back on for
       // a fresh one-off deliberately.
-      if (JITTEN_ONE_OFF_ENABLED && !jitenOneOffAlreadyUsed && (email.sender_email || '').toLowerCase() === JITTEN_EMAIL) {
+      if (automaticResponseAllowed && JITTEN_ONE_OFF_ENABLED && !jitenOneOffAlreadyUsed && (email.sender_email || '').toLowerCase() === JITTEN_EMAIL) {
         try {
           const oneOffOwnerUserId = await resolveOwnerUserId(email.user_id);
           const oneOffSenderUser = (authUsersList || []).find(u => u.id === oneOffOwnerUserId);
@@ -1243,7 +1244,7 @@ export default async function handler(req, res) {
       // account with no firm_settings row of its own (like
       // itzy212@gmail.com) correctly gets false here, not whatever
       // another account's row happens to say.
-      const autoSendEnabled = autoSendSettingsByUser.get(ownerUserId) || false;
+      const autoSendEnabled = automaticResponseAllowed && (autoSendSettingsByUser.get(ownerUserId) || false);
       const eligibility = await computeSendEligibility(email, supabase, ownerUserId);
       if (!eligibility.eligible) {
         results.skipped++;
