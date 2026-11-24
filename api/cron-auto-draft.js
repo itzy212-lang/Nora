@@ -1,3 +1,4 @@
+import { configuredNoraEmail } from './_lib/loa-email.js';
 // api/cron-auto-draft.js
 // Runs every 15 minutes via Vercel cron.
 // Finds new inbound emails that need a draft response and generates them via Ely.
@@ -1116,13 +1117,15 @@ export default async function handler(req, res) {
           }).select('id').single();
           if (oneOffSaveError) throw oneOffSaveError;
 
+          const oneOffMail = await configuredNoraEmail(supabase,oneOffOwnerUserId,oneOffBody);
           const { data: oneOffSendData, error: oneOffSendError } = await supabase.functions.invoke(
             oneOffIsGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
             { body: {
               user_id: oneOffIsGmail ? oneOffOwnerUserId : (email.user_id || null),
               to_email: email.sender_email,
               subject: 'Re: ' + (email.subject || ''),
-              body: toHtmlForSend(oneOffBody),
+              body: oneOffMail.html,
+              attachments: oneOffMail.attachments,
               reply_to_message_id: email.id,
             } }
           );
@@ -2139,13 +2142,15 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).limit(1).maybeSingle();
             const isGmail = integ?.email_provider === 'gmail';
 
+            const noraMail = await configuredNoraEmail(supabase,ownerUserId,draftBody);
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
               isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
               { body: {
                 user_id: isGmail ? ownerUserId : (email.user_id || null),
                 to_email: email.sender_email,
                 subject: 'Re: ' + (email.subject || ''),
-                body: toHtmlForSend(draftBody),
+                body: noraMail.html,
+                attachments: noraMail.attachments,
                 reply_to_message_id: email.id,
               } }
             );
