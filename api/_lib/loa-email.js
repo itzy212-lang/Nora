@@ -6,11 +6,7 @@ import { escapeHtml } from '../../src/utils/formatters.js';
 export function renderNoraEmail(text,firm){
  if(!firm)throw Error('Configured firm signature unavailable');
  const inlineImages=[];
- const signature=buildFirmSignatureHTML(firm).replace(/src="data:(image\/[a-zA-Z0-9.+-]+);base64,([^"]+)"/g,(_,type,content)=>{
-  const cid='nora-signature-'+inlineImages.length;
-  inlineImages.push({filename:cid+'.'+(type==='image/jpeg'?'jpg':type.split('/')[1]),contentType:type,content:content.replace(/\s/g,''),cid});
-  return 'src="cid:'+cid+'"';
- });
+ const signature=buildFirmSignatureHTML(firm);
  const html=escapeHtml(String(text||'').trim().replace(/(?:\n\s*)*Kind regards,?\s*\n\s*Nora(?:\s+on behalf of Itzik Darel|\s*\n\s*On behalf of Itzik Darel|\s*\n\s*Square One Consulting)?(?:\s*\n\s*help@sq1consulting\.co\.uk)?\s*$/i,'').trim()+'\n\nKind regards,\nNora\nOn behalf of Itzik Darel').replace(/\n/g,'<br>')+'<br><br>'+signature;
  return {html,inlineImages};
 }
