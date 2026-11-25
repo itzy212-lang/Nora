@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import sb from '../../supabaseClient';
 
-export default function LoginScreen({ onLogin }) {
+// Remembers that this device has been used with an account, so the front page
+// is only shown to genuine first-time visitors.
+export const markHasAccount = () => { try { localStorage.setItem('nora_has_account', '1'); } catch { /* optional */ } };
+
+export default function LoginScreen({ onLogin, initialMode = 'login' }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'reset'
+  const [mode, setMode] = useState(initialMode); // 'login' | 'signup' | 'reset'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -19,10 +23,12 @@ export default function LoginScreen({ onLogin }) {
       if (mode === 'login') {
         const { data, error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        markHasAccount();
         onLogin(data.user);
       } else if (mode === 'signup') {
         const { data, error } = await sb.auth.signUp({ email, password });
         if (error) throw error;
+        markHasAccount();
         setMessage('Check your email for a confirmation link.');
       } else if (mode === 'reset') {
         const { error } = await sb.auth.resetPasswordForEmail(email);

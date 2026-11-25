@@ -11,7 +11,8 @@ import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
-import LoginScreen from './components/layout/LoginScreen';
+import LoginScreen, { markHasAccount } from './components/layout/LoginScreen';
+import LandingPage from './components/layout/LandingPage';
 import SplashScreen from './components/layout/SplashScreen';
 
 // Features
@@ -526,13 +527,19 @@ export default function App() {
   }, [previousView, previousProjectId, state.projects, setCurrentProject, clearCurrentProject]);
 
   const [splashDone, setSplashDone] = useState(false);
+  // Front page only for people who have never signed in on this device.
+  useEffect(() => { if (currentUser) markHasAccount(); }, [currentUser]);
+  const [entryChoice, setEntryChoice] = useState(() => {
+    try { return localStorage.getItem('nora_has_account') ? 'login' : null; } catch { return null; }
+  });
 
   if (!authChecked || !splashDone) {
     return <SplashScreen onDone={() => setSplashDone(true)} />;
   }
 
   if (!currentUser) {
-    return <LoginScreen onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
+    if (!entryChoice) return <LandingPage onSignIn={() => setEntryChoice('login')} onSignUp={() => setEntryChoice('signup')} />;
+    return <LoginScreen initialMode={entryChoice} onLogin={(user) => dispatch({ type: 'SET_USER', payload: user })} />;
   }
 
   const renderContent = () => {
