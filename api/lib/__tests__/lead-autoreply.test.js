@@ -19,7 +19,7 @@ const helen = {
 
 const settings = normaliseSettings({
   mode: 'send', surveyor_full_name: 'Itzik Darel ACIArb MIPWS', surveyor_short_name: 'Itzik',
-  fee_notice: 100, fee_surveyor: 700, fee_additional: 400, followup_days: 2,
+  fee_notice: 100, fee_surveyor: 700, fee_soc: 450, additional_discount_pct: 50, based_in: 'North London', followup_days: 2,
 });
 
 describe('recognising a genuine lead', () => {
@@ -93,23 +93,33 @@ describe('who is doing the works (strict)', () => {
 });
 
 describe('reply wording', () => {
-  it('owner pricing reply uses the user\'s fees and never mentions location', () => {
+  it('owner pricing reply follows the approved wording, uses the user\'s fees and never mentions location of the works', () => {
     const r = composeReply('owner_works', { name: 'Mrs Mary Helmore', information: 'Loft conversion', postcode: 'EN5 5QQ' }, settings);
     expect(r.kind).toBe('owner_works_pricing');
     expect(r.body).toContain('Hi Mary,');
-    expect(r.body).toContain('Local Surveyors Direct');
-    expect(r.body).toContain('"Loft conversion"');
-    expect(r.body).toContain('£100 to serve the notice');
-    expect(r.body).toContain('£700 to act for you');
-    expect(r.body).toContain('£400');
-    expect(r.body).toContain('subject to reviewing the drawings and the notifiable works');
-    expect(r.body).toContain('within 24 hours');
-    expect(r.body).toContain('Itzik Darel ACIArb MIPWS will be your named surveyor');
-    expect(r.body).not.toMatch(/EN5|location/i);
+    expect(r.body).toContain('We are party wall specialists based in North London.');
+    expect(r.body).toContain('Local Surveyors Direct in relation to notifiable works under the Party Wall Act, namely: Loft conversion.');
+    expect(r.body).toContain('Your named surveyor, if you decide to go with us, will be Itzik Darel ACIArb MIPWS');
+    expect(r.body).toContain('£100 for serving the notice and £700 for acting as your surveyor');
+    expect(r.body).toContain('four options');
+    expect(r.body).toContain('1. Consent outright');
+    expect(r.body).toContain('2. Consent subject to a schedule of condition. In this scenario our fee would be £450.');
+    expect(r.body).toContain('3. Dissent and agree to appoint your surveyor as the agreed surveyor.');
+    expect(r.body).toContain('We do not charge extra to act as the agreed surveyor.');
+    expect(r.body).toContain("4. Dissent and appoint their own surveyor. In this scenario our fee would be £700, and you would also pay their surveyor's fees.");
+    expect(r.body).toContain('each additional neighbour would be £100');
+    expect(r.body).toContain('50% reduction');
+    expect(r.body).toContain("you would pay their surveyor's fees in full");
+    expect(r.body).not.toMatch(/EN5/);
+  });
+  it('quotes a first-person description instead of running it into the sentence', () => {
+    const r = composeReply('owner_works', { name: 'A B', information: 'I am planning a loft conversion' }, settings);
+    expect(r.body).toContain('Party Wall Act ("I am planning a loft conversion").');
   });
   it('keeps the works vague when none was given', () => {
     const r = composeReply('owner_works', { name: 'A B', information: '' }, settings);
-    expect(r.body).toContain('regarding your proposed works.');
+    expect(r.body).toContain('under the Party Wall Act.');
+    expect(r.body).not.toContain('namely');
   });
   it('neighbour and unclear replies contain no prices', () => {
     for (const kind of ['neighbour_works', 'unclear']) {
@@ -173,7 +183,7 @@ describe('the whole job', () => {
   const mk = (mode) => {
     const db = fakeDb({
       emails: [{ id: 'e1', user_id: owner, direction: 'incoming', is_draft: false, sender_email: SENDER, received_at: '2026-11-25T09:00:00Z', ...mary }],
-      settingsRow: { user_id: owner, lead_autoreply: { mode, surveyor_full_name: 'Itzik Darel ACIArb MIPWS', surveyor_short_name: 'Itzik', fee_notice: 100, fee_surveyor: 700, fee_additional: 400, followup_days: 2 } },
+      settingsRow: { user_id: owner, lead_autoreply: { mode, surveyor_full_name: 'Itzik Darel ACIArb MIPWS', surveyor_short_name: 'Itzik', fee_notice: 100, fee_surveyor: 700, fee_soc: 450, additional_discount_pct: 50, followup_days: 2 } },
     });
     const sent = [];
     const deps = { supabase: db, resolveOwnerUserId: async (u) => u, sendMail: async (m) => { sent.push(m); }, automaticSendingAllowed: () => true, now: new Date('2026-11-25T10:00:00Z') };

@@ -171,13 +171,16 @@ export function normaliseSettings(raw) {
     sign_off_name: String(s.sign_off_name || 'Nora').trim(),
     fee_notice: money(s.fee_notice),
     fee_surveyor: money(s.fee_surveyor),
-    fee_additional: money(s.fee_additional),
+    fee_additional: money(s.fee_additional),          // no longer used in the wording
+    fee_soc: money(s.fee_soc),                         // consent subject to a schedule of condition
+    additional_discount_pct: Number.isFinite(Number(s.additional_discount_pct)) && Number(s.additional_discount_pct) > 0 && Number(s.additional_discount_pct) < 100 ? Math.round(Number(s.additional_discount_pct)) : 50,
+    based_in: String(s.based_in || '').trim(),         // e.g. "North London"
     followup_days: days,
   };
 }
 
 export function pricingReady(settings) {
-  return !!(settings.fee_notice && settings.fee_surveyor && settings.fee_additional && settings.surveyor_full_name);
+  return !!(settings.fee_notice && settings.fee_surveyor && settings.fee_soc && settings.surveyor_full_name);
 }
 
 const gbp = (n) => '£' + Number(n).toLocaleString('en-GB');
@@ -197,16 +200,23 @@ export function composeReply(kind, lead, settings) {
 
   if (kind === 'owner_works' && pricingReady(settings)) {
     const works = tidyWorks(lead?.information);
-    const intro = works
-      ? `Hi ${first},\n\nThank you for your enquiry. We received your details from Local Surveyors Direct regarding your proposed works ("${works}").`
-      : `Hi ${first},\n\nThank you for your enquiry. We received your details from Local Surveyors Direct regarding your proposed works.`;
+    const based = settings.based_in ? ` based in ${settings.based_in}` : '';
+    const firstPerson = /^(i|we|my|our|i'm|we're|i've|we've)\b/i.test(works);
+    const base = 'We received your details from Local Surveyors Direct in relation to notifiable works under the Party Wall Act';
+    const worksLine = !works ? `${base}.` : firstPerson ? `${base} ("${works}").` : `${base}, namely: ${works}.`;
+    const d = settings.additional_discount_pct;
     const body = [
-      intro,
-      `If you have one adjoining owner, our fee is ${gbp(settings.fee_notice)} to serve the notice and ${gbp(settings.fee_surveyor)} to act for you as your surveyor. We do not charge extra to act as the agreed surveyor between you and each neighbour.`,
-      `If you have more than one neighbour, each additional appointment is ${gbp(settings.fee_additional)}.`,
-      `These fees are subject to reviewing the drawings and the notifiable works.`,
-      `Once the go-ahead has been received, notices are typically sent within 24 hours.`,
-      `${surveyorFull} will be your named surveyor and will reach out to you directly as soon as available.`,
+      `Hi ${first},`,
+      `We are party wall specialists${based}. ${worksLine}`,
+      `Your named surveyor, if you decide to go with us, will be ${surveyorFull}, who will reach out to you shortly to discuss this in more detail and give you a more accurate costing. In the meantime, our rough prices are ${gbp(settings.fee_notice)} for serving the notice and ${gbp(settings.fee_surveyor)} for acting as your surveyor.`,
+      [
+        `The notice gives the adjoining owner four options:`,
+        `1. Consent outright. No further action, and you have only paid for the notice (${gbp(settings.fee_notice)}).`,
+        `2. Consent subject to a schedule of condition. In this scenario our fee would be ${gbp(settings.fee_soc)}.`,
+        `3. Dissent and agree to appoint your surveyor as the agreed surveyor. In this scenario our fee would be ${gbp(settings.fee_surveyor)}. We do not charge extra to act as the agreed surveyor.`,
+        `4. Dissent and appoint their own surveyor. In this scenario our fee would be ${gbp(settings.fee_surveyor)}, and you would also pay their surveyor's fees.`,
+      ].join('\n'),
+      `Please note: if you have more than one neighbour, the notice for each additional neighbour would be ${gbp(settings.fee_notice)}, and any further action would be priced at a ${d}% reduction. If they go with option 4 and appoint their own surveyor, our fee would still be reduced by ${d}%, but you would pay their surveyor's fees in full.`,
       signOff,
     ].join('\n\n');
     return { subject: 'Your party wall enquiry', body, kind: 'owner_works_pricing' };
