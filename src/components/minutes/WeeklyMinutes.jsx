@@ -426,7 +426,7 @@ export default function WeeklyMinutes({ defaultProjectId, onBack, onOpenComposer
                     )}
                     {!isPortalConfirmation && <span style={{ fontSize: 11, fontWeight: 700, color: c.text, background: c.bg, padding: '2px 8px', borderRadius: 6 }}>{t.severity}</span>}
                     {programmeTitle && (
-                      <span style={{ fontSize: 11, color: '#6a49e0', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>→ {programmeTitle}</span>
+                      <span style={{ fontSize: 11, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>→ {programmeTitle}</span>
                     )}
                   </div>
                 </div>

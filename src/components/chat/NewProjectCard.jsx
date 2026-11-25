@@ -109,7 +109,7 @@ export default function NewProjectCard({ proposal }) {
           type="button"
           onClick={create}
           disabled={problems.length > 0 || status === 'creating'}
-          style={{ fontSize: 12.5, padding: '6px 14px', borderRadius: 99, border: 'none', background: problems.length ? 'var(--border)' : 'var(--blue, #7c5cf0)', color: '#fff', fontWeight: 600, cursor: problems.length || status === 'creating' ? 'default' : 'pointer' }}
+          style={{ fontSize: 12.5, padding: '6px 14px', borderRadius: 99, border: 'none', background: problems.length ? 'var(--border)' : 'var(--blue, #3b82f6)', color: '#fff', fontWeight: 600, cursor: problems.length || status === 'creating' ? 'default' : 'pointer' }}
         >
           {status === 'creating' ? 'Creating…' : 'Create project'}
         </button>

@@ -556,7 +556,7 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
                   <button key={String(opt.val)} type="button"
                     onClick={() => setUploadMode(opt.val)}
                     style={{ flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                      border: uploadMode === opt.val ? '2px solid #7c5cf0' : '1px solid var(--border)',
+                      border: uploadMode === opt.val ? '2px solid #3b82f6' : '1px solid var(--border)',
                       background: uploadMode === opt.val ? '#eff6ff' : 'transparent',
                       color: uploadMode === opt.val ? '#1e40af' : 'var(--text2)' }}>
                     {opt.label}
@@ -576,14 +576,14 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
                       onChange={e => { setUploadFiles(Array.from(e.target.files)); setExtractedScope(null); }} />
                     {extracting ? (
                       <div>
-                        <div style={{ fontSize: 14, color: '#7c5cf0', fontWeight: 600 }}>🔍 Reading documents...</div>
+                        <div style={{ fontSize: 14, color: '#3b82f6', fontWeight: 600 }}>🔍 Reading documents...</div>
                         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Claude is extracting project details and scope of works</div>
                       </div>
                     ) : uploadFiles.length > 0 ? (
                       <div>
                         <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✅ {uploadFiles.length} file{uploadFiles.length !== 1 ? 's' : ''} uploaded</div>
                         {uploadFiles.map(f => <div key={f.name} style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{f.name}</div>)}
-                        {extractedScope && <div style={{ fontSize: 12, color: '#7c5cf0', marginTop: 6, fontWeight: 600 }}>✨ {extractedScope.length} scope items extracted — review below</div>}
+                        {extractedScope && <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 6, fontWeight: 600 }}>✨ {extractedScope.length} scope items extracted — review below</div>}
                       </div>
                     ) : (
                       <div>

@@ -180,7 +180,7 @@ export default function SaveToOneDriveOverlay({
           <button onClick={handleSave} disabled={saving || !selectedFolderId || folders.length === 0}
             style={{
               padding: '8px 20px',
-              background: selectedFolderId && !saving ? '#7c5cf0' : 'var(--border)',
+              background: selectedFolderId && !saving ? '#3b82f6' : 'var(--border)',
               color: selectedFolderId && !saving ? '#fff' : 'var(--text3)',
               border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
               cursor: selectedFolderId && !saving ? 'pointer' : 'not-allowed',

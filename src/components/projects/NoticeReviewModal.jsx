@@ -134,8 +134,8 @@ function btn(variant, disabled = false) {
     border: 'none',
     transition: 'all 0.15s',
   };
-  if (variant === 'ghost') return { ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #38337a' };
-  if (variant === 'primary') return { ...base, background: disabled ? '#2b2760' : '#7c5cf0', color: disabled ? '#475569' : '#fff' };
+  if (variant === 'ghost') return { ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #2a2d3a' };
+  if (variant === 'primary') return { ...base, background: disabled ? '#1e2130' : '#3b82f6', color: disabled ? '#475569' : '#fff' };
   if (variant === 'success') return { ...base, background: disabled ? '#1e2930' : '#16a34a', color: disabled ? '#64748b' : '#fff' };
   if (variant === 'danger') return { ...base, background: disabled ? '#21171c' : '#7f1d1d', color: disabled ? '#6b4a55' : '#fecaca', border: '1px solid #7f1d1d' };
   return base;
@@ -287,7 +287,7 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-      <div style={{ background: '#1c1941', border: '1px solid #38337a', borderRadius: 12, padding: 24, width: 380, maxWidth: '92vw' }}>
+      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 380, maxWidth: '92vw' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 16 }}>Attach PDF</div>
         <div onClick={() => fileRef.current?.click()} style={{ border: '1.5px dashed #334155', borderRadius: 8, padding: 20, textAlign: 'center', cursor: 'pointer', marginBottom: 16, color: file ? '#e2e8f0' : '#64748b', fontSize: 13 }}>
           {file ? `✓ ${file.name}` : 'Click to select a PDF'}
@@ -297,12 +297,12 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Insert position</div>
           {INSERT_OPTIONS.map(opt => (
             <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#94a3b8', marginBottom: 8, cursor: 'pointer' }}>
-              <input type="radio" name="insertMode" value={opt.value} checked={insertMode === opt.value} onChange={() => setInsertMode(opt.value)} style={{ accentColor: '#7c5cf0' }} />
+              <input type="radio" name="insertMode" value={opt.value} checked={insertMode === opt.value} onChange={() => setInsertMode(opt.value)} style={{ accentColor: '#3b82f6' }} />
               {opt.label}
             </label>
           ))}
           {insertMode === 'after_number' && (
-            <input type="number" min={1} max={Math.max(1, totalPages)} value={pageNum} onChange={e => setPageNum(e.target.value)} placeholder={`1–${Math.max(1, totalPages)}`} style={{ marginLeft: 24, width: 80, padding: '4px 8px', background: '#2b2760', border: '1px solid #334155', borderRadius: 4, color: '#e2e8f0', fontSize: 13 }} />
+            <input type="number" min={1} max={Math.max(1, totalPages)} value={pageNum} onChange={e => setPageNum(e.target.value)} placeholder={`1–${Math.max(1, totalPages)}`} style={{ marginLeft: 24, width: 80, padding: '4px 8px', background: '#1e2130', border: '1px solid #334155', borderRadius: 4, color: '#e2e8f0', fontSize: 13 }} />
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -323,12 +323,12 @@ function SaveModal({ project, ao, saving, onConfirm, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-      <div style={{ background: '#1c1941', border: '1px solid #38337a', borderRadius: 12, padding: 24, width: 430, maxWidth: '92vw' }}>
+      <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 430, maxWidth: '92vw' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 6 }}>Finalise document</div>
         <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>Choose where the final PDF should be saved.</div>
         {options.map(opt => (
-          <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: saveTarget === opt.value ? '#2b2467' : '#2b2760', border: `1.5px solid ${saveTarget === opt.value ? '#7c5cf0' : '#38337a'}`, borderRadius: 8, marginBottom: 8, cursor: 'pointer' }}>
-            <input type="radio" name="saveTarget" value={opt.value} checked={saveTarget === opt.value} onChange={() => setSaveTarget(opt.value)} style={{ accentColor: '#7c5cf0', marginTop: 2 }} />
+          <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: saveTarget === opt.value ? '#1a2340' : '#1e2130', border: `1.5px solid ${saveTarget === opt.value ? '#3b82f6' : '#2a2d3a'}`, borderRadius: 8, marginBottom: 8, cursor: 'pointer' }}>
+            <input type="radio" name="saveTarget" value={opt.value} checked={saveTarget === opt.value} onChange={() => setSaveTarget(opt.value)} style={{ accentColor: '#3b82f6', marginTop: 2 }} />
             <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>{opt.label}</div>
           </label>
         ))}
@@ -617,12 +617,12 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const aoLabel = currentEntry.ao?.premise || currentEntry.ao?.address || currentEntry.ao?.name || 'Adjoining Owner';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#15122f', zIndex: 500, display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 20px', minHeight: 52, background: '#1c1941', borderBottom: '1px solid #38337a', flexShrink: 0, overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#0f1117', zIndex: 500, display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 20px', minHeight: 52, background: '#161820', borderBottom: '1px solid #2a2d3a', flexShrink: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, overflow: 'hidden' }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project?.bo_premise_address || 'Notice Pack'}</span>
           <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aoLabel}</span>
-          {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#2b2467', border: '1px solid #6a49e0', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
+          {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>
@@ -634,7 +634,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {!mobilePreviewOpen ? (
             <>
-              <div style={{ padding: 10, borderBottom: '1px solid #38337a' }}>
+              <div style={{ padding: 10, borderBottom: '1px solid #2a2d3a' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{pages.length} pages</span>
                   <button onClick={() => setShowAttach(true)} disabled={generating} style={{ ...btn('ghost', generating), padding: '5px 10px', fontSize: 12 }}>+ Add page</button>
@@ -650,9 +650,9 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
                     <div
                       key={page.id}
                       onClick={() => { setCurrentPageIdx(index); setMobilePreviewOpen(true); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, marginBottom: 8, background: selected ? '#2b2467' : '#191c26', border: `1px solid ${selected ? '#7c5cf0' : '#38337a'}`, borderRadius: 10, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, marginBottom: 8, background: selected ? '#1a2340' : '#191c26', border: `1px solid ${selected ? '#3b82f6' : '#2a2d3a'}`, borderRadius: 10, cursor: 'pointer' }}
                     >
-                      <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ width: 20, height: 20, flexShrink: 0, accentColor: '#7c5cf0', cursor: 'pointer' }} />
+                      <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ width: 20, height: 20, flexShrink: 0, accentColor: '#3b82f6', cursor: 'pointer' }} />
                       <div style={{ width: 40, height: 54, background: '#fff', borderRadius: 3, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
                         <div style={{ padding: '8px 5px', display: 'flex', flexDirection: 'column', gap: 2 }}>{[88, 64, 78, 54, 82, 70].map((width, row) => <div key={row} style={{ height: row === 0 ? 2.5 : 2, width: `${width}%`, background: row === 0 ? '#9ca3af' : '#d1d5db', borderRadius: 1 }} />)}</div>
                       </div>
@@ -666,7 +666,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
               </div>
 
               {selectedCount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#21171c', borderTop: '1px solid #38337a', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#21171c', borderTop: '1px solid #2a2d3a', flexShrink: 0 }}>
                   <span style={{ fontSize: 13, color: '#fecaca' }}>{selectedCount} selected</span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => setSelectedPageIds(new Set())} style={btn('ghost')}>Cancel</button>
@@ -677,7 +677,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
             </>
           ) : (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #38337a', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #2a2d3a', flexShrink: 0 }}>
                 <button onClick={() => setMobilePreviewOpen(false)} style={btn('ghost')}>← Back</button>
                 <span style={{ fontSize: 13, color: '#e2e8f0' }}>Page {currentPageIdx + 1} of {pages.length}</span>
               </div>
@@ -690,8 +690,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         </div>
       ) : (
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <aside style={{ width: 230, background: '#181538', borderRight: '1px solid #38337a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: 10, borderBottom: '1px solid #38337a' }}>
+        <aside style={{ width: 230, background: '#13151e', borderRight: '1px solid #2a2d3a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: 10, borderBottom: '1px solid #2a2d3a' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{pages.length} pages</span>
               <button onClick={handleSelectAll} disabled={generating || !pages.length} style={{ background: 'transparent', border: 0, color: '#93c5fd', fontSize: 11, cursor: 'pointer' }}>{allSelected ? 'Clear all' : 'Select all'}</button>
@@ -709,8 +709,8 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
               const selected = selectedPageIds.has(page.id);
               const current = currentPageIdx === index;
               return (
-                <div key={page.id} onClick={() => setCurrentPageIdx(index)} style={{ position: 'relative', display: 'flex', gap: 9, padding: 8, marginBottom: 8, background: current ? '#2b2467' : '#191c26', border: `1px solid ${current ? '#7c5cf0' : selected ? '#64748b' : '#38337a'}`, borderRadius: 7, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ marginTop: 3, accentColor: '#7c5cf0', cursor: 'pointer' }} />
+                <div key={page.id} onClick={() => setCurrentPageIdx(index)} style={{ position: 'relative', display: 'flex', gap: 9, padding: 8, marginBottom: 8, background: current ? '#1a2340' : '#191c26', border: `1px solid ${current ? '#3b82f6' : selected ? '#64748b' : '#2a2d3a'}`, borderRadius: 7, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(page.id)} style={{ marginTop: 3, accentColor: '#3b82f6', cursor: 'pointer' }} />
                   <div style={{ width: 48, height: 66, background: '#fff', borderRadius: 2, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
                     <div style={{ padding: '10px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>{[88, 64, 78, 54, 82, 70, 45].map((width, row) => <div key={row} style={{ height: row === 0 ? 3 : 2, width: `${width}%`, background: row === 0 ? '#9ca3af' : '#d1d5db', borderRadius: 1 }} />)}</div>
                     <span style={{ position: 'absolute', right: 3, bottom: 2, fontSize: 8, color: '#6b7280' }}>{index + 1}</span>

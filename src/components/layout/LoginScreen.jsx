@@ -58,7 +58,7 @@ export default function LoginScreen({ onLogin, initialMode = 'login' }) {
               0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
               28% { opacity: 1; transform: translateY(-4px); }
             }
-            .nora-dot { animation: noraPulse 1.4s ease-in-out infinite; border-radius: 50%; background: #7c5cf0; display: inline-block; }
+            .nora-dot { animation: noraPulse 1.4s ease-in-out infinite; border-radius: 50%; background: var(--text); display: inline-block; }
             .nora-dot-1 { animation-delay: 0s; }
             .nora-dot-2 { animation-delay: 0.22s; }
             .nora-dot-3 { animation-delay: 0.44s; }

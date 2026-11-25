@@ -704,12 +704,12 @@ function FirmTab() {
             {logoB64 && <img src={imageSrcFromBase64(logoB64)} alt="Logo" style={{ maxHeight: 52, maxWidth: 190, objectFit: 'contain', display: 'block', marginBottom: 10 }} onError={e => { e.currentTarget.src = `data:image/jpeg;base64,${logoB64}`; }} />}
             <div style={{ fontWeight: 700, fontSize: 14 }}>{form.surveyorName}</div>
             {form.qualifications && <div style={{ color: '#555' }}>{form.qualifications}</div>}
-            <hr style={{ border: 'none', borderTop: '2px solid #7c5cf0', margin: '8px 0' }} />
+            <hr style={{ border: 'none', borderTop: '2px solid #4f7fff', margin: '8px 0' }} />
             <div style={{ fontWeight: 600 }}>{form.firmName}</div>
             {(form.addressLine1 || form.addressLine2) && <div style={{ color: '#555' }}>{[form.addressLine1, form.addressLine2, form.city, form.postcode].filter(Boolean).join(', ')}</div>}
             {form.tel && <div style={{ color: '#555' }}>T: {form.tel}</div>}
-            {form.email && <div><a href={`mailto:${form.email}`} style={{ color: '#7c5cf0' }}>{form.email}</a></div>}
-            {form.website && <div><a href={form.website} style={{ color: '#7c5cf0' }}>{form.website}</a></div>}
+            {form.email && <div><a href={`mailto:${form.email}`} style={{ color: '#4f7fff' }}>{form.email}</a></div>}
+            {form.website && <div><a href={form.website} style={{ color: '#4f7fff' }}>{form.website}</a></div>}
             {sigB64 && <img src={imageSrcFromBase64(sigB64)} alt="Signature" style={{ maxHeight: 60, maxWidth: 220, objectFit: 'contain', marginTop: 8, display: 'block' }} onError={e => { e.currentTarget.src = `data:image/jpeg;base64,${sigB64}`; }} />}
             {accreditationB64 && <img src={imageSrcFromBase64(accreditationB64)} alt="Accreditation" style={{ maxHeight: 44, maxWidth: 180, objectFit: 'contain', marginTop: 10, display: 'block' }} onError={e => { e.currentTarget.src = `data:image/jpeg;base64,${accreditationB64}`; }} />}
           </div>
@@ -994,7 +994,7 @@ function BusinessHoursSection({ settings, save }) {
                 onClick={() => updateDay(key, day.off ? { off: false, open: day.open || '09:00', close: day.close || '17:00' } : { off: true })}
                 style={{
                   width: 36, height: 20, borderRadius: 99, cursor: 'pointer', flexShrink: 0,
-                  background: !day.off ? 'var(--accent, #6a49e0)' : 'var(--border)',
+                  background: !day.off ? 'var(--accent, #2563eb)' : 'var(--border)',
                   position: 'relative', transition: 'background 0.2s',
                 }}
               >
@@ -1075,7 +1075,7 @@ function NoraTab() {
         onClick={() => save({ [key]: !settings[key] })}
         style={{
           width: 42, height: 24, borderRadius: 99, cursor: 'pointer', flexShrink: 0,
-          background: settings[key] ? 'var(--accent, #6a49e0)' : 'var(--border)',
+          background: settings[key] ? 'var(--accent, #2563eb)' : 'var(--border)',
           position: 'relative', transition: 'background 0.2s',
         }}
       >
@@ -1116,14 +1116,14 @@ function NoraTab() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
                 borderRadius: 8, cursor: 'pointer',
-                border: `1.5px solid ${settings.nora_personality === p.value ? 'var(--accent, #6a49e0)' : 'var(--border)'}`,
+                border: `1.5px solid ${settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'var(--border)'}`,
                 background: settings.nora_personality === p.value ? 'var(--blue-bg, #eff6ff)' : 'var(--bg)',
               }}
             >
               <div style={{
                 width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                border: `2px solid ${settings.nora_personality === p.value ? 'var(--accent, #6a49e0)' : 'var(--border)'}`,
-                background: settings.nora_personality === p.value ? 'var(--accent, #6a49e0)' : 'transparent',
+                border: `2px solid ${settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'var(--border)'}`,
+                background: settings.nora_personality === p.value ? 'var(--accent, #2563eb)' : 'transparent',
               }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.label}</div>
@@ -1632,7 +1632,7 @@ function UserBrainV2Section() {
               disabled={saving}
               style={{
                 padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                background: 'var(--accent, #6a49e0)', color: '#fff', border: 'none',
+                background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
                 cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
               }}
             >

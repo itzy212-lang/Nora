@@ -1359,7 +1359,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                       <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>💾 {msg.memorySaveProposal.suggestion}</span>
                       <button
                         onClick={() => handleSaveToMemory(msg.memorySaveProposal, msg.id)}
-                        style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #7c5cf0)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}
+                        style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #3b82f6)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}
                       >Remember this</button>
                       <button
                         onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? {...m, memorySaveProposal: null} : m))}
@@ -1491,7 +1491,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
             {memorySaveProposal && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 16px', padding: '10px 14px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)' }}>
           <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>💾 {memorySaveProposal.suggestion}</span>
-          <button onClick={() => handleSaveToMemory(memorySaveProposal)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #7c5cf0)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Remember this</button>
+          <button onClick={() => handleSaveToMemory(memorySaveProposal)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--blue, #3b82f6)', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Remember this</button>
           <button onClick={() => setMemorySaveProposal(null)} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>No</button>
         </div>
       )}

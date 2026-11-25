@@ -384,7 +384,7 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
   // subsequent, not duplicated back onto the individual card too.
   // Nothing to show here at this stage — the AO simply has no
   // status yet, exactly as it should read before its first notice.
-  return { label: '', colour: '#7c5cf0', action: null };
+  return { label: '', colour: '#3b82f6', action: null };
 }
 
 function fmtGBP(v) {
@@ -6231,7 +6231,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                   try { await updateAORecord(ao, patch); } catch (e) { console.warn('[Award] Could not save dates:', e?.message); }
                   handleGenerateAward({ ...ao, ...patch });
                 }}
-                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #6a49e0)', color: '#fff', cursor: 'pointer', opacity: (awardDatePrompt.fields.some(f => !f.value) || awardDatePrompt.other.length > 0) ? 0.5 : 1 }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent, #2563eb)', color: '#fff', cursor: 'pointer', opacity: (awardDatePrompt.fields.some(f => !f.value) || awardDatePrompt.other.length > 0) ? 0.5 : 1 }}
               >Save &amp; generate</button>
             </div>
           </div>

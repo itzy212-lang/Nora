@@ -47,7 +47,7 @@ export default function SplashScreen({ onDone }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'linear-gradient(180deg,#ffffff,#f1eefe)',
+      background: '#0a0a0a',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       opacity: fadeOut ? 0 : 1,
@@ -58,16 +58,16 @@ export default function SplashScreen({ onDone }) {
           <span style={{
             fontFamily: "'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif",
             fontSize: 64, fontWeight: 300, letterSpacing: '-1px',
-            lineHeight: 1, color: '#0f1a44',
+            lineHeight: 1, color: 'white',
           }}>nora</span>
           <span style={{ display: 'flex', alignItems: 'flex-end', gap: 7, paddingLeft: 9, paddingBottom: 12 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot1, transform: `translateY(${-(dot1 - 0.15) * 6}px)` }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot2, transform: `translateY(${-(dot2 - 0.15) * 6}px)` }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot3, transform: `translateY(${-(dot3 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot1, transform: `translateY(${-(dot1 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot2, transform: `translateY(${-(dot2 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot3, transform: `translateY(${-(dot3 - 0.15) * 6}px)` }}/>
           </span>
         </div>
         <div style={{
-          fontSize: 12, color: '#8a93b2',
+          fontSize: 12, color: 'rgba(255,255,255,0.35)',
           letterSpacing: '3px', marginTop: 10,
           fontFamily: "'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif",
           fontWeight: 300, textAlign: 'center',

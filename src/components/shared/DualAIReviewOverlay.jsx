@@ -375,7 +375,7 @@ export default function DualAIReviewOverlay({ diff, gptItems, onFinalise, onClos
                 padding: '8px 20px',
                 borderRadius: 8,
                 border: 'none',
-                background: '#7c5cf0',
+                background: '#3b82f6',
                 color: '#fff',
                 fontSize: 13,
                 fontWeight: 600,

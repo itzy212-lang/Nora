@@ -7,22 +7,22 @@ const c = {
 
   topbar: { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid #edf0f4', flexShrink:0 },
   topLeft: { display:'flex', alignItems:'center', gap:10 },
-  avatar: { width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#7c5cf0,#a58bff)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0 },
+  avatar: { width:30, height:30, borderRadius:'50%', background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0 },
   topTitle: { fontSize:14, fontWeight:700, color:'var(--text)' },
   topSub: { fontSize:11, color:'var(--text3)', marginTop:1 },
   backBtn: { fontSize:13, color:'var(--text3)', background:'none', border:'none', cursor:'pointer', padding:'4px 8px', borderRadius:8, marginRight:4 },
-  pill: { fontSize:11, fontWeight:600, background:'#f0f5ff', color:'#7c5cf0', padding:'4px 12px', borderRadius:99, border:'1px solid #dce8ff', whiteSpace:'nowrap' },
+  pill: { fontSize:11, fontWeight:600, background:'#f0f5ff', color:'#3b82f6', padding:'4px 12px', borderRadius:99, border:'1px solid #dce8ff', whiteSpace:'nowrap' },
 
   chat: { flex:1, overflowY:'auto', padding:'14px', display:'flex', flexDirection:'column', gap:12 },
 
   // Nora bubble
   noraRow: { display:'flex', alignItems:'flex-start', gap:8 },
-  noraSm: { width:26, height:26, borderRadius:'50%', background:'linear-gradient(135deg,#7c5cf0,#a58bff)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0, marginTop:2 },
+  noraSm: { width:26, height:26, borderRadius:'50%', background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0, marginTop:2 },
   noraBubble: { background:'#f4f5f7', borderRadius:'4px 14px 14px 14px', padding:'10px 13px', fontSize:13, color:'var(--text2)', lineHeight:1.6, maxWidth:'85%' },
 
   // User bubble
   userRow: { display:'flex', justifyContent:'flex-end' },
-  userBubble: { background:'#7c5cf0', color:'#fff', borderRadius:'14px 4px 14px 14px', padding:'9px 13px', fontSize:13, maxWidth:'60%', lineHeight:1.5 },
+  userBubble: { background:'#3b82f6', color:'#fff', borderRadius:'14px 4px 14px 14px', padding:'9px 13px', fontSize:13, maxWidth:'60%', lineHeight:1.5 },
 
   // Summary card
   summaryCard: { borderRadius:14, border:'1px solid #dce8ff', background:'#f0f5ff', padding:'14px 16px', marginLeft:34 },
@@ -49,8 +49,8 @@ const c = {
   infoRow: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderBottom:'1px solid #f4f5f7', fontSize:12 },
   infoLabel: { color:'var(--text3)', fontWeight:500 },
   infoVal: (col) => ({ color:col==='red'?'#ef4444':col==='amber'?'#d97706':col==='green'?'#059669':'var(--text)', fontWeight:600 }),
-  insight: { marginTop:10, padding:'9px 11px', background:'#fafafa', borderRadius:10, borderLeft:'3px solid #7c5cf0', fontSize:12, color:'var(--text2)', lineHeight:1.55 },
-  insightLabel: { fontSize:9.5, fontWeight:700, color:'#7c5cf0', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:3 },
+  insight: { marginTop:10, padding:'9px 11px', background:'#fafafa', borderRadius:10, borderLeft:'3px solid #3b82f6', fontSize:12, color:'var(--text2)', lineHeight:1.55 },
+  insightLabel: { fontSize:9.5, fontWeight:700, color:'#3b82f6', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:3 },
   aoActions: (level) => ({
     padding:'10px 13px', display:'flex', gap:7, flexWrap:'wrap',
     borderTop:`1px solid ${level==='red'?'#fee2e2':level==='amber'?'#fde68a':'#d1fae5'}`,
@@ -83,7 +83,7 @@ const c = {
     padding:'9px 13px', display:'flex', alignItems:'center', gap:8,
     background:isChasing?'#fffbeb':'#f0f5ff',
   }),
-  emailStripLabel: (isChasing) => ({ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', color:isChasing?'#d97706':'#7c5cf0' }),
+  emailStripLabel: (isChasing) => ({ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', color:isChasing?'#d97706':'#3b82f6' }),
   emailBody: { padding:'12px 13px' },
   emailSender: { fontSize:14, fontWeight:700, color:'var(--text)', marginBottom:2 },
   emailSubject: { fontSize:12.5, fontWeight:600, color:'var(--text2)', marginBottom:6 },
@@ -105,7 +105,7 @@ const c = {
   inputbar: { borderTop:'1px solid #edf0f4', padding:'10px 12px', display:'flex', gap:8, alignItems:'center', background:'#fff', flexShrink:0 },
   input: { flex:1, fontSize:14, padding:'9px 14px', borderRadius:99, border:'1px solid #e8eaed', background:'#f9fafb', outline:'none', color:'var(--text)', fontFamily:'inherit' },
   micBtn: { width:36, height:36, borderRadius:'50%', background:'#f4f5f7', border:'1px solid #e8eaed', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, cursor:'pointer', flexShrink:0 },
-  sendBtn: (active) => ({ width:36, height:36, borderRadius:'50%', background:active?'#7c5cf0':'#e8eaed', border:'none', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, cursor:active?'pointer':'default', flexShrink:0, color:'#fff' }),
+  sendBtn: (active) => ({ width:36, height:36, borderRadius:'50%', background:active?'#3b82f6':'#e8eaed', border:'none', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, cursor:active?'pointer':'default', flexShrink:0, color:'#fff' }),
 };
 
 // ── Button ────────────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ function Btn({ variant='ghost', onClick, disabled, children }) {
   const variants = {
     red:     { background:'#ef4444', color:'#fff', border:'none' },
     amber:   { background:'#f59e0b', color:'#fff', border:'none' },
-    primary: { background:'#7c5cf0', color:'#fff', border:'none' },
+    primary: { background:'#3b82f6', color:'#fff', border:'none' },
     green:   { background:'#10b981', color:'#fff', border:'none' },
     ghost:   { background:'#fff', color:'var(--text3)', border:'1px solid #e8eaed' },
     skip:    { background:'transparent', color:'#9ca3af', border:'none', fontSize:11.5 },
@@ -223,8 +223,8 @@ function EmailQueueCard({ item, onAction, onOpenComposer }) {
         <div style={c.emailStripLabel(email.isChasing)}>{email.isChasing?'⚡ Chasing — needs reply':'Unreplied email'}</div>
         {email.daysAgo > 0 && (
           <span style={{ marginLeft:'auto', fontSize:10.5, fontWeight:600,
-            background:email.daysAgo>=3?'rgba(239,68,68,0.1)':'rgba(124,92,240,0.1)',
-            color:email.daysAgo>=3?'#ef4444':'#7c5cf0', padding:'2px 7px', borderRadius:99 }}>
+            background:email.daysAgo>=3?'rgba(239,68,68,0.1)':'rgba(59,130,246,0.1)',
+            color:email.daysAgo>=3?'#ef4444':'#3b82f6', padding:'2px 7px', borderRadius:99 }}>
             {email.daysAgo}d ago
           </span>
         )}

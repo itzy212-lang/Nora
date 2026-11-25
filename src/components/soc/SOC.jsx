@@ -1461,7 +1461,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
               <button
                 onClick={() => setShowRawNotes(v => !v)}
                 style={{
-                  fontSize: 12.5, fontWeight: 600, color: 'var(--blue, #6a49e0)', background: 'none',
+                  fontSize: 12.5, fontWeight: 600, color: 'var(--blue, #2563eb)', background: 'none',
                   border: 'none', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline',
                 }}
               >
@@ -1496,7 +1496,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                   onKeyDown={e => { if (e.key === 'Enter') addArea(newAreaName); if (e.key === 'Escape') { setShowAddArea(false); setNewAreaName(''); } }}
                   style={{ ...s.input, fontSize: 13, padding: '5px 8px', width: 190 }} />
                 <button onClick={() => addArea(newAreaName)} disabled={!newAreaName.trim()}
-                  style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99, border: 'none', background: 'var(--blue, #6a49e0)', color: '#fff', cursor: 'pointer', opacity: newAreaName.trim() ? 1 : 0.5 }}>Add</button>
+                  style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99, border: 'none', background: 'var(--blue, #2563eb)', color: '#fff', cursor: 'pointer', opacity: newAreaName.trim() ? 1 : 0.5 }}>Add</button>
                 <button onClick={() => { setShowAddArea(false); setNewAreaName(''); }}
                   style={{ fontSize: 12, padding: '5px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'none', color: 'var(--text2)', cursor: 'pointer' }}>Cancel</button>
               </span>

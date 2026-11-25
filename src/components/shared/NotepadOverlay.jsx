@@ -227,7 +227,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 12px', borderBottom: '1px solid #e5e7eb', background: '#fff', gap: 10 }}>
               <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#111827' }}>📝 Notes</div>
-              <button onClick={createNote} style={{ background: '#7c5cf0', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={createNote} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 + New
               </button>
               <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: '0 2px', lineHeight: 1 }}>×</button>
@@ -251,7 +251,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
                 >
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>✅ To-do list</div>
-                    <div style={{ fontSize: 11.5, color: '#7c5cf0' }}>Calls, emails, correspondence</div>
+                    <div style={{ fontSize: 11.5, color: '#3b82f6' }}>Calls, emails, correspondence</div>
                   </div>
                   <div style={{ fontSize: 10, color: '#93c5fd', marginTop: 8 }}>Always here</div>
                 </div>
@@ -328,7 +328,7 @@ export default function NotepadOverlay({ onClose, onOpenEmail, onOpenProject }) 
                   className="color-btn"
                   onClick={() => handleColorChange(c.id)}
                   style={{
-                    width: 22, height: 22, borderRadius: '50%', border: c.id === color ? '2px solid #7c5cf0' : `2px solid ${c.border}`,
+                    width: 22, height: 22, borderRadius: '50%', border: c.id === color ? '2px solid #3b82f6' : `2px solid ${c.border}`,
                     background: c.bg, cursor: 'pointer', padding: 0,
                   }}
                   title={c.id}

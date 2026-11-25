@@ -185,7 +185,7 @@ export default function PartyWallLeadQuote({ project, onAccept, onBack, onProjec
             });
             setDetailsEditing(true);
           }}
-            style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+            style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
             Edit
           </button>
         </div>
@@ -205,7 +205,7 @@ export default function PartyWallLeadQuote({ project, onAccept, onBack, onProjec
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={saveDetails} disabled={detailsSaving}
-              style={{ padding: '8px 14px', borderRadius: 99, border: 'none', background: '#7c5cf0', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              style={{ padding: '8px 14px', borderRadius: 99, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               {detailsSaving ? 'Saving...' : 'Save'}
             </button>
             <button onClick={() => setDetailsEditing(false)}
@@ -265,7 +265,7 @@ export default function PartyWallLeadQuote({ project, onAccept, onBack, onProjec
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={generate} disabled={generating}
-          style={{ padding: '9px 16px', borderRadius: 99, border: 'none', background: '#7c5cf0', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: generating ? 0.6 : 1 }}>
+          style={{ padding: '9px 16px', borderRadius: 99, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: generating ? 0.6 : 1 }}>
           {generating ? 'Generating…' : '📄 Generate fee proposal'}
         </button>
         {project.stage !== 'live' && (
