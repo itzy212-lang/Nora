@@ -49,7 +49,7 @@ export default function LandRegistryUpload({ target = 'bo', onApply }) {
     try {
       const result = await readLandRegistryFile(file);
       setRegister(result);
-      setUseService(false); // an address for service elsewhere is only used if the user ticks it
+      setUseService(serviceAddressDiffers(result)); // an owner address that differs from the property is their registered address, so it is used unless unticked
       setStatus('review');
     } catch (e) {
       setError(e.message || 'Could not read that document.');
@@ -120,7 +120,7 @@ export default function LandRegistryUpload({ target = 'bo', onApply }) {
         {differs && (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text2)', marginBottom: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={useService} onChange={(e) => setUseService(e.target.checked)} style={{ marginTop: 3 }} />
-            <span>Also use the first owner’s address for service as the service / correspondence address (it is not the property itself)</span>
+            <span>The first owner’s registered address is different from the property, so use it as their address: <strong>{owners[0]?.address_for_service}</strong> (untick to keep the property address)</span>
           </label>
         )}
 

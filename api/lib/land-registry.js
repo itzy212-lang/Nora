@@ -39,6 +39,11 @@ Return ONLY valid JSON, no markdown:
 
 const clean = (v) => (v === undefined || v === null ? '' : String(v).replace(/\s+/g, ' ').trim());
 
+// The register prints the postcode in brackets: "18 Harcourt Road, London (N22 7XW)".
+// We want it as plain text: "18 Harcourt Road, London N22 7XW".
+const POSTCODE_IN_BRACKETS = /\s*[(\[]\s*([A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2})\s*[)\]]/g;
+const cleanAddress = (v) => clean(v).replace(POSTCODE_IN_BRACKETS, ' $1').replace(/\s+/g, ' ').trim();
+
 function parseModelJson(raw) {
   const text = String(raw || '').replace(/```json|```/g, '').trim();
   if (!text) return null;
@@ -70,7 +75,7 @@ function normaliseLandRegistry(raw) {
       name: clean(o?.name),
       kind: clean(o?.kind).toLowerCase() === 'company' ? 'company' : 'person',
       company_number: clean(o?.company_number),
-      address_for_service: clean(o?.address_for_service),
+      address_for_service: cleanAddress(o?.address_for_service),
     }))
     .filter((o) => o.name);
 
@@ -80,7 +85,7 @@ function normaliseLandRegistry(raw) {
     is_land_registry_register: obj.is_land_registry_register !== false && (owners.length > 0 || !!clean(obj.title_number) || !!clean(obj.property_address)),
     title_number: clean(obj.title_number),
     tenure: tenure === 'freehold' || tenure === 'leasehold' ? tenure : '',
-    property_address: clean(obj.property_address),
+    property_address: cleanAddress(obj.property_address),
     owners,
     notes: clean(obj.notes),
   };
@@ -96,4 +101,4 @@ function looksLikeRegisterText(text) {
   return /register of title|title number|proprietorship register|property register/i.test(t);
 }
 
-export { LAND_REGISTRY_PROMPT, normaliseLandRegistry, parseModelJson, looksLikeRegisterText };
+export { cleanAddress, LAND_REGISTRY_PROMPT, normaliseLandRegistry, parseModelJson, looksLikeRegisterText };

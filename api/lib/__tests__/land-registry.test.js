@@ -20,6 +20,15 @@ describe('normaliseLandRegistry', () => {
     expect(r.is_land_registry_register).toBe(true);
   });
 
+  it('prints the postcode plainly, not in brackets', () => {
+    const r = normaliseLandRegistry({
+      property_address: '18 Harcourt Road, London (N22 7XW)',
+      owners: [{ name: 'A B', address_for_service: '4 Elm Close, Leeds (LS1 1AA)' }],
+    });
+    expect(r.property_address).toBe('18 Harcourt Road, London N22 7XW');
+    expect(r.owners[0].address_for_service).toBe('4 Elm Close, Leeds LS1 1AA');
+  });
+
   it('drops owners without a name and never invents missing fields', () => {
     const r = normaliseLandRegistry({ owners: [{ name: '  ' }, { name: 'ACME HOMES LIMITED', kind: 'company' }] });
     expect(r.owners).toEqual([{ name: 'ACME HOMES LIMITED', kind: 'company', company_number: '', address_for_service: '' }]);
