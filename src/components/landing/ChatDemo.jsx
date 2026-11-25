@@ -4,17 +4,30 @@ import { useInView } from './hooks';
 
 const EXAMPLES = [
   {
-    chip: 'Review the foundation correspondence',
-    q: 'Nora, review the correspondence with the adjoining owner’s surveyor regarding the foundation design. Establish what was previously agreed, identify the outstanding issues and draft a response.',
-    a: 'I’ve reviewed the relevant project correspondence, identified the previous agreements and established a chronology of the outstanding issues. I’ve prepared a draft response for your review.',
-    draft: true,
+    chip: 'Notices "expired"',
+    q: 'I want to discuss the adjoining owner’s surveyor’s last email.',
+    a: 'We served the notices on 8 December 2025, so it is nearly a year since service. The surveyor is now asking for fresh notices to be served on the basis that the originals have expired. That point is wrong. In Leadbetter v Marylebone Corporation (No. 2), the position is that once notices have been dissented to and surveyors appointed, the notices do not expire simply because time passes before the award. I’ve drafted a reply for you.',
+    draft: {
+      subject: 'Re: Request for new notices',
+      body: 'Dear Jamie,\n\nThank you for your email. I do not agree that fresh notices are required. The notices were served on 8 December 2025 and dissented to, and surveyors were then appointed. In those circumstances the notices do not expire while we work towards an award, as confirmed in Leadbetter v Marylebone Corporation (No. 2).\n\nI suggest we continue with the award on the basis of the existing notices.\n\nKind regards',
+    },
+  },
+  {
+    chip: 'Agreed third surveyor',
+    q: 'What third surveyor did we agree for number 16?',
+    a: 'I’ve reviewed your correspondence with Jamie Peters at James & Associates. The third surveyor you agreed is Grimshaw Surveyors.',
+  },
+  {
+    chip: 'Insurance certificates clause',
+    q: 'I want to respond to the adjoining owner’s surveyor’s email.',
+    a: 'They are asking for a clause in the award requiring the building owner to provide copies of the insurance certificates for their selected contractors. That is not a party wall matter, and neither surveyor can enforce it under the Act, so the award should not include it. I’ve drafted a reply setting that out politely.',
+    draft: {
+      subject: 'Re: Proposed award clause',
+      body: 'Dear Jamie,\n\nThank you for your email. I understand why you would like sight of the contractors’ insurance certificates, but I do not think it can form part of the award. It is not a matter the Party Wall etc. Act 1996 gives either of us the power to determine, and we could not enforce it.\n\nI am happy to ask my appointing owner to share them voluntarily, outside the award.\n\nKind regards',
+    },
   },
   { chip: 'Notices due to expire', q: 'Which notices are due to expire this week?', a: 'I’ve checked the notice dates across your projects and listed those approaching expiry, with the next step for each.' },
-  { chip: 'What was agreed', q: 'What did the adjoining owner’s surveyor previously agree to?', a: 'I’ve found the relevant emails and notes and summarised what was agreed, with the dates.' },
-  { chip: 'Signed appointments', q: 'Have we received all the signed letters of appointment?', a: 'I’ve checked the signing status on this project and listed who has signed and who is still outstanding.' },
-  { chip: 'Position on a dispute', q: 'What is the current position on this dispute?', a: 'I’ve summarised the history of the matter, the points still in dispute and a sensible next step.' },
   { chip: 'Outstanding invoices', q: 'Which invoices are still outstanding?', a: 'I’ve listed the unpaid invoices, and I can draft a reminder for any of them.' },
-  { chip: 'Summarise correspondence', q: 'Summarise the correspondence on this project.', a: 'Here is a short summary of the correspondence, in date order.' },
   { chip: 'Outstanding actions', q: 'What actions are still outstanding?', a: 'I’ve gathered the open tasks and deadlines for this project.' },
 ];
 
@@ -37,7 +50,7 @@ export default function ChatDemo({ reduced }) {
     } else if (phase === 'a') {
       t = chars < ex.a.length ? setTimeout(() => setChars((c) => c + 3), 16) : setTimeout(() => setPhase('done'), 300);
     } else if (phase === 'done' && !manual) {
-      t = setTimeout(() => { setIdx((i) => (i + 1) % EXAMPLES.length); setPhase('q'); setChars(0); }, 4200);
+      t = setTimeout(() => { setIdx((i) => (i + 1) % EXAMPLES.length); setPhase('q'); setChars(0); }, ex.draft ? 9000 : 4200);
     }
     return () => clearTimeout(t);
   }, [reduced, inView, phase, chars, ex, manual]);
@@ -68,9 +81,17 @@ export default function ChatDemo({ reduced }) {
             ) : (
               <>{showA}{!reduced && phase === 'a' && <span className="lp-caret" />}</>
             )}
-            {done && ex.draft && (
-              <span className="lp-draftchip"><Icon name="check" size={14} stroke={2.4} /> Draft ready for your review</span>
-            )}
+          </div>
+        )}
+        {done && ex.draft && (
+          <div className="lp-draftcard">
+            <div className="lp-draftcard-head"><span>Draft email</span><span className="lp-draftcard-subj">{ex.draft.subject}</span></div>
+            <div className="lp-draftcard-body">{ex.draft.body}</div>
+            <div className="lp-draftcard-actions" aria-hidden="true">
+              <span className="lp-dc-btn lp-dc-primary">Use this draft</span>
+              <span className="lp-dc-btn">Open in composer</span>
+              <span className="lp-dc-btn">Copy</span>
+            </div>
           </div>
         )}
       </div>
