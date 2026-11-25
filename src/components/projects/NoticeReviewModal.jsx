@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
+import { noticeFileName } from '../../utils/noticeFileName';
 import { uploadDocument } from '../../utils/providers';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -204,7 +205,7 @@ async function mergePdfsClientSide(pageList) {
 }
 
 function safeFileName(value) {
-  return String(value || 'Notice_Pack.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return String(value || 'Notice_Pack.pdf').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_{2,}/g, '_');
 }
 
 function aoMatches(item, target) {
@@ -572,7 +573,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     setSaving(true);
 
     const is104b = (currentEntry?.aoSections || []).includes('s10_4b');
-    const fileName = safeFileName(`${project?.bo_premise_address || 'Notice'}_${currentEntry.ao?.premise || currentEntry.ao?.name || 'AO'}_${is104b ? '10_4b_Appointment' : 'Notice_Pack'}.pdf`);
+    const fileName = safeFileName(noticeFileName(project?.bo_premise_address, currentEntry.ao?.premise, currentEntry.ao?.name, is104b ? '10_4b_Appointment' : 'Notice_Pack'));
     const pack = {
       ao: currentEntry.ao,
       aoSections: currentEntry.aoSections,
