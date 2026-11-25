@@ -3,11 +3,23 @@ import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 
 export const loaHash = bytes => createHash('sha256').update(bytes).digest('hex');
 export const loaToken = () => randomBytes(24).toString('base64url');
 export const loaTokenHash = token => loaHash(Buffer.from(token));
+/**
+ * A signer's link, worked out from their id and a server-only secret instead of
+ * being random. The database still stores only its one-way hash, but because
+ * the link can be recalculated, a reminder can resend exactly the same link as
+ * the original email, so there is never an old link and a new link in
+ * circulation. Nobody without the server secret can work a link out.
+ */
+export const loaSignerToken = signerId => {
+  const key = process.env.LOA_LINK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw Error('Signing link secret not configured');
+  return createHmac('sha256', key).update('loa-signer-link:' + signerId).digest('base64url').slice(0, 32);
+};
 
 /** A signer is invited only after the previous signer has verified their email. */
 export function nextLOASigner(signers) {

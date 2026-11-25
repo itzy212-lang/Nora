@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'node:crypto';
-import { loaHash, loaToken, loaTokenHash, locateLOAAnchors, stampLOASignatures, appendLOAAuditPage } from './_lib/loa-signing.js';
+import { loaHash, loaSignerToken, loaTokenHash, locateLOAAnchors, stampLOASignatures, appendLOAAuditPage } from './_lib/loa-signing.js';
 import { sendLOAEmail } from './_lib/loa-email.js';
 import { fileCompletedLOA } from './_lib/loa-filing.js';
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -67,7 +67,7 @@ export default async function handler(req,res){
   await sb.from('loa_signing_requests').update({partial_path:path}).eq('id',request.id);
   const next=signers.find(x=>x.status==='waiting');
   if(!next)throw Error('Next signer not found');
-  const nextToken=loaToken();
+  const nextToken=loaSignerToken(next.id);
   const {data:activated,error:ae}=await sb.from('loa_signers').update({status:'invited',invited_at:verifiedAt,token_hash:loaTokenHash(nextToken)}).eq('id',next.id).eq('status','waiting').select('id').maybeSingle();
   if(ae||!activated)throw Error('Could not activate next signatory');
   const appointmentLabel=request.appointment_type.startsWith('bo_')?'Building Owner Letter of Appointment':'Adjoining Owners Letter of Appointment';

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { loaToken, loaTokenHash, loaHash, validateLOASigners, locateLOAAnchors } from './_lib/loa-signing.js';
+import { loaSignerToken, loaTokenHash, loaHash, validateLOASigners, locateLOAAnchors } from './_lib/loa-signing.js';
 import { sendLOAEmail } from './_lib/loa-email.js';
 
 const db=()=>createClient(process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -28,8 +28,9 @@ export default async function handler(req,res){
   if(uploaded.error)throw uploaded.error;
   const {error:re}=await sb.from('loa_signing_requests').insert({id,user_id:user.id,project_id,appointment_type,document_name:clean(document_name)||'Letter of Appointment.pdf',original_path:path,original_sha256:loaHash(bytes)});
   if(re)throw re;
-  const tokens=people.map(()=>loaToken());
-  const {data:rows,error:se}=await sb.from('loa_signers').insert(people.map((p,i)=>({...p,request_id:id,token_hash:loaTokenHash(tokens[i]),status:i===0?'invited':'waiting',invited_at:i===0?new Date().toISOString():null}))).select('id');
+  const signerIds=people.map(()=>crypto.randomUUID());
+  const tokens=signerIds.map(loaSignerToken);
+  const {data:rows,error:se}=await sb.from('loa_signers').insert(people.map((p,i)=>({...p,id:signerIds[i],request_id:id,token_hash:loaTokenHash(tokens[i]),status:i===0?'invited':'waiting',invited_at:i===0?new Date().toISOString():null}))).select('id');
   if(se)throw se;
   const intro=people.length>1?'There is more than one person required to sign this appointment. Once you have signed and verified your signature, the next signatory will automatically receive their invitation.':'';
   const message='Dear '+people[0].name.split(' ')[0]+',\n\nYour Letter of Appointment is ready for review and electronic signature.\n\nPlease use this secure link:\n'+host+'/loa/sign/'+tokens[0]+'\n\n'+intro+'';

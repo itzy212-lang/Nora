@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runLoaChase, activeMessage } from '../../cron-loa-chase.js';
+import { loaSignerToken, loaTokenHash } from '../../_lib/loa-signing.js';
+process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-secret';
 
 // Tiny in-memory stand-in for the database calls the chaser makes.
 function fakeDb(tables) {
@@ -45,9 +47,17 @@ describe('LOA chaser', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toEqual(['sam@example.com']);
     expect(sent[0].text).toMatch(/\/loa\/sign\/[A-Za-z0-9_-]{32}/);
+    expect(sent[0].text).toContain('replaces the one sent before'); // older random link
     expect(t.loa_signers[0].token_hash).not.toBe('old');
     expect(t.loa_signers[0].chased_at).toBeTruthy();
     expect(t.loa_signers[1].chased_at).toBeNull();
+  });
+  it('resends exactly the same link when the original can be worked out', async () => {
+    const t = setup(); t.loa_signers[0].token_hash = loaTokenHash(loaSignerToken('s1')); const sent = [];
+    await runLoaChase(fakeDb(t), { now: NOW, send: async (m) => { sent.push(m); return { sent: true }; } });
+    expect(sent[0].text).toContain('/loa/sign/' + loaSignerToken('s1'));
+    expect(sent[0].text).toContain('same secure link as before');
+    expect(t.loa_signers[0].token_hash).toBe(loaTokenHash(loaSignerToken('s1'))); // unchanged
   });
   it('the second signer is chased 3 days after THEIR invitation, not before', async () => {
     const t = setup();
