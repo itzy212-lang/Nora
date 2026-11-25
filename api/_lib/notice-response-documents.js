@@ -122,7 +122,7 @@ export async function finaliseNoticeResponse(sb, submissionId) {
 }
 
 const htmlEscape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const firstName=value=>String(value||'').trim().split(/\\s+/)[0]||'there';
+const firstName=value=>String(value||'').trim().split(/\s+/)[0]||'there';
 const outcome=choice=>({
  consent:'Consent',
  consent_soc:'Consent subject to a Schedule of Condition',
@@ -131,20 +131,35 @@ const outcome=choice=>({
  section1_agree:'Agreement to build astride the boundary under Section 1(2)',
  section1_refuse:'No agreement to build astride the boundary under Section 1(2)'
 })[choice]||choices[choice]||choice;
-function nextSteps(choice,surveyorName,forBO=false){
- if(choice==='consent')return forBO?'The adjoining owner has consented to the works.':'We will let the building owner know.';
+function nextSteps(choice,surveyorName,forBO=false,aoSurveyorName=''){
+ if(forBO){
+  if(choice==='consent')return 'No further action is needed from the adjoining owner on this notice.';
+  if(choice==='consent_soc')return 'We will be in touch with them to arrange the Schedule of Condition.';
+  if(choice==='dissent_agreed')return 'We will be in touch with them to start the process.';
+  if(choice==='dissent_own')return 'We will reach out to their surveyor'+(aoSurveyorName?' ('+aoSurveyorName+')':'')+' to start the process.';
+  return 'We will be in touch about the next steps.';
+ }
+ if(choice==='consent')return 'We will let the building owner know.';
  if(choice==='consent_soc'||choice==='dissent_agreed')return surveyorName+' will be in touch shortly to discuss the next steps.';
- if(choice==='dissent_own')return forBO?'Your surveyor will be contacted by the adjoining owner’s surveyor to begin the process.':'Your neighbour’s surveyor will reach out to your surveyor to get the process started.';
+ if(choice==='dissent_own')return 'Your neighbour’s surveyor will reach out to your surveyor to get the process started.';
  return 'We will notify the relevant parties of your response.';
 }
+const boOutcomeSentence=choice=>({
+ consent:'has consented to the works',
+ consent_soc:'has consented subject to a Schedule of Condition',
+ dissent_agreed:'has dissented and appointed us as the agreed surveyor',
+ dissent_own:'has dissented and appointed their own surveyor',
+ section1_agree:'has agreed to the building astride the boundary under Section 1(2)',
+ section1_refuse:'has not agreed to the building astride the boundary under Section 1(2)'
+})[choice]||'has responded to the notice';
 function signatureFromFirm(firm){
  const images=[];let html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.5;margin-top:20px">';
  const addImage=(value,cid,width,height)=>{
   if(!value)return;
-  const raw=String(value),m=raw.match(/^data:image\\/(png|jpeg|jpg);base64,(.+)$/i);
+  const raw=String(value),m=raw.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/i);
   const base64=m?m[2]:raw;
-  if(!/^[A-Za-z0-9+/=\\s]+$/.test(base64))return;
-  images.push({filename:cid+'.'+(m&&m[1]!=='png'?'jpg':'png'),contentType:m&&m[1]!=='png'?'image/jpeg':'image/png',content:base64.replace(/\\s/g,''),cid});
+  if(!/^[A-Za-z0-9+/=\s]+$/.test(base64))return;
+  images.push({filename:cid+'.'+(m&&m[1]!=='png'?'jpg':'png'),contentType:m&&m[1]!=='png'?'image/jpeg':'image/png',content:base64.replace(/\s/g,''),cid});
   html+='<div style="margin:6px 0"><img src="cid:'+cid+'" style="max-width:'+width+'px;max-height:'+height+'px" /></div>';
  };
  addImage(firm?.signature_b64,'nora-firm-signature',220,60);
@@ -186,28 +201,28 @@ export async function emailFinalisedResponse(sb,result){
   '',
   'Kind regards,',
   'Nora'
- ].join('\\n');
- const ownerHtml=ownerText.split('\\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html;
+ ].join('\n');
+ const ownerHtml=ownerText.split('\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html;
  const ownerDelivery=await sendNoticeEmail({
   userId:link.user_id,to:[record.signer_email],
   subject:'Your verified party wall notice acknowledgement',
   text:ownerText,html:ownerHtml,inlineImages:signature.images,attachments:pdfAttachments
  });
  const boPeople=[{name:project?.bo_1_name,email:project?.bo_1_email},{name:project?.bo_2_name,email:project?.bo_2_email}]
-  .filter(p=>typeof p.email==='string'&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(p.email.trim()));
+  .filter(p=>typeof p.email==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email.trim()));
  const seen=new Set();let boSent=0;
  for(const person of boPeople){
   const to=person.email.trim().toLowerCase();
   if(seen.has(to))continue;
   seen.add(to);
   const paragraphs=[
-   'Dear '+firstName(person.name)+',',
+   'Hi '+firstName(person.name)+',',
    '',
-   'Please find attached the signed response and confirmation record for the party wall notice between yourselves and the adjoining owner of '+adjoiningAddress+'.',
+   'Just to let you know, the adjoining owner of '+adjoiningAddress+' '+boOutcomeSentence(record.choice)+'.',
    '',
-   'Notice response: '+outcome(record.choice)+'.',
+   nextSteps(record.choice,servingName,true,record.surveyor?.name||''),
    '',
-   nextSteps(record.choice,servingName,true),
+   'I have attached a copy of the signed notice response and the confirmation certificate for your records.',
    '',
    'Kind regards,',
    'Nora'
@@ -215,16 +230,16 @@ export async function emailFinalisedResponse(sb,result){
   const html=paragraphs.map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html;
   const delivery=await sendNoticeEmail({userId:link.user_id,to:[to],
    subject:'Party wall notice response received: '+(project?.bo_premise_address||'Your property'),
-   text:paragraphs.join('\\n'),html,inlineImages:signature.images,attachments:pdfAttachments});
+   text:paragraphs.join('\n'),html,inlineImages:signature.images,attachments:pdfAttachments});
   if(delivery.sent)boSent++;
  }
  const {data:user}=await sb.auth.admin.getUserById(link.user_id);
  let surveyorDelivery={sent:false};
  if(user?.user?.email&&user.user.email.toLowerCase()!==record.signer_email.toLowerCase()){
-  const surveyorText='An adjoining owner has signed and verified a party wall notice response.\\n\\nAdjoining owner property: '+adjoiningAddress+'\\nResponse: '+outcome(record.choice)+'\\n\\nOpen the project in NORA to view the saved records.\\n\\nKind regards,\\nNora';
+  const surveyorText='An adjoining owner has signed and verified a party wall notice response.\n\nAdjoining owner property: '+adjoiningAddress+'\nResponse: '+outcome(record.choice)+'\n\nOpen the project in NORA to view the saved records.\n\nKind regards,\nNora';
   surveyorDelivery=await sendNoticeEmail({userId:link.user_id,to:[user.user.email],
    subject:'NORA: Notice response verified - '+adjoiningAddress,
-   text:surveyorText,html:surveyorText.split('\\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html,
+   text:surveyorText,html:surveyorText.split('\n').map(line=>line?'<div>'+htmlEscape(line)+'</div>':'<div style="height:12px"></div>').join('')+signature.html,
    inlineImages:signature.images});
  }
  const boNotified=boPeople.length>0&&boSent===seen.size;
