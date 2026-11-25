@@ -1470,7 +1470,6 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onTog
               same place, whatever the subject or preview says. */}
           <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
             {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
-            {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
             {hasDraft && <span title="Nora has drafted a response" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, border: '1px solid #bbf7d0' }}>✨ Draft ready</span>}
             {/* Added 2026-09-19, on request: distinct from the generic
                 "replied" arrow (any reply, manual or otherwise) -
@@ -1481,6 +1480,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onTog
                 this row) is completely independent of this badge. */}
             {autoResponded && <span title="Nora automatically responded to this email" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#dcfce7', color: '#15803d', fontWeight: 700, border: '1px solid #86efac' }}>✅ Nora responded</span>}
             {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
+            {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
             <span title={hasAtt ? 'Has attachment' : undefined} style={{ width: 18, textAlign: 'center', fontSize: 12, flexShrink: 0 }}>{hasAtt ? '📎' : ''}</span>
             <span title={replied ? 'You replied to this email' : undefined} style={{ width: 18, textAlign: 'center', fontSize: 15, fontWeight: 800, lineHeight: 1, color: '#15803d', flexShrink: 0 }}>{replied ? '↩' : ''}</span>
           </div>
