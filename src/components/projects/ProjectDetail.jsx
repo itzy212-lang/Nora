@@ -1396,15 +1396,34 @@ function getAOWorkflowAction(ao, projectRole = 'BO') {
   return { label: 'Serve notice', action: 'serveNotice', colour: 'var(--blue)', active: true };
 }
 
-function LOASigningStatus({request,prefix='AO'}) {
- if(!request)return null;
- const signers=[...(request.loa_signers||[])].sort((a,b)=>a.position-b.position);
- const signed=signers.filter(s=>s.status==='verified').length;
- return <div style={{marginTop:10,padding:'8px 10px',border:'1px solid var(--border)',borderRadius:8,fontSize:12}}>
-  <div style={{fontWeight:600,marginBottom:5,color:request.status==='completed'?'var(--green)':'var(--text2)'}}>{request.status==='completed'?'LOA completed':'LOA sent for signing'}</div>
-  {signers.map(s=><div key={s.position} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'3px 0'}}><span>{prefix}{s.position} · {s.name}</span><span style={{fontWeight:600,color:s.status==='verified'?'var(--green)':'var(--amber)'}}>{s.status==='verified'?'✓ Signed':'Pending'}</span></div>)}
-  <div style={{color:'var(--text3)',marginTop:4}}>{signed} of {signers.length} signatures completed</div>
- </div>;
+// Compact LOA status for an adjoining owner card: the label sits in the button row
+// ("LOA sent" / "LOA signed") and the signers sit on one line underneath, side by side.
+// The signer line disappears once everyone has signed. While the live status is still
+// loading, the line's space is reserved so the card does not jump when it arrives.
+function aoLoaState(request, ao) {
+  if (request) return request.status === 'completed' ? 'signed' : 'sent';
+  if (ao?.loa_signed_at) return 'signed';
+  if (ao?.loa_sent_at) return 'sent';
+  return null;
+}
+function LOASignerLine({ request, prefix = 'AO', reserve = false }) {
+  if (!request) return reserve ? <div style={{ minHeight: 22, marginTop: 6 }} /> : null;
+  if (request.status === 'completed') return null;
+  const signers = [...(request.loa_signers || [])].sort((a, b) => a.position - b.position);
+  if (!signers.length) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 18px', marginTop: 6, fontSize: 12, minHeight: 22 }}>
+      {signers.map(sg => {
+        const done = sg.status === 'verified';
+        return (
+          <span key={sg.position} style={{ whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--text2)' }}>{prefix}{sg.position} · {sg.name}</span>{' '}
+            <span style={{ fontWeight: 600, color: done ? 'var(--green)' : 'var(--amber)' }}>{done ? '✓ signed' : 'pending'}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 function matchAOLOA(requests,ao){
  const norm=v=>String(v||'').trim().toLowerCase();
@@ -1913,6 +1932,15 @@ function AOCard({
             </div>
             )}
 
+            {aoLoaState(loaRequest, ao) && (
+              <span
+                title={aoLoaState(loaRequest, ao) === 'signed' ? 'Letter of Appointment signed' : 'Letter of Appointment sent, awaiting signature'}
+                style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', color: aoLoaState(loaRequest, ao) === 'signed' ? 'var(--green)' : 'var(--amber)' }}
+              >
+                {aoLoaState(loaRequest, ao) === 'signed' ? '✅ LOA signed' : '📄 LOA sent'}
+              </span>
+            )}
+
             <button
               className="btn btn-sm btn-ghost"
               disabled={awardLoading}
@@ -1946,7 +1974,7 @@ function AOCard({
               </button>
             )}
           </div>
-          <LOASigningStatus request={loaRequest} />
+          <LOASignerLine request={loaRequest} prefix="AO" reserve={!loaRequest && aoLoaState(loaRequest, ao) === 'sent'} />
         </div>
       </div>
     </div>
@@ -5513,17 +5541,24 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       </div>
                     </div>
                   )}
-                  <LOASigningStatus request={boLOARequest} prefix="BO" />
-                  {project.bo_loa_signed_at ? (
-                    <span title={`BO LOA signed ${new Date(project.bo_loa_signed_at).toLocaleDateString('en-GB')}`}
-                      style={{ fontSize: 16, display: 'inline-block', marginTop: 6, cursor: project.bo_loa_signed_pdf_url ? 'pointer' : 'default' }}
-                      onClick={() => project.bo_loa_signed_pdf_url && window.open(project.bo_loa_signed_pdf_url, '_blank')}
-                    >✅</span>
-                  ) : project.bo_loa_sent_at ? (
-                    <span title={`BO LOA sent ${new Date(project.bo_loa_sent_at).toLocaleDateString('en-GB')} -- awaiting signature`}
-                      style={{ fontSize: 16, display: 'inline-block', marginTop: 6 }}
-                    >📤</span>
-                  ) : null}
+                  {(() => {
+                    const boState = boLOARequest
+                      ? (boLOARequest.status === 'completed' ? 'signed' : 'sent')
+                      : project.bo_loa_signed_at ? 'signed' : project.bo_loa_sent_at ? 'sent' : null;
+                    if (!boState) return null;
+                    return (
+                      <>
+                        <div
+                          title={boState === 'signed' ? 'Building owner LOA signed' : 'Building owner LOA sent, awaiting signature'}
+                          onClick={() => boState === 'signed' && project.bo_loa_signed_pdf_url && window.open(project.bo_loa_signed_pdf_url, '_blank')}
+                          style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: boState === 'signed' ? 'var(--green)' : 'var(--amber)', cursor: boState === 'signed' && project.bo_loa_signed_pdf_url ? 'pointer' : 'default' }}
+                        >
+                          {boState === 'signed' ? '✅ LOA signed' : '📄 LOA sent'}
+                        </div>
+                        <LOASignerLine request={boLOARequest} prefix="BO" reserve={!boLOARequest && boState === 'sent'} />
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>
