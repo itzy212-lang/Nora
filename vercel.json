@@ -121,6 +121,9 @@
     },
     "api/cron-aos-invoice-chase.js": {
       "maxDuration": 120
+    },
+    "api/cron-loa-chase.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -143,6 +146,10 @@
     {
       "path": "/api/cron-aos-invoice-chase",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron-loa-chase",
+      "schedule": "17 10 * * *"
     }
   ]
 }
