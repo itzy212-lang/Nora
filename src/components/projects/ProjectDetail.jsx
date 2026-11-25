@@ -1131,7 +1131,7 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
   // fit the form. The service address is only changed if the user ticked it.
   const applyLandRegistry = (patch) => {
     setForm(f => {
-      const service = patch.useService ? patch.aoService : (sameAddr ? patch.aoPremise : f.service);
+      const service = patch.useService ? patch.aoService : (patch.aoPremise || f.premise);
       return {
         ...f,
         premise: patch.aoPremise || f.premise,
@@ -1140,7 +1140,7 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
         ao2: { ...f.ao2, name: patch.ao2Name || f.ao2.name },
       };
     });
-    if (patch.useService) setSameAddr(false);
+    setSameAddr(!patch.useService);
   };
 
   const handleSave = async () => {

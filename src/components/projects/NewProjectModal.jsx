@@ -214,13 +214,12 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
   // service address when the user ticked it) — emails and phones stay as typed.
   const applyLandRegistry = (patch, target) => {
     const p = target === 'ao' ? 'ao' : 'bo';
-    const sameAddr = p === 'ao' ? aoSameAddr : boSameAddr;
     const setSame = p === 'ao' ? setAoSameAddr : setBoSameAddr;
     setForm(f => {
       const premise = patch[`${p}Premise`] || f[`${p}Premise`];
-      let service = f[`${p}Service`];
-      if (patch.useService) service = patch[`${p}Service`];
-      else if (sameAddr) service = premise; // keep "service address same as premise" true to the new premise
+      // Registered address differs -> it goes on the lower line, tickbox off.
+      // Same as the property -> lower line copies the top, tickbox on.
+      const service = patch.useService ? patch[`${p}Service`] : premise;
       return {
         ...f,
         [`${p}Premise`]: premise,
@@ -229,7 +228,7 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
         [`${p}2`]: { ...f[`${p}2`], name: patch[`${p}2Name`] || f[`${p}2`].name },
       };
     });
-    if (patch.useService) setSame(false);
+    setSame(!patch.useService);
   };
 
   const extractFromDocuments = async (files) => {
