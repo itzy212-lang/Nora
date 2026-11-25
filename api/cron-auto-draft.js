@@ -1,4 +1,5 @@
 import { configuredNoraEmail } from './_lib/loa-email.js';
+import { processLeadEmails, isFromLeadSender } from './lib/lead-autoreply.js';
 // api/cron-auto-draft.js
 // Runs every 15 minutes via Vercel cron.
 // Finds new inbound emails that need a draft response and generates them via Ely.
@@ -1031,7 +1032,40 @@ export default async function handler(req, res) {
 
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
+    // Local Surveyors Direct sales leads: read, save to Leads, diary follow-up
+    // and fixed-wording reply. Self-contained and off by default per account
+    // (firm_settings.lead_autoreply.mode). Never allowed to stop the rest of the run.
+    try {
+      const leadSummary = await processLeadEmails({
+        supabase,
+        resolveOwnerUserId,
+        automaticSendingAllowed: (ownerUserId) => ownerUserId === '3bd1f331-e8ce-477a-8a5d-c5dcdd901434',
+        sendMail: async ({ ownerUserId, rawUserId, toEmail, subject, body }) => {
+          const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).limit(1).maybeSingle();
+          const isGmail = integ?.email_provider === 'gmail';
+          const mail = await configuredNoraEmail(supabase, ownerUserId, body);
+          const { data: sendData, error: sendError } = await supabase.functions.invoke(
+            isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
+            { body: {
+              user_id: isGmail ? ownerUserId : (rawUserId || null),
+              to_email: toEmail,
+              subject,
+              body: mail.html,
+              attachments: mail.attachments,
+            } }
+          );
+          if (sendError || sendData?.error) throw new Error(sendError?.message || sendData?.error || 'Send failed');
+        },
+      });
+      if (leadSummary.checked) console.log('[cron-auto-draft] lead auto-reply:', JSON.stringify(leadSummary));
+    } catch (leadErr) {
+      console.warn('[cron-auto-draft] lead auto-reply failed:', leadErr?.message || leadErr);
+    }
+
     for (const email of scopedEmails) {
+      // Local Surveyors Direct's own emails (leads, invoices, notices) are handled
+      // above or are not for Nora to answer. Never draft or send a reply to them.
+      if (isFromLeadSender(email)) { results.skipped++; continue; }
       const automaticResponseAllowed = (await resolveOwnerUserId(email.user_id)) === '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
       // AOS invoice payment chases are handled by the dedicated two-stage
       // invoice workflow, never by the general automatic reply generator.
