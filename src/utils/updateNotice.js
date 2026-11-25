@@ -13,6 +13,7 @@ async function latestScript() {
 }
 
 function showBar() {
+  if (document.body?.dataset?.noraLanding) return; // never on the public landing page
   if (document.getElementById('nora-update-bar')) return;
   const bar = document.createElement('div');
   bar.id = 'nora-update-bar';

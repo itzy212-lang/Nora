@@ -1,103 +1,196 @@
-// Front page for visitors who are not signed in. Anyone who has signed in or
-// created an account on this device goes straight to the sign-in screen instead
-// (see App.jsx), so registered users do not see this page again.
+// Public front page for visitors who are not signed in. Anyone who has signed in
+// or registered on this device goes straight to the sign-in screen instead (see
+// App.jsx), so registered users do not see this page again.
+import { useEffect, useRef } from 'react';
+import '../landing/landing.css';
+import Icon from '../landing/icons';
+import HubDiagram from '../landing/HubDiagram';
+import ChatDemo from '../landing/ChatDemo';
+import { BrandLogo, DisputeVisual, Workflow, PhoneDemo, ScheduleDemo, GRID } from '../landing/Sections';
+import { usePrefersReducedMotion, useReveal } from '../landing/hooks';
 
-const FEATURES = [
-  {
-    icon: '🧠',
-    title: 'Nora knows everything about your project',
-    text: 'She keeps every email, note and conversation against the right project. If you are in a dispute with a surveyor or an adjoining owner, Nora can tell you what was said and when, then help you draft your reply.',
-  },
-  {
-    icon: '⏰',
-    title: 'She keeps you on track',
-    text: 'Nora sets reminders, including notice reminders, and follows up with surveyors for you. She tells you when to serve a Section 10 notice and when you need a 10(4)(b), and she generates them for you.',
-  },
-  {
-    icon: '📚',
-    title: 'Knows the Act inside out',
-    text: 'Nora knows the Party Wall etc. Act 1996 inside out and is up to date with case law, so what she tells you rests on the Act, not guesswork.',
-  },
-  {
-    icon: '📋',
-    title: 'Shave hours off your schedules of condition',
-    text: 'Dictate to Nora as you walk through the property. By the time you reach your car she has transcribed it and drafted your schedule of condition as a PDF, ready to send to the adjoining owner’s surveyor, straight from your phone.',
-  },
-  {
-    icon: '⚖️',
-    title: 'Draft custom awards within minutes',
-    text: 'Nora adds the notice, building owner and adjoining owner details straight into the award, and you download the Word document to review.',
-  },
-  {
-    icon: '📄',
-    title: 'Generate notices in seconds',
-    text: 'Create notices straight from your mobile. Nora helps you append drawings and supporting documents, and compiles everything into one PDF, ready to print or email immediately.',
-  },
-  {
-    icon: '📬',
-    title: 'All your emails in one place',
-    text: 'Connect Outlook or Gmail, and OneDrive or Google Drive. Your mail, your project folders and Nora all work together.',
-  },
-];
-
-const ASK_NORA = [
-  'Can’t remember which third surveyor was nominated? Ask Nora.',
-  'Can’t remember whether you have spoken to an adjoining owner’s surveyor? Ask Nora.',
-  'On the go and need to answer an email? Ask Nora.',
-];
-
-const wrap = { maxWidth: 960, margin: '0 auto', padding: '0 20px' };
+const TITLE = 'Nora | The intelligent assistant for party wall surveyors';
+const DESCRIPTION = 'Nora is an intelligent personal assistant built for party wall surveyors. She knows your projects, understands your profession and works alongside you: notices, awards, schedules of condition, correspondence and deadlines.';
 
 export default function LandingPage({ onSignIn, onSignUp }) {
+  const rootRef = useRef(null);
+  const reduced = usePrefersReducedMotion();
+  useReveal(rootRef, reduced);
+
+  // Page title and description for search engines and sharing, restored when the page goes.
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = TITLE;
+    let meta = document.querySelector('meta[name="description"]');
+    const created = !meta;
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'description'; document.head.appendChild(meta); }
+    const prevDesc = meta.getAttribute('content');
+    meta.setAttribute('content', DESCRIPTION);
+    // The "new version ready" bar belongs inside the signed-in app, not on this page.
+    document.body.dataset.noraLanding = '1';
+    document.getElementById('nora-update-bar')?.remove();
+    return () => {
+      document.title = prevTitle;
+      if (created) meta.remove(); else meta.setAttribute('content', prevDesc || '');
+      delete document.body.dataset.noraLanding;
+    };
+  }, []);
+
+  const go = (id) => (e) => {
+    e.preventDefault();
+    document.getElementById(id)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: 'var(--bg)', color: 'var(--text)' }}>
-      <header style={{ ...wrap, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px' }}>
-        <div style={{ fontFamily: "'Bahnschrift Light', 'DIN Alternate', sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: '-0.5px' }}>
-          nora
+    <div className="lp" ref={rootRef}>
+      <a className="lp-skip" href="#lp-main" onClick={go('lp-main')}>Skip to content</a>
+
+      <header className="lp-header">
+        <div className="lp-wrap lp-header-in">
+          <a className="lp-logo" href="#top" onClick={go('top')} aria-label="nora, home">nora<span className="lp-logo-dots" aria-hidden="true"><i /><i /><i /></span></a>
+          <nav className="lp-nav" aria-label="Page sections">
+            <a href="#memory" onClick={go('memory')}>Project memory</a>
+            <a href="#how-it-works" onClick={go('how-it-works')}>How it works</a>
+            <a href="#features" onClick={go('features')}>Features</a>
+          </nav>
+          <div className="lp-header-cta">
+            <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={onSignIn}>Sign in</button>
+            <button type="button" className="lp-btn lp-btn-primary lp-btn-sm" onClick={onSignUp}>Get started</button>
+          </div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={onSignIn}>Sign in</button>
       </header>
 
-      <section style={{ ...wrap, textAlign: 'center', padding: '56px 20px 40px' }}>
-        <div style={{ fontSize: 12, letterSpacing: '2px', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 14 }}>
-          Party wall specialist assistant
-        </div>
-        <h1 style={{ fontSize: 'clamp(28px, 5.6vw, 44px)', lineHeight: 1.14, fontWeight: 600, letterSpacing: '-1px', margin: '0 auto 20px', maxWidth: 760 }}>
-          Nora is your reliable 24‑hour, 7‑day‑a‑week party wall specialist assistant.
-        </h1>
-        <p style={{ fontSize: 'clamp(15px, 2.4vw, 18px)', color: 'var(--text2)', lineHeight: 1.55, maxWidth: 680, margin: '0 auto 18px' }}>
-          She remembers every communication, note and piece of correspondence, kept specifically to each of your projects, and she automatically links your emails to the right project.
-        </p>
-        <div style={{ maxWidth: 560, margin: '0 auto 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {ASK_NORA.map((t) => (
-            <div key={t} style={{ fontSize: 'clamp(14px, 2.2vw, 16px)', color: 'var(--text)', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '10px 14px', lineHeight: 1.45 }}>{t}</div>
-          ))}
-        </div>
-        <p style={{ fontSize: 'clamp(15px, 2.4vw, 18px)', color: 'var(--text2)', lineHeight: 1.55, maxWidth: 680, margin: '0 auto 28px' }}>
-          Dictate your email straight to your personal assistant and she drafts it, ready for you to send.
-        </p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-primary" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignUp}>Get started</button>
-          <button className="btn btn-ghost" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignIn}>Sign in</button>
-        </div>
-      </section>
-
-      <section style={{ ...wrap, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, padding: '20px 20px 40px' }}>
-        {FEATURES.map((f) => (
-          <div key={f.title} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--rxl)', padding: 22 }}>
-            <div style={{ fontSize: 26, marginBottom: 10 }}>{f.icon}</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{f.title}</div>
-            <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.55 }}>{f.text}</div>
+      <main id="lp-main">
+        <section id="top" className="lp-hero lp-wrap">
+          <p className="lp-eyebrow">The intelligent assistant for party wall surveyors</p>
+          <h1 className="lp-h1">
+            <span>She knows your projects.</span>
+            <span>She understands your work.</span>
+            <span className="lp-grad">She’s always there to assist.</span>
+          </h1>
+          <p className="lp-lead">
+            Nora brings together your correspondence, documents, deadlines and project history, building an intelligent understanding of every matter you work on. From serving your first notice to resolving complex disputes, Nora works alongside you.
+          </p>
+          <div className="lp-hero-cta">
+            <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={onSignUp}>Meet your new assistant <Icon name="arrow" size={18} /></button>
+            <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={go('how-it-works')}><Icon name="play" size={16} /> See how Nora works</button>
           </div>
-        ))}
-      </section>
+          <ul className="lp-principles">
+            <li><Icon name="history" size={20} /> Nora knows your projects.</li>
+            <li><Icon name="scale" size={20} /> Nora understands your profession.</li>
+            <li><Icon name="phone" size={20} /> Nora works alongside you, wherever you are.</li>
+          </ul>
+        </section>
 
-      <section style={{ ...wrap, textAlign: 'center', padding: '10px 20px 56px' }}>
-        <button className="btn btn-primary" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignUp}>Create your account</button>
-      </section>
+        <section id="how-it-works" className="lp-wrap lp-section lp-section-hub">
+          <HubDiagram reduced={reduced} />
+        </section>
 
-      <footer style={{ ...wrap, textAlign: 'center', padding: '0 20px 36px', fontSize: 12, color: 'var(--text3)' }}>
-        Nora · Square One Consulting
+        <section id="memory" className="lp-section lp-band">
+          <div className="lp-wrap lp-two">
+            <div className="lp-copy lp-reveal">
+              <h2 className="lp-h2">Every project has a history. Nora remembers yours.</h2>
+              <p>Nora builds an understanding of your projects as you work. Your emails, correspondence, documents, notices, responses and previous discussions become part of her project knowledge.</p>
+              <p>When an issue arises, you don’t need to spend hours searching through old emails, establishing what was agreed or reconstructing the sequence of events.</p>
+              <p className="lp-strong">Simply ask Nora.</p>
+              <p>She can retrieve relevant correspondence, identify key information, establish a chronology and help you prepare a considered, professional response based on the history of the matter.</p>
+            </div>
+            <div className="lp-reveal"><ChatDemo reduced={reduced} /></div>
+          </div>
+        </section>
+
+        <section id="disputes" className="lp-section lp-wrap lp-two lp-two-flip">
+          <div className="lp-reveal"><DisputeVisual /></div>
+          <div className="lp-copy lp-reveal">
+            <h2 className="lp-h2">Complex disputes. Powerful correspondence. Minutes, not hours.</h2>
+            <p>Dealing with a difficult adjoining owner’s surveyor? Responding to a complex technical issue? Trying to establish what was agreed months ago?</p>
+            <p>Nora can draw upon your project history, previous correspondence, documents and discussions to extract the relevant information, establish a chronology and help you construct a detailed, well-reasoned response.</p>
+            <p>Rather than spending hours searching through emails and piecing together the history of a dispute, let Nora bring the information together and prepare professionally written correspondence, ready for you to review and send.</p>
+            <p>Nora helps you present your position clearly, confidently and with the benefit of your project’s recorded history.</p>
+          </div>
+        </section>
+
+        <section id="notices" className="lp-section lp-band">
+          <div className="lp-wrap">
+            <div className="lp-copy lp-center lp-reveal">
+              <h2 className="lp-h2">Draft a notice in seconds. Let Nora keep track of what happens next.</h2>
+              <p>Generate party wall notices directly from the information already held within your project. Nora prepares the notice, saves it to the relevant project file and makes it ready to email or print.</p>
+              <p className="lp-strong">But her work doesn’t stop there.</p>
+            </div>
+            <div className="lp-reveal"><Workflow /></div>
+            <p className="lp-closing-line lp-reveal">From initial notices and Section 10 notices to letters of appointment and party wall awards, Nora helps you manage the entire party wall process.</p>
+          </div>
+        </section>
+
+        <section id="email" className="lp-section lp-wrap lp-two">
+          <div className="lp-copy lp-reveal">
+            <h2 className="lp-h2">Your inbox is part of your project knowledge.</h2>
+            <p>Nora integrates with Outlook and Gmail, bringing your correspondence and project information together.</p>
+            <p>Rather than treating your emails as isolated conversations, Nora can use relevant correspondence to build an understanding of the matters you’re working on.</p>
+            <p>Find previous agreements, retrieve important information, summarise conversations and draft responses without spending your day searching through your inbox.</p>
+          </div>
+          <div className="lp-logos lp-reveal">
+            <div className="lp-logo-card"><BrandLogo name="Outlook" file="outlook.svg" /></div>
+            <div className="lp-logo-card"><BrandLogo name="Gmail" file="gmail.svg" /></div>
+          </div>
+        </section>
+
+        <section id="onthego" className="lp-section lp-band">
+          <div className="lp-wrap lp-two lp-two-flip">
+            <div className="lp-reveal lp-center-mobile"><PhoneDemo /></div>
+            <div className="lp-copy lp-reveal">
+              <h2 className="lp-h2">Work on the go. Write like you’re in the office.</h2>
+              <p>Between inspections, travelling to appointments or working away from your desk, simply tell Nora what you want to say.</p>
+              <p>Nora understands the context of your project and turns your spoken instructions into professionally written correspondence.</p>
+              <p>Review it, send it and move on with your day.</p>
+              <p>Your clients won’t know whether you’re sitting at your desk or standing outside your next inspection.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="soc" className="lp-section lp-wrap">
+          <div className="lp-copy lp-center lp-reveal">
+            <h2 className="lp-h2">Finish your schedule before you reach the car.</h2>
+            <p>Dictate your observations room by room as you carry out your inspection. Nora transforms your spoken observations into a structured, professionally written schedule of condition.</p>
+            <p>No returning to the office to transcribe recordings. No hours spent typing up handwritten notes.</p>
+            <p>Complete your inspection, review your schedule and have it ready to issue.</p>
+          </div>
+          <div className="lp-reveal"><ScheduleDemo /></div>
+        </section>
+
+        <section id="features" className="lp-section lp-band">
+          <div className="lp-wrap">
+            <h2 className="lp-h2 lp-center lp-reveal">Your specialist party wall assistant</h2>
+            <div className="lp-grid">
+              {GRID.map((g, i) => (
+                <article className="lp-card lp-reveal" key={g.title} style={{ transitionDelay: `${(i % 4) * 60}ms` }}>
+                  <span className="lp-card-icon"><Icon name={g.icon} size={24} /></span>
+                  <h3>{g.title}</h3>
+                  <p>{g.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="closing" className="lp-closing">
+          <div className="lp-wrap lp-center">
+            <h2 className="lp-h2 lp-reveal">You’re the surveyor. Nora is your assistant.</h2>
+            <p className="lp-lead lp-reveal">Spend less time searching through correspondence, drafting documents and managing administration. Spend more time doing the work that requires your professional expertise.</p>
+            <p className="lp-lead lp-reveal">In the office, on site or on the move, Nora is there to assist you.</p>
+            <p className="lp-big lp-reveal"><span>Less searching.</span> <span>Less typing.</span> <span>Less chasing.</span> <span className="lp-grad">More surveying.</span></p>
+            <div className="lp-reveal"><button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={onSignUp}>Get started with Nora <Icon name="arrow" size={18} /></button></div>
+            <p className="lp-brandline lp-reveal">Your practice. Your knowledge. Your assistant.</p>
+          </div>
+        </section>
+      </main>
+
+      <footer className="lp-footer">
+        <div className="lp-wrap lp-footer-in">
+          <span className="lp-logo lp-logo-sm">nora</span>
+          <span>Square One Consulting</span>
+          <button type="button" className="lp-link" onClick={onSignIn}>Sign in</button>
+        </div>
       </footer>
     </div>
   );
