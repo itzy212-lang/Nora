@@ -13,6 +13,28 @@
 // with real force. The anti-padding rules below are still right for
 // routine, simple correspondence; they were never meant to apply
 // when the user is actually making a case.
+// Added 2026-11-25, on request: Main Chat can set up a new project from an
+// email the user has linked (or details they type). This is Surface Contract
+// behaviour only — the model reads the email already in Working Memory and
+// proposes the details inside a fixed marker block; JavaScript only parses and
+// validates that block (splitNewProjectProposal below), it never decides what
+// the email means. Nothing is created until the user presses Confirm on the
+// card the app shows, so there is no extra model call and no silent action.
+const NEW_PROJECT_START = '<<<NEW_PROJECT>>>';
+const NEW_PROJECT_END = '<<<END_NEW_PROJECT>>>';
+const NEW_PROJECT_CONTRACT = `
+
+NEW PROJECT: Only when the user explicitly asks you to create, set up or open a new project (or says "create a project"), use the details in their message and in the linked or pasted email already in this prompt to propose one. Do not do this for any other request.
+- In plain language, say what you found for the owner(s) and the property, and say plainly anything you could not find. Do not say the project has been created: the app shows the user a confirmation card and creates it only when they press Confirm.
+- Then, at the very end of your reply, add exactly one block of JSON between the markers ${NEW_PROJECT_START} and ${NEW_PROJECT_END}, on their own lines, in this shape:
+${NEW_PROJECT_START}
+{"role":"BO or AO or empty","property_address":"","service_address":"","owners":[{"name":"","email":"","phone":""}],"works":""}
+${NEW_PROJECT_END}
+- role: "BO" if the user said they act for the building owner (building owner's surveyor), "AO" if for the adjoining owner. If they did not say, leave it empty and ask in your reply which it is.
+- owners: the client(s) the user acts for — at most two. Copy each full name EXACTLY as written in the email or by the user; never shorten, correct, translate or guess a name. Do not treat the email's sender as an owner unless the email makes clear that they are one. Include email and phone only if actually stated for that person.
+- property_address: the address of the property as stated, with its postcode if given. service_address: only if a separate correspondence address is stated; otherwise empty.
+- Anything not stated stays as an empty string. Never invent or infer a name, address, email, phone or works description.`;
+
 function buildSurfaceContract(surface, modeHint) {
   const isDraft = modeHint === 'draft';
   // Added 2026-09-03, on request: a dedicated place to request a
@@ -41,7 +63,7 @@ function buildSurfaceContract(surface, modeHint) {
     return 'SURFACE: Project Chat, discuss mode. Collaborate before drafting where the user is still working through the position. Treat the user\'s detailed dictation as the starting strategy, not a blank slate — refine and organise it rather than replacing it with a fresh generic analysis. Identify the controlling point quickly and state it plainly; do not bury it in procedure. For every request, judge the nature of what is being communicated: is this a simple, routine communication, or is it making or supporting a case, position, or argument (disputing something, pushing back, justifying a decision, or relying on "we have already said this")? A case being made needs corroboration -- actively mine the project data already available in this prompt (prior emails, prior chat history, project memory) for the specific facts, dates, quotes, and prior statements that support it, and use them, rather than relying only on what the user just dictated in this message. This judgement must not depend on the user using any particular word (never wait for "dispute", "email", or similar to be said explicitly) -- judge the actual purpose of the communication itself. A simple, routine communication does not need this treatment; do not force historical detail into something that does not call for it. Preserve confirmed project spellings, names and roles exactly. Do not draft until asked. Once asked to draft, use the complete agreed reasoning from the discussion — do not restart the analysis. Do not burden responses with generic professional qualifications or safeguards that do not materially change the advice. When the user says the discussion is complete and asks for a draft, stop discussing and produce the draft.';
   }
   if (surface === 'main_chat' && !isDraft) {
-    return 'SURFACE: Main Chat. Provide general collaboration. Preserve representation. Do not confuse the authenticated user with email senders or represented parties. Do not automatically respond in email format merely because the user has pasted an email.';
+    return 'SURFACE: Main Chat. Provide general collaboration. Preserve representation. Do not confuse the authenticated user with email senders or represented parties. Do not automatically respond in email format merely because the user has pasted an email.' + NEW_PROJECT_CONTRACT;
   }
   // Fixed 2026-09-15, real, confirmed bug found while investigating
   // a live complaint: "I had to swear at it repeatedly before it
@@ -131,6 +153,47 @@ function splitDraftFromCommentary(rawText) {
   return { reply, draft: draft || null };
 }
 
+const clean = (v) => (v === undefined || v === null ? '' : String(v).replace(/\s+/g, ' ').trim());
+
+// Mechanical split, like splitDraftFromCommentary: finds the fixed marker
+// block, parses it, and keeps only well-formed string fields. Makes no
+// judgement about whether the proposal is right — the user confirms it.
+function splitNewProjectProposal(rawText) {
+  if (!rawText) return { reply: '', proposal: null };
+  const startIdx = rawText.indexOf(NEW_PROJECT_START);
+  const endIdx = rawText.indexOf(NEW_PROJECT_END);
+  if (startIdx === -1) return { reply: rawText.trim(), proposal: null };
+
+  const before = rawText.slice(0, startIdx).trim();
+  const after = endIdx > startIdx ? rawText.slice(endIdx + NEW_PROJECT_END.length).trim() : '';
+  const reply = [before, after].filter(Boolean).join('\n\n').trim();
+  if (endIdx === -1 || endIdx < startIdx) return { reply, proposal: null };
+
+  let obj = null;
+  try {
+    obj = JSON.parse(rawText.slice(startIdx + NEW_PROJECT_START.length, endIdx).replace(/```json|```/g, '').trim());
+  } catch {
+    obj = null;
+  }
+  if (!obj || typeof obj !== 'object') return { reply, proposal: null };
+
+  const role = clean(obj.role).toUpperCase();
+  const owners = (Array.isArray(obj.owners) ? obj.owners : [])
+    .map((o) => ({ name: clean(o?.name), email: clean(o?.email), phone: clean(o?.phone) }))
+    .filter((o) => o.name)
+    .slice(0, 2);
+  const proposal = {
+    role: role === 'BO' || role === 'AO' ? role : '',
+    property_address: clean(obj.property_address),
+    service_address: clean(obj.service_address),
+    owners,
+    works: clean(obj.works),
+  };
+  // Nothing usable at all → no card.
+  if (!proposal.property_address && owners.length === 0) return { reply, proposal: null };
+  return { reply, proposal };
+}
+
 // Experimental change, 2026-08-22, on direct request — traced to a real,
 // evidenced miss: reviewed an actual project chat transcript against the
 // email it produced and confirmed the user's own instruction ('identify
@@ -216,4 +279,4 @@ function assembleV2Prompt({ universalBrain, effectiveVoice, goldStandardBlock, d
   return { prompt, sections };
 }
 
-export { assembleV2Prompt, buildSurfaceContract, splitDraftFromCommentary, FINAL_VALIDATION_INSTRUCTION, DRAFT_DELIMITER_START, DRAFT_DELIMITER_END };
+export { assembleV2Prompt, buildSurfaceContract, splitDraftFromCommentary, splitNewProjectProposal, FINAL_VALIDATION_INSTRUCTION, DRAFT_DELIMITER_START, DRAFT_DELIMITER_END, NEW_PROJECT_START, NEW_PROJECT_END };

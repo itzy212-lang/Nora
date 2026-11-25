@@ -10,7 +10,7 @@ import { waitUntil } from '@vercel/functions';
 import { resolveArchitectureVersion, buildDiagnosticsEnvelope } from './lib/v2-operating-system.js';
 import { resolveEffectiveVoice, buildGoldStandardBlock } from './lib/v2-voice-resolution.js';
 import { assembleWorkingMemory, CATEGORY_BUDGETS, extractConfirmedProjectAnchors, extractCurrentDraftState, extractProjectMemory, buildStructuredProjectFacts, identifyDiscussedEmail, splitSemanticResults, excludeExistingIds, filterByMatchedAnchor } from './lib/v2-working-memory.js';
-import { assembleV2Prompt, splitDraftFromCommentary } from './lib/v2-prompt-assembly.js';
+import { assembleV2Prompt, splitDraftFromCommentary, splitNewProjectProposal } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { findNamedCorrespondentAddresses, formatRecipients, dedupeNearDuplicateEmails, emailEvidenceHeader } from './lib/named-correspondent.js';
 import { buildStage1Context } from './lib/stage1-context.js';
@@ -1321,7 +1321,13 @@ async function runV2Pipeline({
 
   // Mechanical split only — a fixed-delimiter extraction, not a judgement
   // about what "counts" as a draft. See splitDraftFromCommentary().
-  const { reply: splitReply, draft: splitDraft } = splitDraftFromCommentary(replyText);
+  // Main Chat only: a new-project proposal (see NEW_PROJECT_CONTRACT in
+  // v2-prompt-assembly.js) is taken out of the reply by the same kind of
+  // fixed-marker split. The user confirms it in the app before anything is created.
+  const projectSplit = surface === 'main_chat' && modeHint !== 'draft'
+    ? splitNewProjectProposal(replyText)
+    : { reply: replyText, proposal: null };
+  const { reply: splitReply, draft: splitDraft } = splitDraftFromCommentary(projectSplit.reply);
 
   const diagnostics = buildDiagnosticsEnvelope({
     architectureVersion: 'v2',
@@ -1370,6 +1376,9 @@ async function runV2Pipeline({
   // returned.
   const correctedReply = applyContactCorrections(splitReply, contactsContext);
   const correctedDraft = applyContactCorrections(splitDraft, contactsContext);
+  // Carried on the diagnostics object (after it was logged above) so the call
+  // site's destructuring, which several tests pin, stays exactly as it was.
+  diagnostics.new_project_proposal = projectSplit.proposal;
   return { replyText: correctedReply, draft: correctedDraft, diagnostics };
 }
 
@@ -3689,7 +3698,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
         console.log('[nora-v2] response served', {
           surface: body.surface, mode: modeHint, model: diagnostics.model_returned, hasDraft: !!draft,
         });
-        return res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null, mode: modeHint, architecture_version: 'v2' });
+        return res.status(200).json({ reply: replyText, draft, draftType: draft ? 'email' : null, mode: modeHint, architecture_version: 'v2', pending_project: diagnostics?.new_project_proposal || null });
       } catch (v2Err) {
         console.error('[nora-v2] pipeline failed:', v2Err.message);
         return res.status(500).json({ error: 'Nora V2 request failed', detail: v2Err.message });

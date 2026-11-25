@@ -2,8 +2,8 @@ import { useState, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail } from '../../utils/getCurrentUserEmail';
-import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
-import { createProjectFolder } from '../../utils/providers';
+import { getNextRef, createProjectRecord } from '../../utils/createProject';
+import LandRegistryUpload from './LandRegistryUpload';
 
 const mInput = {
   width: '100%',
@@ -166,75 +166,6 @@ function AddressBlock({
   );
 }
 
-async function getNextRef() {
-  try {
-    const { data } = await sb
-      .from('projects')
-      .select('ref')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    const year = new Date().getFullYear();
-
-    const nums = (data || [])
-      .map(p => p.ref || '')
-      .filter(r => r.startsWith(`SQ1-${year}-`))
-      .map(r => parseInt(r.split('-')[2], 10) || 0);
-
-    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
-
-    return `SQ1-${year}-${String(next).padStart(3, '0')}`;
-  } catch {
-    return `SQ1-${new Date().getFullYear()}-001`;
-  }
-}
-
-function buildAORecord(form, aoService) {
-  return {
-    // Fixed 2026-09-03, part of the AO consolidation: the old
-    // `ao-${Date.now()}` format isn't a valid UUID, which the
-    // adjoining_owners table's id column requires — confirmed
-    // directly as the exact issue that caused problems migrating
-    // existing data with this same legacy format. New AOs now get a
-    // real UUID from the start.
-    id: crypto.randomUUID(),
-    num: 1,
-
-    premise: form.aoPremise.trim(),
-    address: form.aoPremise.trim(),
-    reg_addr: aoService || form.aoPremise.trim(),
-    service_address: aoService || form.aoPremise.trim(),
-
-    name: form.ao1.name.trim(),
-    email: form.ao1.email.trim() || '',
-    phone: form.ao1.phone.trim() || '',
-
-    name2: form.ao2.name.trim() || '',
-    email2: form.ao2.email.trim() || '',
-    phone2: form.ao2.phone.trim() || '',
-
-    status: 'appointed_ao',
-    appointed_by_me: true,
-    agreed_surveyor: false,
-
-    notice_served_date: '',
-    noticeServedDate: '',
-    consent_deadline: '',
-    consentDeadline: '',
-    s10_deadline: '',
-    s10Deadline: '',
-
-    surv_name: '',
-    surveyorName: '',
-    surv_firm: '',
-    surveyorFirm: '',
-    surv_email: '',
-    surveyorEmail: '',
-    surv_phone: '',
-    surveyorPhone: '',
-  };
-}
-
 export default function NewProjectModal({ onClose, onCreated, defaultStage = 'live' }) {
   // Fixed 2026-09-12, on request: rolling out to testers now, who
   // should only see Party Wall — "locked for everyone, but not for
@@ -277,6 +208,29 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
   const setBo2 = (k, v) => setForm(f => ({ ...f, bo2: { ...f.bo2, [k]: v } }));
   const setAo1 = (k, v) => setForm(f => ({ ...f, ao1: { ...f.ao1, [k]: v } }));
   const setAo2 = (k, v) => setForm(f => ({ ...f, ao2: { ...f.ao2, [k]: v } }));
+
+  // Fill the form from a Land Registry register the user has just confirmed.
+  // Only touches property address and the first two owners' names (and the
+  // service address when the user ticked it) — emails and phones stay as typed.
+  const applyLandRegistry = (patch, target) => {
+    const p = target === 'ao' ? 'ao' : 'bo';
+    const sameAddr = p === 'ao' ? aoSameAddr : boSameAddr;
+    const setSame = p === 'ao' ? setAoSameAddr : setBoSameAddr;
+    setForm(f => {
+      const premise = patch[`${p}Premise`] || f[`${p}Premise`];
+      let service = f[`${p}Service`];
+      if (patch.useService) service = patch[`${p}Service`];
+      else if (sameAddr) service = premise; // keep "service address same as premise" true to the new premise
+      return {
+        ...f,
+        [`${p}Premise`]: premise,
+        [`${p}Service`]: service,
+        [`${p}1`]: { ...f[`${p}1`], name: patch[`${p}1Name`] || f[`${p}1`].name },
+        [`${p}2`]: { ...f[`${p}2`], name: patch[`${p}2Name`] || f[`${p}2`].name },
+      };
+    });
+    if (patch.useService) setSame(false);
+  };
 
   const extractFromDocuments = async (files) => {
     if (!files || !files.length) return;
@@ -402,7 +356,6 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
 
     try {
       const ref = await getNextRef();
-      const fee = form.fee.trim() ? parseFloat(form.fee) : null;
       const { data: { user } } = await sb.auth.getUser();
 
       const newId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -443,119 +396,9 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
         return;
       }
 
-      const boPremise = form.boPremise.trim();
-      const boService = (boSameAddr ? form.boPremise : form.boService).trim();
-      const aoPremise = form.aoPremise.trim();
-      const aoService = (aoSameAddr ? form.aoPremise : form.aoService).trim();
-
-      const payload = {
-        id: newId,
-        user_id: user?.id || null,
-
-        ref,
-        role: form.role,   // valid column — appointment_role does not exist
-        status: 'active',
-
-        // Building owner — top-level columns that exist in schema
-        bo_premise_address: boPremise || null,
-        bo_service_address: boService || boPremise || null,
-        bo_1_name: form.bo1.name.trim() || null,
-        bo: form.bo1.name.trim() || null,       // legacy display field
-        bo_1_email: form.bo1.email.trim() || null,
-        bo_phone: form.bo1.phone.trim() || null, // only one phone column
-        bo_2_name: form.bo2.name.trim() || null,
-        bo_2_email: form.bo2.email.trim() || null,
-        // bo_email / bo_2_phone do not exist in schema — omitted
-
-        // Adjoining owner — schema has ao_client_name, ao_email, ao_phone (single owner)
-        // Owner 2 and full AO details live in the aos jsonb array below
-        ao_premise_address: aoPremise || null,
-        ao_service_address: aoService || aoPremise || null,
-        ao_client_name: form.ao1.name.trim() || null,
-        ao_email: form.ao1.email.trim() || null,
-        ao_phone: form.ao1.phone.trim() || null,
-        // ao_2_name / ao_2_email / ao_2_phone are not top-level columns — in aos jsonb
-
-        // Full AO record (including owner 2) stored in aos jsonb
-        aos: isAO ? [buildAORecord(form, aoService || aoPremise)] : [],
-
-        works: form.works.trim() || null,
-        fee: Number.isFinite(fee) ? fee : null,
-        project_type: form.project_type || 'party_wall',
-        // Added 2026-08-21, on request: leads are real project records
-        // from the start, just flagged — 'Add New Lead' passes
-        // defaultStage='lead' through so the same creation flow marks
-        // it correctly, no separate lead table or form.
-        stage: defaultStage,
-        quote_status: isConstruction ? 'draft' : null,
-        client_name: isConstruction ? (form.bo1.name.trim() || null) : null,
-        client_email: isConstruction ? (form.bo1.email.trim() || null) : null,
-        site_address: isConstruction ? (boPremise || null) : null,
-        contract_value: isConstruction && form.fee.trim() ? parseFloat(form.fee) : null,
-      };
-
-      const { data, error: err } = await sb
-        .from('projects')
-        .insert([payload])
-        .select('*')
-        .single();
-
-      if (err) throw err;
-
-      // Added 2026-09-03, part of the AO consolidation: the project
-      // insert above already includes aos in its payload (the JSON
-      // write), but the new adjoining_owners table needs its own
-      // row created too, which only happens once we have the real
-      // project id back from the insert.
-      if (payload.aos?.length) {
-        await saveAdjoiningOwners(data.id, payload.aos);
-      }
-
-      // Auto-create OneDrive folder for new project
-      const boAddr = boPremise || payload.bo_premise_address || '';
-      if (boAddr && data?.id) {
-        try {
-          const user = await sb.auth.getUser();
-          const userId = user?.data?.user?.id;
-          if (!userId) {
-            console.warn('[NewProjectModal] Could not determine current user — skipping folder creation.');
-          } else {
-            // Create folder using user's configured provider (OneDrive or Google Drive)
-            const folderData = await createProjectFolder(userId, boAddr);
-            
-            if (folderData?.folder_id) {
-              // Update project with folder info (will be stored in either onedrive or google_drive columns)
-              const { data: integrations } = await sb
-                .from('user_integrations')
-                .select('storage_provider')
-                .eq('user_id', userId)
-                .single();
-
-              const provider = integrations?.storage_provider || 'onedrive';
-              const updateData = provider === 'googledrive'
-                ? { google_drive_folder_id: folderData.folder_id, google_drive_folder_url: folderData.web_url || null }
-                : { onedrive_folder_id: folderData.folder_id, onedrive_folder_url: folderData.web_url || null };
-
-              await sb.from('projects').update(updateData).eq('id', data.id);
-              // Fixed 2026-09-17, real, confirmed bug found by
-              // tracing the actual code path start to finish: this
-              // wrote the folder id to the database but never updated
-              // the local `data` object handed off to open the new
-              // project — so the in-memory project everything renders
-              // from was missing google_drive_folder_id/
-              // onedrive_folder_id from the moment the project screen
-              // first opened, even though the database had it
-              // correctly. Adding an AO straight after checks
-              // project.google_drive_folder_id from that stale
-              // in-memory copy, finds nothing, and silently skips
-              // creating its subfolder — no error, nothing logged.
-              Object.assign(data, updateData);
-            }
-          }
-        } catch (folderErr) {
-          console.warn('[NewProjectModal] Folder creation failed:', folderErr.message);
-        }
-      }
+      // Project, adjoining-owner record and storage folder are all created by
+      // the shared function the main chat also uses — see utils/createProject.js.
+      const data = await createProjectRecord({ form, ref, user, defaultStage, isConstruction, boSameAddr, aoSameAddr });
 
       // Save extracted scope items if any — create zones/rooms from each item's "zone" field first
       // (Structure and External always guaranteed, everything else derived from what the AI identified),
@@ -865,6 +708,8 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
 
           {!isConstruction && !isDispute && (isAO ? (
             <>
+              <LandRegistryUpload target="ao" onApply={patch => applyLandRegistry(patch, 'ao')} />
+
               <AddressBlock
                 title="Adjoining owner property"
                 premise={form.aoPremise}
@@ -895,6 +740,8 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
                   <OwnerBlock title="Owner 2" obj={form.ao2} set={setAo2} />
                 </div>
               </div>
+
+              <LandRegistryUpload target="bo" onApply={patch => applyLandRegistry(patch, 'bo')} />
 
               <AddressBlock
                 title="Building owner property"
@@ -928,6 +775,8 @@ export default function NewProjectModal({ onClose, onCreated, defaultStage = 'li
             </>
           ) : (
             <>
+              <LandRegistryUpload target="bo" onApply={patch => applyLandRegistry(patch, 'bo')} />
+
               <AddressBlock
                 title="Building owner property"
                 premise={form.boPremise}

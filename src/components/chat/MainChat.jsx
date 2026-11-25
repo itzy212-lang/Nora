@@ -3,6 +3,7 @@ import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
 import ChatInputBar from '../shared/ChatInputBar';
+import NewProjectCard from './NewProjectCard';
 import { uid } from '../../utils/formatters';
 import sb from '../../supabaseClient';
 
@@ -652,6 +653,9 @@ export default function MainChat({ onOpenComposer, onClose }) {
         content: result.reply || 'Done.',
         suggestedActions: result.suggestedActions,
         memorySaveProposal: result.memory_save_proposal || null,
+        // Set when the reply proposes a new project from a linked email — shown
+        // as a confirm card; nothing is created until the user presses Create.
+        newProjectProposal: result.pending_project || null,
       }]);
       return;
     }
@@ -1349,6 +1353,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
                     onAttachQuote={handleAttachQuote}
                     onPreviewQuote={handlePreviewQuote}
                   />
+                  {msg.newProjectProposal && <NewProjectCard proposal={msg.newProjectProposal} />}
                   {msg.memorySaveProposal && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 16px 12px', padding: '10px 14px', background: 'var(--bg2)', borderRadius: 12, border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>💾 {msg.memorySaveProposal.suggestion}</span>
