@@ -1410,7 +1410,7 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onTog
   return (
     <div style={{ margin: '5px 10px', position: 'relative' }}>
       <div onClick={() => onSelect(email)} style={{
-        background: selected ? 'var(--blue-bg)' : unread ? 'var(--bg2)' : 'var(--bg3)',
+        background: selected ? 'var(--blue-bg)' : unread ? 'var(--mail-unread-bg, var(--bg2))' : 'var(--bg3)',
         border: `1px solid ${selected ? 'var(--blue)' : 'var(--border)'}`,
         borderRadius: 14, padding: '10px 12px 10px 36px',
         cursor: 'pointer', transition: 'border-color 0.12s',
@@ -1465,14 +1465,15 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onTog
           <span style={{ fontSize: 11.5, color: 'var(--text3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {stripHtml(email.body_preview || '')}
           </span>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            {hasAtt  && <span style={{ fontSize: 11 }}>📎</span>}
-            {replied && <span style={{ fontSize: 11, color: 'var(--green)' }}>↩</span>}
+          {/* Chips (vary in number/width) come first; the two icons sit in fixed-width
+              slots at the far right so the paperclip and reply arrow are always in the
+              same place, whatever the subject or preview says. */}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
             {flagged && <span style={{ fontSize: 11, color: 'var(--red)' }}>🚩</span>}
             {email.project_id && <span title="Linked to project" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 700 }}>Project</span>}
             {hasDraft && <span title="Nora has drafted a response" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, border: '1px solid #bbf7d0' }}>✨ Draft ready</span>}
             {/* Added 2026-09-19, on request: distinct from the generic
-                "replied" arrow above (any reply, manual or otherwise) -
+                "replied" arrow (any reply, manual or otherwise) -
                 this specifically means Nora auto-generated AND sent
                 this response, at a glance, without opening the email.
                 Deliberately never implies the email has been read -
@@ -1480,6 +1481,8 @@ function EmailRow({ email, selected, checked, onSelect, onCheck, onDelete, onTog
                 this row) is completely independent of this badge. */}
             {autoResponded && <span title="Nora automatically responded to this email" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#dcfce7', color: '#15803d', fontWeight: 700, border: '1px solid #86efac' }}>✅ Nora responded</span>}
             {catColour && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: `${catColour}22`, color: catColour, fontWeight: 600 }}>{cat.replace(/_/g,' ')}</span>}
+            <span title={hasAtt ? 'Has attachment' : undefined} style={{ width: 18, textAlign: 'center', fontSize: 12, flexShrink: 0 }}>{hasAtt ? '📎' : ''}</span>
+            <span title={replied ? 'You replied to this email' : undefined} style={{ width: 18, textAlign: 'center', fontSize: 15, fontWeight: 800, lineHeight: 1, color: '#15803d', flexShrink: 0 }}>{replied ? '↩' : ''}</span>
           </div>
         </div>
       </div>

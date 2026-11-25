@@ -4,6 +4,7 @@
   --bg: #0a0c12;
   --bg2: #111318;
   --bg3: #181b24;
+  --mail-unread-bg: var(--bg2);
   --bg4: #1e2130;
   --border: rgba(255,255,255,0.07);
   --border2: rgba(255,255,255,0.12);
@@ -34,6 +35,7 @@ body.light {
   --bg: #f0f2f5;
   --bg2: #e8eaed;
   --bg3: #ffffff;
+  --mail-unread-bg: #f9fafb;
   --bg4: #f5f6f8;
   --border: rgba(0,0,0,0.08);
   --border2: rgba(0,0,0,0.13);
