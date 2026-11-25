@@ -47,7 +47,7 @@ export default function SplashScreen({ onDone }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: '#0a0a0a',
+      background: 'linear-gradient(180deg,#f6f7fb,#eceef6)',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       opacity: fadeOut ? 0 : 1,
@@ -67,7 +67,7 @@ export default function SplashScreen({ onDone }) {
           </span>
         </div>
         <div style={{
-          fontSize: 12, color: 'rgba(255,255,255,0.35)',
+          fontSize: 12, color: '#8a93b2',
           letterSpacing: '3px', marginTop: 10,
           fontFamily: "'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif",
           fontWeight: 300, textAlign: 'center',
