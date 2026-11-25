@@ -4,25 +4,31 @@
 
 const FEATURES = [
   {
-    icon: '🗂️',
-    title: 'Manages your projects',
-    text: 'Every party wall job in one place: building owners, adjoining owners, notices, responses, letters of appointment and awards, with the emails kept alongside.',
-  },
-  {
-    icon: '🧾',
-    title: 'Invoices',
-    text: 'Raise and track invoices against each project, and chase the ones that are overdue without leaving the job.',
-  },
-  {
-    icon: '🎙️',
-    title: 'Dictate your emails',
-    text: 'Say what you want to say and Nora writes the email, in your voice, ready for you to check and send.',
-  },
-  {
     icon: '📋',
-    title: 'Schedules of condition, done on site',
-    text: 'Dictate the schedule of condition room by room while you are standing in the property, and send it before you reach your car. It saves around 3 hours on every schedule.',
+    title: 'Shave hours off your schedules of condition',
+    text: 'Dictate to Nora as you walk through the property. By the time you reach your car she has transcribed it and drafted your schedule of condition as a PDF, ready to send to the adjoining owner’s surveyor, straight from your phone.',
   },
+  {
+    icon: '⚖️',
+    title: 'Draft custom awards within minutes',
+    text: 'Nora adds the notice, building owner and adjoining owner details straight into the award, and you download the Word document to review.',
+  },
+  {
+    icon: '📄',
+    title: 'Generate notices in seconds',
+    text: 'Create notices straight from your mobile. Nora helps you append drawings and supporting documents, and compiles everything into one PDF, ready to print or email immediately.',
+  },
+  {
+    icon: '📬',
+    title: 'All your emails in one place',
+    text: 'Connect Outlook or Gmail, and OneDrive or Google Drive. Your mail, your project folders and Nora all work together.',
+  },
+];
+
+const ASK_NORA = [
+  'Can’t remember which third surveyor was nominated? Ask Nora.',
+  'Can’t remember whether you have spoken to an adjoining owner’s surveyor? Ask Nora.',
+  'On the go and need to answer an email? Ask Nora.',
 ];
 
 const wrap = { maxWidth: 960, margin: '0 auto', padding: '0 20px' };
@@ -39,13 +45,21 @@ export default function LandingPage({ onSignIn, onSignUp }) {
 
       <section style={{ ...wrap, textAlign: 'center', padding: '56px 20px 40px' }}>
         <div style={{ fontSize: 12, letterSpacing: '2px', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 14 }}>
-          Specialist assistant for party wall surveyors
+          Party wall specialist assistant
         </div>
-        <h1 style={{ fontSize: 'clamp(30px, 6vw, 48px)', lineHeight: 1.12, fontWeight: 600, letterSpacing: '-1px', margin: '0 auto 18px', maxWidth: 720 }}>
-          Run your party wall practice from your phone.
+        <h1 style={{ fontSize: 'clamp(28px, 5.6vw, 44px)', lineHeight: 1.14, fontWeight: 600, letterSpacing: '-1px', margin: '0 auto 20px', maxWidth: 760 }}>
+          Nora is your reliable 24‑hour, 7‑day‑a‑week party wall specialist assistant.
         </h1>
-        <p style={{ fontSize: 'clamp(15px, 2.4vw, 18px)', color: 'var(--text2)', lineHeight: 1.55, maxWidth: 620, margin: '0 auto 28px' }}>
-          Nora is built for party wall work. She keeps your projects, emails and invoices together, writes your emails when you dictate them, and turns what you say on site into a finished schedule of condition.
+        <p style={{ fontSize: 'clamp(15px, 2.4vw, 18px)', color: 'var(--text2)', lineHeight: 1.55, maxWidth: 680, margin: '0 auto 18px' }}>
+          She remembers every communication, note and piece of correspondence, kept specifically to each of your projects, and she automatically links your emails to the right project.
+        </p>
+        <div style={{ maxWidth: 560, margin: '0 auto 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {ASK_NORA.map((t) => (
+            <div key={t} style={{ fontSize: 'clamp(14px, 2.2vw, 16px)', color: 'var(--text)', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '10px 14px', lineHeight: 1.45 }}>{t}</div>
+          ))}
+        </div>
+        <p style={{ fontSize: 'clamp(15px, 2.4vw, 18px)', color: 'var(--text2)', lineHeight: 1.55, maxWidth: 680, margin: '0 auto 28px' }}>
+          Dictate your email straight to your personal assistant and she drafts it, ready for you to send.
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-primary" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignUp}>Get started</button>
@@ -64,13 +78,7 @@ export default function LandingPage({ onSignIn, onSignUp }) {
       </section>
 
       <section style={{ ...wrap, textAlign: 'center', padding: '10px 20px 56px' }}>
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--rxl)', padding: '34px 22px' }}>
-          <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Finish the schedule before you reach the car.</div>
-          <p style={{ fontSize: 14, color: 'var(--text2)', margin: '0 auto 20px', maxWidth: 520, lineHeight: 1.55 }}>
-            Letters of appointment and notices can also be sent for electronic signature, with the responses recorded on the project for you.
-          </p>
-          <button className="btn btn-primary" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignUp}>Create your account</button>
-        </div>
+        <button className="btn btn-primary" style={{ padding: '12px 26px', fontSize: 15 }} onClick={onSignUp}>Create your account</button>
       </section>
 
       <footer style={{ ...wrap, textAlign: 'center', padding: '0 20px 36px', fontSize: 12, color: 'var(--text3)' }}>
