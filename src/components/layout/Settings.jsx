@@ -1794,6 +1794,24 @@ function AITab() {
   );
 }
 
+function NoticeDomainSettings() {
+  const [domain,setDomain]=useState('');
+  const [verified,setVerified]=useState(false);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{let active=true;(async()=>{
+    const {data:{user}}=await sb.auth.getUser();
+    if(!user){if(active)setLoading(false);return;}
+    const {data}=await sb.from('firm_settings').select('notice_response_domain,notice_response_domain_verified').eq('user_id',user.id).maybeSingle();
+    if(active){setDomain(data?.notice_response_domain||'');setVerified(!!data?.notice_response_domain_verified);setLoading(false);}
+  })();return()=>{active=false;};},[]);
+  return <div style={{marginTop:20,padding:16,border:'1px solid var(--border)',borderRadius:12}}>
+    <div style={{fontWeight:700,marginBottom:8}}>Notice response URL</div>
+    <p style={{fontSize:13,color:'var(--text2)'}}>QR codes and response links use the domain assigned to your login, not another surveyor's domain.</p>
+    <div style={{fontSize:14,fontWeight:600,overflowWrap:'anywhere'}}>{loading?'Loading…':verified&&domain?'https://'+domain:'https://nora-d9wy.vercel.app'}</div>
+    <p style={{fontSize:12,color:'var(--text3)'}}>{verified?'Your personalised notice domain is connected. No switch is required.':'NORA default domain is active. A personalised domain can be connected and verified for this account.'}</p>
+  </div>;
+}
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('Firm');
 
@@ -1813,7 +1831,7 @@ export default function Settings() {
         ))}
       </div>
 
-      {activeTab === 'Firm' && <FirmTab />}
+      {activeTab === 'Firm' && <><FirmTab /><NoticeDomainSettings /></>}
       {activeTab === 'Templates' && <TemplatesTab />}
       {activeTab === 'Placeholders' && <PlaceholdersTab />}
       {activeTab === 'Email' && <EmailTab />}

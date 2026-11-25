@@ -1,0 +1,3 @@
+alter table public.firm_settings add column if not exists notice_response_domain text;
+alter table public.firm_settings add column if not exists notice_response_domain_verified boolean not null default false;
+update public.firm_settings set notice_response_domain='notices.sq1consulting.co.uk',notice_response_domain_verified=true where user_id='3bd1f331-e8ce-477a-8a5d-c5dcdd901434' and lower(firm_name)='square one consulting';

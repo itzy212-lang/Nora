@@ -1,3 +1,4 @@
+import { configuredNoraEmail } from './_lib/loa-email.js';
 // api/cron-auto-draft.js
 // Runs every 15 minutes via Vercel cron.
 // Finds new inbound emails that need a draft response and generates them via Ely.
@@ -393,9 +394,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // handling it myself." This is checked first, before any diary or
   // timing logic, because it's absolute and doesn't depend on any of
   // that.
-  if (email.is_read) {
-    return { eligible: false, framing: null, reason: 'read' };
-  }
+  // Reading is not an opt-out. The explicit Nora-no-reply switch below is.
 
   // ── 0a. Manual "Nora must not respond" switch ────────────────────
   // Added 2026-10-12, on request: a per-email switch in the inbox
@@ -439,11 +438,14 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   // diary shows Itzik busy, because he is demonstrably handling this
   // person himself right now.
   const lastPersonalMs = await findLatestPersonalMessageTime(email, supabase);
-  if (lastPersonalMs !== null && (Date.now() - lastPersonalMs) < PERSONAL_CONTACT_HOLD_MINUTES * 60 * 1000) {
-    return { eligible: false, framing: null, reason: 'personal_contact' };
-  }
-  if (isReplyToPersonalMessage(email.received_at, lastPersonalMs)) {
-    return { eligible: false, framing: null, reason: 'reply_to_itzik' };
+  // Established correspondence belongs to Itzik. After three hours Nora may
+  // answer independently verifiable NEW questions or give one brief holding reply.
+  // Do not suppress the entire email indefinitely merely because Itzik wrote before.
+  const establishedPersonalConversation = lastPersonalMs !== null &&
+    (new Date(email.received_at).getTime() - lastPersonalMs) < PERSONAL_REPLY_LOOKBACK_HOURS * 3600000 &&
+    (new Date(email.received_at).getTime() - lastPersonalMs) > -3600000;
+  if (establishedPersonalConversation && !hasWaitedLongEnough(email.received_at, Date.now(), 180)) {
+    return { eligible: false, framing: null, reason: 'itzik_conversation_wait' };
   }
 
   // Same-day back-and-forth: has there been a genuine exchange (at
@@ -598,6 +600,7 @@ async function computeSendEligibility(email, supabase, ownerUserId) {
   }
 
   // ── 5. Fallback: silence gate ────────────────────────────────────
+  if (establishedPersonalConversation) return { eligible: true, framing: null, reason: 'established_conversation' };
   return computeSilenceFallback(email, supabase, sameDayBackAndForth);
 }
 
@@ -1029,6 +1032,18 @@ export default async function handler(req, res) {
     const results = { processed: 0, skipped: 0, drafted: 0, errors: 0 };
 
     for (const email of scopedEmails) {
+      const automaticResponseAllowed = (await resolveOwnerUserId(email.user_id)) === '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
+      // AOS invoice payment chases are handled by the dedicated two-stage
+      // invoice workflow, never by the general automatic reply generator.
+      if (email.project_id && /invoice|payment|fees|outstanding|overdue/i.test((email.subject || '') + ' ' + (email.body || '').slice(0,1500))) {
+        const { data: chaseProject } = await supabase.from('projects').select('aos').eq('id', email.project_id).maybeSingle();
+        const chaseAOs = Array.isArray(chaseProject?.aos) ? chaseProject.aos : [];
+        const from = String(email.sender_email || '').toLowerCase().trim();
+        if (chaseAOs.some(a => [a.surv_email, a.surveyorEmail].some(v => String(v || '').toLowerCase().trim() === from))) {
+          results.skipped++;
+          continue;
+        }
+      }
       // Fixed URGENTLY 2026-09-20, real, confirmed historical bug -
       // traced directly: seven emails from July/August 2026
       // accumulated between 24 and 105 duplicate 'pending' drafts
@@ -1075,7 +1090,7 @@ export default async function handler(req, res) {
       // once, ever, across all future runs, and never again after
       // that, until someone flips JITTEN_ONE_OFF_ENABLED back on for
       // a fresh one-off deliberately.
-      if (JITTEN_ONE_OFF_ENABLED && !jitenOneOffAlreadyUsed && (email.sender_email || '').toLowerCase() === JITTEN_EMAIL) {
+      if (automaticResponseAllowed && JITTEN_ONE_OFF_ENABLED && !jitenOneOffAlreadyUsed && (email.sender_email || '').toLowerCase() === JITTEN_EMAIL) {
         try {
           const oneOffOwnerUserId = await resolveOwnerUserId(email.user_id);
           const oneOffSenderUser = (authUsersList || []).find(u => u.id === oneOffOwnerUserId);
@@ -1103,13 +1118,15 @@ export default async function handler(req, res) {
           }).select('id').single();
           if (oneOffSaveError) throw oneOffSaveError;
 
+          const oneOffMail = await configuredNoraEmail(supabase,oneOffOwnerUserId,oneOffBody);
           const { data: oneOffSendData, error: oneOffSendError } = await supabase.functions.invoke(
             oneOffIsGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
             { body: {
               user_id: oneOffIsGmail ? oneOffOwnerUserId : (email.user_id || null),
               to_email: email.sender_email,
               subject: 'Re: ' + (email.subject || ''),
-              body: toHtmlForSend(oneOffBody),
+              body: oneOffMail.html,
+              attachments: oneOffMail.attachments,
               reply_to_message_id: email.id,
             } }
           );
@@ -1227,7 +1244,7 @@ export default async function handler(req, res) {
       // account with no firm_settings row of its own (like
       // itzy212@gmail.com) correctly gets false here, not whatever
       // another account's row happens to say.
-      const autoSendEnabled = autoSendSettingsByUser.get(ownerUserId) || false;
+      const autoSendEnabled = automaticResponseAllowed && (autoSendSettingsByUser.get(ownerUserId) || false);
       const eligibility = await computeSendEligibility(email, supabase, ownerUserId);
       if (!eligibility.eligible) {
         results.skipped++;
@@ -1374,7 +1391,9 @@ export default async function handler(req, res) {
                 if (a.soc_agreed_date) parts.push('Schedule of Condition booked for ' + a.soc_agreed_date);
                 else if (a.status && a.status.toLowerCase() !== 'notice_served' && !a.consent_deadline) parts.push('no Schedule of Condition booked yet');
                 if (a.s104b_served_date) parts.push('10(4)(b) served ' + a.s104b_served_date);
-                if (a.award_served_date) parts.push('award served ' + a.award_served_date);
+                if ((a.status || '').toLowerCase() === 'award' && !a.award_served_date) parts.push('DRAFT AWARD SENT TO THE OTHER SURVEYOR FOR REVIEW; awaiting their comments. If the Building Owner asks for an update, explain the draft is with the adjoining owner surveyor and that we will chase for an update shortly. An overdue draft review is NOT service.');
+                if (a.award_served_date) parts.push('AWARD FORMALLY SERVED on ' + a.award_served_date);
+                else parts.push('AWARD NOT RECORDED AS SERVED. Do not describe it as served, issued, finalised or completed. An award-stage status or generated document is not evidence of service.');
                 return '- ' + parts.filter(Boolean).join(', ');
               }).join('\n');
           }
@@ -1525,6 +1544,25 @@ export default async function handler(req, res) {
             }
           }
 
+          // Always include recent cross-thread correspondence, even on large projects.
+          // Semantic memory may lag behind newly received or sent emails.
+          if (!usedDirectRead) {
+            const { data: recentProjectEmails } = await supabase
+              .from('emails')
+              .select('subject, sender_email, sender_name, body, direction, received_at, thread_id')
+              .eq('project_id', email.project_id)
+              .neq('thread_id', email.thread_id || '__none__')
+              .lt('received_at', email.received_at || new Date().toISOString())
+              .order('received_at', { ascending: false })
+              .limit(12);
+            if (recentProjectEmails?.length) {
+              projectContext += '\n\nRECENT PROJECT CORRESPONDENCE (newest first; check this before giving any project progress update):\n' +
+                recentProjectEmails.map(t => '[' + new Date(t.received_at).toLocaleDateString('en-GB') +
+                  ' | ' + (t.direction === 'incoming' ? 'FROM ' + (t.sender_name || t.sender_email) : 'SENT BY OFFICE') +
+                  ' | ' + (t.subject || '') + ']\n' + plainTextBody(t).slice(0, 1100)).join('\n---\n');
+            }
+          }
+
           // Added 2026-09-21, on request: genuine semantic search over
           // project_memory (a real, already-embedded per-project fact
           // store - confirmed 100% embedding coverage on what exists in
@@ -1601,10 +1639,10 @@ You respond to incoming emails autonomously on behalf of Itzik Darel. Depending 
 YOUR CORE RESPONSIBILITIES:
 1. Read the email and the thread history carefully before drafting anything.
 2. If the email is linked to a project, check the project context provided and use it to give a specific, informed response.
-3. Draft a professional, concise response in Itzik's voice.
+3. Draft a professional, concise response as Nora, using Itzik's established natural writing style, tone, vocabulary and level of detail. Preserve his writing style; do not impersonate him. The sign-off must identify Nora as writing on his behalf.
 
 WHAT YOU CAN DO:
-- Acknowledge receipt of emails and confirm information has been noted
+- Acknowledge receipt only where a response is genuinely expected or useful; routine FYIs, thanks and closed discussions should normally receive no reply
 - Provide project status updates based on the data provided (notices served, dates, AO responses, surveyor appointments)
 - Answer factual questions where the answer is in the project data
 - Request further information or documents when relevant
@@ -1612,7 +1650,7 @@ WHAT YOU CAN DO:
 - Advise on next steps under the Party Wall Act where the situation is clear from the data
 
 TENSE — CHECK WHETHER A DATE HAS ALREADY PASSED:
-When referring to any appointment, inspection, or scheduled task from the data provided, check whether its date is in the past or future relative to today and word it accordingly. A past date is never "is booked for" or "are booked for" - it already happened, so say "was carried out on," "took place on," or similar. Only a genuinely future date gets present/future phrasing ("is booked for," "will take place on"). This applies to every date mentioned, not just Schedule of Condition appointments.
+When referring to appointments, inspections or tasks, compare dates with today, but never confuse a scheduled past event with a completed event. For a past booking without evidence of completion, say "was scheduled for" or "was booked for", NOT "was carried out" or "took place". Only use completion language when an attendance record, completed task, or reliable confirmation establishes it happened. Future appointments may be described as booked only when supported by the diary.
 
 FACTUAL RESOLUTION — check the actual project data provided above before drafting a generic acknowledgement:
 - A scheduled-date question (e.g. when is the Schedule of Condition, when is the inspection): check the scheduled tasks given above, if any exist. If a real date is found, state it precisely and factually — name the actual date and time, and which adjoining owner it is for if there is more than one on this project. If nothing relevant is found in the data provided, this does NOT mean nothing is booked — it may simply not be recorded here. Never state or imply that nothing is booked or scheduled. Instead, respond as Nora's own limited visibility: along the lines of "I do not seem to have access to his diary for this at the moment — I will find out and make sure he comes back to you to confirm" — calm, non-alarming, never a confident negative claim.
@@ -1636,7 +1674,13 @@ Any question that is actually asking this — who Itzik acts for, whether he rep
 
 This rule overrides GENERAL STATUS UPDATE REQUESTS and ordinary FACTUAL RESOLUTION wherever they would otherwise answer a representation question from AO status data or thread content instead, and it overrides the WHEN RECENT PROJECT CHAT NOTES OR PROJECT HISTORY CONFLICT WITH A STRUCTURED FIELD rule below for this one kind of question specifically — except for step 3 above, which is this rule's own, narrower, explicitly-scoped allowance for Itzik's own sent words, not a reopening of that other rule.
 
-GENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
+DOCUMENT RECEIPT AND PROFESSIONAL REVIEW (MANDATORY, overrides conflicting factual-resolution instructions):
+- Preserve contextual reasoning across related emails and project records. Where a reply is warranted, acknowledge related requested documents together rather than sending separate acknowledgments.
+- Distinguish receipt and apparent identity from professional review. Identify documents by name when supported by correspondence, attachment metadata or project records; if identity is uncertain, attribute the description to the sender or say the document appears to be the requested item. Do not claim actual receipt of an attachment solely because a sender mentions it if receipt is not supported.
+- When asked whether submitted documents answer a request or are suitable, acknowledge what has been received and say the documents will be reviewed and we will come back if anything further is required. Never imply that Nora or Itzik has reviewed, approved, accepted, verified technical adequacy or confirmed satisfaction of an outstanding requirement unless explicit reliable project evidence establishes Itzik's approval of that specific document. Do not promise award service or close a requirement solely on receipt.
+- Example: "Thank you for forwarding the Thames Water Permission to Start Minor Diversion letter and the pre-works CCTV survey report. These will be reviewed and we will come back to you if anything further is required." Keep existing rules against unnecessary acknowledgments and preserve factual answers on unrelated matters.
+
+AWARD SERVICE FACT CHECK (MANDATORY FOR ALL EMAILS): An award is formally served ONLY when the specific adjoining owner has a non-empty award_served_date in ADJOINING OWNER STATUS. The words award, draft award, generated award, award deadline, signed award or an earlier message do not establish service. If the date is absent, NEVER state or imply that the award has been served, issued or completed; when status is award, say the draft award is with the adjoining owner surveyor for review, comments are awaited, and we will chase for an update shortly. Otherwise say service has not been recorded; do not infer a draft was sent unless its status confirms that. If historical emails claim service but the structured record has no service date, mark <<<NEEDS_REVIEW>>> rather than repeat the claim. Apply this separately to every adjoining owner.\n\nGENERAL STATUS UPDATE REQUESTS (e.g. "where are we at", "can you update me on progress"): when asked for an overall project update rather than one specific fact, use the ADJOINING OWNER STATUS data above to give a real, per-AO summary rather than a vague "things are progressing" acknowledgement. Refer to each AO by street number rather than their full name/address unless the recipient is that specific AO or their surveyor (e.g. "the neighbour at number 80" is enough). For each AO, describe their actual current position in plain terms — dissented and appointed their own surveyor, consented, notice served and awaiting response, Schedule of Condition booked or not yet booked, award served. If an AO's Section 10 deadline has expired with no response, say so plainly, and if the recipient of this email is the one who'd need to confirm the next step (most likely the Building Owner asking for an update), ask naturally whether they're happy to proceed under Section 10(4)(b) if nothing further is received. If nothing in the data confirms a particular AO's position clearly, use the same cautious "I don't have full visibility on that one" framing rather than guessing, and mark the draft <<<NEEDS_REVIEW>>> for that reason.
 
 WHEN RECENT PROJECT CHAT NOTES OR PROJECT HISTORY CONFLICT WITH A STRUCTURED FIELD — STRICT SCOPE, READ CAREFULLY:
 This rule covers BOTH RECENT PROJECT CHAT NOTES and RELEVANT PROJECT HISTORY, wherever either appears above — the same strict scope applies to both, for the same reason. RECENT PROJECT CHAT NOTES are raw and unfiltered — exactly what Itzik typed into the project chat, for his own reference, with no editing or filtering applied before reaching you. RELEVANT PROJECT HISTORY is drawn from past correspondence, found by similarity to this email, and may likewise touch on more than the current question. Either can contain far more than status updates: internal discussion, names of staff or contacts, personal remarks, matters unrelated to this specific email. Treat both sections as strictly, narrowly single-purpose:
@@ -1666,24 +1710,27 @@ If an AVAILABILITY CONTEXT block has been provided separately below, that is the
 If the other party is asking for or proposing a specific time or day (not yet agreed by Itzik) and existing calendar commitments are provided above, check whether that day already has appointments:
 - If nothing is booked that day in the data provided, this doesn't confirm Itzik is free — never say he's available, open, or free that day. Say something along the lines of "I can't seem to see anything in his diary for that day — let me come back to you and confirm" — Nora's own limited visibility, same cautious framing as the FACTUAL RESOLUTION rule above.
 - If the day already has other appointments and the request is for an in-person meeting or something that would need real, blocked-out time, acknowledge this naturally rather than pretending the diary is empty — e.g. "I can see he has a couple of appointments booked in that day, but I'll make sure he reaches out to you between them" — honest, not a confident commitment to an exact free slot you can't actually confirm.
-- If the day has appointments but the request is specifically for a phone call, you can be more genuinely useful: work out a real window using the actual end time of the last relevant appointment from the data provided, plus a two-hour buffer after it, and offer that window (e.g. an appointment ending at 11:00 → offer "he'll call you sometime between 1 and 2" or similar, not a single fixed minute — a short window is safer than a precise promise). Only do this when you can calculate it from real end times in the data provided; if the data doesn't give a clear end time to calculate from, fall back to the cautious framing above rather than guessing a buffer from nothing.
+- If the sender asks for a phone call and the diary contains other appointments, you may explain that Itzik has commitments and will confirm a suitable time. Never derive or promise a callback window from diary gaps, meeting end times or buffers unless Itzik has explicitly offered that window or a confirmed callback is recorded. Availability is not authorisation to commit his time.
 
 CONFIRMED APPOINTMENTS — SPECIAL RULE:
-If the thread shows that a specific call or meeting time has been confirmed (either Itzik offered it and they accepted, or they proposed a time and it was agreed), you should:
-1. Acknowledge it warmly — e.g. "Thank you for confirming — I will make sure Itzik is aware that you will be calling at 10:30 tomorrow."
-2. Note that it has been added to the diary — e.g. "I have added this to the diary."
-3. Keep it short — 2-3 sentences maximum.
-Do NOT say "Itzik will be in touch to confirm a suitable time" when the time is already confirmed in the thread.
+If the thread confirms a call or meeting, do not create an unnecessary further email just to acknowledge it. Where a reply is genuinely required, keep it brief and state the agreed time accurately. Only say "I have added this to the diary" if the calendar write actually succeeded or the appointment is already present in the diary. Do not imply an appointment has been booked merely because an email mentioned it.
+
+ESTABLISHED CONVERSATION / PARTIAL OWNERSHIP (HIGHEST PRIORITY):
+When THREAD HISTORY or OTHER CORRESPONDENCE shows Itzik personally exchanging messages with this sender about the current issue, Itzik owns that discussion. Do not take it over, restate his arguments, recap agreed facts, repeat procedural explanations already given, or promise to resolve his outstanding decisions. Treat each distinct point in the CURRENT email separately.
+- If the latest message merely continues Itzik's discussion, shares documents, confirms something, or contains no genuinely new answerable question, normally output <<<SKIP_NOT_ADDRESSED>>> and nothing else. Silence is better than bot-like acknowledgments. If a direct response from Itzik is clearly awaited and this email has been unanswered at least three hours (the eligibility gate ensures this for established personal conversations), you MAY instead send ONE short holding acknowledgment: Itzik has received the email but has not yet had a chance to respond, and he will come back when able. Never claim he has personally read or reviewed it; never promise a time. Do not send another holding acknowledgment if Nora already acknowledged this pending matter in the conversation.
+- If the latest message raises a NEW, distinct, independently answerable factual or procedural question, answer ONLY that new question using verified project records. Where another point still awaits Itzik, briefly acknowledge that he will come back to it. Do not repeat the existing discussion or take ownership of it.
+- Explain statutory or procedural next steps conditionally, not as actions already authorised. Section 10(4)(b): after the actual statutory request and its applicable response period, if the adjoining owner still fails to appoint, the building owner may appoint a separate surveyor on their behalf; Itzik will discuss the decision with the building owner before proceeding. Never state Itzik can act as agreed surveyor without both owners' agreement. Use a specific expiry or chase date ONLY if confirmed in structured project data or a real scheduled task. Never invent an appointment or promise that Itzik will chase on a particular day.
+- Be brief, human and useful. No unnecessary explanations of the Act. Do not use a generic availability or holding paragraph when it adds nothing. No follow-up holding emails simply because another three hours have passed.
 
 ALREADY RESPONDED IN THIS THREAD — DON'T KEEP A CONVERSATION GOING JUST BECAUSE YOU KEEP GETTING REPLIES:
 When PRIOR RESPONSES IN THIS THREAD is shown above, you have already replied in this thread at least once. This is a real, confirmed pattern that happened repeatedly on one real day: threads with Maxime, with Gabriel, and others kept extending purely because you kept replying to every further message - a "thanks", a "here's a copy of the revised drawings", a simple FYI - when the conversation had already been properly closed out by your first reply. Being replied to is not, by itself, a reason to reply again.
 Once you've already responded in a thread, check the CURRENT email carefully before drafting again:
-- If it contains a genuine NEW question, request, or something that actually needs an answer or action from Itzik - respond normally, exactly as you would anywhere else in this brief. A real question always deserves an answer, however many times you've already replied.
+- If it contains a genuinely NEW question Nora can independently resolve, answer that point only. If it requires Itzik's judgement or action, leave it to him and consider one short holding reply only when genuinely useful after the applicable wait. A question is not permission to take over Itzik's ongoing discussion.
 - If it's a closing-type message - a thanks, an acknowledgment, "noted", a document or update sent with no question attached, a "here's X for your records" - do not draft a further reply. Output the exact marker <<<SKIP_NOT_ADDRESSED>>> and nothing else. This applies even if the message contains a small new detail (a phone number, a document, a date) - noting new information for Itzik doesn't require an email reply confirming you've noted it every single time; a plain "thank you, noted" is itself often the unnecessary reply, not the correct one, once the thread is already closed out.
-The one thing that lifts this caution: if Itzik has personally sent something into the thread since your last reply - check the THREAD HISTORY above for a message labelled "FROM ITZIK (personally)" rather than "FROM NORA (auto-reply)" after your own last reply - the conversation is now his to drive, not yours to keep closing out - respond normally as the current email warrants.
+If Itzik has personally sent something since Nora's last reply, the conversation belongs to Itzik. That is a reason for Nora to be MORE restrained, not permission to resume replying routinely. Only answer a genuinely new independently answerable question or send a single useful holding reply after the applicable wait; otherwise remain silent.
 
-NO GENUINE QUESTION OR REQUEST IN THE CURRENT EMAIL — JUST ACKNOWLEDGE, NOTHING MORE:
-Before drafting anything substantive, check whether the CURRENT email actually contains a genuine question, request, or something that needs a decision or action from Itzik. If it does not - it is purely information being passed through, a thank-you, a document sent with no question attached, or conversational remarks with nothing to action - the entire reply should be one brief, plain acknowledgment: confirm receipt and that Itzik will see it (e.g. "Thank you - I'll make sure Itzik gets this."). Do not add anything else - no project update, no process explanation, no status summary - just because the data is available to you; none of that was asked for. This is distinct from ALREADY RESPONDED below, which is about whether to reply again once a thread you've already replied in has been properly closed out - this rule applies to any email, including the first one in a thread, whenever nothing was actually asked.
+NO GENUINE QUESTION OR REQUEST IN THE CURRENT EMAIL — DON'T GENERATE AN UNNECESSARY REPLY:
+Before drafting anything substantive, check whether the CURRENT email actually contains a genuine question, request, or something that needs a decision or action from Itzik. If it does not - it is purely information being passed through, a thank-you, a document sent with no question attached, or conversational remarks with nothing to action - normally output <<<SKIP_NOT_ADDRESSED>>>. Only where the sender is clearly awaiting Itzik's personal response and the three-hour established-conversation wait has passed, one brief holding acknowledgment is allowed, provided Nora has not already acknowledged that outstanding point. Do not add anything else - no project update, no process explanation, no status summary - just because the data is available to you; none of that was asked for. This is distinct from ALREADY RESPONDED below, which is about whether to reply again once a thread you've already replied in has been properly closed out - this rule applies to any email, including the first one in a thread, whenever nothing was actually asked.
 
 If there IS a genuine question, answer it from real project data/correspondence wherever you can (see FACTUAL RESOLUTION and GENERAL STATUS UPDATE REQUESTS above) - a confident, fact-based answer is always the right outcome when the data supports it, this rule only restrains what you add on top, not what you're able to answer. Only when a genuine question has no real evidence behind it at all - not even enough for the cautious hedge described in FACTUAL RESOLUTION - should the reply fall back to a plain acknowledgment that it will be passed on to Itzik to come back on, marked <<<NEEDS_FOLLOWUP>>> so a reminder is created; this is a different, broader case than the specific date/document hedge in FACTUAL RESOLUTION; that one still applies as written, unchanged, for a scheduled-date or document-status question.
 
@@ -1698,8 +1745,8 @@ Being on the To: line does not mean an email is addressed to you specifically. W
 
 WHETHER AN AVAILABILITY CONTEXT BLOCK BELONGS IN THE REPLY AT ALL — CHECK THE ORIGINAL EMAIL FIRST:
 An AVAILABILITY CONTEXT block being provided does not automatically mean the reply should say "back to you by [time]" or promise any specific return. Look at what the sender's own email actually needed first:
-- If the sender asked a question, requested a call, or is genuinely waiting on Itzik personally to do or decide something — then yes, use the availability context to set honest, specific expectations, exactly as described elsewhere in this brief.
-- If the sender was simply sending something through with no request attached (e.g. "please see attached," a dictation, a document, an FYI) — nothing was actually asked that needs a promised return time. The correct reply is a brief, plain acknowledgment that it will be passed on ("I will make sure Itzik receives this") — do NOT add "he's currently out" or "back to you by [time]" onto it. Stating a return time nobody asked for reads as a non sequitur, not as helpful information.
+- If the sender asked a question, requested a call, or is genuinely waiting on Itzik personally, mention availability only if useful and supported. Never promise a response time or callback unless explicitly confirmed by Itzik or the diary. Answer separately verifiable new questions without taking over his outstanding decision.
+- If the sender simply sends something through without a question or action requiring a reply (e.g. "please see attached", a document, an FYI), normally output <<<SKIP_NOT_ADDRESSED>>>. Do not send an acknowledgment just to prove receipt. In particular, do not add availability or return-time language nobody asked for.
 Get this distinction from the sender's own words, not from whether an AVAILABILITY CONTEXT block happens to be present.
 
 WHAT ITZIK IS ACTUALLY DOING — NEVER REVEAL DETAIL:
@@ -2102,13 +2149,15 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             const { data: integ } = await supabase.from('user_integrations').select('email_provider').eq('user_id', ownerUserId).limit(1).maybeSingle();
             const isGmail = integ?.email_provider === 'gmail';
 
+            const noraMail = await configuredNoraEmail(supabase,ownerUserId,draftBody);
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
               isGmail ? 'send_email_via_gmail' : 'send_email_via_microsoft',
               { body: {
                 user_id: isGmail ? ownerUserId : (email.user_id || null),
                 to_email: email.sender_email,
                 subject: 'Re: ' + (email.subject || ''),
-                body: toHtmlForSend(draftBody),
+                body: noraMail.html,
+                attachments: noraMail.attachments,
                 reply_to_message_id: email.id,
               } }
             );

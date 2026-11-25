@@ -1,0 +1,1 @@
+alter table public.notice_response_short_links add column if not exists response_token text;

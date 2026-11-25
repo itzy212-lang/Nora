@@ -89,6 +89,8 @@ export default async function handler(req, res) {
   // session-held advisory lock required.
   const t0 = Date.now();
   let runId = null;
+  const {error: staleErr}=await supabase.from('embedding_backfill_runs').update({completed_at:new Date().toISOString(),error_summary:'Expired abandoned run'}).is('completed_at',null).lt('started_at',new Date(Date.now()-10*60_000).toISOString());
+  if(staleErr) return res.status(500).json({error:'Unable to release expired backfill run'});
   {
     const { data: claimed, error: claimErr } = await supabase
       .from('embedding_backfill_runs')
@@ -96,6 +98,7 @@ export default async function handler(req, res) {
       .select('id')
       .single();
     if (claimErr) {
+      if(claimErr.code!=='23505') return res.status(500).json({error:'Unable to claim backfill run'});
       // Unique violation (Postgres code 23505) means another run is
       // already active — skip this invocation entirely, logged as such.
       await supabase.from('embedding_backfill_runs').insert({
@@ -103,7 +106,7 @@ export default async function handler(req, res) {
         completed_at: new Date().toISOString(),
         duration_ms: Date.now() - t0,
         project_id: project_id || null,
-      }).select('id').maybeSingle().catch(() => {}); // best-effort log of the skip itself; never throws
+      }).select('id').maybeSingle(); // best-effort log of the skip itself; never throws
       return res.status(200).json({ ok: true, skipped: true, reason: 'another run is already active' });
     }
     runId = claimed.id;
@@ -141,7 +144,8 @@ export default async function handler(req, res) {
         // embedding column NULL, so it remains eligible for the next
         // run automatically — no separate "attempted" state is written.
         if (embedding) {
-          await supabase.from('emails').update({ embedding }).eq('id', row.id);
+          const {error:writeError}=await supabase.from('emails').update({ embedding }).eq('id', row.id);
+          if(writeError)throw writeError;
           done++;
         } else {
           failed++;
@@ -188,7 +192,8 @@ export default async function handler(req, res) {
         const embData = await embRes.json();
         const embedding = embData.data?.[0]?.embedding;
         if (embedding) {
-          await supabase.from('ai_messages').update({ embedding }).eq('id', row.id);
+          const {error:writeError}=await supabase.from('ai_messages').update({ embedding }).eq('id', row.id);
+          if(writeError)throw writeError;
           aiMsgDone++;
         } else {
           aiMsgFailed++;

@@ -1372,6 +1372,22 @@ function getAOWorkflowAction(ao, projectRole = 'BO') {
   return { label: 'Serve notice', action: 'serveNotice', colour: 'var(--blue)', active: true };
 }
 
+function LOASigningStatus({request,prefix='AO'}) {
+ if(!request)return null;
+ const signers=[...(request.loa_signers||[])].sort((a,b)=>a.position-b.position);
+ const signed=signers.filter(s=>s.status==='verified').length;
+ return <div style={{marginTop:10,padding:'8px 10px',border:'1px solid var(--border)',borderRadius:8,fontSize:12}}>
+  <div style={{fontWeight:600,marginBottom:5,color:request.status==='completed'?'var(--green)':'var(--text2)'}}>{request.status==='completed'?'LOA completed':'LOA sent for signing'}</div>
+  {signers.map(s=><div key={s.position} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'3px 0'}}><span>{prefix}{s.position} · {s.name}</span><span style={{fontWeight:600,color:s.status==='verified'?'var(--green)':'var(--amber)'}}>{s.status==='verified'?'✓ Signed':'Pending'}</span></div>)}
+  <div style={{color:'var(--text3)',marginTop:4}}>{signed} of {signers.length} signatures completed</div>
+ </div>;
+}
+function matchAOLOA(requests,ao){
+ const norm=v=>String(v||'').trim().toLowerCase();
+ const email=norm(ao.email||ao.surv_email||ao.surveyorEmail);
+ return requests.find(r=>r.appointment_type.startsWith('ao_')&&r.loa_signers?.some(s=>s.position===1&&norm(s.name)===norm(ao.name)&&email&&norm(s.email)===email));
+}
+
 function AOCard({
   ao,
   projectRole,
@@ -1392,6 +1408,7 @@ function AOCard({
   onOpenSOCForAO,
   onOpenNoticeHistory,
   loaLoading,
+  loaRequest,
   awardLoading,
   emailResponseTasks = [],
 }) {
@@ -1765,7 +1782,7 @@ function AOCard({
             {/* Dissent only makes sense once a notice has genuinely
                 been served — cannot dissent to a notice that was
                 never served. */}
-            {!isAOAppointment && noticed && (
+            {!isAOAppointment && noticed && !['dissent','award','award_served','complete'].includes((ao.status || '').toLowerCase()) && (
               <button
                 onClick={() => onSetAOStatus?.(ao, 'dissent')}
                 style={{
@@ -1836,7 +1853,7 @@ function AOCard({
                 alongside the existing "not yet sent" check. Left the
                 separate isAOAppointment variant (a different scenario
                 entirely) untouched. */}
-            {!ao.loa_sent_at && (isAOAppointment || ao.agreed_surveyor) && (
+            {!loaRequest && !ao.loa_sent_at && (isAOAppointment || ao.agreed_surveyor) && (
             <div style={{ display: 'flex', gap: 1 }}>
               <button
                 className="btn btn-sm btn-ghost"
@@ -1905,6 +1922,7 @@ function AOCard({
               </button>
             )}
           </div>
+          <LOASigningStatus request={loaRequest} />
         </div>
       </div>
     </div>
@@ -3177,6 +3195,23 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [subFolders, setSubFolders] = useState([]); // AO subfolders discovered in root
   const [oneDriveRefresh, setOneDriveRefresh] = useState(0); // increment to force reload
   const [loaLoading, setLoaLoading] = useState(null);
+  const [loaRequests,setLoaRequests]=useState([]);
+  const refreshLOAStatus=useCallback(async()=>{
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      if(!session?.access_token)return;
+      const res=await fetch('/api/loa-project-status?project_id='+encodeURIComponent(initialProject.id),{headers:{Authorization:'Bearer '+session.access_token}});
+      if(res.ok){const data=await res.json();setLoaRequests(data.requests||[]);}
+    }catch(e){console.warn('LOA status refresh failed',e);}
+  },[initialProject.id]);
+  useEffect(()=>{
+    setLoaRequests([]);
+    refreshLOAStatus();
+    const timer=setInterval(refreshLOAStatus,10000);
+    window.addEventListener('focus',refreshLOAStatus);
+    return ()=>{clearInterval(timer);window.removeEventListener('focus',refreshLOAStatus);};
+  },[refreshLOAStatus]);
+  const boLOARequest=loaRequests.find(r=>r.appointment_type.startsWith('bo_'));
   const [awardLoading, setAwardLoading] = useState(null);
   // Missing-date prompt for award generation: { ao, fields:[{label,patch:[keys],value}], other:[labels] }
   const [awardDatePrompt, setAwardDatePrompt] = useState(null);
@@ -3411,13 +3446,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         ],
       });
 
+      if(r.success)await refreshLOAStatus();
       r.success ? alert(`LoA sent to ${boEmail} for signature.`) : alert(r.error || 'Could not send LoA.');
     } catch (err) {
       alert(err.message);
     } finally {
       setLoaLoading(null);
     }
-  }, [sendForSignature, project, bo, boEmail]);
+  }, [sendForSignature, project, bo, boEmail, refreshLOAStatus]);
 
   const handleDownloadBOLOAPdf = useCallback(async () => {
     setLoaLoading('bo_pdf');
@@ -3461,13 +3497,14 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         ],
       });
 
+      if(r.success)await refreshLOAStatus();
       r.success ? alert(`LoA sent to ${aoEmail} for signature.`) : alert(r.error || 'Could not send LoA.');
     } catch (err) {
       alert(err.message);
     } finally {
       setLoaLoading(null);
     }
-  }, [sendForSignature, project, role]);
+  }, [sendForSignature, project, role, refreshLOAStatus]);
 
   const handleDownloadAOLOAPdf = useCallback(async (ao) => {
     const aoKey = `ao-pdf-${ao.id || ao.num || ao.name || 'unknown'}`;
@@ -4092,12 +4129,15 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // Fixed 2026-08-28, on request: an edited notice should update
       // its existing record, not create a duplicate alongside it.
       if (editingNoticeId) {
-        await sb.from('notices').update(record).eq('id', editingNoticeId);
+        const {error}=await sb.from('notices').update(record).eq('id', editingNoticeId);
+        if(error)throw error;
       } else {
-        await sb.from('notices').insert([{ ...record, run_number: runNumber }]);
+        const {error}=await sb.from('notices').insert([{ ...record, run_number: runNumber }]);
+        if(error)throw error;
       }
     } catch (err) {
-      console.warn('Could not save notices table record:', err?.message || err);
+      console.error('Could not save notices table record:', err?.message || err);
+      throw err;
     }
 
     try {
@@ -4458,6 +4498,16 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         allWarnings.push(`AO${ao.num || ''}: no sections assigned`);
         continue;
       }
+      // Reserve the notice and its response URL before producing the Word/PDF.
+      const { data: { session: noticeSession } } = await sb.auth.getSession();
+      if(!noticeSession?.access_token)throw Error('Sign in to generate an online-response notice');
+      const prepareResponse=await fetch('/api/notice-response-prepare',{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+noticeSession.access_token},
+        body:JSON.stringify({projectId:project.id,aoId:String(ao?.id||ao?.num||''),sections:aoSections,noticeDate})
+      });
+      const prepared=await prepareResponse.json();
+      if(!prepareResponse.ok||!prepared?.noticeId||!prepared?.url)
+        throw Error(prepared?.error||'Could not create notice response QR link');
       const generatedDocs = [];
       const zip = new PizZip();
       const keysToGenerate = [...aoSections];
@@ -4471,6 +4521,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             .filter(Boolean)
             .filter((w, i, arr) => arr.findIndex(x => x.toLowerCase() === w.toLowerCase()) === i);
           const mergeData = buildNoticeMergeData({ project, ao, sectionKey: key, includeCover, noticeDate, section2Subsections: aoS2Subs, section1Is2, allSections: aoSections, worksItems: sectionWorks });
+          // Every notice in this pack uses the same permanent AO response link.
+          mergeData.NOTICE_RESPONSE_URL=prepared.url;
+          mergeData.notice_response_url=prepared.url;
           const result = await generateDocument({
             templateKey: key === 's2' ? 's3' : key,
             mergeData,
@@ -4482,9 +4535,11 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             generatedDocs.push({ key, fileName: mergeData.file_name, docx_b64: result.docx_b64 });
             addDocxToZip(zip, mergeData.file_name, result.docx_b64);
           } else {
+            if(key===keysToGenerate[0])throw Error(result?.error||'Notice QR document could not be generated');
             warnings.push(`${key}: ${result?.error || 'document not generated'}`);
           }
         } catch (err) {
+          if(key===keysToGenerate[0])throw Error('Online-response QR notice generation failed: '+err.message);
           warnings.push(`${key}: ${err.message}`);
         }
       }
@@ -4496,7 +4551,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
         });
         // Store per-AO metadata needed for workflow save on confirm
-        aoQueue.push({ ao, sortedDocs: sorted, aoSections, aoWorksItems, aoS2Subs });
+        aoQueue.push({ ao, sortedDocs: sorted, aoSections, aoWorksItems, aoS2Subs, noticeId:prepared.noticeId, responseToken:prepared.token });
       }
 
       allWarnings.push(...warnings);
@@ -4858,7 +4913,17 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
               const ak = String(ao?.id || ao?.num || ao?.ao_id || ao?.name || ao?.premise || ao?.address || '');
 
               const aoSafeguarding = safeguardingMap[ak] !== undefined ? !!safeguardingMap[ak] : !!safeguarding;
-      await saveNoticeRecord({ editingNoticeId: rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
+      if(pack.noticeId&&pack.responseToken){
+        const {data:{session:finalSession}}=await sb.auth.getSession();
+        if(!finalSession?.access_token)throw Error('Session expired before notice could be archived');
+        const activation=await fetch('/api/notice-response-activate',{
+          method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+finalSession.access_token},
+          body:JSON.stringify({noticeId:pack.noticeId,token:pack.responseToken,pdfB64:pack.pdf_b64})
+        });
+        const activated=await activation.json();
+        if(!activation.ok||!activated?.success)throw Error(activated?.error||'Could not archive original notice PDF');
+      }
+      await saveNoticeRecord({ editingNoticeId: pack.noticeId||rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
 
               const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
               if (nonS10.length > 0) {
@@ -5389,7 +5454,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       icon below already shows sent/signed state.
                       Stays permanently available in Edit BO
                       regardless. */}
-                  {(role === 'BO' || boAgreedSurveyorMode) && !project.bo_loa_sent_at && (
+                  {(role === 'BO' || boAgreedSurveyorMode) && !boLOARequest && !project.bo_loa_sent_at && (
                     <div style={{ position: 'relative', display: 'inline-block' }}>
                       <div style={{ display: 'flex', gap: 1, marginTop: 6 }}>
                         <button
@@ -5424,6 +5489,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       </div>
                     </div>
                   )}
+                  <LOASigningStatus request={boLOARequest} prefix="BO" />
                   {project.bo_loa_signed_at ? (
                     <span title={`BO LOA signed ${new Date(project.bo_loa_signed_at).toLocaleDateString('en-GB')}`}
                       style={{ fontSize: 16, display: 'inline-block', marginTop: 6, cursor: project.bo_loa_signed_pdf_url ? 'pointer' : 'default' }}
@@ -5523,6 +5589,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
                       onOpenSOCForAO={handleOpenSOCForAO}
                       onOpenNoticeHistory={handleOpenNoticeHistory}
                       loaLoading={loaLoading === aoKey}
+                      loaRequest={matchAOLOA(loaRequests,ao)}
                       awardLoading={awardLoading === aoKey}
                       emailResponseTasks={emailResponseTasks}
                     />

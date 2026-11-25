@@ -189,9 +189,20 @@ export default function useDocumentGenerator() {
         throw new Error('PDF conversion failed. Check API2PDF_API_KEY is set in Vercel.');
       }
 
-      const sigResponse = await fetch('/api/send-loa', {
+      // Preserve Firma.dev as the default and reversible fallback.
+      // In-house signing is opt-in via the Vite environment configuration.
+      const selectedProvider = window.localStorage.getItem('nora_loa_signing_provider') || 'nora';
+      const inHouse = selectedProvider === 'nora';
+      let accessToken = null;
+      if (inHouse) {
+        const { sb } = await import('../supabaseClient');
+        const { data: { session } } = await sb.auth.getSession();
+        accessToken = session?.access_token;
+        if (!accessToken) throw new Error('Please sign in to Nora before sending an LOA.');
+      }
+      const sigResponse = await fetch(inHouse ? '/api/loa-create' : '/api/send-loa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) },
         body: JSON.stringify({
           project_id: projectId,
           appointment_type: appointmentType,

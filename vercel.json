@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/n/:slug",
+      "destination": "/api/notice-short-redirect?slug=:slug"
+    },
+    {
       "source": "/api/ely-ai",
       "destination": "https://uttrmbmbmjszzfiftvco.supabase.co/functions/v1/ai_router"
     },
@@ -103,6 +107,20 @@
     },
     "api/cron-sync-gmail.js": {
       "maxDuration": 120
+    },
+    "api/loa-create.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+    },
+    "api/loa-verify.js": {
+      "maxDuration": 60,
+      "includeFiles": "{node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs,node_modules/@fontsource/allura/files/allura-latin-400-normal.woff}"
+    },
+    "api/cron-memory-reconcile.js": {
+      "maxDuration": 120
+    },
+    "api/cron-aos-invoice-chase.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -116,6 +134,14 @@
     },
     {
       "path": "/api/cron-sync-gmail",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron-memory-reconcile",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron-aos-invoice-chase",
       "schedule": "*/5 * * * *"
     }
   ]

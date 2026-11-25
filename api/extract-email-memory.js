@@ -160,9 +160,9 @@ ${body.slice(0, 6000)}`;
       return res.status(500).json({ error: error.message });
     }
 
-    // Generate embeddings for each inserted row — non-blocking
+    // Generate embeddings before returning so serverless execution cannot terminate early
     if (inserted?.length && process.env.OPENAI_API_KEY) {
-      (async () => {
+      await (async () => {
         for (const row of inserted) {
           try {
             const embRes = await fetch('https://api.openai.com/v1/embeddings', {

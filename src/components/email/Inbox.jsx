@@ -1933,7 +1933,7 @@ function AttachmentChip({ att }) {
   );
 }
 
-function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
+function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked, onBackToInbox, onOpenProject }) {
   // Fixed URGENTLY 2026-09-22, real confirmed regression from the
   // recipients-popup fix: this component referenced state.currentUser
   // without ever getting state from useApp() in this scope - state
@@ -2010,6 +2010,10 @@ function EmailPreview({ email, onOpenReply, onDraftWithEly, onEmailLinked }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
       {showSavePopup && <SaveAttachmentPopup email={email} attachments={attachments} onDismiss={() => setShowSavePopup(false)} />}
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderBottom:'1px solid var(--border)',flexShrink:0,background:'var(--bg2)'}}>
+        <button onClick={onBackToInbox} style={{border:'1px solid var(--border)',borderRadius:99,background:'var(--bg3)',padding:'7px 12px',color:'var(--text)',fontWeight:600,cursor:'pointer'}}>← Back to inbox</button>
+        {email.project_id && <button onClick={() => onOpenProject?.(email.project_id)} style={{border:'1px solid var(--blue)',borderRadius:99,background:'var(--blue-bg)',padding:'7px 12px',color:'var(--blue)',fontWeight:600,cursor:'pointer'}}>📁 Open project</button>}
+      </div>
       <ProjectLinkBanner email={email} onLinked={(projectId) => onEmailLinked?.(email, projectId)} />
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, lineHeight: 1.3 }}>{email.subject}</div>
@@ -2176,7 +2180,7 @@ function isBriefContent(text = '') {
 // Real, persistent local storage for the email inbox — survives a
 // full app close, unlike the in-memory-only React state that existed
 // before this.
-export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange }) {
+export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore, loadingMore, hasMore, onOverlayChange, onOpenProject }) {
   const { state, dispatch } = useApp();
   const [loading, setLoading]            = useState(false);
   // Added 2026-09-17, alongside the loading-hang fixes above: a real
@@ -2185,6 +2189,13 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   // explanation why. Now shown directly in the UI.
   const [inboxLoadError, setInboxLoadError] = useState('');
   const [selectedEmail, setSelectedEmail]= useState(null);
+  const inboxListRef = useRef(null);
+  const inboxScrollPositionRef = useRef(0);
+  const restoreInboxPosition = () => {
+    setMobileShowEmail(false);
+    setSelectedEmail(null);
+    requestAnimationFrame(() => { if (inboxListRef.current) inboxListRef.current.scrollTop = inboxScrollPositionRef.current; });
+  };
   // Fixed 2026-09-12, real, confirmed bug: App.jsx's email
   // notification deep-link already dispatched SET_SELECTED_EMAIL_ID,
   // but nothing here ever read it — the app opened to the inbox
@@ -2771,6 +2782,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
   const [autoDraft, setAutoDraft] = useState(null);
 
   const handleSelect = async (email) => {
+    if (inboxListRef.current) inboxScrollPositionRef.current = inboxListRef.current.scrollTop;
     setSelectedEmail(email);
     setAppointmentPrompt(null);
     setAutoDraft(null);
@@ -3430,12 +3442,14 @@ if (syncErr) throw syncErr;
         </div>
 
         <div
+          ref={inboxListRef}
           style={{ flex: 1, overflowY: 'auto', paddingTop: 4, paddingBottom: 8 }}
           onScroll={(e) => {
             // Added 2026-08-13, on request: real infinite scroll. Only
             // triggers during ordinary browsing, never during an active
             // search — search results are a fixed, real database query
             // result, not something to paginate further.
+            inboxScrollPositionRef.current = e.target.scrollTop;
             if (search && search.trim()) return;
             if (!onLoadMore || loadingMore || hasMore === false) return;
             const el = e.target;
@@ -3494,23 +3508,25 @@ if (syncErr) throw syncErr;
               background: 'var(--bg2)', flexShrink: 0,
             }}>
               <button
-                onClick={() => { setMobileShowEmail(false); setSelectedEmail(null); }}
+                onClick={restoreInboxPosition}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--bg3)', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}
               >
-                ← Back
+                ← Inbox
               </button>
+              {selectedEmail?.project_id && <button onClick={() => onOpenProject?.(selectedEmail.project_id)} style={{padding:'6px 12px',borderRadius:99,border:'1px solid var(--blue)',background:'var(--blue-bg)',color:'var(--blue)',fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📁 Project</button>}
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 {selectedEmail?.subject}
               </span>
             </div>
           )}
+          {!isMobile && selectedEmail?.project_id && <div style={{padding:'7px 14px',borderBottom:'1px solid var(--border)',flexShrink:0}}><button onClick={() => onOpenProject?.(selectedEmail.project_id)} style={{padding:'6px 12px',borderRadius:99,border:'1px solid var(--blue)',background:'var(--blue-bg)',color:'var(--blue)',fontSize:13,fontWeight:600,cursor:'pointer'}}>📁 Open linked project</button></div>}
           {/* 2026-10-17: on a phone the open email (iframe + every inline image
               converted to a data URL) sat fully loaded UNDER the composer, doubling
               memory exactly while drafting - the only place "Aw, Snap!" happens.
               While a composer is open on mobile it is not mounted; it returns on close. */}
           {(isMobile && (replyOverlay || draftWithEly))
             ? <div style={{ flex: 1 }} />
-            : <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} />}
+            : <EmailPreview email={selectedEmail} onOpenReply={mode => setReplyOverlay({ mode, email: selectedEmail })} onDraftWithEly={() => setDraftWithEly(true)} onEmailLinked={handleEmailLinked} onBackToInbox={restoreInboxPosition} onOpenProject={onOpenProject} />}
 
           {/* Auto-draft panel */}
           {autoDraft && (

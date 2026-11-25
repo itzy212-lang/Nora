@@ -11,11 +11,16 @@ const sbClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABA
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { user_id, user_uuid, item_id } = req.body || {};
+    const { user_id, user_uuid, item_id, offset } = req.body || {};
     if ((!user_id && !user_uuid) || !item_id) return res.status(400).json({ error: 'user_id and item_id are required' });
     const ctx = await getProviderContext({ sb: sbClient(), userEmail: user_id, userUuid: user_uuid });
     const storage = await getStorageAdapter(ctx);
     const f = await storage.download(item_id);
+    if (offset !== undefined) {
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > f.buffer.length) return res.status(400).json({error:'Invalid file offset'});
+      const end = Math.min(offset + MAX_FILE_BYTES, f.buffer.length);
+      return res.status(200).json({name:f.name,type:f.mimeType,size:f.buffer.length,base64:f.buffer.subarray(offset,end).toString('base64'),nextOffset:end < f.buffer.length ? end : null});
+    }
     if (f.buffer.length > MAX_FILE_BYTES) return res.status(413).json({ error: 'Too large to attach from here (over 3 MB) - attach it manually', name: f.name });
     return res.status(200).json({ name: f.name, type: f.mimeType, size: f.buffer.length, base64: f.buffer.toString('base64') });
   } catch (err) {

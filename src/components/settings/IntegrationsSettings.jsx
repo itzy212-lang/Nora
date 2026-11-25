@@ -5,6 +5,7 @@ export default function IntegrationsSettings() {
   const [integrations, setIntegrations] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loaProvider, setLoaProvider] = useState(() => window.localStorage.getItem('nora_loa_signing_provider') || 'nora');
 
   useEffect(() => {
     loadIntegrations();
@@ -257,6 +258,15 @@ export default function IntegrationsSettings() {
             )}
           </div>
         )}
+      </div>
+      <div style={{padding:18,marginTop:18,border:'1px solid var(--border)',borderRadius:10}}>
+        <h3 style={{marginTop:0}}>Letter of Appointment e-signatures</h3>
+        <p style={{fontSize:13,color:'var(--text2)'}}>Choose the provider for new LOAs. Existing Firma.dev documents and signing records are never removed. This selection applies to this browser.</p>
+        <label style={{display:'block',fontSize:13,marginBottom:8}}>Signing provider</label>
+        <select value={loaProvider} onChange={e=>{const value=e.target.value;window.localStorage.setItem('nora_loa_signing_provider',value);setLoaProvider(value);}} style={{padding:10,borderRadius:6,minWidth:250}}>
+          <option value="firma">Firma.dev (existing)</option>
+          <option value="nora">Nora in-house (sequential signing)</option>
+        </select>
       </div>
     </div>
   );
