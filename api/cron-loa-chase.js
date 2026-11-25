@@ -19,24 +19,14 @@ const host = process.env.LOA_SIGNING_BASE_URL || (process.env.VERCEL_ENV === 'pr
 const first = (n) => String(n || '').trim().split(/\s+/)[0] || 'there';
 const label = (type) => String(type || '').startsWith('bo_') ? 'Building Owner Letter of Appointment' : 'Adjoining Owners Letter of Appointment';
 
-export function activeMessage(signer, request, link, waiting) {
+export function activeMessage(signer, request, link) {
   const lines = [
     'Hi ' + first(signer.name) + ',', '',
     'Just a quick reminder that your ' + label(request.appointment_type) + ' is still waiting for your signature.', '',
     'Please use this secure link, which replaces the one sent before:', link,
   ];
-  if (waiting.length) lines.push('', 'Once you have signed, ' + waiting.map((w) => w.name).join(' and ') + ' will be sent their own link.');
   lines.push('', 'Kind regards,', 'Nora');
   return lines.join('\n');
-}
-
-export function waitingMessage(signer, request, activeName) {
-  return [
-    'Hi ' + first(signer.name) + ',', '',
-    'Just to let you know that the ' + label(request.appointment_type) + ' is still outstanding.', '',
-    activeName + ' needs to sign first. As soon as they have, you will be sent your own secure link to sign.', '',
-    'Kind regards,', 'Nora',
-  ].join('\n');
 }
 
 export async function runLoaChase(sb, { now = new Date(), send = sendLOAEmail } = {}) {
@@ -58,18 +48,13 @@ export async function runLoaChase(sb, { now = new Date(), send = sendLOAEmail } 
     const { data: claimed } = await sb.from('loa_signers').update({ chased_at: now.toISOString() }).eq('id', s.id).is('chased_at', null).select('id').maybeSingle();
     if (!claimed) continue;
 
-    const { data: all } = await sb.from('loa_signers').select('id,position,name,email,status').eq('request_id', s.request_id).order('position');
-    const waiting = (all || []).filter((x) => x.status === 'waiting');
     const token = loaToken();
     try {
       const { error: te } = await sb.from('loa_signers').update({ token_hash: loaTokenHash(token) }).eq('id', s.id);
       if (te) throw te;
       const link = host + '/loa/sign/' + token;
-      const jobs = [send({ userId: request.user_id, to: [s.email], subject: 'Reminder: please sign your ' + label(request.appointment_type), text: activeMessage(s, request, link, waiting) })];
-      for (const w of waiting) jobs.push(send({ userId: request.user_id, to: [w.email], subject: 'Update on your ' + label(request.appointment_type), text: waitingMessage(w, request, s.name) }));
-      const results = await Promise.allSettled(jobs);
-      const activeSent = results[0].status === 'fulfilled' && results[0].value?.sent;
-      if (!activeSent) throw Error('reminder not delivered');
+      const sent = await send({ userId: request.user_id, to: [s.email], subject: 'Reminder: please sign your ' + label(request.appointment_type), text: activeMessage(s, request, link) });
+      if (!sent?.sent) throw Error('reminder not delivered');
       out.chased++; out.requests++;
     } catch (e) {
       console.error('[cron-loa-chase] failed for signer', s.id, e.message);

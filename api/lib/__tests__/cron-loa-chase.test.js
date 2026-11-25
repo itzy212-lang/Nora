@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runLoaChase, activeMessage, waitingMessage } from '../../cron-loa-chase.js';
+import { runLoaChase, activeMessage } from '../../cron-loa-chase.js';
 
 // Tiny in-memory stand-in for the database calls the chaser makes.
 function fakeDb(tables) {
@@ -38,20 +38,27 @@ const setup = (over = {}) => ({
 });
 
 describe('LOA chaser', () => {
-  it('chases the signer whose turn it is with a fresh link, and tells the waiting one', async () => {
+  it('chases only the signer whose turn it is, with a fresh link; nothing goes to the one waiting', async () => {
     const t = setup(); const sent = [];
     const r = await runLoaChase(fakeDb(t), { now: NOW, send: async (m) => { sent.push(m); return { sent: true }; } });
     expect(r.chased).toBe(1);
-    expect(sent).toHaveLength(2);
-    const a = sent.find((m) => m.to[0] === 'sam@example.com');
-    expect(a.text).toMatch(/\/loa\/sign\/[A-Za-z0-9_-]{32}/);
-    expect(a.text).toContain('Pat Jones will be sent their own link');
-    const w = sent.find((m) => m.to[0] === 'pat@example.com');
-    expect(w.text).not.toMatch(/\/loa\/sign\//);
-    expect(w.text).toContain('Sam Jones needs to sign first');
-    expect(t.loa_signers[0].token_hash).not.toBe('old'); // link replaced
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toEqual(['sam@example.com']);
+    expect(sent[0].text).toMatch(/\/loa\/sign\/[A-Za-z0-9_-]{32}/);
+    expect(t.loa_signers[0].token_hash).not.toBe('old');
     expect(t.loa_signers[0].chased_at).toBeTruthy();
-    expect(t.loa_signers[1].chased_at).toBeNull(); // waiting person is still chased later, when it is their turn
+    expect(t.loa_signers[1].chased_at).toBeNull();
+  });
+  it('the second signer is chased 3 days after THEIR invitation, not before', async () => {
+    const t = setup();
+    t.loa_signers[0].status = 'verified'; t.loa_signers[0].chased_at = daysAgo(2);
+    t.loa_signers[1].status = 'invited'; t.loa_signers[1].invited_at = daysAgo(1);
+    const sent = [];
+    const send = async (m) => { sent.push(m); return { sent: true }; };
+    expect((await runLoaChase(fakeDb(t), { now: NOW, send })).chased).toBe(0);
+    t.loa_signers[1].invited_at = daysAgo(3.5);
+    expect((await runLoaChase(fakeDb(t), { now: NOW, send })).chased).toBe(1);
+    expect(sent[0].to).toEqual(['pat@example.com']);
   });
   it('a single owner gets a single email', async () => {
     const t = setup(); t.loa_signers = [t.loa_signers[0]]; const sent = [];
@@ -76,7 +83,7 @@ describe('LOA chaser', () => {
     expect(t.loa_signers[0].chased_at).toBeNull();
   });
   it('wording', () => {
-    expect(activeMessage({ name: 'Sam Jones' }, { appointment_type: 'ao_loa' }, 'LINK', [])).toContain('Adjoining Owners Letter of Appointment');
-    expect(waitingMessage({ name: 'Pat' }, { appointment_type: 'bo_loa' }, 'Sam')).toContain('Building Owner Letter of Appointment');
+    expect(activeMessage({ name: 'Sam Jones' }, { appointment_type: 'ao_loa' }, 'LINK')).toContain('Adjoining Owners Letter of Appointment');
+    expect(activeMessage({ name: 'Pat' }, { appointment_type: 'bo_loa' }, 'LINK')).toContain('Building Owner Letter of Appointment');
   });
 });
