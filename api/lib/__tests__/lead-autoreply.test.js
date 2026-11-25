@@ -137,15 +137,36 @@ describe('reply wording', () => {
     expect(r.body).toContain('under the Party Wall Act.');
     expect(r.body).not.toContain('namely');
   });
-  it('neighbour and unclear replies contain no prices', () => {
-    for (const kind of ['neighbour_works', 'unclear']) {
-      const r = composeReply(kind, { name: 'Helen Vassilakas' }, settings);
-      expect(r.kind).toBe('no_pricing');
-      expect(r.body).not.toMatch(/£/);
-      expect(r.body).toContain("We'll be in touch shortly");
-      expect(r.body).toContain('preference on timing');
-      expect(r.body).toContain('Itzik will reach out as soon as available');
+  it('neighbour reply reassures, explains the next steps and has no prices', () => {
+    const r = composeReply('neighbour_works', { name: 'Helen Vassilakas' }, settings);
+    expect(r.kind).toBe('no_pricing');
+    expect(r.body).not.toMatch(/£/);
+    expect(r.body).toContain('we have got your back');
+    expect(r.body).toContain('Itzik Darel ACIArb MIPWS is an experienced party wall surveyor');
+    expect(r.body).toContain('protections you have under the Party Wall Act');
+    expect(r.body).toContain("reach out to your neighbour's surveyor");
+    expect(r.body).toContain('schedule of condition of your property');
+    expect(r.body).toContain('preference on timing');
+  });
+  it('unclear reply is friendly, has no prices and does not assume a neighbour is doing works', () => {
+    const r = composeReply('unclear', { name: 'Helen Vassilakas' }, settings);
+    expect(r.body).not.toMatch(/£/);
+    expect(r.body).not.toMatch(/neighbour/i);
+    expect(r.body).toContain('Itzik Darel ACIArb MIPWS is an experienced party wall surveyor');
+    expect(r.body).toContain('preference on timing');
+  });
+  it('ends with a plain sign-off the email wrapper recognises, so it is not doubled', () => {
+    for (const kind of ['owner_works', 'neighbour_works', 'unclear']) {
+      const r = composeReply(kind, { name: 'A B', information: 'loft' }, settings);
+      expect(r.body.trim().endsWith('Kind regards,\nNora')).toBe(true);
+      expect(r.body).not.toContain('On behalf of');
     }
+  });
+  it('says "both" for two neighbours', () => {
+    const r = composeReply('owner_works', { name: 'A B', information: 'I want to dig a basement and I have two neighbours' }, settings);
+    expect(r.body).toContain('does not necessarily mean that both need to be served a notice');
+    expect(r.body).toContain('If you do need to serve both');
+    expect(r.body).not.toMatch(/all 2/);
   });
   it('falls back to the no-price reply when fees are not set up', () => {
     const bare = normaliseSettings({ mode: 'send', surveyor_full_name: 'Itzik Darel' });

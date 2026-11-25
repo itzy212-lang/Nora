@@ -216,8 +216,8 @@ function neighbourParagraphs(n, settings, surveyorShort) {
   const cut = (v) => Math.round(v * (100 - d)) / 100;
   const total = (first) => first + (n - 1) * cut(first);
   return [
-    `You mentioned you have ${n} neighbours. Having ${n} neighbours does not necessarily mean that all ${n} need to be served a notice. ${surveyorShort} will discuss that with you.`,
-    `If you do need to serve all ${n}, the notices would be ${n} x ${gbp(n1)} = ${gbp(n * n1)}, and any further action would be priced at a ${d}% reduction for each additional neighbour. If all ${n} neighbours chose the same option, our fee would be ${gbp(total(soc))} for option 2, or ${gbp(total(act))} for option 3 or option 4. If they go with option 4 and appoint their own surveyors, you would pay their surveyors' fees in full.`,
+    `You mentioned you have ${n} neighbours. Having ${n} neighbours does not necessarily mean that ${n === 2 ? 'both' : `all ${n}`} need to be served a notice. ${surveyorShort} will discuss that with you.`,
+    `If you do need to serve ${n === 2 ? 'both' : `all ${n}`}, the notices would be ${n} x ${gbp(n1)} = ${gbp(n * n1)}, and any further action would be priced at a ${d}% reduction for each additional neighbour. If ${n === 2 ? 'both neighbours' : `all ${n} neighbours`} chose the same option, our fee would be ${gbp(total(soc))} for option 2, or ${gbp(total(act))} for option 3 or option 4. If they go with option 4 and appoint their own surveyors, you would pay their surveyors' fees in full.`,
   ].join('\n\n');
 }
 
@@ -225,7 +225,9 @@ export function composeReply(kind, lead, settings) {
   const first = greetingName(lead?.name);
   const surveyorShort = settings.surveyor_short_name || settings.surveyor_full_name || 'The surveyor';
   const surveyorFull = settings.surveyor_full_name || surveyorShort;
-  const signOff = `Kind regards,\n${settings.sign_off_name}\nOn behalf of ${surveyorFull}`;
+  // The email wrapper (api/_lib/loa-email.js) adds the full sign-off and signature itself,
+  // so the body ends with a plain sign-off it recognises and replaces.
+  const signOff = `Kind regards,\n${settings.sign_off_name}`;
 
   if (kind === 'owner_works' && pricingReady(settings)) {
     const works = tidyWorks(lead?.information);
@@ -251,11 +253,29 @@ export function composeReply(kind, lead, settings) {
     return { subject: 'Your party wall enquiry', body, kind: 'owner_works_pricing' };
   }
 
-  // Neighbour doing works, unclear, or fees not set up: no prices.
+  const based = settings.based_in ? ` based in ${settings.based_in}` : '';
+  const timing = `If you have a preference on timing, please let me know. Otherwise, ${surveyorShort} will reach out as soon as available.`;
+
+  // A neighbour is doing the works: reassure, explain the next steps, no prices.
+  if (kind === 'neighbour_works') {
+    const body = [
+      `Hi ${first},`,
+      `Thank you for your enquiry via Local Surveyors Direct. We are party wall specialists${based}, and we have got your back.`,
+      `${surveyorFull} is an experienced party wall surveyor who has worked with plenty of owners whose neighbours are carrying out works, so you would be in good hands.`,
+      `The next step would be for ${surveyorShort} to discuss the works with you: to go through your concerns, look at which works are most at risk to your property, and explain the protections you have under the Party Wall Act.`,
+      `If you decide to go with us, ${surveyorShort} would then reach out to your neighbour's surveyor and engage with them, and arrange a schedule of condition of your property. This usually happens a little earlier in the process, so that ${surveyorShort} can sit down with you, go through the drawings in more detail and get a better understanding of your property and your concerns, before meeting their surveyor to go through the schedule of condition and highlight the areas of concern.`,
+      timing,
+      signOff,
+    ].join('\n\n');
+    return { subject: 'Your party wall enquiry', body, kind: 'no_pricing' };
+  }
+
+  // Unclear (or fees not set up): friendly, no prices.
   const body = [
     `Hi ${first},`,
-    `Thank you for your enquiry via Local Surveyors Direct. We'll be in touch shortly.`,
-    `If you have a preference on timing, please let me know. Otherwise, ${surveyorShort} will reach out as soon as available.`,
+    `Thank you for your enquiry via Local Surveyors Direct. We are party wall specialists${based}.`,
+    `${surveyorFull} is an experienced party wall surveyor and will reach out to talk through your situation and how we can help.`,
+    timing,
     signOff,
   ].join('\n\n');
   return { subject: 'Your party wall enquiry', body, kind: kind === 'owner_works' ? 'owner_works_no_pricing_setup' : 'no_pricing' };
