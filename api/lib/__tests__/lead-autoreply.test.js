@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isLeadEmail, isFromLeadSender, parseLead, classifyLead, composeReply, normaliseSettings,
+  neighbourCount, isLeadEmail, isFromLeadSender, parseLead, classifyLead, composeReply, normaliseSettings,
   greetingName, tidyName, nextLeadRef, followUpDate, estimatedValue, processLeadEmails,
 } from '../lead-autoreply.js';
 
@@ -115,6 +115,22 @@ describe('reply wording', () => {
   it('quotes a first-person description instead of running it into the sentence', () => {
     const r = composeReply('owner_works', { name: 'A B', information: 'I am planning a loft conversion' }, settings);
     expect(r.body).toContain('Party Wall Act ("I am planning a loft conversion").');
+  });
+  it('adapts to the number of neighbours the enquirer mentions', () => {
+    expect(neighbourCount('We want a loft conversion and have 3 neighbours')).toBe(3);
+    expect(neighbourCount('extension, two neighbours')).toBe(2);
+    expect(neighbourCount('both neighbours')).toBe(2);
+    expect(neighbourCount('one neighbour')).toBe(null);
+    expect(neighbourCount('a neighbour')).toBe(null);
+    expect(neighbourCount('')).toBe(null);
+    const r = composeReply('owner_works', { name: 'A B', information: 'I want to build an extension and I have 3 neighbours' }, settings);
+    expect(r.body).toContain('You mentioned you have 3 neighbours.');
+    expect(r.body).toContain('does not necessarily mean that all 3 need to be served a notice');
+    expect(r.body).toContain('Itzik will discuss that with you');
+    expect(r.body).toContain('3 x £100 = £300');
+    expect(r.body).toContain('£900 for option 2');   // 450 + 225 + 225
+    expect(r.body).toContain('£1,400 for option 3 or option 4'); // 700 + 350 + 350
+    expect(r.body).not.toContain('Please note: if you have more than one neighbour');
   });
   it('keeps the works vague when none was given', () => {
     const r = composeReply('owner_works', { name: 'A B', information: '' }, settings);

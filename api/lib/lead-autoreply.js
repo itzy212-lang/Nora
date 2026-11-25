@@ -185,11 +185,39 @@ export function pricingReady(settings) {
 
 const gbp = (n) => '£' + Number(n).toLocaleString('en-GB');
 
+
+// How many neighbours the enquirer says they have. Only a clear number of 2 to 6
+// counts; one, none or anything vague returns null and the standard wording is used.
+const NUMBER_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+export function neighbourCount(info) {
+  const t = String(info || '').toLowerCase();
+  let n = null;
+  const m = t.match(/\b(\d{1,2}|one|two|three|four|five|six)\s+(?:adjoining\s+|adjacent\s+)?(?:neighbou?rs?|adjoining owners?|adjoining properties|neighbouring properties)\b/);
+  if (m) n = /^\d/.test(m[1]) ? parseInt(m[1], 10) : NUMBER_WORDS[m[1]];
+  else if (/\bboth\s+(?:my\s+|our\s+|the\s+)?neighbou?rs?\b|neighbou?rs?\s+on\s+(?:both|either)\s+sides?/.test(t)) n = 2;
+  return n && n >= 2 && n <= 6 ? n : null;
+}
+
 // ── Reply wording (fixed text) ────────────────────────────────────────────
 function tidyWorks(info) {
   const s = String(info || '').replace(/\s+/g, ' ').trim();
   if (!s || s.length > 220) return '';
   return s.replace(/[.!\s]+$/, '');
+}
+
+
+function neighbourParagraphs(n, settings, surveyorShort) {
+  const d = settings.additional_discount_pct;
+  const n1 = settings.fee_notice, soc = settings.fee_soc, act = settings.fee_surveyor;
+  if (!n) {
+    return `Please note: if you have more than one neighbour, the notice for each additional neighbour would be ${gbp(n1)}, and any further action would be priced at a ${d}% reduction. If they go with option 4 and appoint their own surveyor, our fee would still be reduced by ${d}%, but you would pay their surveyor's fees in full.`;
+  }
+  const cut = (v) => Math.round(v * (100 - d)) / 100;
+  const total = (first) => first + (n - 1) * cut(first);
+  return [
+    `You mentioned you have ${n} neighbours. Having ${n} neighbours does not necessarily mean that all ${n} need to be served a notice. ${surveyorShort} will discuss that with you.`,
+    `If you do need to serve all ${n}, the notices would be ${n} x ${gbp(n1)} = ${gbp(n * n1)}, and any further action would be priced at a ${d}% reduction for each additional neighbour. If all ${n} neighbours chose the same option, our fee would be ${gbp(total(soc))} for option 2, or ${gbp(total(act))} for option 3 or option 4. If they go with option 4 and appoint their own surveyors, you would pay their surveyors' fees in full.`,
+  ].join('\n\n');
 }
 
 export function composeReply(kind, lead, settings) {
@@ -216,7 +244,7 @@ export function composeReply(kind, lead, settings) {
         `3. Dissent and agree to appoint your surveyor as the agreed surveyor. In this scenario our fee would be ${gbp(settings.fee_surveyor)}. We do not charge extra to act as the agreed surveyor.`,
         `4. Dissent and appoint their own surveyor. In this scenario our fee would be ${gbp(settings.fee_surveyor)}, and you would also pay their surveyor's fees.`,
       ].join('\n'),
-      `Please note: if you have more than one neighbour, the notice for each additional neighbour would be ${gbp(settings.fee_notice)}, and any further action would be priced at a ${d}% reduction. If they go with option 4 and appoint their own surveyor, our fee would still be reduced by ${d}%, but you would pay their surveyor's fees in full.`,
+      neighbourParagraphs(neighbourCount(lead?.information), settings, surveyorShort),
       signOff,
     ].join('\n\n');
     return { subject: 'Your party wall enquiry', body, kind: 'owner_works_pricing' };
