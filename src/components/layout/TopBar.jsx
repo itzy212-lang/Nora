@@ -1,4 +1,5 @@
 import { useApp } from '../../state/appStore';
+import PulseDots from '../shared/PulseDots';
 import { useState, useEffect } from 'react';
 import { getAutoPlay, setAutoPlayGlobal } from '../../hooks/useSpeech';
 
@@ -68,9 +69,9 @@ export default function TopBar({ currentView, onMenuToggle, onNavigate, onOpenNo
           // Project Chat's own tab is active — reported as redundant
           // clutter squashing the top bar, since a second way into
           // the same kind of chat is already visible.
-          style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: (isOverlayOpen || hideAskNora) ? 'none' : 'flex', alignItems: 'center' }}
+          style={{ gap: 5, padding: '7px 14px', borderRadius: 8, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: (isOverlayOpen || hideAskNora) ? 'none' : 'flex', alignItems: 'center' }}
         >
-          ✨ Ask Nora
+          <PulseDots /> Ask Nora
         </button>
         <button
           onClick={onOpenQuickRef}

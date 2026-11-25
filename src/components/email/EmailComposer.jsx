@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import PulseDots from '../shared/PulseDots';
 import { useApp } from '../../state/appStore';
 import { useEmails } from '../../hooks/useEmails';
 import DraftWithEly from './DraftWithEly';
@@ -628,7 +629,7 @@ export default function EmailComposer({ opts = {}, onClose, onSent }) {
             <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>{draftNote}</span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setShowDraftWithEly(true)} style={{ padding: '7px 14px', borderRadius: 8, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>✨ Draft with Nora</button>
+            <button onClick={() => setShowDraftWithEly(true)} style={{ padding: '7px 14px', borderRadius: 8, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7 }}><PulseDots /> Draft with Nora</button>
             <button className="btn btn-amber" onClick={() => setDraftNote('Draft saved')}>Save draft</button>
             <button className="btn btn-primary" onClick={handleSend} disabled={sending}>
               {sending ? 'Sending...' : 'Send'}

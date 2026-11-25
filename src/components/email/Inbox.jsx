@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import PulseDots from '../shared/PulseDots';
 import sb from '../../supabaseClient';
 import { getCurrentUserEmail, getCurrentUserUuid, getUserStorageInfo } from '../../utils/getCurrentUserEmail';
 import { toHtml, cleanSignOff, stripEmbeddedImagesFromQuote, logDiag } from '../../utils/draftUtils';
@@ -1367,8 +1368,8 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
                   📁 Project files
                 </button>
                 {!showEly && (
-                  <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: '#0a0a0a', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                    ✨ Draft with Nora
+                  <button onClick={() => setShowEly(true)} style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                    <PulseDots /> Draft with Nora
                   </button>
                 )}
               </div>

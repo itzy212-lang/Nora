@@ -58,12 +58,12 @@ export default function SplashScreen({ onDone }) {
           <span style={{
             fontFamily: "'Bahnschrift Light', 'DIN Alternate', Arial, sans-serif",
             fontSize: 64, fontWeight: 300, letterSpacing: '-1px',
-            lineHeight: 1, color: 'white',
+            lineHeight: 1, color: '#7c5cf0',
           }}>nora</span>
           <span style={{ display: 'flex', alignItems: 'flex-end', gap: 7, paddingLeft: 9, paddingBottom: 12 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot1, transform: `translateY(${-(dot1 - 0.15) * 6}px)` }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot2, transform: `translateY(${-(dot2 - 0.15) * 6}px)` }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'white', display: 'inline-block', opacity: dot3, transform: `translateY(${-(dot3 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot1, transform: `translateY(${-(dot1 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot2, transform: `translateY(${-(dot2 - 0.15) * 6}px)` }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#7c5cf0', display: 'inline-block', opacity: dot3, transform: `translateY(${-(dot3 - 0.15) * 6}px)` }}/>
           </span>
         </div>
         <div style={{
