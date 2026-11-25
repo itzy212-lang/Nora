@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../state/appStore';
 import TaskEditModal from './TaskEditModal';
+import LandRegistryUpload from './LandRegistryUpload';
 import { useEly } from '../../hooks/useEly';
 import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { sortAOsNumerically } from '../../utils/aoUtils';
@@ -1125,6 +1126,23 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
     if (c) setForm(f => ({ ...f, service: f.premise }));
   };
 
+  // Land Registry upload (add mode only): fills the property and the owners'
+  // names once the user has confirmed what was read. Only the first two owners
+  // fit the form. The service address is only changed if the user ticked it.
+  const applyLandRegistry = (patch) => {
+    setForm(f => {
+      const service = patch.useService ? patch.aoService : (sameAddr ? patch.aoPremise : f.service);
+      return {
+        ...f,
+        premise: patch.aoPremise || f.premise,
+        service,
+        ao1: { ...f.ao1, name: patch.ao1Name || f.ao1.name },
+        ao2: { ...f.ao2, name: patch.ao2Name || f.ao2.name },
+      };
+    });
+    if (patch.useService) setSameAddr(false);
+  };
+
   const handleSave = async () => {
     setSaving(true);
 
@@ -1153,6 +1171,12 @@ function AOEditModal({ ao, mode, onSave, onClose, onDelete, onSetStatus, onGener
           }}>
             Adjoining property
           </div>
+
+          {isNew && (
+            <div style={{ marginBottom: 12 }}>
+              <LandRegistryUpload target="ao" onApply={applyLandRegistry} />
+            </div>
+          )}
 
           <AddressBlock
             premise={form.premise}
