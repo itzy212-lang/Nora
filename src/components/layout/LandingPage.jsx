@@ -4,6 +4,21 @@
 
 const FEATURES = [
   {
+    icon: '🧠',
+    title: 'Nora knows everything about your project',
+    text: 'She keeps every email, note and conversation against the right project. If you are in a dispute with a surveyor or an adjoining owner, Nora can tell you what was said and when, then help you draft your reply.',
+  },
+  {
+    icon: '⏰',
+    title: 'She keeps you on track',
+    text: 'Nora sets reminders, including notice reminders, and follows up with surveyors for you. She tells you when to serve a Section 10 notice and when you need a 10(4)(b), and she generates them for you.',
+  },
+  {
+    icon: '📚',
+    title: 'Knows the Act inside out',
+    text: 'Nora knows the Party Wall etc. Act 1996 inside out and is up to date with case law, so what she tells you rests on the Act, not guesswork.',
+  },
+  {
     icon: '📋',
     title: 'Shave hours off your schedules of condition',
     text: 'Dictate to Nora as you walk through the property. By the time you reach your car she has transcribed it and drafted your schedule of condition as a PDF, ready to send to the adjoining owner’s surveyor, straight from your phone.',
