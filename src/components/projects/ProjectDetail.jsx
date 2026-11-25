@@ -3247,17 +3247,19 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   const [subFolders, setSubFolders] = useState([]); // AO subfolders discovered in root
   const [oneDriveRefresh, setOneDriveRefresh] = useState(0); // increment to force reload
   const [loaLoading, setLoaLoading] = useState(null);
-  const [loaRequests,setLoaRequests]=useState([]);
+  // Remember the last-known signing status per project so it shows the instant the project opens,
+  // then refresh quietly in the background.
+  const loaCacheKey='nora_loa_status_'+initialProject.id;
+  const [loaRequests,setLoaRequests]=useState(()=>{try{return JSON.parse(localStorage.getItem('nora_loa_status_'+initialProject.id)||'[]')||[];}catch{return [];}});
   const refreshLOAStatus=useCallback(async()=>{
     try{
       const {data:{session}}=await sb.auth.getSession();
       if(!session?.access_token)return;
       const res=await fetch('/api/loa-project-status?project_id='+encodeURIComponent(initialProject.id),{headers:{Authorization:'Bearer '+session.access_token}});
-      if(res.ok){const data=await res.json();setLoaRequests(data.requests||[]);}
+      if(res.ok){const data=await res.json();const reqs=data.requests||[];setLoaRequests(reqs);try{localStorage.setItem(loaCacheKey,JSON.stringify(reqs));}catch{}}
     }catch(e){console.warn('LOA status refresh failed',e);}
-  },[initialProject.id]);
+  },[initialProject.id,loaCacheKey]);
   useEffect(()=>{
-    setLoaRequests([]);
     refreshLOAStatus();
     const timer=setInterval(refreshLOAStatus,10000);
     window.addEventListener('focus',refreshLOAStatus);
