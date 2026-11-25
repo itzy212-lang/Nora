@@ -231,6 +231,14 @@ describe('the whole job', () => {
     await processLeadEmails(deps);
     expect(sent).toHaveLength(1); expect(db.t.projects).toHaveLength(1); expect(db.t.tasks).toHaveLength(1);
   });
+  it('test switch sends every reply to the test address, never to the enquirer', async () => {
+    const { db, sent, deps } = mk('send');
+    db.t.firm_settings[0].lead_autoreply.redirect_to = 'me@example.com';
+    await processLeadEmails(deps);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].toEmail).toBe('me@example.com');
+    expect(sent[0].subject).toBe('[TEST - would go to maryh54321@gmail.com] Your party wall enquiry');
+  });
   it('still saves the lead and diary entry when automatic sending is not allowed, but sends nothing', async () => {
     const { db, sent, deps } = mk('send');
     await processLeadEmails({ ...deps, automaticSendingAllowed: () => false });

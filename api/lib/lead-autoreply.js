@@ -175,6 +175,7 @@ export function normaliseSettings(raw) {
     fee_soc: money(s.fee_soc),                         // consent subject to a schedule of condition
     additional_discount_pct: Number.isFinite(Number(s.additional_discount_pct)) && Number(s.additional_discount_pct) > 0 && Number(s.additional_discount_pct) < 100 ? Math.round(Number(s.additional_discount_pct)) : 50,
     based_in: String(s.based_in || '').trim(),         // e.g. "North London"
+    redirect_to: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s.redirect_to || '').trim()) ? String(s.redirect_to).trim() : '', // test switch: send every reply here instead
     followup_days: days,
   };
 }
@@ -343,7 +344,8 @@ export async function processLeadEmails(deps) {
       }
 
       // mode === 'send'
-      const canSend = !!lead.email && (!automaticSendingAllowed || automaticSendingAllowed(ownerUserId));
+      const sendTo = settings.redirect_to || lead.email;
+      const canSend = !!sendTo && (!automaticSendingAllowed || automaticSendingAllowed(ownerUserId));
       // A pricing reply is only ever auto-sent when every fee is set; composeReply already
       // falls back to the no-price wording otherwise.
 
@@ -379,7 +381,8 @@ export async function processLeadEmails(deps) {
       // 4. Reply to the enquirer.
       let status = 'saved_only';
       if (canSend) {
-        await sendMail({ ownerUserId, rawUserId: email.user_id, toEmail: lead.email, subject: reply.subject, body: reply.body, replyToEmailId: null, projectId: leadRow.id });
+        const testing = !!settings.redirect_to;
+        await sendMail({ ownerUserId, rawUserId: email.user_id, toEmail: sendTo, subject: testing ? `[TEST - would go to ${lead.email || 'no address'}] ${reply.subject}` : reply.subject, body: reply.body, replyToEmailId: null, projectId: leadRow.id });
         status = 'sent';
         summary.sent++;
       }
