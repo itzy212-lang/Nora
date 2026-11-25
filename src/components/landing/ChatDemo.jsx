@@ -6,16 +6,16 @@ const EXAMPLES = [
   {
     chip: 'Notices "expired"',
     q: 'I want to discuss the adjoining owner’s surveyor’s last email.',
-    a: 'We served the notices on 8 December 2025, so it is nearly a year since service. The surveyor is now asking for fresh notices to be served on the basis that the originals have expired. That point is wrong. In Leadbetter v Marylebone Corporation (No. 2), the position is that once notices have been dissented to and surveyors appointed, the notices do not expire simply because time passes before the award. I’ve drafted a reply for you.',
+    a: 'James is questioning the validity of the notices. He says that on Friday it will be one year since they were served, so they have now expired and new notices must be served. We served the notices on 27 November 2025, so Friday is the one-year mark. But the notices have not expired. In Leadbetter v Marylebone Corporation (No. 2), the position is that once notices have been dissented to and surveyors appointed, they do not expire simply because time passes before the award. I’ve drafted a reply for you.',
     draft: {
       subject: 'Re: Request for new notices',
-      body: 'Dear Jamie,\n\nThank you for your email. I do not agree that fresh notices are required. The notices were served on 8 December 2025 and dissented to, and surveyors were then appointed. In those circumstances the notices do not expire while we work towards an award, as confirmed in Leadbetter v Marylebone Corporation (No. 2).\n\nI suggest we continue with the award on the basis of the existing notices.\n\nKind regards',
+      body: 'Dear James,\n\nThank you for your email. I do not agree that fresh notices are required. The notices were served on 27 November 2025 and dissented to, and surveyors were then appointed. In those circumstances the notices do not expire while we work towards an award, as confirmed in Leadbetter v Marylebone Corporation (No. 2).\n\nI suggest we continue with the award on the basis of the existing notices.\n\nKind regards',
     },
   },
   {
     chip: 'Agreed third surveyor',
     q: 'What third surveyor did we agree for number 16?',
-    a: 'I’ve reviewed your correspondence with Jamie Peters at James & Associates. The third surveyor you agreed is Grimshaw Surveyors.',
+    a: 'I’ve reviewed your correspondence with James Peters at James & Associates. The third surveyor you agreed is Grimshaw Surveyors.',
   },
   {
     chip: 'Insurance certificates clause',
@@ -23,7 +23,7 @@ const EXAMPLES = [
     a: 'They are asking for a clause in the award requiring the building owner to provide copies of the insurance certificates for their selected contractors. That is not a party wall matter, and neither surveyor can enforce it under the Act, so the award should not include it. I’ve drafted a reply setting that out politely.',
     draft: {
       subject: 'Re: Proposed award clause',
-      body: 'Dear Jamie,\n\nThank you for your email. I understand why you would like sight of the contractors’ insurance certificates, but I do not think it can form part of the award. It is not a matter the Party Wall etc. Act 1996 gives either of us the power to determine, and we could not enforce it.\n\nI am happy to ask my appointing owner to share them voluntarily, outside the award.\n\nKind regards',
+      body: 'Dear James,\n\nThank you for your email. I understand why you would like sight of the contractors’ insurance certificates, but I do not think it can form part of the award. It is not a matter the Party Wall etc. Act 1996 gives either of us the power to determine, and we could not enforce it.\n\nI am happy to ask my appointing owner to share them voluntarily, outside the award.\n\nKind regards',
     },
   },
   { chip: 'Notices due to expire', q: 'Which notices are due to expire this week?', a: 'I’ve checked the notice dates across your projects and listed those approaching expiry, with the next step for each.' },
