@@ -56,7 +56,7 @@ const initialState = {
     agreedFee: '600',
     boDissentFee: '800',
     logoData: '',
-    brandColour: '#4f7fff',
+    brandColour: '#7c5cf0',
     sigType: 'built',
     googleReview: '',
     reviewTiming: '3',

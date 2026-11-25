@@ -214,7 +214,7 @@ function InvoicePreviewCard({ msg, projectId, boEmail, onSent }) {
   return (
     <div style={{ margin: '8px 0', borderRadius: 12, border: '1px solid var(--blue)', overflow: 'hidden', background: 'var(--blue-bg)' }}>
       {/* Header */}
-      <div style={{ padding: '8px 12px', background: 'rgba(79,127,255,0.12)', borderBottom: '1px solid var(--blue)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '8px 12px', background: 'rgba(124,92,240,0.12)', borderBottom: '1px solid var(--blue)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoice {inv.invoice_number}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>£{parseFloat(total).toFixed(2)}</span>
       </div>
@@ -1345,7 +1345,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
             }}>
               <div style={{
                 padding: '8px 12px',
-                background: 'rgba(79,127,255,0.12)',
+                background: 'rgba(124,92,240,0.12)',
                 borderBottom: '1px solid var(--blue)',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -1470,7 +1470,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   {/* Animated bars */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2.5, height: 20, marginBottom: 6 }}>
                     {[0.5,0.9,0.6,1,0.7,0.8,0.5,1,0.6,0.9,0.7,0.8,0.5,0.9,0.6,1,0.7,0.8].map((h,i) => (
-                      <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#3b82f6)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
+                      <div key={i} style={{ width: 3, borderRadius: 2, background: 'var(--blue,#7c5cf0)', height: `${4+h*16}px`, animation: `waveBar 0.7s ease-in-out ${i*0.05}s infinite alternate` }} />
                     ))}
                     <style>{`@keyframes waveBar{from{transform:scaleY(0.25)}to{transform:scaleY(1)}}`}</style>
                   </div>
@@ -1548,7 +1548,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   <button
                     onClick={() => voicePhase === 'recording' ? stopVoice() : handleSend()}
                     disabled={loading || uploading}
-                    style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--blue,#3b82f6)', color: '#fff', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 3 }}
+                    style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--blue,#7c5cf0)', color: '#fff', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 3 }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>

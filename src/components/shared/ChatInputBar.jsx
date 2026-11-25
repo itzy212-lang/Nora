@@ -232,7 +232,7 @@ export default function ChatInputBar({
                 width: 36, height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: isTranscribing ? 'var(--bg3, #f3f4f6)' : '#3b82f6',
+                background: isTranscribing ? 'var(--bg3, #f3f4f6)' : '#7c5cf0',
                 color: isTranscribing ? 'var(--text3)' : '#fff',
                 cursor: disabled || loading || isTranscribing ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',

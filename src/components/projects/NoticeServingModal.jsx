@@ -341,14 +341,14 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                 const active = selectedAOKeys.includes(key);
                 return (
                   <button key={key} type="button" onClick={() => toggleAO(item)} disabled={lockedToSingleAO}
-                    style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 14, border: active ? '2px solid #2563eb' : '1px solid #e5e7eb', background: active ? '#eff6ff' : '#fff', color: active ? '#1d4ed8' : '#111827', cursor: lockedToSingleAO ? 'default' : 'pointer' }}>
+                    style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 14, border: active ? '2px solid #6a49e0' : '1px solid #e5e7eb', background: active ? '#eff6ff' : '#fff', color: active ? '#6a49e0' : '#111827', cursor: lockedToSingleAO ? 'default' : 'pointer' }}>
                     <div>AO{item?.num || ''} — {item?.name || 'Unnamed AO'}</div>
                     {aoAddress(item) && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{aoAddress(item)}</div>}
                     {active && (
                       <div onClick={e => e.stopPropagation()} style={{ marginTop: 8, display: 'flex', gap: 6 }}>
                         {['', 'leaseholder', 'freeholder'].map(t => (
                           <button key={t} type="button" onClick={e => { e.stopPropagation(); setAoTenureTypes(prev => ({ ...prev, [key]: t })); }}
-                            style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', border: (aoTenureTypes[key] || '') === t ? '1.5px solid #2563eb' : '1px solid #d1d5db', background: (aoTenureTypes[key] || '') === t ? '#2563eb' : '#f9fafb', color: (aoTenureTypes[key] || '') === t ? '#fff' : '#6b7280', fontWeight: 600 }}>
+                            style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', border: (aoTenureTypes[key] || '') === t ? '1.5px solid #6a49e0' : '1px solid #d1d5db', background: (aoTenureTypes[key] || '') === t ? '#6a49e0' : '#f9fafb', color: (aoTenureTypes[key] || '') === t ? '#fff' : '#6b7280', fontWeight: 600 }}>
                             {t === '' ? 'Default' : t.charAt(0).toUpperCase() + t.slice(1)}
                           </button>
                         ))}
@@ -378,7 +378,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                 return (
                   <div key={item.key}>
                     <button type="button" onClick={() => toggleNotice(item.key)}
-                      style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 14, border: active ? '2px solid #2563eb' : '1px solid #e5e7eb', background: active ? '#eff6ff' : '#fff', color: active ? '#1d4ed8' : '#111827', cursor: 'pointer' }}>
+                      style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 14, border: active ? '2px solid #6a49e0' : '1px solid #e5e7eb', background: active ? '#eff6ff' : '#fff', color: active ? '#6a49e0' : '#111827', cursor: 'pointer' }}>
                       {item.label}
                     </button>
 
@@ -394,7 +394,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                           return (
                             <button key={ak} type="button"
                               onClick={() => toggleSectionAO(item.key, ak)}
-                              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, cursor: 'pointer', border: isOn ? '1.5px solid #2563eb' : '1px solid #d1d5db', background: isOn ? '#2563eb' : '#f9fafb', color: isOn ? '#fff' : '#6b7280', fontWeight: 600 }}>
+                              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, cursor: 'pointer', border: isOn ? '1.5px solid #6a49e0' : '1px solid #d1d5db', background: isOn ? '#6a49e0' : '#f9fafb', color: isOn ? '#fff' : '#6b7280', fontWeight: 600 }}>
                               AO{a.num || ''} — {aoAddress(a) || a.name || ak}
                             </button>
                           );
@@ -454,7 +454,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                   return (
                     <div key={ak} style={{ marginBottom: aoIdx < aosForSection.length - 1 ? 16 : 0 }}>
                       {showAddrHeader && (
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1d4ed8', marginBottom: 8, paddingBottom: 4, borderBottom: '1px solid #e5e7eb' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#6a49e0', marginBottom: 8, paddingBottom: 4, borderBottom: '1px solid #e5e7eb' }}>
                           {addr}
                         </div>
                       )}
@@ -515,7 +515,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
                         {STANDARD_WORK_ITEMS[sec]?.length > 0 && (
                           <div style={{ position: 'relative', flex: 1 }}>
                             <button type="button" onClick={() => setLibraryOpenFor(prev => prev === workKey(sec, ak) ? null : workKey(sec, ak))}
-                              style={{ padding: '7px 14px', borderRadius: 10, border: '1px solid #93c5fd', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontSize: 13, width: '100%' }}>
+                              style={{ padding: '7px 14px', borderRadius: 10, border: '1px solid #93c5fd', background: '#eff6ff', color: '#6a49e0', cursor: 'pointer', fontSize: 13, width: '100%' }}>
                               + Standard item
                             </button>
                             {libraryOpenFor === workKey(sec, ak) && (
@@ -567,7 +567,7 @@ export default function NoticeServingModal({ project, ao, aos = [], defaultSecti
               Cancel
             </button>
             <button type="button" disabled={loading} onClick={handleServe}
-              style={{ padding: '8px 16px', borderRadius: 99, border: 'none', background: '#2563eb', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer' }}>
+              style={{ padding: '8px 16px', borderRadius: 99, border: 'none', background: '#6a49e0', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? 'Serving…' : 'Serve Notice Pack'}
             </button>
           </div>

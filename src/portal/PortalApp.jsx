@@ -271,7 +271,7 @@ function ExpandableTaskCard({ t, sessionToken, onUpdated }) {
       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
         {t.start_date && t.end_date ? `${t.start_date} → ${t.end_date}` : 'Dates TBC'}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: isDone ? '#059669' : isPending ? '#d97706' : isInProgress ? '#2563eb' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: isDone ? '#059669' : isPending ? '#d97706' : isInProgress ? '#6a49e0' : '#6b7280', marginTop: 6, textTransform: 'capitalize' }}>
         {isDone ? 'Complete' : isPending ? 'Marked complete — awaiting confirmation' : isInProgress ? 'In progress' : 'Not started'}
       </div>
       {open && (
@@ -292,7 +292,7 @@ function ExpandableTaskCard({ t, sessionToken, onUpdated }) {
               <div style={{ display: 'flex', gap: 8 }}>
                 {!isInProgress && (
                   <button onClick={handleStart} disabled={busy}
-                    style={{ flex: 1, padding: 9, borderRadius: 8, background: '#2563eb', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                    style={{ flex: 1, padding: 9, borderRadius: 8, background: '#6a49e0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                     Start
                   </button>
                 )}
@@ -472,7 +472,7 @@ function ApprovalsTab({ sessionToken }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button onClick={() => respond(a.id, 'accepted')} style={{ flex: 1, padding: 10, borderRadius: 8, background: '#059669', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Accept</button>
             <button onClick={() => respond(a.id, 'rejected')} style={{ flex: 1, padding: 10, borderRadius: 8, background: '#f3f4f6', color: '#374151', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Decline</button>
-            {comment[a.id] && <button onClick={() => respond(a.id, 'commented')} style={{ flex: 1, padding: 10, borderRadius: 8, background: '#eff6ff', color: '#2563eb', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Send comment</button>}
+            {comment[a.id] && <button onClick={() => respond(a.id, 'commented')} style={{ flex: 1, padding: 10, borderRadius: 8, background: '#eff6ff', color: '#6a49e0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Send comment</button>}
           </div>
         </>
       ) : (

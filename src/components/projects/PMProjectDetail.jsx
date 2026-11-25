@@ -317,7 +317,7 @@ function DocumentCard({ doc, project, subs, card }) {
       </div>
 
       {visOpen && (
-        <div style={{ marginTop: 10, padding: 10, background: 'rgba(59,130,246,0.06)', borderRadius: 8 }}>
+        <div style={{ marginTop: 10, padding: 10, background: 'rgba(124,92,240,0.06)', borderRadius: 8 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Show on portal to:</div>
           {checkingVis ? (
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading...</div>
@@ -503,7 +503,7 @@ function SnaggingTab({ project, rooms, subs, card }) {
       )}
 
       {subs.length > 0 && openItems.length > 0 && (
-        <div style={{ ...card(), background: 'rgba(59,130,246,0.06)' }}>
+        <div style={{ ...card(), background: 'rgba(124,92,240,0.06)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Generate work card</div>
           <select value={workCardSubId} onChange={e => { setWorkCardSubId(e.target.value); setSelectedForCard(new Set()); }}
             style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 8, background: 'var(--bg)', color: 'var(--text)' }}>
@@ -969,7 +969,7 @@ function ScopeModal({ item, projectId, quoteId, rooms, onSave, onClose }) {
               {[{ val: false, label: '🏢 Sub' }, { val: true, label: '🔨 In-house' }].map(opt => (
                 <button key={String(opt.val)} type="button" onClick={() => set('in_house', opt.val)}
                   style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                    border: (form.in_house || false) === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    border: (form.in_house || false) === opt.val ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                     background: (form.in_house || false) === opt.val ? '#eff6ff' : 'transparent',
                     color: (form.in_house || false) === opt.val ? '#1e40af' : '#374151' }}>
                   {opt.label}
@@ -995,7 +995,7 @@ function ScopeModal({ item, projectId, quoteId, rooms, onSave, onClose }) {
             </div>
           )}
           {form.in_house && (
-            <div style={{ marginBottom: 10, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#3b82f6' }}>
+            <div style={{ marginBottom: 10, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#7c5cf0' }}>
               In-house — enter your charge to the client below
             </div>
           )}
@@ -1009,7 +1009,7 @@ function ScopeModal({ item, projectId, quoteId, rooms, onSave, onClose }) {
               ].map(opt => (
                 <button key={opt.val} type="button" onClick={() => set('markup_type', opt.val)}
                   style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                    border: form.markup_type === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    border: form.markup_type === opt.val ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                     background: form.markup_type === opt.val ? '#eff6ff' : 'transparent',
                     color: form.markup_type === opt.val ? '#1e40af' : '#374151' }}>
                   {opt.label}
@@ -1051,7 +1051,7 @@ function ScopeModal({ item, projectId, quoteId, rooms, onSave, onClose }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={handleSave} disabled={saving || !form.title.trim()}
-            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Saving...' : 'Save Item'}
           </button>
         </div>
@@ -1130,7 +1130,7 @@ function StageModal({ stage, projectId, onSave, onClose }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={handleSave} disabled={saving || !form.title.trim() || !form.amount}
-            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Saving...' : 'Save Stage'}
           </button>
         </div>
@@ -1177,7 +1177,7 @@ function RoomModal({ room, projectId, onSave, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
@@ -1278,7 +1278,7 @@ function MaterialModal({ material, projectId, rooms, subs, onSave, onClose }) {
               <button key={opt.value} type="button"
                 onClick={() => set('task_type', opt.value)}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                  border: form.task_type === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  border: form.task_type === opt.value ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                   background: form.task_type === opt.value ? '#eff6ff' : 'transparent' }}
               >
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
@@ -1382,7 +1382,7 @@ function MaterialModal({ material, projectId, rooms, subs, onSave, onClose }) {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Saving...' : 'Save Material'}
           </button>
         </div>
@@ -1506,7 +1506,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
               <button key={opt.value} type="button"
                 onClick={() => set('task_type', opt.value)}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                  border: form.task_type === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  border: form.task_type === opt.value ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                   background: form.task_type === opt.value ? '#eff6ff' : 'transparent' }}
               >
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
@@ -1573,7 +1573,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
             ].map(opt => (
               <button key={opt.val} type="button" onClick={() => set('markup_type', opt.val)}
                 style={{ flex: 1, padding: '7px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                  border: form.markup_type === opt.val ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                  border: form.markup_type === opt.val ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                   background: form.markup_type === opt.val ? '#eff6ff' : 'transparent',
                   color: form.markup_type === opt.val ? '#1e40af' : '#374151' }}>
                 {opt.label}
@@ -1652,7 +1652,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
                         ))}
                         style={{ width: 60, padding: '3px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, textAlign: 'center' }}
                       />
-                      {existing.lag_days > 0 && <span style={{ fontSize: 11, color: '#3b82f6' }}>+{existing.lag_days}d wait</span>}
+                      {existing.lag_days > 0 && <span style={{ fontSize: 11, color: '#7c5cf0' }}>+{existing.lag_days}d wait</span>}
                     </div>
                   )}
                 </div>
@@ -1680,7 +1680,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
               <div>
                 <div style={labelStyle}>
                   Start date
-                  {minStartStr && <span style={{ color: '#3b82f6', fontWeight: 400, fontSize: 10, marginLeft: 6 }}>earliest: {new Date(minStartStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+                  {minStartStr && <span style={{ color: '#7c5cf0', fontWeight: 400, fontSize: 10, marginLeft: 6 }}>earliest: {new Date(minStartStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
                 </div>
                 <input type="date" value={form.start_date} min={minStartStr || undefined}
                   onChange={e => { set('start_date', e.target.value); if (form.end_date && e.target.value > form.end_date) set('end_date', ''); }}
@@ -1709,7 +1709,7 @@ function TaskModal({ task, projectId, allTasks, rooms, subs, onSave, onClose }) 
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 99, border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#374151' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving || !form.title.trim()}
-            style={{ flex: 1, padding: '10px', borderRadius: 99, background: saving ? '#93c5fd' : '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 99, background: saving ? '#93c5fd' : '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Saving...' : 'Save Task'}
           </button>
         </div>
@@ -1781,7 +1781,7 @@ function SubModal({ sub, projectId, onSave, onClose }) {
           </div>
         ))}
 
-        <div style={{ marginBottom: 12, padding: 12, background: 'rgba(59,130,246,0.06)', borderRadius: 10 }}>
+        <div style={{ marginBottom: 12, padding: 12, background: 'rgba(124,92,240,0.06)', borderRadius: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Portal access</div>
             {portalStatus && <span style={{ fontSize: 11, fontWeight: 700, color: portalStatus === 'active' ? '#059669' : '#d97706', textTransform: 'capitalize' }}>{portalStatus}</span>}
@@ -2080,7 +2080,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Project Details</div>
                 <button onClick={() => setContractEditing(!contractEditing)}
-                  style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                   {contractEditing ? 'Done' : 'Edit'}
                 </button>
               </div>
@@ -2194,7 +2194,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   {/* PM fee fields — only if PM role */}
                   {project.user_role === 'pm' && (
                     <div style={{ background: '#eff6ff', borderRadius: 8, padding: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 4 }}>PM Fee</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#7c5cf0', marginBottom: 4 }}>PM Fee</div>
               <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>Leave blank if you are managing your own project and not charging a fee.</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div>
@@ -2243,7 +2243,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         <button key={opt.value} type="button"
                           onClick={() => setProject(p => ({ ...p, payment_mode: opt.value }))}
                           style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                            border: (project.payment_mode || 'task') === opt.value ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                            border: (project.payment_mode || 'task') === opt.value ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                             background: (project.payment_mode || 'task') === opt.value ? '#eff6ff' : 'transparent' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{opt.label}</div>
                           <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{opt.desc}</div>
@@ -2281,7 +2281,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                       setContractSaving(false);
                       setContractEditing(false);
                     }}
-                    style={{ padding: '10px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                    style={{ padding: '10px', borderRadius: 10, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                   >
                     {contractSaving ? 'Saving...' : 'Save Contract Details'}
                   </button>
@@ -2309,7 +2309,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                     }
                     setDetailsEditing(!detailsEditing);
                   }}
-                    style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                    style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                     {detailsEditing ? 'Cancel' : 'Edit'}
                   </button>
                 </div>
@@ -2470,7 +2470,7 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                         }
                       }}
                       disabled={detailsSaving}
-                      style={{ padding: '9px 14px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      style={{ padding: '9px 14px', borderRadius: 10, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                       {detailsSaving ? 'Saving...' : 'Save Details'}
                     </button>
                   </div>
@@ -2566,12 +2566,12 @@ export default function PMProjectDetail({ project: initialProject, onBack, onOpe
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#1e40af' }}>
                     {{ task: '✅ Task completion payments', milestone: '🏁 Milestone payments', interim: '📅 Interim / weekly payments' }[paymentMode]}
                   </div>
-                  <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#7c5cf0', marginTop: 2 }}>
                     {{ task: 'Payment raised when tasks are marked complete', milestone: 'Payment raised when agreed milestones are reached', interim: 'Payment raised as percentage of work completed' }[paymentMode]}
                   </div>
                 </div>
                 <button onClick={() => { setTab('overview'); setContractEditing(true); }}
-                  style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
+                  style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
               </div>
 
               {/* Negative equity warning */}
@@ -2723,7 +2723,7 @@ Proceed?`
                       }]).select('*').single();
                       setStages(prev => [...prev, newStage]);
                     }}
-                    style={{ width: '100%', padding: '11px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                    style={{ width: '100%', padding: '11px', borderRadius: 10, background: '#7c5cf0', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
                     Raise interim payment
                   </button>
                 </div>
@@ -2766,7 +2766,7 @@ Proceed?`
                   </div>
                   <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4 }}>
                     <div style={{ height: '100%', borderRadius: 4, width: `${Math.min(100, maxPayable > 0 ? (totalNetPaid / maxPayable) * 100 : 0)}%`,
-                      background: warningLevel === 'red' ? '#dc2626' : warningLevel === 'amber' ? '#f59e0b' : '#3b82f6', transition: 'width 0.3s' }} />
+                      background: warningLevel === 'red' ? '#dc2626' : warningLevel === 'amber' ? '#f59e0b' : '#7c5cf0', transition: 'width 0.3s' }} />
                   </div>
                 </div>
               </div>
@@ -2800,11 +2800,11 @@ Proceed?`
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                         <span style={{ fontSize: 11, color: '#6b7280' }}>Amount paid (net of retention)</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: severelyOverpaid ? '#dc2626' : overpaid ? '#d97706' : '#3b82f6' }}>{pctPaid.toFixed(0)}% ({fmt(totalNetPaid)})</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: severelyOverpaid ? '#dc2626' : overpaid ? '#d97706' : '#7c5cf0' }}>{pctPaid.toFixed(0)}% ({fmt(totalNetPaid)})</span>
                       </div>
                       <div style={{ height: 10, background: '#e5e7eb', borderRadius: 5 }}>
                         <div style={{ height: '100%', borderRadius: 5, width: `${Math.min(100, pctPaid)}%`,
-                          background: severelyOverpaid ? '#dc2626' : overpaid ? '#f59e0b' : '#3b82f6' }} />
+                          background: severelyOverpaid ? '#dc2626' : overpaid ? '#f59e0b' : '#7c5cf0' }} />
                       </div>
                     </div>
                     {(overpaid || severelyOverpaid) && (
@@ -2825,7 +2825,7 @@ Proceed?`
                 </div>
                 {paymentMode === 'milestone' && (
                   <button onClick={() => setStageModal('new')}
-                    style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    style={{ padding: '7px 16px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     + Add Stage
                   </button>
                 )}
@@ -2845,7 +2845,7 @@ Proceed?`
                   {stages.map((stage, i) => {
                     const retention = parseFloat(stage.amount || 0) * retentionPct;
                     const net = parseFloat(stage.amount || 0) - retention;
-                    const statusColour = { pending: '#6b7280', certified: '#3b82f6', paid: '#16a34a' }[stage.status];
+                    const statusColour = { pending: '#6b7280', certified: '#7c5cf0', paid: '#16a34a' }[stage.status];
                     const typeLabel = { task_completion: '✅ Tasks', interim: '📅 Interim', stage: '🏁 Stage' }[stage.payment_type || 'stage'];
                     return (
                       <div key={stage.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 60px', gap: 8, padding: '12px 16px', borderBottom: i < stages.length - 1 ? '1px solid #e5e7eb' : 'none', alignItems: 'center' }}>
@@ -2880,7 +2880,7 @@ Proceed?`
                           </select>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          {paymentMode === 'milestone' && <button onClick={() => setStageModal(stage)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>}
+                          {paymentMode === 'milestone' && <button onClick={() => setStageModal(stage)} style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>}
                           <button onClick={async () => {
                             if (!window.confirm('Delete this payment record?')) return;
                             await sb.from('payment_stages').delete().eq('id', stage.id);
@@ -2908,7 +2908,7 @@ Proceed?`
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Rooms & Areas</div>
               <button onClick={() => setRoomModal('new')}
-                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 + Add Room
               </button>
             </div>
@@ -2941,7 +2941,7 @@ Proceed?`
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => setRoomModal(room)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => setRoomModal(room)} style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                           {!room.zone_type || room.zone_type === 'room' ? (
                             <button onClick={async () => {
                               if (!window.confirm('Delete this room?')) return;
@@ -2965,7 +2965,7 @@ Proceed?`
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Materials</div>
               <button onClick={() => setMaterialModal('new')}
-                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 + Add Material
               </button>
             </div>
@@ -2976,7 +2976,7 @@ Proceed?`
             ) : (
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
                 {materials.map((mat, i) => {
-                  const statusColour = { not_ordered: '#6b7280', ordered: '#3b82f6', delivered: '#16a34a', delayed: '#dc2626' }[mat.status];
+                  const statusColour = { not_ordered: '#6b7280', ordered: '#7c5cf0', delivered: '#16a34a', delayed: '#dc2626' }[mat.status];
                   const statusLabel = { not_ordered: 'Not ordered', ordered: 'Ordered', delivered: 'Delivered', delayed: 'Delayed' }[mat.status];
                   const linkedRooms = rooms.filter(r => (mat.room_ids || []).includes(r.id));
                   // Calculate latest order date from linked tasks
@@ -3010,13 +3010,13 @@ Proceed?`
                           {linkedRooms.length > 0 && (
                             <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                               {linkedRooms.map(r => (
-                                <span key={r.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe' }}>{r.name}</span>
+                                <span key={r.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: '#eff6ff', color: '#7c5cf0', border: '1px solid #bfdbfe' }}>{r.name}</span>
                               ))}
                             </div>
                           )}
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 8 }}>
-                          <button onClick={() => setMaterialModal(mat)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => setMaterialModal(mat)} style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                           <button onClick={async () => {
                             if (!window.confirm('Delete this material?')) return;
                             await sb.from('project_materials').delete().eq('id', mat.id);
@@ -3118,7 +3118,7 @@ Proceed?`
                 <button key={q.id} onClick={() => setActiveQuoteId(q.id)}
                   style={{
                     padding: '7px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    border: activeQuoteId === q.id ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    border: activeQuoteId === q.id ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
                     background: activeQuoteId === q.id ? '#eff6ff' : '#fff',
                     color: activeQuoteId === q.id ? '#1e40af' : '#6b7280',
                     display: 'flex', alignItems: 'center', gap: 6,
@@ -3269,7 +3269,7 @@ Proceed?`
                     setScopeItems(prev => [...prev.filter(s => !selectedScopeIds.has(s.id)), newItem].sort((a,b) => (a.position||0)-(b.position||0)));
                     setSelectedScopeIds(new Set());
                   }}
-                  style={{ padding: '7px 14px', borderRadius: 99, background: '#8b5cf6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#8e6cf5', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     ⊕ Merge {selectedScopeIds.size} items
                   </button>
                 )}
@@ -3280,7 +3280,7 @@ Proceed?`
                   </button>
                 )}
                 <button onClick={() => setScopeModal('new')}
-                  style={{ padding: '7px 14px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ padding: '7px 14px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   + Add Item
                 </button>
                 <button onClick={() => document.getElementById('drawing-upload-input').click()}
@@ -3579,7 +3579,7 @@ Proceed?`
                           <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{item.title}</span>
                           {item.extracted_by_ai
                           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ fontSize: 9, background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>AI IMPORTED</span>
+                              <span style={{ fontSize: 9, background: '#dbeafe', color: '#6a49e0', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>AI IMPORTED</span>
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
@@ -3595,7 +3595,7 @@ Proceed?`
                         {item.description && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.description}</div>}
                         {item.trade && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.trade}</div>}
                         {item.in_house && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 1 }}>🔨 In-house</div>}
-                        {!item.in_house && item.subcontractor_name && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 1 }}>👤 {item.subcontractor_name}</div>}
+                        {!item.in_house && item.subcontractor_name && <div style={{ fontSize: 11, color: '#7c5cf0', marginTop: 1 }}>👤 {item.subcontractor_name}</div>}
                       </div>
                       <div style={{ fontSize: 12, color: '#374151' }}>{cost > 0 ? fmt(cost) : '—'}</div>
                       <div style={{ fontSize: 12, color: '#6b7280' }}>
@@ -3605,7 +3605,7 @@ Proceed?`
                         {charge > 0 ? fmt(charge) : '—'}
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => setScopeModal(item)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => setScopeModal(item)} style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                         <button onClick={async () => {
                           if (!window.confirm('Delete this scope item?')) return;
                           await sb.from('scope_items').delete().eq('id', item.id);
@@ -3905,7 +3905,7 @@ Proceed?`
                         }
                       }}
                       style={{ flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                        background: type === 'tender' ? 'transparent' : '#3b82f6',
+                        background: type === 'tender' ? 'transparent' : '#7c5cf0',
                         color: '#fff',
                         border: type === 'tender' ? '2px solid #93c5fd' : 'none' }}>
                       {type === 'quote' ? (quoteGenerating ? '⏳ Generating...' : '📄 Generate Quote') : '📦 Generate Tender Pack'}
@@ -3924,7 +3924,7 @@ Proceed?`
               <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Programme</div>
               <button
                 onClick={() => setTaskModal('new')}
-                style={{ padding: '7px 16px', borderRadius: 99, background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '7px 16px', borderRadius: 99, background: '#7c5cf0', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 + Add Task
               </button>
@@ -3973,7 +3973,7 @@ Proceed?`
 
               const statusColours = {
                 not_started: '#d1d5db',
-                in_progress: '#3b82f6',
+                in_progress: '#7c5cf0',
                 complete: '#16a34a',
                 delayed: '#dc2626',
                 clash: '#f59e0b',
@@ -4279,7 +4279,7 @@ Proceed?`
                   <div style={{ display: 'flex', gap: 12, padding: '8px 16px', flexWrap: 'wrap', borderTop: '1px solid #f3f4f6' }}>
                     {[
                       ['#d1d5db', 'Not started'],
-                      ['#3b82f6', 'In progress'],
+                      ['#7c5cf0', 'In progress'],
                       ['#16a34a', 'Complete'],
                       ['#dc2626', 'Delayed'],
                       ['#f59e0b', 'Date clash'],
@@ -4357,7 +4357,7 @@ Proceed?`
                 {tasks.map((task, idx) => {
                   const statusColour = {
                     not_started: '#6b7280',
-                    in_progress: '#3b82f6',
+                    in_progress: '#7c5cf0',
                     complete: '#16a34a',
                     delayed: '#dc2626',
                   }[task.status] || '#6b7280';
@@ -4424,7 +4424,7 @@ Proceed?`
                             );
                           })()}
                         </div>
-                        {task.in_house && <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>In-house</div>}
+                        {task.in_house && <div style={{ fontSize: 11, color: '#7c5cf0', marginTop: 2 }}>In-house</div>}
                         {task.task_value > 0 && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>£{Number(task.task_value).toLocaleString()}</div>}
                         {!task.in_house && task.contractor && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.contractor}</div>}
                         {task.trade && !task.contractor && !task.in_house && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{task.trade}</div>}
@@ -4453,7 +4453,7 @@ Proceed?`
                         </select>
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button onClick={() => setTaskModal(task)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => setTaskModal(task)} style={{ fontSize: 11, color: '#7c5cf0', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
                         <button onClick={async () => {
                           if (!window.confirm('Delete this task?')) return;
                           await sb.from('programme_tasks').delete().eq('id', task.id);
@@ -4473,7 +4473,7 @@ Proceed?`
                   {[
                     { label: 'Total tasks', val: tasks.length, colour: '#111827' },
                     { label: 'Complete', val: tasks.filter(t => t.status === 'complete').length, colour: '#16a34a' },
-                    { label: 'In progress', val: tasks.filter(t => t.status === 'in_progress').length, colour: '#3b82f6' },
+                    { label: 'In progress', val: tasks.filter(t => t.status === 'in_progress').length, colour: '#7c5cf0' },
                     { label: 'Delayed', val: tasks.filter(t => t.status === 'delayed').length, colour: '#dc2626' },
                   ].map(({ label, val, colour }) => (
                     <div key={label} style={{ textAlign: 'center' }}>

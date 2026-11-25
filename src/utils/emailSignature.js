@@ -39,8 +39,8 @@ export function buildFirmSignatureHTML(settings = {}) {
 
   if (firmName) html += `<div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(firmName)}</div>`;
   if (tel) html += `<div style="font-size:12.5px;color:#555">Tel | ${escapeHtml(tel)}</div>`;
-  if (email) html += `<div style="font-size:12.5px;color:#555">Email | <a href="mailto:${escapeHtml(email)}" style="color:#4f7fff">${escapeHtml(email)}</a></div>`;
-  if (website) html += `<div style="font-size:12.5px"><a href="${escapeHtml(website)}" style="color:#4f7fff">${escapeHtml(website)}</a></div>`;
+  if (email) html += `<div style="font-size:12.5px;color:#555">Email | <a href="mailto:${escapeHtml(email)}" style="color:#7c5cf0">${escapeHtml(email)}</a></div>`;
+  if (website) html += `<div style="font-size:12.5px"><a href="${escapeHtml(website)}" style="color:#7c5cf0">${escapeHtml(website)}</a></div>`;
   if (address) html += `<div style="font-size:12.5px;color:#555;margin-top:2px">${escapeHtml(address)}</div>`;
 
   if (accreditation) {

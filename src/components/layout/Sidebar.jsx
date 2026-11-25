@@ -78,7 +78,7 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
             0%, 55%, 100% { opacity: 0.15; transform: translateY(0px); }
             28% { opacity: 1; transform: translateY(-3px); }
           }
-          .nora-sb-dot { animation: noraSidebarPulse 1.4s ease-in-out infinite; border-radius: 50%; background: var(--text); display: inline-block; }
+          .nora-sb-dot { animation: noraSidebarPulse 1.4s ease-in-out infinite; border-radius: 50%; background: #7c5cf0; display: inline-block; }
           .nora-sb-dot-1 { animation-delay: 0s; }
           .nora-sb-dot-2 { animation-delay: 0.22s; }
           .nora-sb-dot-3 { animation-delay: 0.44s; }

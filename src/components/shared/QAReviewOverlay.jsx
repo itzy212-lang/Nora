@@ -212,7 +212,7 @@ export default function QAReviewOverlay({
                 padding: '8px 20px',
                 borderRadius: 8,
                 border: 'none',
-                background: '#3b82f6',
+                background: '#7c5cf0',
                 color: '#fff',
                 fontSize: 13,
                 fontWeight: 600,

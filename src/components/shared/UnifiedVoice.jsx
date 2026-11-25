@@ -26,7 +26,7 @@ function WaveformBars({ active }) {
           style={{
             width: 3,
             borderRadius: 2,
-            background: active ? 'var(--blue, #3b82f6)' : 'var(--border, #e5e7eb)',
+            background: active ? 'var(--blue, #7c5cf0)' : 'var(--border, #e5e7eb)',
             height: active ? `${8 + h * 12}px` : '4px',
             animation: active ? `waveBar 0.8s ease-in-out ${i * 0.06}s infinite alternate` : 'none',
             transition: 'height 0.2s ease, background 0.2s ease',
@@ -248,11 +248,11 @@ export default function UnifiedVoice({
         flexDirection: 'column',
         gap: 0,
         borderRadius: 14,
-        border: `1.5px solid ${isRecording ? 'var(--blue, #3b82f6)' : 'var(--border, #e5e7eb)'}`,
+        border: `1.5px solid ${isRecording ? 'var(--blue, #7c5cf0)' : 'var(--border, #e5e7eb)'}`,
         background: 'var(--bg, #fff)',
         overflow: 'hidden',
         transition: 'border-color 0.2s ease',
-        boxShadow: isRecording ? '0 0 0 3px rgba(59,130,246,0.12)' : 'none',
+        boxShadow: isRecording ? '0 0 0 3px rgba(124,92,240,0.12)' : 'none',
       }}
     >
       {/* Live preview area */}
@@ -280,9 +280,9 @@ export default function UnifiedVoice({
         display: 'flex',
         alignItems: 'center',
         padding: '6px 10px 8px',
-        borderTop: `1px solid ${isRecording ? 'rgba(59,130,246,0.2)' : 'var(--border, #e5e7eb)'}`,
+        borderTop: `1px solid ${isRecording ? 'rgba(124,92,240,0.2)' : 'var(--border, #e5e7eb)'}`,
         gap: 8,
-        background: isRecording ? 'rgba(59,130,246,0.04)' : 'transparent',
+        background: isRecording ? 'rgba(124,92,240,0.04)' : 'transparent',
       }}>
         {/* Waveform fills the space */}
         <div style={{ flex: 1 }}>
@@ -303,7 +303,7 @@ export default function UnifiedVoice({
             borderRadius: '50%',
             border: 'none',
             background: isRecording
-              ? 'var(--blue, #3b82f6)'
+              ? 'var(--blue, #7c5cf0)'
               : 'var(--bg3, #f3f4f6)',
             color: isRecording ? '#fff' : 'var(--text2, #6b7280)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -311,7 +311,7 @@ export default function UnifiedVoice({
             opacity: disabled || isTranscribing ? 0.5 : 1,
             transition: 'all 0.2s ease',
             flexShrink: 0,
-            boxShadow: isRecording ? '0 0 0 4px rgba(59,130,246,0.2)' : 'none',
+            boxShadow: isRecording ? '0 0 0 4px rgba(124,92,240,0.2)' : 'none',
           }}
         >
           {isRecording ? (

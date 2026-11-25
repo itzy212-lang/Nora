@@ -34,7 +34,7 @@ function colourFor(task) {
   if (task.source === 'assistant') return '#16a34a'; // green — AI-generated, needs a different kind of review
   if (task.source === 'deadline') return '#dc2626';  // red — a notice/S10 deadline triggered this
   if (task.task_type === 'call') return '#7c3aed';   // purple — phone call
-  return '#2563eb'; // blue — a normal, manually-created task
+  return '#6a49e0'; // blue — a normal, manually-created task
 }
 
 function fmtDayHeading(dateStr) {
@@ -162,7 +162,7 @@ export default function TodoListView({ onBack, onCloseAll, onOpenEmail, onOpenPr
       <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>←</button>
         <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#111827' }}>✅ To-do list</div>
-        <button onClick={() => setShowAdd(true)} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => setShowAdd(true)} style={{ background: '#7c5cf0', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
           + Add task
         </button>
         {/* Fixed 2026-09-13, on request: this view previously had no
@@ -355,7 +355,7 @@ function AddTaskInline({ userId, onClose, onCreated }) {
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'transparent', fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={saving || !title.trim()} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || !title.trim() ? 0.6 : 1 }}>
+          <button onClick={handleSave} disabled={saving || !title.trim()} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#7c5cf0', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || !title.trim() ? 0.6 : 1 }}>
             {saving ? 'Adding…' : 'Add'}
           </button>
         </div>

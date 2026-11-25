@@ -86,7 +86,7 @@ export function getProjectColour(project) {
   if (hasNotices) return '#22c55e';
 
   // Blue — AOs added but no notice served yet
-  return '#3b82f6';
+  return '#7c5cf0';
 }
 
 function streetSortKey(address) {
@@ -513,7 +513,7 @@ export default function ProjectList({ onOpenProject }) {
           <button key={t.key} onClick={() => setProjectTab(t.key)}
             style={{
               padding: '7px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              border: projectTab === t.key ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+              border: projectTab === t.key ? '2px solid #7c5cf0' : '1px solid #e5e7eb',
               background: projectTab === t.key ? '#eff6ff' : '#fff',
               color: projectTab === t.key ? '#1e40af' : '#6b7280',
             }}>
@@ -579,7 +579,7 @@ export default function ProjectList({ onOpenProject }) {
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
-                  style={{ cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb' }}
+                  style={{ cursor: 'pointer', color: syncing ? '#9ca3af' : '#6a49e0' }}
                   onClick={handleSyncOneDrive}
                   disabled={syncing}
                 >
@@ -637,7 +637,7 @@ export default function ProjectList({ onOpenProject }) {
                       <button
                         onClick={() => { setShowMobileMenu(false); handleSyncOneDrive(); }}
                         disabled={syncing}
-                        style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: syncing ? '#9ca3af' : '#2563eb', borderTop: '1px solid var(--border)' }}
+                        style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: syncing ? '#9ca3af' : '#6a49e0', borderTop: '1px solid var(--border)' }}
                       >{syncing ? '⏳ Syncing…' : '☁ Sync OneDrive'}</button>
                       {syncResult && !syncing && (
                         <div style={{ padding: '8px 16px', fontSize: 12, color: syncResult.error ? '#ef4444' : '#16a34a', borderTop: '1px solid var(--border)' }}>

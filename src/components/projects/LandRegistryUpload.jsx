@@ -131,7 +131,7 @@ export default function LandRegistryUpload({ target = 'bo', onApply }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={apply} style={{ padding: '7px 16px', borderRadius: 99, border: 'none', background: 'var(--blue, #3b82f6)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          <button type="button" onClick={apply} style={{ padding: '7px 16px', borderRadius: 99, border: 'none', background: 'var(--blue, #7c5cf0)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Use these details
           </button>
           <button type="button" onClick={reset} style={{ padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer' }}>

@@ -150,7 +150,7 @@ function EmailBody({ email }) {
   const htmlToRender = resolvedHtml !== null ? resolvedHtml : body;
 
   if (isHtmlEmail(body)) {
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${htmlToRender}</body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#7c5cf0}img{max-width:100%;height:auto}*{box-sizing:border-box}</style></head><body>${htmlToRender}</body></html>`;
     return <iframe srcDoc={html} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100%', border: 'none', flex: 1 }} title="email-body" />;
   }
   return <div style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{body}</div>;
@@ -593,7 +593,7 @@ ${threadText}`;
 
 
   const isHtml = isHtmlEmail(email?.body || '');
-  const emailHtml = isHtml ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#4f7fff}img{max-width:100%}</style></head><body>${email?.body}</body></html>` : null;
+  const emailHtml = isHtml ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#222;margin:16px;padding:0;background:#fff}a{color:#7c5cf0}img{max-width:100%}</style></head><body>${email?.body}</body></html>` : null;
 
   return (
     <div style={{
@@ -767,11 +767,11 @@ ${threadText}`;
                     )}
                     {msg.draft && (
                       <div style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue)', borderRadius: 10, overflow: 'hidden' }}>
-                        <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--blue)', background: 'rgba(79,127,255,0.1)' }}>
+                        <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--blue)', background: 'rgba(124,92,240,0.1)' }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Draft reply</span>
                         </div>
                         <div style={{ padding: '10px 13px', fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{msg.draft}</div>
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', background: 'rgba(79,127,255,0.05)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--blue)', background: 'rgba(124,92,240,0.05)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           <button onClick={() => {
                               const u = window.speechSynthesis;
                               if (u.speaking) { u.cancel(); return; }
@@ -1158,7 +1158,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
               <div style={{ width: 1, background: 'var(--border)', margin: '2px 2px' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                 <span style={{ fontSize: 11, color: 'var(--text3)' }}>A</span>
-                <input type="color" defaultValue="#1d4ed8"
+                <input type="color" defaultValue="#6a49e0"
                   onInput={e => { document.execCommand('foreColor', false, e.target.value); bodyEditorRef.current?.focus(); }}
                   style={{ width: 24, height: 22, padding: 0, border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer' }}
                   title="Text colour"
@@ -3562,14 +3562,14 @@ if (syncErr) throw syncErr;
 
           {/* Appointment detection prompt */}
           {appointmentPrompt && (
-            <div style={{ position: 'absolute', bottom: 80, left: 16, right: 16, padding: '10px 14px', background: appointmentPrompt.has_clash ? '#fef2f2' : '#eff6ff', border: `1px solid ${appointmentPrompt.has_clash ? '#ef4444' : '#3b82f6'}`, borderRadius: 8, fontSize: 12.5, zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+            <div style={{ position: 'absolute', bottom: 80, left: 16, right: 16, padding: '10px 14px', background: appointmentPrompt.has_clash ? '#fef2f2' : '#eff6ff', border: `1px solid ${appointmentPrompt.has_clash ? '#ef4444' : '#7c5cf0'}`, borderRadius: 8, fontSize: 12.5, zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{appointmentPrompt.has_clash ? '⚠️ Appointment detected — possible clash' : '📅 Appointment detected'}</div>
               <div style={{ color: 'var(--text2)', marginBottom: 6 }}>{appointmentPrompt.summary}</div>
               {appointmentPrompt.clash_detail && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 6 }}>{appointmentPrompt.clash_detail}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                 {!appointmentPrompt.has_clash && (
                   <button onClick={() => { setAppointmentPrompt(null); setReplyOverlay({ mode: 'reply', prefillBody: appointmentPrompt.confirm_reply }); }}
-                    style={{ padding: '6px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    style={{ padding: '6px 12px', background: '#7c5cf0', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     ✅ Reply confirming & book in
                   </button>
                 )}

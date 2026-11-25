@@ -443,12 +443,12 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
           onClick={() => onNavigate('briefing')}
           style={{ ...cardStyle, padding: isMobile ? '18px' : '20px', cursor: 'pointer', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #dce8ff', display: 'flex', alignItems: 'center', gap: 16 }}
         >
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,#7c5cf0,#a58bff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
             ✨
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a', marginBottom: 3 }}>Open Briefing</div>
-            <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: '#7c5cf0', lineHeight: 1.5 }}>
               Nora reviews all projects, deadlines and emails — and walks you through what needs doing today.
             </div>
           </div>
