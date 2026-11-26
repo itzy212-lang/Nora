@@ -1223,7 +1223,11 @@ export default async function handler(req, res) {
           headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: 'gpt-5.6-luna',
-            max_completion_tokens: 60,
+            // Raised 60 -> 600 on 26 Nov 2026: Luna's hidden reasoning counts inside this limit, and
+            // AI usage tracking showed 2 of 4 calls using all 60 on reasoning and returning an EMPTY
+            // answer, so the marketing / thanks-only filter silently did nothing for those emails.
+            // You only pay for tokens actually used.
+            max_completion_tokens: 600,
             messages: [
               { role: 'developer', content: 'Classify this email for a Party Wall surveying practice. Respond with valid JSON only: {"category": "business"|"marketing"|"acknowledgment_only", "confident": true|false}. "business" means genuine correspondence related to a project, a party wall matter, a surveyor, an adjoining/building owner, an invoice/payment for real work, or similar, that contains a question, a request, or new information needing a response. "marketing" means sales outreach, promotional content, newsletters, or cold pitches unrelated to an actual matter this practice is handling. "acknowledgment_only" means the email is nothing more than a brief thank-you, closing acknowledgment, or confirmation of receipt (e.g. "thanks", "thanks Nora", "got it", "noted", "perfect, thank you") with no new question, request, or information that needs a further reply - this applies even if it is a real client replying to a real previous email. If genuinely unsure, set confident to false.' },
               { role: 'user', content: 'FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + (email.subject || '') + '\nBODY: ' + plainTextBody(email).slice(0, 1500) },
@@ -2033,7 +2037,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: 'gpt-5.6-luna',
-              max_completion_tokens: 200,
+              max_completion_tokens: 800, // was 200: Luna's hidden reasoning counts inside the limit (see classifier above)
               messages: [
                 // Fixed 2026-09-12, on request: "if it's not a specific
                 // time, it's just a loose appointment... make it an
