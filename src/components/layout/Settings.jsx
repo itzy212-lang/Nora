@@ -1489,7 +1489,11 @@ Use UK English. Do not use long dashes or em dashes.`,
   fee_structure_content: '',
   banned_phrases: `duly, accordingly (unless genuinely necessary), for the avoidance of doubt, notwithstanding the foregoing, in this regard, at this juncture, please be advised, I trust this clarifies, I would be grateful if, kindly confirm, pursuant to, I write further to, we refer to, I look forward to hearing from you, please do not hesitate to contact me, I hope this finds you well, I trust this meets your requirements.`,
   soc_gold_standard: SOC_GOLD_STANDARD_DEFAULT,
+  knowledge_content: '',
 };
+
+// Keep in step with KNOWLEDGE_MAX_CHARS in api/lib/user-knowledge.js (about 2,000 words).
+const KNOWLEDGE_MAX_CHARS = 12000;
 
 function UserBrainV2Section() {
   const [fields, setFields] = React.useState(null);
@@ -1499,6 +1503,8 @@ function UserBrainV2Section() {
   const [error, setError] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
   const fileInputRef = React.useRef(null);
+  const knowledgeFileRef = React.useRef(null);
+  const [summarising, setSummarising] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -1513,12 +1519,17 @@ function UserBrainV2Section() {
         fee_structure_content: data.fee_structure_content ?? V2_DEFAULTS.fee_structure_content,
         banned_phrases: data.banned_phrases ?? V2_DEFAULTS.banned_phrases,
         soc_gold_standard: data.soc_gold_standard ?? V2_DEFAULTS.soc_gold_standard,
+        knowledge_content: data.knowledge_content ?? '',
       } : { ...V2_DEFAULTS });
     })();
   }, []);
 
   const save = async () => {
     if (!userId || !fields) return;
+    if ((fields.knowledge_content || '').length > KNOWLEDGE_MAX_CHARS) {
+      setError('Your knowledge box is over its limit. Please trim it before saving.');
+      return;
+    }
     setSaving(true);
     setError('');
     const payload = { user_id: userId, ...fields, updated_at: new Date().toISOString() };
@@ -1559,6 +1570,48 @@ function UserBrainV2Section() {
     }
   };
 
+  // "Your knowledge": upload a CPD / paper, Nora reads it and writes a short note
+  // into the box. Nothing is saved until the user has read it and pressed Save.
+  const handleKnowledgeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSummarising(true);
+    setError('');
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not read the selected file'));
+        reader.readAsDataURL(file);
+      });
+      const ex = await fetch('/api/extract-document-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_base64: base64, filename: file.name }),
+      });
+      const exData = await ex.json();
+      if (!ex.ok || !exData?.success) throw new Error(exData?.error || 'Could not read this file.');
+      const { data: { session } } = await sb.auth.getSession();
+      const sm = await fetch('/api/summarise-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ text: exData.text, filename: file.name }),
+      });
+      const smData = await sm.json();
+      if (!sm.ok || !smData?.success) throw new Error(smData?.error || 'Could not summarise this file.');
+      const heading = file.name.replace(/\.[^.]+$/, '');
+      setFields(prev => ({
+        ...prev,
+        knowledge_content: [prev.knowledge_content?.trim(), `${heading}\n${smData.summary}`].filter(Boolean).join('\n\n---\n\n'),
+      }));
+    } catch (err) {
+      setError(err.message || 'Upload failed.');
+    } finally {
+      setSummarising(false);
+      if (knowledgeFileRef.current) knowledgeFileRef.current.value = '';
+    }
+  };
+
   const field = (key, label, desc, rows = 4) => (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
@@ -1592,6 +1645,45 @@ function UserBrainV2Section() {
           {field('sign_off', 'Sign-off', 'What every drafted email ends with, before your saved signature.', 1)}
           {field('fee_structure_content', 'Fee structure', 'Your own pricing — notices, consent, dissent options, whatever structure you quote.', 8)}
           {field('banned_phrases', 'Banned phrases', 'Words or stock phrases Nora should never use in your drafts.', 4)}
+
+          <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Your knowledge</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+              Your own CPD, reading and Faculty material, as short notes. Upload a document and Nora writes a summary of about 250 words into this box. Read it, correct anything wrong, then press Save. Private to you: it is only ever used in your own chats and drafts, and Nora uses it when a disagreement turns on that point.
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => knowledgeFileRef.current?.click()}
+                disabled={summarising}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
+                  background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)',
+                  cursor: summarising ? 'not-allowed' : 'pointer', opacity: summarising ? 0.6 : 1,
+                }}
+              >
+                {summarising ? 'Nora is reading it…' : 'Upload a CPD or document'}
+              </button>
+              <input ref={knowledgeFileRef} type="file" accept=".pdf,.docx,.txt" onChange={handleKnowledgeUpload} style={{ display: 'none' }} />
+            </div>
+            <textarea
+              value={fields.knowledge_content}
+              onChange={e => setFields(prev => ({ ...prev, knowledge_content: e.target.value }))}
+              rows={10}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13,
+                borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)',
+                color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 6, fontSize: 12 }}>
+              <span style={{ color: 'var(--text3)' }}>
+                By pressing Save you confirm you have read these notes and are happy to rely on them.
+              </span>
+              <span style={{ color: (fields.knowledge_content || '').length > KNOWLEDGE_MAX_CHARS ? 'var(--red, #dc2626)' : 'var(--text3)', whiteSpace: 'nowrap' }}>
+                {(fields.knowledge_content || '').length.toLocaleString()} of {KNOWLEDGE_MAX_CHARS.toLocaleString()}
+              </span>
+            </div>
+          </div>
 
           <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Schedule of Condition — gold standard</div>

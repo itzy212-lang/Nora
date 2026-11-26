@@ -14,6 +14,7 @@ import { assembleV2Prompt, splitDraftFromCommentary, splitNewProjectProposal } f
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { findNamedCorrespondentAddresses, formatRecipients, dedupeNearDuplicateEmails, emailEvidenceHeader } from './lib/named-correspondent.js';
 import { loadStatutoryReference } from './lib/statutory-reference.js';
+import { withUserKnowledge } from './lib/user-knowledge.js';
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
 import { applyDependencyValidation } from './lib/stage1-dependency-graph.js';
@@ -1274,7 +1275,7 @@ async function runV2Pipeline({
     universalBrain,
     effectiveVoice,
     goldStandardBlock,
-    domainKnowledge: domainKnowledgeText || null,
+    domainKnowledge: withUserKnowledge(domainKnowledgeText || null, userBrainV2),
     workingMemory,
     surface,
     modeHint,
