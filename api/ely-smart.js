@@ -15,6 +15,7 @@ import { assembleV2Prompt, splitDraftFromCommentary, splitNewProjectProposal } f
 import { findNamedCorrespondentAddresses, formatRecipients, dedupeNearDuplicateEmails, emailEvidenceHeader } from './lib/named-correspondent.js';
 import { loadStatutoryReference } from './lib/statutory-reference.js';
 import { withUserKnowledge } from './lib/user-knowledge.js';
+import { buildConversationSearchQuery, excludeCurrentSessionChat, extractLiteralTerms, snippetsAroundTerms } from './lib/retrieval-queries.js';
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
 import { applyDependencyValidation } from './lib/stage1-dependency-graph.js';
@@ -495,7 +496,7 @@ async function loadProjectBundle(projectId) {
   );
 
   const projectMemory = await safeSelect('project_memory', '*', q =>
-    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
+    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(100) // 26 Nov 2026: was 30; the 10,000-character budget in Working Memory still caps what is shown
   );
 
   // Load SOC reports for this project (all AOs)
@@ -570,7 +571,7 @@ async function loadProjectFacts(projectId) {
   );
 
   const projectMemory = await safeSelect('project_memory', '*', q =>
-    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(30)
+    q.eq('project_id', projectId).order('created_at', { ascending: false }).limit(100) // 26 Nov 2026: was 30; the 10,000-character budget in Working Memory still caps what is shown
   );
 
   const socReports = await safeSelect(
@@ -1116,7 +1117,12 @@ async function runV2Pipeline({
   let searchResults = [];
   if (effectiveProjectId && prompt) {
     try {
-      searchResults = (await semanticSearchProject(effectiveProjectId, prompt, 25)) || [];
+      // 26 Nov 2026: ask with the recent conversation, not only the latest message, and
+      // drop this conversation's own saved messages from the results (mechanical).
+      searchResults = excludeCurrentSessionChat(
+        (await semanticSearchProject(effectiveProjectId, buildConversationSearchQuery(prompt, chatHistory), 25)) || [],
+        prompt, chatHistory
+      );
       // Added 2026-09-02, on request: this call has been genuinely
       // live and working since the 2026-08-06 v2 wiring correction
       // above it, but was never given the same logging the old,
@@ -1146,6 +1152,28 @@ async function runV2Pipeline({
         error_message: String(searchErr.message || searchErr).slice(0, 300),
       }]).then(() => {}).catch(() => {});
     }
+  }
+  // 26 Nov 2026: literal times/dates used in the conversation ("3pm", "26 November") are
+  // looked up as plain text in this project's email bodies, so a fact buried low in a
+  // quoted chain is still seen. Mechanical; no relevance judgement.
+  let keywordMatches = [];
+  try {
+    const sbKw = getSupabase();
+    const convoText = [prompt, ...(chatHistory || []).slice(-6).map((m) => m?.content || '')].join(' ');
+    const terms = extractLiteralTerms(convoText);
+    if (sbKw && effectiveProjectId && terms.length) {
+      const orFilter = terms.map((t) => `body.ilike.%${t.replace(/[%,()]/g, ' ')}%`).join(',');
+      const { data: kwRows, error: kwErr } = await sbKw
+        .from('emails')
+        .select('id, subject, sender_name, sender_email, direction, received_at, sent_at, body')
+        .eq('project_id', effectiveProjectId)
+        .or(orFilter)
+        .order('received_at', { ascending: false })
+        .limit(12);
+      if (!kwErr && kwRows?.length) keywordMatches = snippetsAroundTerms(kwRows, terms);
+    }
+  } catch (kwCatch) {
+    console.warn('[nora-v2] keyword email match failed (non-fatal):', kwCatch.message);
   }
   const alreadyIncludedIds = new Set([
     ...orderedEmailContext.map((e) => e.id).filter(Boolean),
@@ -1240,6 +1268,7 @@ async function runV2Pipeline({
       id: e.id, content: (emailEvidenceHeader(e) + (e.body || e.body_preview || '')).slice(0, 2000 + 400),
       date: e.date || e.received_at || e.sent_at, author: e.from || e.sender_name || e.sender_email,
     })),
+    keywordMatches,
     // Protects the most recent accepted draft from the chatHistory
     // per-category cap, so a minor-amendment request can never lose it.
     currentDraftState: extractCurrentDraftState(confirmedDraftText),
@@ -1268,7 +1297,7 @@ async function runV2Pipeline({
     rawSources,
     namedCorrespondentMode
       ? { categoryMaxItems: { thread: 40 }, categoryBudgets: { ...CATEGORY_BUDGETS, thread: 40000 } }
-      : {}
+      : { categoryMaxItems: { thread: 14 }, categoryBudgets: { ...CATEGORY_BUDGETS, thread: 30000 } } // 26 Nov 2026: was the default 8
   );
 
   const { prompt: systemPrompt, sections } = assembleV2Prompt({
@@ -1658,7 +1687,7 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   if (projectId) {
     // Cap at 30 most recent — unbounded fetch blows past OpenAI TPM limits on projects
     // with long correspondence histories. Broader history goes through searchProjectEmails.
-    query = query.eq('project_id', projectId).order('received_at', { ascending: false }).limit(30);
+    query = query.eq('project_id', projectId).order('received_at', { ascending: false }).limit(40); // 26 Nov 2026: 30 -> 40 before collapsing duplicate stored copies
   } else {
     query = query.in('folder', ['Inbox', 'Sent Items']).limit(20);
   }
@@ -1666,13 +1695,15 @@ async function buildScopedEmailContext({ prompt, projectId, emailContext = null,
   const { data, error } = await query;
   // Restore chronological order after most-recent-first fetch
   if (projectId && data?.length) data.reverse();
+  // 26 Nov 2026: one sent email is often stored 2-3 times; collapse those copies so they stop using up the limited slots.
+  const dedupedRows = projectId && data?.length ? dedupeNearDuplicateEmails(data) : data;
 
   if (error) {
     console.warn('[ely-smart] email context error:', error.message);
     return suppliedEmail ? [suppliedEmail] : [];
   }
 
-  const emails = (data || []).map(normaliseEmailRecord).filter(Boolean);
+  const emails = (dedupedRows || []).map(normaliseEmailRecord).filter(Boolean);
   if (suppliedEmail && !emails.some(row => String(row.id) === String(suppliedEmail.id))) emails.unshift(suppliedEmail);
   return emails;
 }

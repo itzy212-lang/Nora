@@ -72,6 +72,7 @@ const CATEGORY_BUDGETS = Object.freeze({
   projectFacts: 14000,      // matches V1's compactJson(bundleWithoutNotes, 14000)
   projectMemory: 10000,     // deliberately capped, unlike V1's uncapped section
   projectChatHistory: 8000, // matches V1's ALL PROJECT NOTES & CHAT cap
+  keywordMatches: 6000,     // 26 Nov 2026: short quotations around literal times/dates found in email bodies
 });
 
 // Fixed priority order. Updated per the project-context correction
@@ -86,6 +87,7 @@ const CATEGORY_PRIORITY = Object.freeze([
   'currentInstruction',
   'selectedEmail',
   'thread',
+  'keywordMatches',
   'currentDraftState',
   'confirmedProjectAnchors',
   'projectFacts',

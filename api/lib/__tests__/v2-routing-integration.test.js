@@ -91,7 +91,8 @@ describe('V1/V2 routing — structural guarantees', () => {
     const pipelineStart = source.indexOf('async function runV2Pipeline(');
     const pipelineEnd = source.indexOf('\n}\n', pipelineStart);
     const pipelineBody = source.slice(pipelineStart, pipelineEnd);
-    expect(pipelineBody).toContain('semanticSearchProject(effectiveProjectId, prompt');
+    // 26 Nov 2026: the query is now the recent conversation (buildConversationSearchQuery), still scoped to effectiveProjectId.
+    expect(pipelineBody).toContain('semanticSearchProject(effectiveProjectId, buildConversationSearchQuery(prompt, chatHistory)');
   });
 
   // Project-context correction (2026-08-06), spec tests 6 and 7.

@@ -23,6 +23,7 @@ describe('assembleWorkingMemory — priority order', () => {
       'currentInstruction',
       'selectedEmail',
       'thread',
+      'keywordMatches',
       'currentDraftState',
       'confirmedProjectAnchors',
       'projectFacts',
