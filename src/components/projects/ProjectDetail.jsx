@@ -5126,186 +5126,105 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         />
       )}
 
+      {/* 26 Nov 2026, on request: the Back button is gone (the menu's Projects entry does the
+          same job); the tabs moved to the top and are pinned so they stay in view while scrolling.
+          Action buttons sit below as one row of three, with Project Complete full width underneath. */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: windowWidth < 768 ? '1fr' : 'auto minmax(260px, 1fr) auto',
-        alignItems: 'center',
-        gap: 12,
-        padding: '8px 0 12px',
-        marginBottom: 10,
+        position: 'sticky',
+        top: 0,
+        zIndex: 20,
+        margin: '-18px -38px 10px',
+        padding: '8px 38px',
+        background: 'var(--bg)',
         borderBottom: '1px solid var(--border)',
+        boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+        display: 'flex',
+        gap: 3,
+        overflowX: 'auto',
       }}>
-        <button onClick={onBack} style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 5,
-          padding: '4px 11px',
-          borderRadius: 99,
-          border: '1px solid var(--border)',
-          background: 'var(--bg2)',
-          color: 'var(--text2)',
-          fontSize: 12,
-          cursor: 'pointer',
-          fontWeight: 500,
-          height: 30,
-          width: windowWidth < 768 ? 'fit-content' : 'auto',
-        }}>
-          ← Back
-        </button>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => { setTab(t.id); setNoticeModal(null); }}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              fontSize: 13,
+              border: 'none',
+              cursor: 'pointer',
+              background: tab === t.id ? 'var(--blue-bg)' : 'transparent',
+              fontWeight: tab === t.id ? 700 : 500,
+              color: tab === t.id ? 'var(--blue)' : 'var(--text2)',
+              borderRadius: 99,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: windowWidth < 768 ? 'flex-start' : 'center',
-          alignItems: 'center',
-          gap: 3,
-          minWidth: 0,
-          overflowX: 'auto',
-        }}>
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => { setTab(t.id); setNoticeModal(null); }}
-              style={{
-                padding: '6px 14px',
-                fontSize: 12.5,
-                border: 'none',
-                cursor: 'pointer',
-                background: tab === t.id ? 'var(--blue-bg)' : 'transparent',
-                fontWeight: tab === t.id ? 700 : 500,
-                color: tab === t.id ? 'var(--blue)' : 'var(--text2)',
-                borderRadius: 99,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{
-          display: 'flex',
-          gap: 6,
-          justifyContent: windowWidth < 768 ? 'flex-start' : 'flex-end',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}>
-          {/* Fixed 2026-09-10, on request: Edit moved into the BO
-              card itself, matching how each AO card already has its
-              own Edit button within the card, rather than sitting
-              separately up here under the tabs. */}
-
-          {/* Added 2026-09-15, on request: Option A pause design —
-              a separate flag, never overwrites any AO's real status.
-              While active, this project is entirely excluded from
-              the dashboard's "needs attention" calculation. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 0 12px', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
           {(!project.paused_until || new Date(project.paused_until) <= new Date()) && project.status !== 'award_served' && project.status !== 'complete' && (
-            <button
-              onClick={handlePauseProject}
-              style={{
-                cursor: 'pointer',
-                borderRadius: 99,
-                padding: '4px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                minHeight: 30,
-                background: '#fffbeb',
-                color: '#b45309',
-                border: '1px solid #fde68a',
-              }}
-            >
-              ⏸ Pause
-            </button>
-          )}
+              <button
+                onClick={handlePauseProject}
+                style={{
+                  cursor: 'pointer',
+                  flex: 1,
+                  borderRadius: 99,
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  minHeight: 30,
+                  background: '#fffbeb',
+                  color: '#b45309',
+                  border: '1px solid #fde68a',
+                }}
+              >
+                ⏸ Pause
+              </button>
+            )}
 
-          {project.paused_until && new Date(project.paused_until) > new Date() && (
-            <button
-              onClick={handleUnpauseProject}
-              style={{
-                cursor: 'pointer',
-                borderRadius: 99,
-                padding: '4px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                minHeight: 30,
-                background: '#fffbeb',
-                color: '#b45309',
-                border: '1px solid #fde68a',
-              }}
-            >
-              ▶ Paused until {new Date(project.paused_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — resume
-            </button>
-          )}
-
-          {/* Fixed 2026-09-15, on request: renamed from "Award
-              Served" — with each AO's own award status now handled
-              individually on its own card, a project-level button
-              also saying "Award Served" no longer made sense. Same
-              underlying action and status value (award_served) —
-              only the label changed, so nothing about the actual
-              completion logic is affected. */}
-          {project.status !== 'award_served' && project.status !== 'complete' && (
-            <button
-              onClick={handleMarkAwardServed}
-              style={{
-                cursor: 'pointer',
-                borderRadius: 99,
-                padding: '4px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                minHeight: 30,
-                background: '#f0fdf4',
-                color: '#16a34a',
-                border: '1px solid #bbf7d0',
-              }}
-            >
-              ✓ Project Complete
-            </button>
-          )}
-
-          {project.status === 'award_served' && (
-            <button
-              onClick={handleReactivateProject}
-              style={{
-                cursor: 'pointer',
-                borderRadius: 99,
-                padding: '4px 12px',
-                fontSize: 12,
-                fontWeight: 500,
-                minHeight: 30,
-                background: 'var(--bg2)',
-                color: 'var(--text2)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              ↩ Reactivate
-            </button>
-          )}
+            {project.paused_until && new Date(project.paused_until) > new Date() && (
+              <button
+                onClick={handleUnpauseProject}
+                style={{
+                  cursor: 'pointer',
+                  flex: 1,
+                  borderRadius: 99,
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  minHeight: 30,
+                  background: '#fffbeb',
+                  color: '#b45309',
+                  border: '1px solid #fde68a',
+                }}
+              >
+                ▶ Paused until {new Date(project.paused_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — resume
+              </button>
+            )}
 
           <button
             className="btn btn-sm btn-ghost"
             onClick={handleDeleteProject}
             style={{
               cursor: 'pointer',
+              flex: 1,
               color: 'var(--red)',
               borderRadius: 99,
               padding: '4px 10px',
               fontSize: 12,
               minHeight: 30,
+              border: '1px solid var(--border)',
             }}
           >
             Delete
           </button>
 
-          {/* Fixed 2026-09-12, on request: "what is that? Where did
-              that come from? Remove it." This was a manual
-              re-embed-this-project's-emails tool, built as a
-              workaround from earlier in development, before the
-              automatic embedding pipeline (background email sync)
-              was reliable — that's now confirmed working correctly
-              on its own, making this manual trigger obsolete. */}
-
           <button style={{
+            flex: 1,
             padding: '4px 11px',
             borderRadius: 99,
             fontSize: 12,
@@ -5319,6 +5238,48 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
             🔒 Close project
           </button>
         </div>
+
+        {/* "Award Served" was renamed "Project Complete" on 2026-09-15; same action and status
+            value (award_served). Now full width and green, under the row of three. */}
+        {project.status !== 'award_served' && project.status !== 'complete' && (
+          <button
+            onClick={handleMarkAwardServed}
+            style={{
+              cursor: 'pointer',
+              width: '100%',
+              borderRadius: 99,
+              padding: '8px 12px',
+              fontSize: 13.5,
+              fontWeight: 700,
+              minHeight: 38,
+              background: '#16a34a',
+              color: '#fff',
+              border: 'none',
+            }}
+          >
+            ✓ Project Complete
+          </button>
+        )}
+
+        {project.status === 'award_served' && (
+          <button
+            onClick={handleReactivateProject}
+            style={{
+              cursor: 'pointer',
+              width: '100%',
+              borderRadius: 99,
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: 500,
+              minHeight: 38,
+              background: 'var(--bg2)',
+              color: 'var(--text2)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            ↩ Reactivate
+          </button>
+        )}
       </div>
 
       {tab === 'details' && (

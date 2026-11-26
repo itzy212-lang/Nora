@@ -89,7 +89,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   const [draftSaved, setDraftSaved] = useState(false);
   const [editPersistPending, setEditPersistPending] = useState(false);
   const [generationIncomplete, setGenerationIncomplete] = useState(false);
-  const [dualAIEnabled, setDualAIEnabled] = useState(() => localStorage.getItem('nora_dual_ai_soc') === 'true');
+  // QA review is always on (the on/off switch was removed 26 Nov 2026 at the owner's request).
+  const dualAIEnabled = true;
   const [dualAIVerifying, setDualAIVerifying] = useState(false);
   const [dualAIReview, setDualAIReview] = useState(null); // { diff, rawNotes, structuredData, recommendations }
   const [dualAISkipped, setDualAISkipped] = useState(null); // reason string when Claude was unavailable
@@ -1320,9 +1321,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     aoLabel: { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
     aoSelect: { flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', outline: 'none' },
     // Review page
-    reviewPage: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-    reviewHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, flexWrap: 'wrap' },
-    reviewContent: { flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 },
+    reviewPage: { display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '-18px -20px', height: 'calc(100dvh - 54px)', background: 'var(--bg)' },
+    reviewHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, background: 'var(--bg)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' },
+    reviewContent: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 },
     primaryBtn: { padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--blue)', color: '#fff' },
     secondaryBtn: { padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', background: 'transparent', color: 'var(--text)' },
     card: { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' },
@@ -1413,22 +1414,27 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             onClose={() => { setDualAIReview(null); setPhase('review'); }}
           />
         )}
-        {/* Header */}
+        {/* Header: one pinned row — Back on the left, Email / Save / Download on the right. */}
         <div style={s.reviewHeader}>
-          <button onClick={() => setPhase('recording')} style={s.secondaryBtn}>← Back</button>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setPhase('recording')} style={{ ...s.secondaryBtn, padding: '7px 12px' }}>← Back</button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button onClick={handleSaveAndEmail} disabled={pdfProcessing} style={{ ...s.primaryBtn, padding: '7px 12px', background: '#10b981', opacity: pdfProcessing ? 0.65 : 1 }}>
+              {pdfProcessing ? '…' : '📧 Email'}
+            </button>
             <button
               onClick={handleSaveDraft}
               disabled={savingDraft}
-              style={{ ...s.secondaryBtn, ...(draftSaved ? { background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' } : {}) }}
+              style={{ ...s.secondaryBtn, padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: 5, ...(draftSaved ? { background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' } : {}) }}
             >
-              {savingDraft ? 'Saving…' : draftSaved ? '✓ Saved' : '💾 Save draft'}
+              {savingDraft ? 'Saving…' : draftSaved ? '✓ Saved' : (<>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Save
+              </>)}
             </button>
-            <button onClick={handleSaveAndEmail} disabled={pdfProcessing} style={{ ...s.primaryBtn, background: '#10b981', opacity: pdfProcessing ? 0.65 : 1 }}>
-              {pdfProcessing ? '…' : '📧 Email'}
-            </button>
-            <button onClick={printPreview} disabled={pdfProcessing} style={{ ...s.primaryBtn, opacity: pdfProcessing ? 0.65 : 1 }}>
-              {pdfProcessing ? '…' : '⬇ Download'}
+            <button onClick={printPreview} disabled={pdfProcessing} title="Download" aria-label="Download" style={{ ...s.primaryBtn, padding: '7px 11px', display: 'inline-flex', alignItems: 'center', opacity: pdfProcessing ? 0.65 : 1 }}>
+              {pdfProcessing ? '…' : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+              )}
             </button>
           </div>
         </div>
@@ -1779,19 +1785,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
             disabled={!hasContent || processing}
             style={{ ...s.generateBtn, flex: 1, opacity: (!hasContent || processing) ? 0.5 : 1 }}
           >
-            {processing ? (processingStatus || 'Generating…') : 'Generate SOC'}
+            {processing ? (processingStatus || 'Generating…') : dualAIVerifying ? 'Reviewing…' : 'Generate SOC'}
           </button>
-          <label title="QA Review Mode" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={dualAIEnabled}
-              onChange={e => {
-                setDualAIEnabled(e.target.checked);
-                localStorage.setItem('nora_dual_ai_soc', e.target.checked ? 'true' : 'false');
-              }}
-            />
-            QA{dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 2 }}>…</span>}
-          </label>
           {/* Added 2026-10-13: the "generation incomplete" warning used to be drawn only
               on the review screen, so when generation was blocked (e.g. a note that failed
               to save) nothing at all appeared here and the button looked dead. */}
