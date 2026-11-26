@@ -20,7 +20,7 @@
 export const TIER_DEFAULTS = {
   core: 'gpt-6.2-sol',       // reasoning-heavy: chat, drafting, SOC, audits, disputes, minutes (was gpt-5.6-terra until 26 Nov 2026)
   light: 'gpt-5.6-luna',     // small extraction / classification jobs
-  economy: 'gpt-4o',         // utility calls that need speed, not depth
+  economy: 'gpt-4o',         // no function uses this tier now (soc_live and minutes_extract moved to core, 26 Nov 2026)
 };
 
 export const DEFAULT_FALLBACK_MODEL = 'gpt-4o';
@@ -44,9 +44,9 @@ export const FUNCTIONS = {
   soc_factual_guard:    { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 factual guard' },
   soc_legacy_draft:     { tier: 'core', effort: null,     maxCompletionTokens: 128000, note: 'Legacy SOC pipeline Stage 2 (flag-only path)' },
   minutes_draft:        { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'Meeting minutes drafting' },
-  // Not moved: left on their current models until measured (see the upgrade report).
-  soc_live:             { tier: 'economy', effort: null, maxCompletionTokens: null, note: 'SOC live note processing, runs on every dictated note (speed matters)' },
-  minutes_extract:      { tier: 'economy', effort: null, maxCompletionTokens: 3000, note: 'Meeting minutes extraction' },
+  // Moved to core on 26 Nov 2026 after the live-note comparison (Sol made no factual slips; gpt-4o did).
+  soc_live:             { tier: 'core', effort: 'low', maxCompletionTokens: 8000, note: 'SOC live note processing, runs on every dictated note' },
+  minutes_extract:      { tier: 'core', effort: null, maxCompletionTokens: 6000, note: 'Meeting minutes extraction' },
 };
 
 const REASONING_MODEL = /^(gpt-5|gpt-6|o\d)/i;

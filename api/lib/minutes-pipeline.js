@@ -1,4 +1,4 @@
-import { modelFor } from './model-config.js';
+import { modelFor, isReasoningModel, instructionRole } from './model-config.js';
 // api/lib/minutes-pipeline.js
 // Weekly Site Minutes — Stage 1 extraction + Stage 2 drafting
 // Mirrors the SOC pipeline architecture: dictation -> structured claims -> professional draft
@@ -66,16 +66,19 @@ OUTPUT FORMAT — return ONLY valid JSON:
 
 Ref codes: use the first 2-3 consonants of the room name (e.g. Front Room -> FR, Kitchen -> K, Bathroom -> BA) followed by a 2-digit sequence number (01, 02...). Reuse the same room prefix consistently within the document. Rooms with no claims should be omitted entirely — do not include empty rooms.`;
 
-async function callOpenAI(model, systemPrompt, userPrompt, apiKey) {
+async function callOpenAI(model, systemPrompt, userPrompt, apiKey, maxTokens = 6000) {
+  // Reasoning models (gpt-5.x / gpt-6.x) reject temperature and take the "developer" role; the
+  // token limit also covers their hidden reasoning, so it carries headroom.
+  const reasoning = isReasoningModel(model);
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      temperature: 0.1,
-      max_completion_tokens: 3000,
+      ...(reasoning ? { reasoning_effort: 'low' } : { temperature: 0.1 }),
+      max_completion_tokens: maxTokens,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: instructionRole(model), content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
@@ -101,7 +104,7 @@ async function extractMinutesClaims(noteText, priorNotesText, roomNames, apiKey)
     `NEW NOTE TO EXTRACT:\n${noteText}`;
 
   const model = process.env.MINUTES_EXTRACT_MODEL || modelFor('minutes_extract').model;
-  const result = await callOpenAI(model, EXTRACTION_SYSTEM, userPrompt, apiKey);
+  const result = await callOpenAI(model, EXTRACTION_SYSTEM, userPrompt, apiKey, modelFor('minutes_extract').maxCompletionTokens);
   return Array.isArray(result.claims) ? result.claims : [];
 }
 
@@ -117,7 +120,7 @@ async function draftMinutes(claims, projectMeta, apiKey) {
     `ACTIVE CLAIMS:\n${claimsText}`;
 
   const model = process.env.MINUTES_DRAFT_MODEL || modelFor('minutes_draft').model;
-  return await callOpenAI(model, DRAFTING_SYSTEM, userPrompt, apiKey);
+  return await callOpenAI(model, DRAFTING_SYSTEM, userPrompt, apiKey, modelFor('minutes_draft').maxCompletionTokens);
 }
 
 export { extractMinutesClaims, draftMinutes, EXTRACTION_SYSTEM, DRAFTING_SYSTEM };

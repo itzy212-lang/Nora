@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { modelFor, isReasoningModel, tokenParams, instructionRole, normaliseEffort, FUNCTIONS } from '../model-config.js';
 
 describe('model-config', () => {
-  it('core functions default to Sol, utility functions are unchanged', () => {
+  it('every function defaults to Sol (gpt-4o stays only as the fallback)', () => {
     expect(modelFor('chat_main', {}).model).toBe('gpt-6.2-sol');
     expect(modelFor('soc_draft', {}).model).toBe('gpt-6.2-sol');
-    expect(modelFor('soc_live', {}).model).toBe('gpt-4o');
-    expect(modelFor('minutes_extract', {}).model).toBe('gpt-4o');
+    expect(modelFor('soc_live', {}).model).toBe('gpt-6.2-sol');
+    expect(modelFor('minutes_extract', {}).model).toBe('gpt-6.2-sol');
     expect(modelFor('chat_main', {}).fallbackModel).toBe('gpt-4o');
     expect(modelFor('chat_main', {}).reasoningEffort).toBe('medium');
   });
