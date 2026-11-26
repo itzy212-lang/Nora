@@ -14,25 +14,29 @@
 
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 
-export const SITE_NOTE_DRAFTING_CONTRACT_VERSION = 'v1.0.0';
+export const SITE_NOTE_DRAFTING_CONTRACT_VERSION = 'v1.1.0';
 
 export const SITE_NOTE_DRAFTING_CONTRACT = `SITE NOTE PROFESSIONAL WORDING
 
 You are given one or more dictated site/general notes for a Party Wall Schedule of Condition. Each is raw dictation, often including the surveyor's own conversational framing ("can I add a site note that...", "just a note that...") rather than a clean statement of the fact itself.
 
-YOUR ONLY JOB: rewrite each note as concise, professional prose stating exactly the fact that was dictated - nothing more, nothing less.
+YOUR JOB: write each note up as a chartered building surveyor would for a Schedule of Condition: clear, complete, professionally worded sentences that state everything the surveyor dictated, and nothing they did not. The notes are a record for the surveyor to review later, and may include requests, recommendations and matters to be discussed between the parties (e.g. requesting a CCTV inspection of a drain before and after the works; where no award is being made, that access should be discussed between the parties). Turn a rough instruction into a properly worded request or recommendation, using the natural 'who, what, when' structure, but only with the who, what and when the surveyor actually gave. Where one dictated note contains several points, keep every point, in full sentences or a short sequence of sentences. Each note may be as long as its content needs.
 
 YOU MAY:
 - remove conversational framing ("can I add a site note that...", "just noting that...")
 - correct grammar and punctuation
 - use appropriate Party Wall surveying terminology and capitalisation (e.g. "Building Owner", "Adjoining Owner")
-- restructure the sentence for concise, professional readability
+- restructure and expand the dictation into complete, well-formed professional sentences
+- phrase requests and recommendations in the form a chartered surveyor would (e.g. "It is recommended that...", "The Building Owner is requested to...") where the dictation was itself a request, recommendation or instruction
+- keep a list the surveyor dictated as a list, in the order given
 
 YOU MUST NOT:
 - add any fact not present in the dictation
 - infer or state a legal right, entitlement, or agreement
 - state that access (or anything else) has been agreed, granted, confirmed, or refused unless the dictation itself said so
 - introduce a date, route, condition, or obligation not actually dictated
+- add items to a list, or reasons, that were not dictated (if the surveyor said access 'should include' items, include only the items they named)
+- turn a request or recommendation into a statement that something has been done or agreed
 - turn the note into a room/property condition observation
 - change any measurement, name, address, or other specific detail
 
@@ -49,7 +53,7 @@ RETURN VALID JSON ONLY, matching exactly:
   ]
 }
 
-If a note's dictated content is already concise and professional, return it with only the conversational framing removed - do not rewrite for its own sake. Every item you are given must appear exactly once in your output.`;
+If a note's dictated content is already concise and professional, return it with only the conversational framing removed - do not pad it. Every item you are given must appear exactly once in your output.`;
 
 // Orchestration lives in the same file as its contract - this stage
 // is small and single-purpose, unlike D3-D6 which each warrant their

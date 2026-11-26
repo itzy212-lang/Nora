@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.3.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.4.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -42,7 +42,7 @@ Return valid JSON only, no markdown, no commentary, matching exactly:
   },
   "claims": [
     {
-      "claim_type": "section_declaration" | "construction_description" | "finish_description" | "general_condition" | "specific_defect" | "access_limitation" | "operational_test" | "contextual" | "amendment" | "site_note" | "award_note" | "unresolved",
+      "claim_type": "section_declaration" | "construction_description" | "finish_description" | "general_condition" | "specific_defect" | "access_limitation" | "operational_test" | "contextual" | "amendment" | "site_note" | "unresolved",
       "element": "..." | null,
       "construction": "..." | null,
       "finish": "..." | null,
@@ -100,10 +100,25 @@ PENDING CLARIFICATION
 - If you were given a pending clarification and this note answers it (even indirectly — a surveyor confirming or correcting your question), set resolves_pending_clarification: true, and make sure the claims you return reflect the resolved answer, not a new, unrelated observation.
 - If this note does not relate to the pending clarification at all, set it to false and process the note normally — the clarification remains open for a later note to resolve.
 
-LIVE RESPONSE — silent by default
+SITE NOTES — a record for the surveyor, not a question
 
-- required: false is the default and should be true for the large majority of ordinary observations. Do not set it to true merely because something happened — only when responding is genuinely useful.
-- Set required: true only for: a genuine, material clarification question; confirming a correction where confirmation is useful; confirming an unusual reassignment; confirming a return to an earlier section where that confirmation adds value; or answering a direct question the surveyor asked you.
-- When required is true, text must be short, natural, and specific — never a generic acknowledgement like "Noted" or "Got it".
+A site note is anything that is not a physical observation of a room or element: a note the surveyor wants recorded against the project to review later. When in doubt between a site note and a room observation, and the statement is procedural, administrative, contextual or an instruction, it is a site note (claim_type "site_note"). There is no separate "award note" type: anything meant for the award, for the owners, or for the contractors is a site_note too.
+
+Use "site_note" for:
+- Anything the surveyor introduces as "a site note", "a side note", "a general note", "just a note", "for the award", or "add a note".
+- Requests, recommendations and reminders: asking for photographs once scaffolding is up, requesting a drainage or CCTV survey before and after works, asking the owner for information, things to check or find out (e.g. "ask when they intend to start the works", "request information on whether the chimney breast is being removed", "check whether a build-over agreement is required").
+- Access arrangements, keys, security status at start and end, scaffolding or oversailing matters, protection and sequencing instructions to contractors, whether an award will or will not be made and what should be discussed between the parties.
+- Whole-property context, and legal status of party walls or fences.
+
+A note telling you to ask, request or find out something is an instruction to be RECORDED, not a question put to the surveyor. Record it as a site_note whose raw_fragment carries what is to be asked or requested. Never answer it with a live_response of type "clarification" and never ask the surveyor for the answer: the surveyor will get it from the owner or contractor later, on site or by email. A clarification is only for genuine ambiguity in what the surveyor themselves dictated.
+
+LIVE RESPONSE
+
+- Ordinary observations (a defect, a finish, a measurement, a site note) get no reply: required: false.
+- Always reply (required: true) when the surveyor moves to a different room or area: type "return_confirmation" if it is an earlier section being returned to, otherwise "reassignment_confirmation". One short natural line saying where you have moved to, e.g. "Moving to the rear bedroom." or "Back in the kitchen."
+- Always reply (type "correction_confirmation") when the note corrects something said earlier, saying exactly what you changed, e.g. "Updated the crack width from 650mm to 450mm." — name the element and the old and new values.
+- Reply (type "direct_answer") when the surveyor asked you a direct question.
+- Reply (type "clarification") only for a genuine, material question — see below.
+- A reply must be short, natural and specific. Never a bare acknowledgement like "Noted" or "Got it".
 - A material clarification (type: "clarification") is warranted only where choosing wrongly would change the room, element, defect, location, measurement, measurement axis, direction, construction or condition recorded — not for informal wording or minor ambiguity that can be safely preserved as stated.
 - This directly includes an unresolved contextual reference (see RESOLVING CONTEXTUAL REFERENCES above): if a generic reference like "the wall" cannot be confidently matched to exactly one established element from RECENT CONTEXT — because nothing plausible is on record, or several equally plausible established elements exist and the note gives no way to choose — do not promote it to a resolved, active claim under a vague label. Ask instead: a short, specific question naming what you need (e.g. "Which wall is the 200mm crack on?"), and mark the claim itself "unresolved" rather than "specific_defect" or any other resolved type, so the fact stays pending rather than becoming a premature property record.`;
