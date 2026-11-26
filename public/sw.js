@@ -19,7 +19,7 @@
 // Nora Service Worker — PWA offline support
 // Bumped 2026-09-15 (fourth time today): top bar icon changed from a
 // magnifying glass to a red "2" — frontend change.
-const CACHE_NAME = 'nora-v16';
+const CACHE_NAME = 'nora-v17';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -79,7 +79,9 @@ self.addEventListener('push', event => {
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       tag: data.tag || 'nora-notification',
-      data: { url: data.url || '/' },
+      data: { url: data.url || '/', emailId: data.emailId || null, junkToken: data.junkToken || null },
+      // Phones that support notification buttons show this when the notification is expanded.
+      actions: data.emailId && data.junkToken ? [{ action: 'junk', title: 'Junk' }] : [],
       vibrate: [200, 100, 200],
     })
   );
@@ -87,6 +89,27 @@ self.addEventListener('push', event => {
 
 // Notification click — open the app
 self.addEventListener('notificationclick', event => {
+  // "Junk" button: move that one email to Nora's Junk folder without opening the app.
+  if (event.action === 'junk') {
+    const { emailId, junkToken } = event.notification.data || {};
+    event.notification.close();
+    event.waitUntil(
+      fetch('/api/notification-junk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_id: emailId, token: junkToken }),
+      }).then(r => {
+        if (!r.ok) throw new Error('failed');
+      }).catch(() =>
+        self.registration.showNotification('Nora', {
+          body: 'Could not move that email to Junk. Open Nora to do it.',
+          icon: '/icons/icon-192.png',
+          tag: 'nora-junk-failed',
+        })
+      )
+    );
+    return;
+  }
   event.notification.close();
   const url = event.notification.data?.url || '/';
   event.waitUntil(

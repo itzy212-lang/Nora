@@ -13,6 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 import crypto from 'crypto';
+import { makeJunkToken } from './lib/notification-junk-token.js';
 
 function getSupabase() {
   return createClient(
@@ -105,6 +106,10 @@ export default async function handler(req, res) {
       url: `/?email=${email.id}`,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
+      // 26 Nov 2026: a "Junk" button on the notification. The token is valid for this one
+      // email only; tapping it moves the email to Nora's Junk folder (recoverable).
+      emailId: email.id,
+      junkToken: makeJunkToken(email.id),
     });
 
     let sent = 0, failed = 0;
