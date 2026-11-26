@@ -36,25 +36,43 @@ export function excludeCurrentSessionChat(results, prompt, chatHistory) {
   return (results || []).filter((r) => !(r.content_type === 'chat' && own.has(String(r.content || '').trim().slice(0, 500))));
 }
 
-/** Literal times and dates found in the conversation's own words, as search variants. */
-export function extractLiteralTerms(text, { maxTerms = 4 } = {}) {
-  const t = String(text || '');
-  const terms = [];
-  const add = (v) => { if (v && !terms.includes(v)) terms.push(v); };
+function londonDate(offsetDays, now) {
+  const d = new Date(now.getTime() + offsetDays * 86400000);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long' }).formatToParts(d);
+  return { day: parts.find((p) => p.type === 'day').value, month: parts.find((p) => p.type === 'month').value };
+}
 
+/**
+ * Literal dates and times found in the conversation's own words, as plain-text search variants.
+ * "today" / "tomorrow" / "yesterday" become their real calendar dates (UK time). Dates are listed
+ * before times because they are the more specific anchor.
+ */
+export function extractLiteralTerms(text, { maxDistinct = 4, now = new Date() } = {}) {
+  const t = String(text || '');
+  const dates = [];
+  const times = [];
+  const addTo = (arr, v) => { if (v && !arr.includes(v)) arr.push(v); };
+
+  for (const [word, off] of [['today', 0], ['tomorrow', 1], ['yesterday', -1]]) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(t)) {
+      const { day, month } = londonDate(off, now);
+      addTo(dates, `${day} ${month}`);
+    }
+  }
+  for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTHS})[a-z]*\\b`, 'gi'))) addTo(dates, `${m[1]} ${m[2]}`);
+  for (const m of t.matchAll(new RegExp(`\\b(${MONTHS})[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'gi'))) addTo(dates, `${m[2]} ${m[1]}`);
+
+  const timeVariants = [];
   for (const m of t.matchAll(/\b(\d{1,2})(?::(\d{2})|\.(\d{2}))?\s?(am|pm)\b/gi)) {
     const h = m[1]; const min = m[2] || m[3] || ''; const ap = m[4].toLowerCase();
-    if (min && min !== '00') { add(`${h}:${min}${ap}`); add(`${h}.${min}${ap}`); add(`${h}:${min} ${ap}`); }
-    else { add(`${h}${ap}`); add(`${h}:00${ap}`); add(`${h} ${ap}`); add(`${h}.00${ap}`); }
+    const group = (min && min !== '00')
+      ? [`${h}:${min}${ap}`, `${h}.${min}${ap}`, `${h}:${min} ${ap}`]
+      : [`${h}${ap}`, `${h}:00${ap}`, `${h} ${ap}`, `${h}.00${ap}`];
+    if (!timeVariants.some((g) => g[0] === group[0])) timeVariants.push(group);
   }
-  for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTHS})[a-z]*\\b`, 'gi'))) {
-    add(`${m[1]} ${m[2]}`);
-    add(`${m[1]}th ${m[2]}`);
-  }
-  for (const m of t.matchAll(new RegExp(`\\b(${MONTHS})[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'gi'))) {
-    add(`${m[2]} ${m[1]}`);
-  }
-  return terms.slice(0, maxTerms * 4); // variants of up to ~4 distinct times/dates
+  for (const g of timeVariants.slice(0, maxDistinct)) for (const v of g) addTo(times, v);
+
+  return [...dates.slice(0, maxDistinct), ...times];
 }
 
 function plain(html) {
@@ -81,7 +99,7 @@ export function snippetsAroundTerms(rows, terms, { radius = 260, maxSnippets = 6
     const text = plain(row.body || row.body_preview || '');
     const lower = text.toLowerCase();
     let at = -1;
-    for (const t of lowerTerms) { const i = lower.indexOf(t); if (i !== -1 && (at === -1 || i < at)) at = i; }
+    for (const t of lowerTerms) { const i = lower.indexOf(t); if (i !== -1) { at = i; break; } } // terms are ordered most specific first
     if (at === -1) continue;
     const start = Math.max(0, at - radius);
     const quote = text.slice(start, Math.min(text.length, at + radius)).replace(/\s+/g, ' ').trim();

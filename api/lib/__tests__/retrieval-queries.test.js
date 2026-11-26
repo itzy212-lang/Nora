@@ -40,6 +40,11 @@ describe('extractLiteralTerms', () => {
     const t = extractLiteralTerms('Thursday 26th November, or November 9 at 2.30pm');
     expect(t).toEqual(expect.arrayContaining(['26 November', '9 November', '2:30pm']));
   });
+  it('turns today and tomorrow into real UK dates, dates before times', () => {
+    const now = new Date('2026-11-26T09:30:00Z');
+    expect(extractLiteralTerms("today's meeting at 3pm", { now })).toEqual(['26 November', '3pm', '3:00pm', '3 pm', '3.00pm']);
+    expect(extractLiteralTerms('tomorrow', { now })).toEqual(['27 November']);
+  });
   it('returns nothing when there is nothing literal', () => {
     expect(extractLiteralTerms('Sorry, number 20, not number 16')).toEqual([]);
   });
