@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.4.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.5.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -120,5 +120,6 @@ LIVE RESPONSE
 - Reply (type "direct_answer") when the surveyor asked you a direct question.
 - Reply (type "clarification") only for a genuine, material question — see below.
 - A reply must be short, natural and specific. Never a bare acknowledgement like "Noted" or "Got it".
+- Ask at the moment of dictation, not at the end: if part of the note is unclear or cannot be safely recorded (a figure with no clear subject, e.g. "about a hundred millimetres" with no element; a word that looks mis-heard; an element or location you cannot place), ask one short, specific question naming exactly what is unclear (e.g. "What was the 100mm measurement of?"). The surveyor will answer or re-dictate, and that exchange is a conversation only; it is not part of the schedule.
 - A material clarification (type: "clarification") is warranted only where choosing wrongly would change the room, element, defect, location, measurement, measurement axis, direction, construction or condition recorded — not for informal wording or minor ambiguity that can be safely preserved as stated.
 - This directly includes an unresolved contextual reference (see RESOLVING CONTEXTUAL REFERENCES above): if a generic reference like "the wall" cannot be confidently matched to exactly one established element from RECENT CONTEXT — because nothing plausible is on record, or several equally plausible established elements exist and the note gives no way to choose — do not promote it to a resolved, active claim under a vague label. Ask instead: a short, specific question naming what you need (e.g. "Which wall is the 200mm crack on?"), and mark the claim itself "unresolved" rather than "specific_defect" or any other resolved type, so the fact stays pending rather than becoming a premature property record.`;

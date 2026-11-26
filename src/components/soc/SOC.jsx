@@ -103,6 +103,8 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
   const recognitionRef = useRef(null);
   const chatEndRef = useRef(null);
+  const chatAreaRef = useRef(null);
+  const [noraThinking, setNoraThinking] = useState(false);
   const inputRef = useRef(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -332,9 +334,16 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   }, []);
 
   // ── Scroll chat to bottom ────────────────────────────────────────────────
+  // Scrolls the chat box itself (the page is now exactly screen height, so this is the
+  // only thing that scrolls). Runs for new messages, the thinking dots and live dictation.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const el = chatAreaRef.current;
+    if (!el) return;
+    const toEnd = () => { el.scrollTop = el.scrollHeight; };
+    toEnd();
+    const raf = requestAnimationFrame(toEnd);
+    return () => cancelAnimationFrame(raf);
+  }, [messages, noraThinking, interimText]);
 
   // ── Recording ────────────────────────────────────────────────────────────
   const startRecording = useCallback(() => {
@@ -382,8 +391,12 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // threaded through explicitly here.
   const saveNoteToSession = useCallback(async (sessionId, content) => {
     const msgId = uid();
-    setMessages(prev => [...prev, { id: msgId, role: 'user', content }]);
-    const saveRes = await fetch('/api/soc-save', {
+    setMessages(prev => [...prev, { id: msgId, role: 'user', content, status: 'sending' }]);
+    setNoraThinking(true);
+    const markNote = (status) => setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status } : m));
+    let saveRes;
+    try {
+    saveRes = await fetch('/api/soc-save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -394,6 +407,13 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         user_id: state.currentUser?.id || state.currentUser?.email,
       }),
     });
+    } catch (e) {
+      setNoraThinking(false);
+      markNote('failed');
+      setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
+      return;
+    }
+    setNoraThinking(false);
     // Fixed 2026-09-19, Phase C, on explicit instruction: this previously
     // decided what to show the surveyor using client-side regex, guessing
     // at corrections/room-changes from keywords, defaulting to "Noted ✓"
@@ -406,6 +426,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     if (saveRes.ok) {
       const body = await saveRes.json().catch(() => ({}));
       const processing = body.processing;
+      markNote(processing?.ok === false ? 'failed' : 'saved');
       if (processing?.ok === false) {
         setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Could not process this note. It has been saved and can be retried.' }]);
       } else if (processing?.live_response?.required && processing.live_response.text) {
@@ -415,6 +436,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     } else {
       const err = await saveRes.json().catch(() => ({}));
       console.error('[SOC] save_note failed:', err);
+      markNote('failed');
       setMessages(prev => [...prev, { id: msgId + '-err', role: 'ely', content: '⚠ Note could not be saved. Check your connection.' }]);
     }
   }, [projectId, state.currentUser]);
@@ -1261,6 +1283,9 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
   // ── Styles ───────────────────────────────────────────────────────────────
   const s = {
     page: { display: 'flex', height: '100%', position: 'relative', overflow: 'hidden' },
+    // Dictation screen: exactly the visible height under the top bar, so the header and input
+    // never scroll away (the app's content box grows with its children otherwise).
+    chatPage: { display: 'flex', position: 'relative', overflow: 'hidden', margin: '-18px -20px', height: 'calc(100dvh - 54px)', background: 'var(--bg)' },
     // Sidebar
     sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 550 },
     sidebar: { position: 'fixed', left: 0, top: 0, bottom: 0, width: 280, background: 'var(--bg)', borderRight: '1px solid var(--border)', zIndex: 551, display: 'flex', flexDirection: 'column', boxShadow: '4px 0 20px rgba(0,0,0,0.15)' },
@@ -1275,6 +1300,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     // Main content
     main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' },
+    chatHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, flexWrap: 'wrap', background: 'var(--bg)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' },
     headerLeft: { display: 'flex', alignItems: 'center', gap: 10 },
     hamburger: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text)', fontSize: 20, lineHeight: 1 },
     titleBlock: { display: 'flex', flexDirection: 'column' },
@@ -1282,15 +1308,15 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     titleSub: { fontSize: 11, color: 'var(--text3)' },
     generateBtn: { padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'var(--blue)', color: '#fff', whiteSpace: 'nowrap' },
     // Chat area
-    chatArea: { flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2 },
-    userBubble: { background: 'var(--blue)', color: '#fff', borderRadius: '18px 18px 4px 18px', padding: '8px 13px', fontSize: 13.5, maxWidth: '85%', lineHeight: 1.5, wordBreak: 'break-word' },
-    elyBubble: { background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: '18px 18px 18px 4px', padding: '8px 13px', fontSize: 13, maxWidth: '80%', lineHeight: 1.5, fontStyle: 'italic' },
+    chatArea: { flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', padding: '14px 14px 8px', display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--bg2)' },
+    userBubble: { background: 'var(--blue)', color: '#fff', borderRadius: '20px 20px 6px 20px', padding: '10px 14px', fontSize: 14.5, maxWidth: '86%', lineHeight: 1.5, wordBreak: 'break-word', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' },
+    elyBubble: { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '20px 20px 20px 6px', padding: '10px 14px', fontSize: 14.5, maxWidth: '86%', lineHeight: 1.5, wordBreak: 'break-word', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
     emptyState: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text3)', fontSize: 13, textAlign: 'center', padding: '0 32px' },
     emptyIcon: { fontSize: 36, marginBottom: 4 },
     // Input
-    inputArea: { flexShrink: 0, borderTop: '1px solid var(--border)' },
+    inputArea: { flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--bg)', paddingBottom: 'env(safe-area-inset-bottom)' },
     // AO bar
-    aoBar: { padding: '8px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, position: 'sticky', top: 57, zIndex: 9, background: 'var(--bg)' },
+    aoBar: { padding: '6px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)' },
     aoLabel: { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
     aoSelect: { flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', outline: 'none' },
     // Review page
@@ -1711,7 +1737,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           onClose={() => { setDualAIReview(null); setPhase('review'); }}
         />
       )}
-      <div style={s.page}>
+      <div style={s.chatPage}>
       {/* Sidebar overlay */}
       {sidebarOpen && (
         <>
@@ -1744,39 +1770,18 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
 
       {/* Main content */}
       <div style={s.main}>
-        {/* Header */}
-        <div style={s.header}>
-          <div style={s.headerLeft}>
-            {onBack && <button onClick={onBack} style={s.secondaryBtn}>← Project</button>}
-            <button style={s.hamburger} onClick={() => setSidebarOpen(true)}>☰</button>
-            <div style={s.titleBlock}>
-              <span style={s.titleMain}>SOC Dictation</span>
-              {selectedAOAddress && <span style={s.titleSub}>{selectedAOAddress}</span>}
-            </div>
-          </div>
+        {/* Header: always pinned. Back, menu, Generate and the QA switch, nothing else. */}
+        <div style={s.chatHeader}>
+          {onBack && <button onClick={onBack} style={{ ...s.secondaryBtn, padding: '7px 12px' }}>← Project</button>}
+          <button style={s.hamburger} onClick={() => setSidebarOpen(true)} aria-label="SOC sessions">☰</button>
           <button
             onClick={handleGenerate}
             disabled={!hasContent || processing}
-            style={{ ...s.generateBtn, opacity: (!hasContent || processing) ? 0.5 : 1 }}
+            style={{ ...s.generateBtn, flex: 1, opacity: (!hasContent || processing) ? 0.5 : 1 }}
           >
             {processing ? (processingStatus || 'Generating…') : 'Generate SOC'}
           </button>
-          {/* Added 2026-10-13: the "generation incomplete" warning used to be drawn only
-              on the review screen, so when generation was blocked (e.g. a note that failed
-              to save) nothing at all appeared here and the button looked dead. */}
-          {generationIncomplete && !processing && (
-            <div style={{ flexBasis: '100%', marginTop: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.45 }}>
-              ⚠ <strong>Could not generate the Schedule of Condition.</strong> {String(generationWarning || 'Generation incomplete — please retry.').replace(/^GENERATION_INCOMPLETE:\s*/, '')}
-            </div>
-          )}
-          {processing && processingStatus && (
-            <div style={{ flexBasis: '100%', fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              {processingStatus}
-            </div>
-          )}
-          <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
-          <label style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', marginTop: 8 }}>
+          <label title="QA Review Mode" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none' }}>
             <input
               type="checkbox"
               checked={dualAIEnabled}
@@ -1785,9 +1790,23 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
                 localStorage.setItem('nora_dual_ai_soc', e.target.checked ? 'true' : 'false');
               }}
             />
-            QA Review Mode
-            {dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 4 }}>Reviewing…</span>}
+            QA{dualAIVerifying && <span style={{ color: 'var(--blue)', marginLeft: 2 }}>…</span>}
           </label>
+          {/* Added 2026-10-13: the "generation incomplete" warning used to be drawn only
+              on the review screen, so when generation was blocked (e.g. a note that failed
+              to save) nothing at all appeared here and the button looked dead. */}
+          {generationIncomplete && !processing && (
+            <div style={{ flexBasis: '100%', maxHeight: '30vh', overflowY: 'auto', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.45 }}>
+              ⚠ <strong>Could not generate the Schedule of Condition.</strong> {String(generationWarning || 'Generation incomplete — please retry.').replace(/^GENERATION_INCOMPLETE:\s*/, '')}
+            </div>
+          )}
+          {processing && processingStatus && (
+            <div style={{ flexBasis: '100%', fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              {processingStatus}
+            </div>
+          )}
+          <style>{'@keyframes spin { to { transform: rotate(360deg); } } @keyframes soc-dot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.15); } }'}</style>
         </div>
 
         {/* AO selector bar */}
@@ -1803,7 +1822,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
         )}
 
         {/* Chat area */}
-        <div style={s.chatArea}>
+        <div style={s.chatArea} ref={chatAreaRef}>
           {!hasContent && !isRecording && (
             <div style={s.emptyState}>
               <div style={s.emptyIcon}>🎙</div>
@@ -1813,12 +1832,29 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
           )}
 
           {messages.map(msg => (
-            <div key={msg.id} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
+            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
+              {msg.role !== 'user' && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', margin: '0 0 2px 6px' }}>Nora</span>}
               <div style={msg.role === 'user' ? s.userBubble : s.elyBubble}>
                 {msg.content}
               </div>
+              {msg.role === 'user' && msg.status && (
+                <span style={{ fontSize: 11, margin: '2px 6px 0 0', color: msg.status === 'failed' ? '#dc2626' : msg.status === 'saved' ? 'var(--green, #16a34a)' : 'var(--text3)' }}>
+                  {msg.status === 'saved' ? '✓ Saved' : msg.status === 'failed' ? '⚠ Not saved' : 'Saving…'}
+                </span>
+              )}
             </div>
           ))}
+
+          {noraThinking && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', margin: '0 0 2px 6px' }}>Nora</span>
+              <div style={{ ...s.elyBubble, display: 'flex', gap: 5, padding: '13px 16px' }} aria-label="Nora is thinking">
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', animation: 'soc-dot 1.2s ease-in-out infinite', animationDelay: (i * 0.2) + 's' }} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {interimText && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
