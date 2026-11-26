@@ -21,7 +21,7 @@ export const MAX_CHARS = 7000;
 const RULES = [
   [/section\s*1\b|s\.?\s*1\b|line of junction|new (?:party )?wall.*boundary/, ['s1', 'govuk_booklet_s1_boundary']],
   [/section\s*2\b|s\.?\s*2\b|repair.*party wall|rights of (?:the )?building owner/, ['s2', 'govuk_booklet_s2_rights']],
-  [/section\s*3\b|s\.?\s*3\b|party structure notice|serve.*notice|notice.*(?:expir|laps|valid|period|serv)|one month|two months/, ['s3', 'govuk_booklet_notice_requirements', 'fpws_overview_notice']],
+  [/section\s*3\b|s\.?\s*3\b|party structure notice|serve.*notice|notice.*(?:expir|laps|valid|period|serv)|one month|two months|consent/, ['s3', 'govuk_booklet_notice_requirements', 'fpws_overview_notice']],
   [/section\s*4\b|s\.?\s*4\b|counter.?notice/, ['s4']],
   [/section\s*5\b|s\.?\s*5\b|dissent|deemed dispute|no reply|not reply|14 days|fourteen days/, ['s5', 'fpws_faq_no_reply']],
   [/section\s*6\b|s\.?\s*6\b|excavat|3 ?m(?:etre)?s?\b|6 ?m(?:etre)?s?\b|underpin|adjacent/, ['s6', 'govuk_booklet_s6_excavation']],
@@ -34,7 +34,7 @@ const RULES = [
   [/section\s*1[34]\b|account for work|settlement of account/, ['s13', 's14']],
   [/section\s*15\b|s\.?\s*15\b|(?:how|method).*serv|email.*notice|electronic|service of notice/, ['s15']],
   [/section\s*16\b|offence/, ['s16']],
-  [/section\s*20\b|s\.?\s*20\b|definition|building owner\b|adjoining owner\b/, ['s20', 'govuk_booklet_definitions', 'fpws_overview_building_owner', 'fpws_overview_adjoining_owner']],
+  [/section\s*20\b|s\.?\s*20\b|definition|who is (?:a|an|the) (?:building|adjoining) owner|what is a party (?:wall|fence|structure)/, ['s20', 'govuk_booklet_definitions', 'fpws_overview_building_owner', 'fpws_overview_adjoining_owner']],
   [/no notice|without (?:a )?notice|not serve/, ['fpws_faq_no_notice']],
   [/boundary dispute|boundary line|land registry/, ['fpws_faq_boundary']],
   [/disagree.*surveyor|surveyor.*disagree|change.*surveyor|appointed surveyor/, ['fpws_faq_surveyor_disagree', 'fpws_faq_surveyor_role']],

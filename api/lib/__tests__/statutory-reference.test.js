@@ -20,6 +20,13 @@ describe('pickReferenceRefs', () => {
     expect(r.length).toBeLessThanOrEqual(MAX_REFS);
     expect(new Set(r).size).toBe(r.length);
   });
+  it('does not pull definitions just because owners are mentioned', () => {
+    const r = pickReferenceRefs('The adjoining owner is refusing to pay their share');
+    expect(r).not.toContain('s20');
+  });
+  it('picks notice sections for consent', () => {
+    expect(pickReferenceRefs('The AO has given consent')).toContain('s3');
+  });
   it('handles empty input', () => {
     expect(pickReferenceRefs('')).toEqual([]);
     expect(pickReferenceRefs(null)).toEqual([]);
