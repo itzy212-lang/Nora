@@ -1,3 +1,4 @@
+import './ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/lib/soc-pipeline.js
 // SOC pipeline: claim extraction, professional drafting, completeness audit.
 

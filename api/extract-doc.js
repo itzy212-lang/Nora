@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/extract-doc.js
 // Accepts multipart file upload — handles:
 // - .docx/.doc: mammoth text extraction → Claude text analysis

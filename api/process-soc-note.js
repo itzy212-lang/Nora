@@ -21,6 +21,7 @@
 // single note-save call synchronous end to end.
 
 import { createClient } from '@supabase/supabase-js';
+import { setUsageContext } from './lib/ai-usage.js';
 import { loadLiveContext, callLiveSemanticProcessor } from './lib/soc-brain-v2/live-processor.js';
 import { applyLiveProcessingResult } from './lib/soc-brain-v2/live-state.js';
 import { getPendingClarification, setPendingClarification, clearPendingClarification } from './lib/soc-brain-v2/pending-clarification.js';
@@ -40,6 +41,14 @@ export default async function handler(req, res) {
   }
   const apiKey = openai_key || process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'No OpenAI API key available' });
+
+  // AI token tracking: the live note processor belongs to whoever owns this project.
+  if (project_id) {
+    try {
+      const { data: owner } = await supabase.from('projects').select('user_id').eq('id', project_id).maybeSingle();
+      setUsageContext({ userId: owner?.user_id, projectId: project_id });
+    } catch { /* tracking only: never affects the note */ }
+  }
 
   let noteId = null;
   let sequence = null;

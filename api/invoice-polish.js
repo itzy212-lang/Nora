@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/invoice-polish.js
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;

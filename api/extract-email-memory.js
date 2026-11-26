@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { attributeToProject } from './lib/ai-usage.js';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
@@ -58,6 +60,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'project_id and body required' });
 
   }
+  await attributeToProject(supabase, project_id); // AI token tracking
 
   try {
     const dateStr = received_at

@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { setUsageContext } from './lib/ai-usage.js';
 import { configuredNoraEmail } from './_lib/loa-email.js';
 import { processLeadEmails, isFromLeadSender } from './lib/lead-autoreply.js';
 // api/cron-auto-draft.js
@@ -1065,6 +1067,8 @@ export default async function handler(req, res) {
     }
 
     for (const email of scopedEmails) {
+      // AI token tracking: every AI call made while handling this email belongs to its owner.
+      try { setUsageContext({ userId: await resolveOwnerUserId(email.user_id), projectId: email.project_id }); } catch { /* tracking only */ }
       // Local Surveyors Direct's own emails (leads, invoices, notices) are handled
       // above or are not for Nora to answer. Never draft or send a reply to them.
       if (isFromLeadSender(email)) { results.skipped++; continue; }

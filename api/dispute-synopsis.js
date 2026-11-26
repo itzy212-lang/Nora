@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { setUsageContext } from './lib/ai-usage.js';
 import { modelFor, tokenParams } from './lib/model-config.js';
 import { createClient } from '@supabase/supabase-js';
 
@@ -24,6 +26,7 @@ export default async function handler(req,res){
     if(!token||!sb)return res.status(401).json({error:'Not authenticated'});
     const {data:{user},error:authError}=await sb.auth.getUser(token);
     if(authError||!user)return res.status(401).json({error:'Not authenticated'});
+    setUsageContext({userId:user.id}); // AI token tracking
 
     const intake=req.body?.context?.dispute_intake;
     if(!intake)return res.status(400).json({error:'Missing dispute intake'});

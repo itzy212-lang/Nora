@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/polish-works.js
 // Takes raw dictation of a notifiable work item and returns professional surveying language
 

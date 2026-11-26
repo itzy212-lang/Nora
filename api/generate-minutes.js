@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { attributeToProject } from './lib/ai-usage.js';
 // api/generate-minutes.js
 export const config = { maxDuration: 120 };
 
@@ -16,6 +18,7 @@ export default async function handler(req, res) {
     if (!apiKey) return res.status(500).json({ error: 'Missing OpenAI API key' });
 
     const { action } = req.body || {};
+    await attributeToProject(supabase, req.body?.project_id); // AI token tracking
 
     // ── Save a single dictated note, extract claims live ────────────────────
     if (action === 'save_note') {

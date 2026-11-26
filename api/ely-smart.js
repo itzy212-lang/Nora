@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { setUsageContext } from './lib/ai-usage.js';
 // api/ely-smart.js
 // Ely/Nora smart route - project-hydrated collaboration version
 // Global behaviour: analyse first, draft only when clearly requested.
@@ -2854,6 +2856,7 @@ export default async function handler(req, res) {
 
     // Use verified UUID exclusively — body.userId retained only for non-auth session scoping
     const userId = verifiedUserId;
+    setUsageContext({ userId, projectId }); // AI token tracking: whose calls these are
 
     // ── Silent read fast path
 

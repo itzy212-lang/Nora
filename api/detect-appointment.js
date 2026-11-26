@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/detect-appointment.js
 // Silently analyses an email to detect proposed appointments
 // Cross-references diary and other emails to check for clashes

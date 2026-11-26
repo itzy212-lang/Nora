@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/backfill-embeddings.js
 // One-time backfill of missing embeddings in project_memory
 // Call once manually: POST /api/backfill-embeddings with x-nora-manual: true

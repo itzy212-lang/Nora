@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import {renderNoraEmail,configuredNoraEmail} from './_lib/loa-email.js';
 import {createClient} from '@supabase/supabase-js';
 import {getValidMicrosoftToken} from './onedrive-helper.js';

@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { setUsageContext } from './lib/ai-usage.js';
 // api/summarise-knowledge.js
 // One-off ingestion step for the "Your knowledge" box (26 Nov 2026): condenses an
 // uploaded document into a short note the user then reviews and saves themselves.
@@ -23,6 +25,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const userId = await verifyBearerToken(req);
   if (!userId) return res.status(401).json({ error: 'Please sign in again.' });
+  setUsageContext({ userId }); // AI token tracking
 
   const { text, filename } = req.body || {};
   if (!text || String(text).trim().length < 200) {

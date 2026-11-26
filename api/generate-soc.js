@@ -1,3 +1,5 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
+import { setUsageContext } from './lib/ai-usage.js';
 export const config = { maxDuration: 300 };
 
 import { modelFor } from './lib/model-config.js';
@@ -1430,6 +1432,7 @@ export default async function handler(req, res) {
     // project-chat save, doesn't guess an owner) rather than falling
     // back to a hardcoded identity if it's ever missing.
     const socUserId = user_id || null;
+    setUsageContext({ userId: socUserId, projectId: project_id }); // AI token tracking
 
     // Validate ao_id — Supabase expects a UUID; sanitise to null if invalid
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

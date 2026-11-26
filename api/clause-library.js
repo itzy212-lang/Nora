@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/clause-library.js
 // Added 2026-09-10, on request: a small library of the user's own
 // example clauses, semantically searched against a new clause

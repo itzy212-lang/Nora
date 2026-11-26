@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/extract-land-registry.js
 //
 // Reads a HM Land Registry register of title (PDF, or a photo/scan of one) and

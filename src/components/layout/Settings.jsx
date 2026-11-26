@@ -1920,6 +1920,90 @@ function NoticeDomainSettings() {
   </div>;
 }
 
+// AI usage (26 Nov 2026): the signed-in user's own OpenAI token use, from /api/ai-usage.
+function AIUsageCard() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [range, setRange] = useState('today');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: sess } = await sb.auth.getSession();
+        const token = sess?.session?.access_token;
+        const res = await fetch('/api/ai-usage', { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Could not load usage');
+        if (!cancelled) setData(json);
+      } catch (e) { if (!cancelled) setError(e.message); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const nf = n => Number(n || 0).toLocaleString('en-GB');
+  const usd = n => `$${Number(n || 0).toFixed(Number(n) < 1 ? 3 : 2)}`;
+  const p = data?.periods?.[range];
+  const tabBtn = (key, label) => (
+    <button key={key} onClick={() => setRange(key)} style={{
+      padding: '4px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer',
+      border: range === key ? '1px solid var(--blue)' : '1px solid var(--border)',
+      background: range === key ? 'var(--blue-bg)' : 'var(--bg2)',
+      color: range === key ? 'var(--blue)' : 'var(--text2)', fontWeight: 600,
+    }}>{label}</button>
+  );
+  const rowStyle = { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '5px 0', borderBottom: '1px solid var(--border)' };
+
+  return (
+    <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>AI usage</div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Your OpenAI token use, counted per call. Costs are estimates worked out from OpenAI's published prices.</div>
+      {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
+      {!data && !error && <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Loading…</div>}
+      {data && (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {tabBtn('today', 'Today')}{tabBtn('week', '7 days')}{tabBtn('month', '30 days')}
+          </div>
+          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{nf(p.calls)}</div><div style={{ fontSize: 11.5, color: 'var(--text3)' }}>AI calls</div></div>
+            <div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{nf(p.prompt)}</div><div style={{ fontSize: 11.5, color: 'var(--text3)' }}>tokens in</div></div>
+            <div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{nf(p.completion)}</div><div style={{ fontSize: 11.5, color: 'var(--text3)' }}>tokens out</div></div>
+            <div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{p.estimated ? '~' : ''}{usd(p.cost)}</div><div style={{ fontSize: 11.5, color: 'var(--text3)' }}>estimated cost</div></div>
+          </div>
+          {p.truncated > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--amber)', padding: '6px 10px', background: 'var(--bg2)', borderRadius: 8, marginBottom: 10 }}>
+              ⚠️ {p.truncated} {p.truncated === 1 ? 'reply was' : 'replies were'} cut off by the token limit in this period.
+            </div>
+          )}
+          {p.errors > 0 && <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 10 }}>{p.errors} failed {p.errors === 1 ? 'call' : 'calls'} (counted above).</div>}
+          {p.unpricedCalls > 0 && <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 10 }}>{p.unpricedCalls} calls are on a model with no price set, so they are in the token counts but not the cost.</div>}
+          {data.byFeature.length > 0 ? (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>By feature (last 30 days)</div>
+              {data.byFeature.map(f => (
+                <div key={f.feature} style={rowStyle}>
+                  <span style={{ color: 'var(--text)' }}>{f.feature}</span>
+                  <span style={{ color: 'var(--text3)', textAlign: 'right' }}>{nf(f.calls)} calls · {nf(f.prompt + f.completion)} tokens · {f.estimated ? '~' : ''}{usd(f.cost)}</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '12px 0 2px' }}>By model (last 30 days)</div>
+              {data.byModel.map(m => (
+                <div key={m.model} style={rowStyle}>
+                  <span style={{ color: 'var(--text)' }}>{m.model}</span>
+                  <span style={{ color: 'var(--text3)', textAlign: 'right' }}>{nf(m.calls)} calls · {nf(m.prompt + m.completion)} tokens · {m.estimated ? '~' : ''}{usd(m.cost)}</span>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No AI calls recorded yet. Counting started on 26 Nov 2026 and only covers calls made after that.</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('Firm');
 
@@ -1946,7 +2030,7 @@ export default function Settings() {
       {activeTab === 'Invoice' && <InvoiceSettings />}
       {activeTab === 'Integrations' && <IntegrationsSettings />}
       {activeTab === 'Account' && <AccountTab />}
-      {activeTab === 'AI' && <AITab />}
+      {activeTab === 'AI' && <><AIUsageCard /><AITab /></>}
       {activeTab === 'Nora' && <NoraTab />}
     </div>
   );

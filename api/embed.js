@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/embed.js
 // Generates and stores embeddings for project content (emails, chat messages, documents)
 // Called after new content is saved — non-blocking, failure is non-fatal

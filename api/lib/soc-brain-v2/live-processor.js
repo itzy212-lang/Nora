@@ -1,3 +1,4 @@
+import '../ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/lib/soc-brain-v2/live-processor.js
 //
 // Nora SOC v2, Phase C — the live semantic processor's model-calling

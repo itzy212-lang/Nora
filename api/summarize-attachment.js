@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/summarize-attachment.js
 //
 // New endpoint (2026-08-08), part of the attachment save/summarize

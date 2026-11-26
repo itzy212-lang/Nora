@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/soc-vision.js
 // Secure server-side OpenAI vision call for SOC photo descriptions
 // The API key never leaves the server

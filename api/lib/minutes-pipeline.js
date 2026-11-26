@@ -1,3 +1,4 @@
+import './ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import { modelFor, isReasoningModel, instructionRole } from './model-config.js';
 // api/lib/minutes-pipeline.js
 // Weekly Site Minutes — Stage 1 extraction + Stage 2 drafting

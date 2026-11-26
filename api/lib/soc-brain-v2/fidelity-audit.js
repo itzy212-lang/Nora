@@ -1,3 +1,4 @@
+import '../ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/lib/soc-brain-v2/fidelity-audit.js
 //
 // Nora SOC v2, Phase D4 — the Fidelity Audit orchestration.

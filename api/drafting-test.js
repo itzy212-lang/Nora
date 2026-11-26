@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 /**
  * /api/drafting-test
  * Developer-only A/B/C diagnostic endpoint.

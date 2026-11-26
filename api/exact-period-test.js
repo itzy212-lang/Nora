@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/exact-period-test.js
 // Part 2: Exact runtime reconstruction
 // Variant A: current production prompt (as assembled today)

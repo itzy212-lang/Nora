@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/ab-draft-test.js
 // Controlled A/B comparison: full current prompt vs pre-brain-split prompt
 // Variant A: current runtime (knowledge_layer + user_brain included)

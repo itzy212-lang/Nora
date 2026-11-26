@@ -1,3 +1,4 @@
+import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/backfill-email-embeddings.js
 // Recurring repair/recovery backfill of missing embeddings on the emails
 // AND ai_messages tables. Not the primary ingestion mechanism for either —
