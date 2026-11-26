@@ -186,7 +186,6 @@ export default function ChatInputBar({
           placeholder={
             isRecording ? '🔴 Recording… tap mic to stop' :
             isTranscribing ? 'Transcribing…' :
-            loading ? 'Thinking…' :
             placeholder
           }
           rows={2}

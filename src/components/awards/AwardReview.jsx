@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import NoraTyping from '../shared/NoraTyping';
 import { AWARD_REVIEW_SYSTEM_PROMPT } from '../../data/masterAward';
 
 const card = (extra = {}) => ({
@@ -318,9 +319,7 @@ Be direct and practical. When drafting clauses, produce complete ready-to-use wo
                   {msg.content}
                 </div>
               ))}
-              {chatLoading && (
-                <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>✨ Thinking…</div>
-              )}
+              {chatLoading && <NoraTyping />}
               <div ref={chatEndRef} />
             </div>
           )}

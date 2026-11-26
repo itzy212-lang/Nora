@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import useChatName from '../shared/useChatName';
 import { renderMarkdown } from '../../utils/formatters';
 import DraftCard from './DraftCard';
 import { useSpeech } from '../../hooks/useSpeech';
@@ -157,6 +158,7 @@ async function copyToClipboard(text) {
 
 export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttachQuote, onPreviewQuote, onSaveToMemory }) {
   const isUser = msg.role === 'user';
+  const chatName = useChatName();
   const isDraft = msg.messageType === 'draft';
   const [copied, setCopied] = useState(false);
   // Fixed 2026-09-03, on request: replaced this component's own,
@@ -314,6 +316,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--text3)', margin: '0 4px 3px' }}>{isUser ? chatName : 'Nora'}</span>
       <div className={`chat-msg ${isUser ? 'user' : 'ely'} ${isDraft ? 'draft-only' : ''}`}>
         {isUser ? (
           <span

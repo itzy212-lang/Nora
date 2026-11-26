@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import NoraTyping from '../shared/NoraTyping';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText } from './ChatMessage';
@@ -1777,21 +1778,7 @@ export default function MainChat({ onOpenComposer, onClose }) {
 }
 
 function TypingIndicator() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>✨</div>
-      <div style={{ display: 'flex', gap: 4, padding: '10px 14px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 16, borderBottomLeftRadius: 4 }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            width: 6, height: 6, borderRadius: '50%', background: 'var(--blue)',
-            animation: 'blink 1.2s infinite',
-            animationDelay: `${i * 0.2}s`,
-          }} />
-        ))}
-      </div>
-      <style>{`@keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }`}</style>
-    </div>
-  );
+  return <NoraTyping />;
 }
 
 function WelcomeScreen({ onSend, userName }) {

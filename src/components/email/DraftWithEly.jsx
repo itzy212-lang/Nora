@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import NoraTyping from '../shared/NoraTyping';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { normaliseDraftText, splitSubjectFromDraft } from '../chat/ChatMessage';
@@ -396,11 +397,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
             )
           ))}
 
-          {loading && messages.length > 0 && (
-            <div style={{ display: 'flex', gap: 4, padding: '8px 12px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 14, alignSelf: 'flex-start' }}>
-              {[0,1,2].map(i => <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--blue)', animation: 'blink 1.2s infinite', animationDelay: `${i*0.2}s` }} />)}
-            </div>
-          )}
+          {loading && messages.length > 0 && <NoraTyping />}
 
           <div ref={messagesEndRef} />
         </div>

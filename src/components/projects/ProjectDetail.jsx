@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import NoraTyping from '../shared/NoraTyping';
 import { useApp } from '../../state/appStore';
 import TaskEditModal from './TaskEditModal';
 import LandRegistryUpload from './LandRegistryUpload';
@@ -3013,11 +3014,7 @@ function ProjectChat({ project, onOpenComposer }) {
 })}
 
 
-          {loading && (
-            <div style={{ alignSelf: 'flex-start', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 12, fontSize: 13, color: 'var(--text3)' }}>
-              ✨ Thinking...
-            </div>
-          )}
+          {loading && <NoraTyping />}
 
           <div ref={endRef} />
         </div>

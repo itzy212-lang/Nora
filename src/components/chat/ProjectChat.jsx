@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import NoraTyping from '../shared/NoraTyping';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
 import ChatMessage, { parseAoSubjectRef } from './ChatMessage';
@@ -1304,32 +1305,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
               </div>
             ))}
 
-            {loading && (
-              <div style={{
-                display: 'flex',
-                gap: 4,
-                padding: '10px 14px',
-                background: 'var(--bg3)',
-                border: '1px solid var(--border)',
-                borderRadius: 16,
-                borderBottomLeftRadius: 4,
-                alignSelf: 'flex-start',
-              }}>
-                {[0, 1, 2].map(i => (
-                  <div
-                    key={i}
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: 'var(--blue)',
-                      animation: 'blink 1.2s infinite',
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            {loading && <NoraTyping />}
 
             <div ref={messagesEndRef} />
           </div>
@@ -1521,7 +1497,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                   value={input}
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={loading ? 'Nora is thinking...' : `Ask about ${projectRef || 'this project'}...`}
+                  placeholder={`Ask about ${projectRef || 'this project'}...`}
                   rows={1}
                   style={{
                     flex: 1, background: 'var(--bg3)', border: '1.5px solid var(--border)',
