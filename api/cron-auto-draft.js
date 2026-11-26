@@ -7,6 +7,7 @@ import { processLeadEmails, isFromLeadSender } from './lib/lead-autoreply.js';
 export const config = { maxDuration: 120 };
 
 import { createClient } from '@supabase/supabase-js';
+import { appointmentTitle } from './lib/appointment-title.js';
 
 const SKIP_SENDERS = [
   'noreply', 'no-reply', 'donotreply', 'do-not-reply',
@@ -2038,7 +2039,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 // commitment with no specific time was never captured
                 // at all, since the model had no way to say "confirmed,
                 // but no time".
-                { role: 'developer', content: 'You extract confirmed appointment commitments from email threads. Respond only with valid JSON or null. If a day or a call/meeting has genuinely been committed to in the thread (not just proposed and left open), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM or null if no specific time was actually agreed", "duration_minutes": 30, "title": "Call with [name]", "description": "brief context"}. duration_minutes should reflect the real, stated length if one was given in the thread, and default to 30 (the minimum) if only a specific time was agreed with no stated length — never below 30. If no specific time was agreed at all, set time to null; do not invent one. If nothing has genuinely been committed to, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
+                { role: 'developer', content: 'You extract confirmed appointment commitments from email threads. Respond only with valid JSON or null. If a day or a call/meeting has genuinely been committed to in the thread (not just proposed and left open), return: {"confirmed": true, "date": "YYYY-MM-DD", "time": "HH:MM or null if no specific time was actually agreed", "duration_minutes": 30, "title": "short title naming the real kind of appointment and where, e.g. Schedule of Condition inspection - [address], Site visit - [address], Meeting with [name], Call with [name]", "description": "brief context"}. Only use Call with when it genuinely is a phone or video call; an inspection, survey or site visit is never a call. duration_minutes should reflect the real, stated length if one was given in the thread, and default to 30 (the minimum) if only a specific time was agreed with no stated length — never below 30. If no specific time was agreed at all, set time to null; do not invent one. If nothing has genuinely been committed to, return: {"confirmed": false}. Today is ' + new Date().toISOString().split('T')[0] + '.' },
                 { role: 'user', content: 'EMAIL FROM: ' + (email.sender_name || email.sender_email) + '\nSUBJECT: ' + email.subject + '\nBODY: ' + plainTextBody(email).slice(0, 2000) + '\n\n' + (projectContext || '') },
               ],
             }),
@@ -2079,7 +2080,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
               // rather than the real error. Letting it propagate to
               // that existing outer catch is simplest and correct.
               await supabase.from('calendar_events').insert({
-                title: appt.title || 'Call with ' + (email.sender_name || email.sender_email),
+                title: appointmentTitle(appt, email),
                 description: (appt.description || 'Auto-booked from email: ' + email.subject) + (isAllDay ? ' (no specific time agreed)' : ''),
                 start_time: startDt.toISOString(),
                 end_time: endDt.toISOString(),
@@ -2089,7 +2090,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
                 created_by: 'cron-auto-draft',
               });
 
-              console.log('[cron-auto-draft] Booked calendar event:', appt.title, appt.date, hasSpecificTime ? appt.time : '(all-day, no specific time)');
+              console.log('[cron-auto-draft] Booked calendar event:', appointmentTitle(appt, email), appt.date, hasSpecificTime ? appt.time : '(all-day, no specific time)');
             }
           }
         } catch (calErr) {
