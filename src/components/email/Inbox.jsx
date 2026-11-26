@@ -791,7 +791,7 @@ ${threadText}`;
                             workingDraftRef.current = msg.draft;
                             setWorkingDraft(msg.draft);
                             const htmlDraft = msg.draft && !msg.draft.trim().startsWith('<')
-                              ? msg.draft.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+                              ? toHtml(msg.draft, { gap: null })
                               : msg.draft || '';
                             if (onSendWithDraft) {
                             onSendWithDraft({ to: email?.sender_email || '', subject: `Re: ${email?.subject || ''}`, body: htmlDraft });
@@ -1063,9 +1063,7 @@ function ReplyOverlay({ email, mode, threadEmails, onSend, onClose, prefillBody,
     raw = raw.replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,');
     raw = raw.replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,');
     const html = raw && !raw.trim().startsWith('<')
-      ? raw.split(/\n\n+/).map((p, i, arr) =>
-          `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
-        ).join('')
+      ? toHtml(raw)
       : raw || '';
     setBody(html);
     if (bodyEditorRef.current) {

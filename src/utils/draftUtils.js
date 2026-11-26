@@ -96,37 +96,78 @@ export function stripEmbeddedImagesFromQuote(html) {
 }
 
 /**
- * Convert plain text to HTML paragraphs.
+ * Convert plain text to email-safe HTML.
  * If already HTML, returns as-is.
- * Preserves paragraph breaks (double newline → <p>) and line breaks (single newline → <br>).
- * A block where every line starts "N. " (a genuine numbered list, one
- * item per line) renders as a real <ol><li> list instead of <br>-
- * separated text - added 2026-09-20, since a numbered list read back
- * as one flat, line-broken paragraph doesn't actually look like a
- * list to the recipient, just a wall of text with numbers in it.
+ * Blank line -> new paragraph; single newline -> <br>.
+ * Bullet lines ("- ", "* ", "\u2022 ") become a real <ul> list and numbered lines
+ * ("1. " / "1) ", two or more together) a real <ol>, wherever they sit: on
+ * their own, or straight after an intro line ("Points raised:"). Items
+ * separated by blank lines still join into one list. Rendered as genuine
+ * lists so they survive sending as bullets in Outlook and Gmail, instead of
+ * a wall of hyphens.
+ *
+ * opts.gap   - space after each paragraph/list (default '10px'); null gives
+ *              bare <p> tags with the client's default spacing.
+ * opts.last  - space after the final element (default '0').
  */
-export function toHtml(text) {
+const BULLET_RE = /^[-*\u2022\u00b7\u2013]\s+/;
+const NUMBER_RE = /^\d+[.)]\s+/;
+
+export function toHtml(text, opts = {}) {
   if (!text) return '';
   if (typeof text !== 'string') return '';
   if (text.trim().startsWith('<')) return text; // already HTML
-  return text
-    .split(/\n\n+/)
-    .map(p => p.trim())
-    .filter(Boolean)
-    .map((p, i, arr) => {
-      const isLast = i === arr.length - 1;
-      const margin = isLast ? '0' : '0 0 10px 0';
+  const gap = opts.gap === undefined ? '10px' : opts.gap;
+  const lastGap = opts.last === undefined ? '0' : opts.last;
 
-      const lines = p.split('\n').map(l => l.trim()).filter(Boolean);
-      const isNumberedList = lines.length >= 2 && lines.every(l => /^\d+\.\s+/.test(l));
-      if (isNumberedList) {
-        const items = lines.map(l => `<li style="margin-bottom:6px">${l.replace(/^\d+\.\s+/, '')}</li>`).join('');
-        return `<ol style="margin:${margin};padding-left:22px">${items}</ol>`;
-      }
+  // 1. Split into blocks, then each block into runs of text / bullets / numbers.
+  const segments = []; // { type: 'p'|'ul'|'ol', lines: [], sameBlockAsPrev: bool }
+  text.split(/\n\n+/).map(b => b.trim()).filter(Boolean).forEach(block => {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    let blockSegs = [];
+    lines.forEach(l => {
+      const type = BULLET_RE.test(l) ? 'ul' : NUMBER_RE.test(l) ? 'ol' : 'p';
+      const last = blockSegs[blockSegs.length - 1];
+      const item = type === 'ul' ? l.replace(BULLET_RE, '') : type === 'ol' ? l.replace(NUMBER_RE, '') : l;
+      if (last && last.type === type) last.lines.push(item);
+      else blockSegs.push({ type, lines: [item] });
+    });
+    // A lone numbered line is just text, not a list.
+    blockSegs = blockSegs.map(sg => (sg.type === 'ol' && sg.lines.length < 2
+      ? { type: 'p', lines: sg.lines.map((x, i) => (i === 0 ? '1. ' : '') + x) } : sg));
+    // Merge neighbouring text runs created by the step above.
+    blockSegs = blockSegs.reduce((acc, sg) => {
+      const prev = acc[acc.length - 1];
+      if (prev && prev.type === 'p' && sg.type === 'p') prev.lines.push(...sg.lines); else acc.push(sg);
+      return acc;
+    }, []);
+    blockSegs.forEach((sg, i) => segments.push({ ...sg, joinsPrev: i > 0 }));
+  });
 
-      return `<p style="margin:${margin}">${p.replace(/\n/g, '<br>')}</p>`;
-    })
-    .join('');
+  // 2. Items separated by blank lines still belong to one list.
+  const merged = [];
+  segments.forEach(sg => {
+    const prev = merged[merged.length - 1];
+    if (prev && sg.type !== 'p' && prev.type === sg.type && !sg.joinsPrev) prev.lines.push(...sg.lines);
+    else merged.push({ ...sg });
+  });
+
+  // 3. Render.
+  return merged.map((sg, i) => {
+    const isLast = i === merged.length - 1;
+    const next = merged[i + 1];
+    // An intro line sits close to the list that follows it.
+    const introGap = sg.type === 'p' && next && next.type !== 'p' && next.joinsPrev ? '4px' : gap;
+    const margin = isLast ? lastGap : introGap;
+    if (sg.type === 'p') {
+      const inner = sg.lines.join('<br>');
+      return gap === null ? `<p>${inner}</p>` : `<p style="margin:0 0 ${margin} 0">${inner}</p>`;
+    }
+    const tag = sg.type;
+    const style = `margin:0 0 ${margin === null ? '10px' : margin} 0;padding-left:22px;list-style-type:${tag === 'ul' ? 'disc' : 'decimal'}`;
+    const items = sg.lines.map(x => `<li style="margin-bottom:4px">${x}</li>`).join('');
+    return `<${tag} style="${style}">${items}</${tag}>`;
+  }).join('');
 }
 
 /**

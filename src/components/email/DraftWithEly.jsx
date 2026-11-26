@@ -189,10 +189,7 @@ export default function DraftWithEly({ email, threadId, projectId, onUseDraft, o
 
     if (!cleanBody) return;
 
-    const htmlBody = cleanBody
-      .split(/\n\n+/)
-      .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-      .join('');
+    const htmlBody = toHtml(cleanBody, { gap: null });
 
     onUseDraft?.(htmlBody);
     setVoiceStopSignal(v => v + 1);

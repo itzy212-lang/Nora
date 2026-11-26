@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { toHtml } from '../../utils/draftUtils';
 import useChatName from '../shared/useChatName';
 import { renderMarkdown } from '../../utils/formatters';
 import DraftCard from './DraftCard';
@@ -219,10 +220,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
       .replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,')
       .trim();
 
-    const htmlBody = cleanBody
-      .split(/\n\n+/)
-      .map((para, i, arr) => `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${para.replace(/\n/g, '<br>')}</p>`)
-      .join('');
+    const htmlBody = toHtml(cleanBody);
 
     const aoAddresses = parseAoSubjectRef(replyText);
 
@@ -333,7 +331,7 @@ export default function ChatMessage({ msg, onUseDraft, onOpenInComposer, onAttac
             dangerouslySetInnerHTML={{
               __html: displayDraftText.trim().startsWith('<')
                 ? displayDraftText
-                : displayDraftText.split(/\n\n+/).filter(Boolean).map(p => `<p style="margin:0 0 0.75em 0">${p.replace(/\n/g, '<br>')}</p>`).join('')
+                : toHtml(displayDraftText, { gap: '0.75em', last: '0.75em' })
             }}
           />
         ) : (

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { toHtml } from '../../utils/draftUtils';
 import NoraTyping from '../shared/NoraTyping';
 import { useEly } from '../../hooks/useEly';
 import { useApp } from '../../state/appStore';
@@ -1252,9 +1253,7 @@ export default function ProjectChat({ project, onOpenComposer, onClose }) {
                     raw = raw.replace(/(Kind regards,?\s*)\n[\s\S]{0,50}$/i, 'Kind regards,');
                     raw = raw.replace(/\n(Best regards|Best|Regards|Cheers|Warm regards),?[\s\S]{0,80}$/i, '\n\nKind regards,');
                     const isHtml = raw.trim().startsWith('<');
-                    const htmlBody = isHtml ? raw : raw.split(/\n\n+/).map((p, i, arr) =>
-                      `<p style="margin:${i===arr.length-1?'0':'0 0 10px 0'}">${p.replace(/\n/g, '<br>')}</p>`
-                    ).join('');
+                    const htmlBody = isHtml ? raw : toHtml(raw);
                     const projectAddress = project?.bo_premise_address || project?.address || project?.name || '';
                     const composerSubject = projectAddress
                       ? `Party Wall etc. Act 1996 -- ${projectAddress}`

@@ -1,4 +1,5 @@
 import { getCurrentUserEmail, getUserStorageInfo } from './utils/getCurrentUserEmail';
+import { toHtml } from './utils/draftUtils';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from './state/appStore';
 import { useProjects } from './hooks/useProjects';
@@ -409,10 +410,7 @@ export default function App() {
       // Convert plain text to HTML paragraphs — centralised fix for all composer paths
       opts = {
         ...opts,
-        body: opts.body
-          .split(/\n\n+/)
-          .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-          .join(''),
+        body: toHtml(opts.body, { gap: null }),
       };
     }
     setComposerOpts(opts || { mode: 'compose' });
