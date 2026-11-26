@@ -18,6 +18,7 @@
 // where source_item_ids and row_id are left completely untouched;
 // only the observation text ever changes.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { USER_SOC_BRAIN_V2, buildUserSocBrainContext } from './user-soc-brain.js';
 import { QUALITY_AUDIT_CONTRACT } from './quality-audit-contract.js';
@@ -29,9 +30,9 @@ import { mapWithConcurrency } from './concurrency.js';
  * Falls back to gpt-4o on failure, same as the established precedent.
  * Phase C's own model is untouched by this or any other D-phase work.
  */
-async function callQualityModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callQualityModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_quality_audit').model, fallbackModel = modelFor('soc_quality_audit').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

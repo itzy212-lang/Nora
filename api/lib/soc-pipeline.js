@@ -1,6 +1,7 @@
 // api/lib/soc-pipeline.js
 // SOC pipeline: claim extraction, professional drafting, completeness audit.
 
+import { modelFor, instructionRole } from './model-config.js';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -1730,9 +1731,10 @@ END OF COMPLETE REFERENCE DOCUMENT`;
 
 // ─── Stage 2: Professional drafting — section-level, direct rows ───────────────
 export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, rawNotes) {
-  const resolvedMode = 'gpt-5.6-terra'; // Stage 2 hardcoded to Terra
-  const model = 'gpt-5.6-terra';
-  const params = { max_completion_tokens: 128000 };
+  const stage2Config = modelFor('soc_legacy_draft');
+  const resolvedMode = stage2Config.model;
+  const model = stage2Config.model;
+  const params = { max_completion_tokens: stage2Config.maxCompletionTokens };
 
   const boAddress     = projectMeta.bo_address    || 'Not provided';
   const aoAddress     = projectMeta.ao_address    || 'Not provided';
@@ -1832,7 +1834,7 @@ export async function draftFromClaims(claims, projectMeta, apiKey, modelMode, ra
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: m, ...p, messages: [
-          { role: m.startsWith('gpt-5.6') ? 'developer' : 'system', content: activeSystem },
+          { role: instructionRole(m), content: activeSystem },
           { role: 'user', content: userPrompt },
         ]}),
         signal: controller.signal,

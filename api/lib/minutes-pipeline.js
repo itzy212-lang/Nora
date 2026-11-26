@@ -1,3 +1,4 @@
+import { modelFor } from './model-config.js';
 // api/lib/minutes-pipeline.js
 // Weekly Site Minutes — Stage 1 extraction + Stage 2 drafting
 // Mirrors the SOC pipeline architecture: dictation -> structured claims -> professional draft
@@ -99,7 +100,7 @@ async function extractMinutesClaims(noteText, priorNotesText, roomNames, apiKey)
     (priorNotesText ? `PRIOR NOTES THIS SESSION (for context only, do not re-extract):\n${priorNotesText}\n\n` : '') +
     `NEW NOTE TO EXTRACT:\n${noteText}`;
 
-  const model = process.env.MINUTES_EXTRACT_MODEL || 'gpt-4o';
+  const model = process.env.MINUTES_EXTRACT_MODEL || modelFor('minutes_extract').model;
   const result = await callOpenAI(model, EXTRACTION_SYSTEM, userPrompt, apiKey);
   return Array.isArray(result.claims) ? result.claims : [];
 }
@@ -115,7 +116,7 @@ async function draftMinutes(claims, projectMeta, apiKey) {
     `VISIT: ${projectMeta.week_label || ''} -- ${projectMeta.visit_date || ''}\n\n` +
     `ACTIVE CLAIMS:\n${claimsText}`;
 
-  const model = process.env.MINUTES_DRAFT_MODEL || 'gpt-5.6-terra';
+  const model = process.env.MINUTES_DRAFT_MODEL || modelFor('minutes_draft').model;
   return await callOpenAI(model, DRAFTING_SYSTEM, userPrompt, apiKey);
 }
 

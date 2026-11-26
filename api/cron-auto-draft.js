@@ -8,6 +8,7 @@ export const config = { maxDuration: 120 };
 
 import { createClient } from '@supabase/supabase-js';
 import { appointmentTitle } from './lib/appointment-title.js';
+import { modelFor } from './lib/model-config.js';
 
 const SKIP_SENDERS = [
   'noreply', 'no-reply', 'donotreply', 'do-not-reply',
@@ -1943,7 +1944,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: 'gpt-5.6-terra',
+              model: modelFor('email_draft_auto').model,
               // Fixed: confirmed live, a real draft attempt failed with
               // "Empty draft" - gpt-5.6-terra is a reasoning model, and
               // internal reasoning tokens count against the same budget
@@ -2016,7 +2017,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
           to_name: email.sender_name,
           status: 'pending',
           generated_by: 'cron-auto-draft',
-          model: 'gpt-5.6-terra',
+          model: modelFor('email_draft_auto').model,
         }).select('id').single();
 
         if (saveError) throw saveError;

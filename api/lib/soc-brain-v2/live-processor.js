@@ -11,6 +11,7 @@
 // "guarantee this invariant" (code) — stay genuinely separate, matching
 // the governing principle throughout the v2 specifications.
 
+import { modelFor, isReasoningModel, tokenParams, instructionRole } from '../model-config.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { LIVE_PROCESSING_CONTRACT } from './live-processing-contract.js';
 import { buildSectionIndexText } from './live-state.js';
@@ -105,7 +106,7 @@ function buildUserPrompt({ context, pendingClarification, noteText }) {
  * ("a failed semantic-processing call must remain visible... not
  * silently disappear").
  */
-export async function callLiveSemanticProcessor({ apiKey, context, pendingClarification, noteText, model = 'gpt-4o' }) {
+export async function callLiveSemanticProcessor({ apiKey, context, pendingClarification, noteText, model = modelFor('soc_live').model }) {
   const userPrompt = buildUserPrompt({ context, pendingClarification, noteText });
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -113,9 +114,13 @@ export async function callLiveSemanticProcessor({ apiKey, context, pendingClarif
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      response_format: { type: 'json_object' },
+      // Same request as before for gpt-4o. A reasoning model (if this function is ever pointed
+      // at one via NORA_MODEL_SOC_LIVE) gets its own parameter shape instead.
+      ...(isReasoningModel(model)
+        ? tokenParams(model, { maxTokens: 8000, reasoningEffort: modelFor('soc_live').reasoningEffort || 'low' })
+        : { response_format: { type: 'json_object' } }),
       messages: [
-        { role: 'system', content: UNIVERSAL_SOC_BRAIN_V2 + '\n\n' + LIVE_PROCESSING_CONTRACT },
+        { role: instructionRole(model), content: UNIVERSAL_SOC_BRAIN_V2 + '\n\n' + LIVE_PROCESSING_CONTRACT },
         { role: 'user', content: userPrompt },
       ],
     }),
@@ -130,7 +135,7 @@ export async function callLiveSemanticProcessor({ apiKey, context, pendingClarif
   const raw = data.choices?.[0]?.message?.content || '';
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(isReasoningModel(model) ? raw.replace(/^[`]{3}(?:json)?[\s]*/m, '').replace(/[\s]*[`]{3}$/m, '').trim() : raw);
   } catch (e) {
     throw new Error(`Live processing model returned unparseable JSON: ${e.message}`);
   }

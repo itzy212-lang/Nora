@@ -28,6 +28,7 @@
 // conversational material is not a matter of the model choosing
 // correctly, it is evidence that was never in front of it to choose.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { reconcile } from './reconciliation.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { USER_SOC_BRAIN_V2, buildUserSocBrainContext } from './user-soc-brain.js';
@@ -54,9 +55,9 @@ function generateRowId() {
  * during D2) is deliberately left untouched — this is a separate
  * model choice for a separate stage, not a change to Phase C.
  */
-async function callDraftingModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callDraftingModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_draft').model, fallbackModel = modelFor('soc_draft').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

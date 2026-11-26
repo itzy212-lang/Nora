@@ -38,6 +38,7 @@
 // (explicitly accounted-for non-evidence), or a recovered item (raw
 // detail genuinely missing from state) - never silently dropped.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { assembleCanonicalGenerationInput } from './generation-input.js';
 import { RECONCILIATION_CONTRACT } from './reconciliation-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
@@ -232,9 +233,9 @@ function wordOverlapSignal(noteText, claims) {
  * draft only because it was this module's own, unexamined default -
  * not for any technical reason; there is none.
  */
-async function callReconciliationModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callReconciliationModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_reconcile').model, fallbackModel = modelFor('soc_reconcile').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -280,7 +281,7 @@ async function checkNoteCompleteness({ apiKey, model, sectionName, note, claims 
     apiKey,
     systemContent: UNIVERSAL_SOC_BRAIN_V2 + '\n\n' + RECONCILIATION_CONTRACT,
     userPrompt,
-    primaryModel: model || 'gpt-5.6-terra',
+    primaryModel: model || modelFor('soc_reconcile').model,
   });
 }
 

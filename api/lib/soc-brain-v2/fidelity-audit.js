@@ -22,6 +22,7 @@
 // repair and D5 rewrite, so findings and audit trails stay correctly
 // attached to the same logical observation even as its text changes.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { assembleCanonicalGenerationInput } from './generation-input.js';
 import { FIDELITY_AUDIT_CONTRACT } from './fidelity-audit-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
@@ -257,9 +258,9 @@ function runDeterministicChecks(draftResult, authoritativeSections) {
 
 // ─── AI semantic audit (per section, matching D3's own isolation) ───
 
-async function callAuditModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callAuditModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_fidelity_audit').model, fallbackModel = modelFor('soc_fidelity_audit').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

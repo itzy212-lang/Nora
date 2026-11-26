@@ -15,6 +15,7 @@
 // version of a sentence; its only actions per row are accept D5,
 // revert to D4, or (for a genuine structural anomaly) flag loudly.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { FACTUAL_GUARD_CONTRACT } from './factual-guard-contract.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 import { mapWithConcurrency } from './concurrency.js';
@@ -76,9 +77,9 @@ function runDeterministicChecks(d4Row, d5Row, blockedRowIds) {
   return { findings, wordingChanged, isBlocked };
 }
 
-async function callGuardModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callGuardModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_factual_guard').model, fallbackModel = modelFor('soc_factual_guard').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

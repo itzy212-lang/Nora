@@ -2,6 +2,7 @@
 // Ely/Nora smart route - project-hydrated collaboration version
 // Global behaviour: analyse first, draft only when clearly requested.
 
+import { modelFor, tokenParams } from './lib/model-config.js';
 import { createClient } from '@supabase/supabase-js';
 import { waitUntil } from '@vercel/functions';
 // PHASE V2 — isolated architecture path. V1's brain-content rows and its
@@ -864,8 +865,8 @@ async function generateStage1Brief({
   const stage1System = buildStage1SystemPrompt();
 
   const stage1Payload = {
-    model: 'gpt-5.6-terra',
-    reasoning_effort: process.env.STAGE1_REASONING_EFFORT || process.env.DRAFTING_REASONING_EFFORT || 'medium',
+    model: modelFor('chat_stage1').model,
+    reasoning_effort: process.env.STAGE1_REASONING_EFFORT || process.env.DRAFTING_REASONING_EFFORT || modelFor('chat_stage1').reasoningEffort,
     max_completion_tokens: STAGE1_COMPLETION_TOKEN_LIMIT,
     response_format: { type: 'json_object' },
     messages: [
@@ -1015,7 +1016,7 @@ async function logStage1Diagnostics({ projectId, userId, surface, userPrompt, di
       project_id: projectId || null,
       user_id: userId || null,
       surface: surface || null,
-      model: 'gpt-5.6-terra',
+      model: modelFor('chat_stage1').model,
       prompt_snippet: (userPrompt || '').slice(0, 200),
       brief: envelope,
       stage1_tokens_used: result.tokensUsed,
@@ -1314,7 +1315,8 @@ async function runV2Pipeline({
     inboxSearchContext,
   });
 
-  const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || 'medium';
+  const mainModelConfig = modelFor('chat_main');
+  const requestedReasoningEffort = process.env.DRAFTING_REASONING_EFFORT || mainModelConfig.reasoningEffort;
   let modelReturned = null;
   let observedReasoningTokens = null;
   let fallbackOccurred = false;
@@ -1326,9 +1328,8 @@ async function runV2Pipeline({
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
       body: JSON.stringify({
-        model: 'gpt-5.6-terra',
-        reasoning_effort: requestedReasoningEffort,
-        max_completion_tokens: 3500,
+        model: mainModelConfig.model,
+        ...tokenParams(mainModelConfig.model, { maxTokens: mainModelConfig.maxCompletionTokens, reasoningEffort: requestedReasoningEffort }),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
@@ -1338,7 +1339,7 @@ async function runV2Pipeline({
     if (res.ok) {
       const data = await res.json();
       replyText = data.choices?.[0]?.message?.content || '';
-      modelReturned = data.model || 'gpt-5.6-terra';
+      modelReturned = data.model || mainModelConfig.model;
       observedReasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens ?? null;
     } else {
       const errBody = await res.json().catch(() => ({}));

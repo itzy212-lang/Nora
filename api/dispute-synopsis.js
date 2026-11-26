@@ -1,3 +1,4 @@
+import { modelFor, tokenParams } from './lib/model-config.js';
 import { createClient } from '@supabase/supabase-js';
 
 function getSupabase(){
@@ -30,13 +31,13 @@ export default async function handler(req,res){
     const system=`You are Nora, the private case analyst for an independent mediator or project manager. Analyse only the supplied dispute intake and supporting material. Compare the parties. Do not decide liability or invent facts. Treat assertions as allegations unless supported or agreed. Distinguish positions, evidence, inference and missing information. Produce a practical mediator working brief: what each party wants, strengths and weaknesses, unsupported or inconsistent points, missing evidence, common ground, pressure points to test, and realistic settlement opportunities. Return valid JSON only.`;
     const schema=`Use exactly these keys: executive_summary:string, dispute_synopsis:string, party_summaries:array of {party,name,position,outcome_sought,key_points}, party_assessments:array of {party,strengths,weaknesses,unsupported_points,leverage_points}, agreed_or_common_facts:array, disputed_facts:array, financial_claims:array, workmanship_issues:array, programme_delay_issues:array, contractual_issues:array, relationship_communication_issues:array, possible_common_ground:array, mediator_pressure_points:array, settlement_opportunities:array, resolution_pathway:string, resolution_steps:array, likely_settlement_blockers:array, mediator_questions_to_explore:array, alternative_exit_path:string, missing_information:array, preparation_points:array. If unsupported use [] or ''.`;
 
+    const disputeModel=modelFor('dispute_analysis');
     const response=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.OPENAI_API_KEY}`},
       body:JSON.stringify({
-        model:'gpt-5.6-terra',
-        reasoning_effort:'medium',
-        max_completion_tokens:9000,
+        model:disputeModel.model,
+        ...tokenParams(disputeModel.model,{maxTokens:disputeModel.maxCompletionTokens,reasoningEffort:disputeModel.reasoningEffort}),
         response_format:{type:'json_object'},
         messages:[{role:'system',content:system},{role:'user',content:`${schema}\n\nDISPUTE INTAKE:\n${JSON.stringify(intake)}`}]
       })
@@ -46,7 +47,7 @@ export default async function handler(req,res){
     const raw=data?.choices?.[0]?.message?.content||'';
     const parsed=extractJson(raw);
     if(!parsed)throw new Error('Nora did not return a complete structured synopsis.');
-    return res.status(200).json({reply:JSON.stringify(parsed),model:data.model||'gpt-5.6-terra',mode:'discuss'});
+    return res.status(200).json({reply:JSON.stringify(parsed),model:data.model||disputeModel.model,mode:'discuss'});
   }catch(err){
     console.error('[dispute-synopsis]',err);
     return res.status(500).json({error:err.message||'Could not generate dispute synopsis'});

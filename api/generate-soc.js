@@ -1,5 +1,6 @@
 export const config = { maxDuration: 300 };
 
+import { modelFor } from './lib/model-config.js';
 import { createClient } from '@supabase/supabase-js';
 import {
   draftFromClaims,
@@ -1141,7 +1142,7 @@ export async function extractStructuredDataLegacy(message, projectMeta, apiKey, 
   let draftedResult;
   let draftMeta = {};
   try {
-    const socDraftModel = process.env.SOC_DRAFT_MODEL || 'gpt-5.6-terra';
+    const socDraftModel = process.env.SOC_DRAFT_MODEL || modelFor('soc_legacy_draft').model;
     // Build rawNotesBySeq map so drafting model can read original context
     const rawNoteLines = (message || '').split(/\n+/).filter(l => l.trim());
     const rawNotesBySeq = {};
@@ -1180,7 +1181,7 @@ export async function extractStructuredDataLegacy(message, projectMeta, apiKey, 
       const fbRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-5.6-terra', max_completion_tokens: 8000,
+        body: JSON.stringify({ model: modelFor('soc_legacy_draft').model, max_completion_tokens: 8000,
           messages: [{ role: 'system', content: GENERATOR_SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] }),
       });
       if (fbRes.ok) {
@@ -1264,7 +1265,7 @@ export async function extractStructuredDataLegacy(message, projectMeta, apiKey, 
     claims_extracted: claims.length,
     claims_from_live: claimsFromLive,
     generation_status: status,
-    drafting_model: draftMeta.drafting_model || 'gpt-5.6-terra',
+    drafting_model: draftMeta.drafting_model || modelFor('soc_legacy_draft').model,
     drafting_model_key: draftMeta.model_key || 'gpt4o',
     drafting_latency_ms: draftMeta.total_latency_ms || 0,
     drafting_tokens: { input: draftMeta.total_input_tokens || 0, output: draftMeta.total_output_tokens || 0, reasoning: draftMeta.total_reasoning_tokens || 0 },

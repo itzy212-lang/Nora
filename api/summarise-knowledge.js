@@ -3,6 +3,7 @@
 // uploaded document into a short note the user then reviews and saves themselves.
 // This is not a user-facing answer, so it is outside the single-call-per-request
 // rule (NORA_V2_OPERATING_SYSTEM.md section 4); nothing is saved here.
+import { modelFor } from './lib/model-config.js';
 import { createClient } from '@supabase/supabase-js';
 import { buildSummaryMessages } from './lib/user-knowledge.js';
 
@@ -32,8 +33,8 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: 'gpt-5.6-terra',
-        max_completion_tokens: 900,
+        model: modelFor('project_memory').model,
+        max_completion_tokens: modelFor('project_memory').maxCompletionTokens,
         messages: buildSummaryMessages(text, filename),
       }),
     });

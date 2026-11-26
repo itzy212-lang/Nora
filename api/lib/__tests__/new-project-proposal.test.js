@@ -73,7 +73,7 @@ describe('surface contract ownership', () => {
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(resolve(__dirname, '../../ely-smart.js'), 'utf8');
     const pipeline = source.slice(source.indexOf('async function runV2Pipeline('));
-    const terraCalls = (pipeline.slice(0, pipeline.indexOf('\n}\n')).match(/model: 'gpt-5\.6-terra'/g) || []).length;
+    const terraCalls = (pipeline.slice(0, pipeline.indexOf('\n}\n')).match(/model: mainModelConfig\.model/g) || []).length;
     expect(terraCalls).toBe(1);
     expect(source).toContain('splitNewProjectProposal(replyText)');
   });

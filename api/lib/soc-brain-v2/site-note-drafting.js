@@ -12,6 +12,7 @@
 // bound to the dictated facts - it must never add, infer, or imply
 // anything the surveyor did not actually say.
 
+import { modelFor, isReasoningModel } from '../model-config.js';
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 
 export const SITE_NOTE_DRAFTING_CONTRACT_VERSION = 'v1.2.0';
@@ -69,9 +70,9 @@ If a note's dictated content is already concise and professional, return it with
 // is small and single-purpose, unlike D3-D6 which each warrant their
 // own module.
 
-async function callSiteNoteModel({ apiKey, systemContent, userPrompt, primaryModel = 'gpt-5.6-terra', fallbackModel = 'gpt-4o' }) {
+async function callSiteNoteModel({ apiKey, systemContent, userPrompt, primaryModel = modelFor('soc_site_notes').model, fallbackModel = modelFor('soc_site_notes').fallbackModel }) {
   async function attempt(model) {
-    const isTerra = model.startsWith('gpt-5.6');
+    const isTerra = isReasoningModel(model);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

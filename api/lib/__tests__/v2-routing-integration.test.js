@@ -68,7 +68,9 @@ describe('V1/V2 routing — structural guarantees', () => {
     const fetchMatches = pipelineBody.match(/await fetch\(/g) || [];
     expect(fetchMatches.length).toBe(1);
     expect(pipelineBody).not.toContain("'gpt-4o'");
-    expect(pipelineBody).toContain("model: 'gpt-5.6-terra'");
+    // Model now comes from the central config (api/lib/model-config.js), not a literal.
+    expect(pipelineBody).toContain("model: mainModelConfig.model");
+    expect(pipelineBody).toContain("modelFor('chat_main')");
     expect(pipelineBody).not.toMatch(/temperature/);
   });
 
