@@ -503,29 +503,9 @@ export default function ProjectList({ onOpenProject }) {
         />
       )}
 
-      {/* Added 2026-08-21, on request: Active/Quotes tabs — leads
-          shouldn't appear alongside real active projects by default. */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {[
-          { key: 'active', label: 'Active' },
-          { key: 'quotes', label: 'Quotes' },
-        ].map(t => (
-          <button key={t.key} onClick={() => setProjectTab(t.key)}
-            style={{
-              padding: '7px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              border: projectTab === t.key ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-              background: projectTab === t.key ? '#eff6ff' : '#fff',
-              color: projectTab === t.key ? '#1e40af' : '#6b7280',
-            }}>
-            {t.label}
-            {t.key === 'quotes' && (
-              <span style={{ marginLeft: 6, opacity: 0.7 }}>
-                {projects.filter(p => p.stage === 'lead' && p.project_type !== 'dispute').length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* Changed 26 Nov 2026, on request: the separate Active/Quotes pills are gone. One
+          dropdown in the toolbar below now switches between Active, Quotes and the other
+          status views, so the toolbar is a single neat row. */}
 
       {/* ── Toolbar ── */}
       {(() => {
@@ -547,25 +527,32 @@ export default function ProjectList({ onOpenProject }) {
               />
             )}
 
-            {/* Status filter — only meaningful on the Active tab */}
-            {projectTab === 'active' && (
-              <select
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-                style={{
-                  padding: '8px 10px', fontSize: 13,
-                  background: '#ffffff', border: '1px solid #e5e7eb',
-                  borderRadius: 12, color: 'var(--text)', cursor: 'pointer',
-                }}
-              >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="award_served">Award Served</option>
-                <option value="complete">Complete</option>
-                <option value="on_hold">On hold</option>
-                <option value="dispute">Dispute</option>
-              </select>
-            )}
+            {/* View selector: Active (default), Quotes, or a status refinement of the active list */}
+            <select
+              value={projectTab === 'quotes' ? 'quotes' : filter}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'quotes') { setProjectTab('quotes'); return; }
+                setProjectTab('active');
+                setFilter(v);
+              }}
+              style={{
+                padding: '8px 10px', fontSize: 13,
+                background: '#ffffff', border: '1px solid #e5e7eb',
+                borderRadius: 12, color: 'var(--text)', cursor: 'pointer',
+                ...(isMob ? { flex: 1, minWidth: 0 } : {}),
+              }}
+            >
+              <option value="active">Active</option>
+              <option value="quotes">
+                Quotes ({projects.filter(p => p.stage === 'lead' && p.project_type !== 'dispute').length})
+              </option>
+              <option value="all">All</option>
+              <option value="award_served">Award Served</option>
+              <option value="complete">Complete</option>
+              <option value="on_hold">On hold</option>
+              <option value="dispute">Dispute</option>
+            </select>
 
             {/* Desktop-only: Refresh + Sync */}
             {!isMob && (
