@@ -40,3 +40,22 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   GROUP BY 1,2,3,4
 $$;
 REVOKE ALL ON FUNCTION public.ai_usage_summary(uuid,integer) FROM PUBLIC, anon, authenticated;
+
+-- Owner view (added 26 Nov 2026): totals across every user plus calls with no owner (background
+-- jobs). Only reachable through /api/ai-usage?scope=all for users listed in NORA_ADMIN_USER_IDS.
+CREATE OR REPLACE FUNCTION public.ai_usage_summary_all(p_days integer DEFAULT 30)
+RETURNS TABLE (day date, user_id uuid, feature text, endpoint text, model text, calls bigint,
+               prompt_tokens bigint, completion_tokens bigint, reasoning_tokens bigint,
+               cached_tokens bigint, truncated bigint, errors bigint)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT (created_at AT TIME ZONE 'Europe/London')::date, l.user_id, l.feature, l.endpoint,
+         coalesce(l.model_returned, l.model_requested), count(*),
+         coalesce(sum(prompt_tokens),0), coalesce(sum(completion_tokens),0),
+         coalesce(sum(reasoning_tokens),0), coalesce(sum(cached_tokens),0),
+         count(*) FILTER (WHERE finish_reason = 'length'),
+         count(*) FILTER (WHERE status >= 400)
+  FROM ai_usage_log l
+  WHERE l.created_at >= now() - make_interval(days => greatest(p_days,1))
+  GROUP BY 1,2,3,4,5
+$$;
+REVOKE ALL ON FUNCTION public.ai_usage_summary_all(integer) FROM PUBLIC, anon, authenticated;

@@ -19,7 +19,7 @@
 // Nora Service Worker — PWA offline support
 // Bumped 2026-09-15 (fourth time today): top bar icon changed from a
 // magnifying glass to a red "2" — frontend change.
-const CACHE_NAME = 'nora-v21';
+const CACHE_NAME = 'nora-v22';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

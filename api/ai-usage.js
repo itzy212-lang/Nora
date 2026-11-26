@@ -33,13 +33,23 @@ export default async function handler(req, res) {
   const userId = await userIdFrom(req);
   if (!userId) return res.status(401).json({ error: 'Not signed in' });
 
-  const { data, error } = await supabase.rpc('ai_usage_summary', { p_user: userId, p_days: 30 });
+  // Owner view: ?scope=all returns everyone's usage plus calls with no owner (background jobs).
+  // Only for users listed in NORA_ADMIN_USER_IDS (comma-separated user ids). Everyone else, and
+  // anyone not listed, gets their own usage only.
+  const admins = String(process.env.NORA_ADMIN_USER_IDS || '').split(',').map(x => x.trim()).filter(Boolean);
+  const isAdmin = admins.includes(userId);
+  const wantAll = req.query?.scope === 'all';
+  if (wantAll && !isAdmin) return res.status(403).json({ error: 'Not allowed' });
+
+  const { data, error } = wantAll
+    ? await supabase.rpc('ai_usage_summary_all', { p_days: 30 })
+    : await supabase.rpc('ai_usage_summary', { p_user: userId, p_days: 30 });
   if (error) return res.status(500).json({ error: 'Could not load usage' });
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const weekAgo = new Date(Date.now() - 6 * 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const periods = { today: zero(), week: zero(), month: zero() };
-  const byFeature = {}; const byModel = {};
+  const byFeature = {}; const byModel = {}; const byUser = {};
   for (const r of data || []) {
     const day = String(r.day);
     add(periods.month, r);
@@ -47,7 +57,11 @@ export default async function handler(req, res) {
     if (day === today) add(periods.today, r);
     const f = (byFeature[`${r.feature}`] ||= { feature: r.feature, ...zero() }); add(f, r);
     const m = (byModel[r.model || 'unknown'] ||= { model: r.model || 'unknown', ...zero() }); add(m, r);
+    if (wantAll) {
+      const key = r.user_id || 'system';
+      const u = (byUser[key] ||= { user: r.user_id ? key : 'No owner (background and system)', system: !r.user_id, ...zero() }); add(u, r);
+    }
   }
   const top = obj => Object.values(obj).sort((a, b) => (b.cost - a.cost) || (b.prompt + b.completion - a.prompt - a.completion)).slice(0, 12);
-  return res.status(200).json({ periods, byFeature: top(byFeature), byModel: top(byModel), currency: 'USD' });
+  return res.status(200).json({ periods, byFeature: top(byFeature), byModel: top(byModel), byUser: wantAll ? top(byUser) : undefined, isAdmin, scope: wantAll ? 'all' : 'me', currency: 'USD' });
 }

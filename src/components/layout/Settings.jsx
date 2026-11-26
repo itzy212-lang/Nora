@@ -1925,21 +1925,24 @@ function AIUsageCard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [range, setRange] = useState('today');
+  const [scope, setScope] = useState('me'); // owners can switch to 'all' (everyone + background)
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setData(null); setError(null);
     (async () => {
       try {
         const { data: sess } = await sb.auth.getSession();
         const token = sess?.session?.access_token;
-        const res = await fetch('/api/ai-usage', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/ai-usage${scope === 'all' ? '?scope=all' : ''}`, { headers: { Authorization: `Bearer ${token}` } });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Could not load usage');
-        if (!cancelled) setData(json);
+        if (!cancelled) { setData(json); if (json.isAdmin) setIsAdmin(true); }
       } catch (e) { if (!cancelled) setError(e.message); }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [scope]);
 
   const nf = n => Number(n || 0).toLocaleString('en-GB');
   const usd = n => `$${Number(n || 0).toFixed(Number(n) < 1 ? 3 : 2)}`;
@@ -1962,6 +1965,12 @@ function AIUsageCard() {
       {!data && !error && <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Loading…</div>}
       {data && (
         <>
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <button onClick={() => setScope('me')} style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', fontWeight: 600, border: scope === 'me' ? '1px solid var(--blue)' : '1px solid var(--border)', background: scope === 'me' ? 'var(--blue-bg)' : 'var(--bg2)', color: scope === 'me' ? 'var(--blue)' : 'var(--text2)' }}>Just me</button>
+              <button onClick={() => setScope('all')} style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', fontWeight: 600, border: scope === 'all' ? '1px solid var(--blue)' : '1px solid var(--border)', background: scope === 'all' ? 'var(--blue-bg)' : 'var(--bg2)', color: scope === 'all' ? 'var(--blue)' : 'var(--text2)' }}>Everything (all users + background)</button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
             {tabBtn('today', 'Today')}{tabBtn('week', '7 days')}{tabBtn('month', '30 days')}
           </div>
@@ -1980,7 +1989,18 @@ function AIUsageCard() {
           {p.unpricedCalls > 0 && <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 10 }}>{p.unpricedCalls} calls are on a model with no price set, so they are in the token counts but not the cost.</div>}
           {data.byFeature.length > 0 ? (
             <>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>By feature (last 30 days)</div>
+              {data.byUser && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>By user (last 30 days)</div>
+                  {data.byUser.map(u => (
+                    <div key={u.user} style={rowStyle}>
+                      <span style={{ color: 'var(--text)' }}>{u.system ? u.user : `${String(u.user).slice(0, 8)}…`}</span>
+                      <span style={{ color: 'var(--text3)', textAlign: 'right' }}>{nf(u.calls)} calls · {nf(u.prompt + u.completion)} tokens · {u.estimated ? '~' : ''}{usd(u.cost)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '12px 0 2px' }}>By feature (last 30 days)</div>
               {data.byFeature.map(f => (
                 <div key={f.feature} style={rowStyle}>
                   <span style={{ color: 'var(--text)' }}>{f.feature}</span>
