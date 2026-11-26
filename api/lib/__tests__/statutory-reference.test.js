@@ -56,3 +56,31 @@ describe('loadStatutoryReference', () => {
     expect(called).toBe(false);
   });
 });
+
+import { formatFullAct, sectionNumber } from '../statutory-reference.js';
+
+describe('full Act', () => {
+  const rows = [
+    { section_ref: 's10', title: 'Section 10', statutory_text: 'Disputes text' },
+    { section_ref: 's2', title: 'Section 2', statutory_text: 'Rights text' },
+    { section_ref: 'fpws_faq_fees', title: 'FAQ', statutory_text: 'faq' },
+  ];
+  it('orders numerically and excludes non-Act rows', () => {
+    const out = formatFullAct(rows);
+    expect(out.indexOf('Section 2')).toBeLessThan(out.indexOf('Section 10'));
+    expect(out).not.toMatch(/FAQ/);
+    expect(out).toMatch(/Sections held: 2, 10/);
+  });
+  it('tells the model not to assert what is outside the stored sections', () => {
+    expect(formatFullAct(rows)).toMatch(/do not state what they say/);
+  });
+  it('labels the stored text as condensed, not verbatim', () => {
+    expect(formatFullAct(rows)).toMatch(/condensed working copy/);
+    expect(formatFullAct(rows)).toMatch(/not present its wording as a verbatim/);
+  });
+  it('returns null with no Act rows', () => expect(formatFullAct([])).toBeNull());
+  it('sectionNumber only matches Act sections', () => {
+    expect(sectionNumber('s6')).toBe(6);
+    expect(sectionNumber('fpws_faq_fees')).toBeNull();
+  });
+});

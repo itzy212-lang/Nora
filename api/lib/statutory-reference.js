@@ -75,20 +75,75 @@ export function formatStatutoryReference(rows) {
   ].join('\n');
 }
 
-/** Loads and formats the reference for a request. Never throws; null on any problem. */
-export async function loadStatutoryReference(sb, text) {
+// ── Full Act (26 Nov 2026) ───────────────────────────────────────────────────
+// The Act is short (sections 1-17 and 20 held, about 19,000 characters), and
+// questions about it are often "does the Act say anything about X?", where the
+// user does not know the section. Matching words cannot answer that, so on the
+// surfaces where the shared knowledge layer loads, the whole stored (condensed) text is
+// attached. No judgement is made about whether it is needed; the Universal
+// Brain (DISPUTE AUTHORITY) decides whether and how to use it.
+const ACT_TTL_MS = 10 * 60 * 1000;
+let actCache = { at: 0, text: null };
+
+export function sectionNumber(ref) {
+  const m = /^s(\d+)$/.exec(String(ref || ''));
+  return m ? Number(m[1]) : null;
+}
+
+export function formatFullAct(rows) {
+  const secs = (Array.isArray(rows) ? rows : [])
+    .filter((r) => sectionNumber(r.section_ref) !== null && r.statutory_text)
+    .sort((a, b) => sectionNumber(a.section_ref) - sectionNumber(b.section_ref));
+  if (!secs.length) return null;
+  const held = secs.map((r) => sectionNumber(r.section_ref)).join(', ');
+  return [
+    '## PARTY WALL ETC. ACT 1996 (full stored text)',
+    `Sections held: ${held}. This is a condensed working copy of the Act, not the official text: some subsections may be shortened or missing. Use it to find which section deals with a point and to reason about what the Act covers, cite the section number, and do not present its wording as a verbatim quotation of the Act. Sections not listed are not stored here; do not state what they say. If these sections contain nothing on a point, say the stored sections contain nothing on it and that the official text should be checked, rather than asserting what the Act does not say.`,
+    '',
+    secs.map((r) => `### ${r.title}\n${String(r.statutory_text).trim()}`).join('\n\n'),
+  ].join('\n');
+}
+
+export async function loadFullAct(sb) {
   try {
     if (!sb) return null;
-    const refs = pickReferenceRefs(text);
-    if (!refs.length) return null;
+    if (actCache.text && Date.now() - actCache.at < ACT_TTL_MS) return actCache.text;
     const { data, error } = await sb
       .from('knowledge_base')
-      .select('section_ref, title, statutory_text, practice_notes')
-      .in('section_ref', refs);
+      .select('section_ref, title, statutory_text')
+      .eq('source', 'legislation');
     if (error || !data?.length) return null;
-    const order = new Map(refs.map((r, i) => [r, i]));
-    data.sort((a, b) => order.get(a.section_ref) - order.get(b.section_ref));
-    return formatStatutoryReference(data);
+    const text = formatFullAct(data);
+    if (text) actCache = { at: Date.now(), text };
+    return text;
+  } catch (err) {
+    console.warn('[statutory-reference] full act failed:', err.message);
+    return null;
+  }
+}
+
+/** Loads and formats the reference for a request. Never throws; null on any problem.
+ *  With fullAct, the whole Act is attached first and keyword matching only adds
+ *  the supporting Faculty and GOV.UK entries (not the Act sections again). */
+export async function loadStatutoryReference(sb, text, { fullAct = false } = {}) {
+  try {
+    if (!sb) return null;
+    const act = fullAct ? await loadFullAct(sb) : null;
+    let refs = pickReferenceRefs(text);
+    if (act) refs = refs.filter((r) => sectionNumber(r) === null);
+    let supporting = null;
+    if (refs.length) {
+      const { data, error } = await sb
+        .from('knowledge_base')
+        .select('section_ref, title, statutory_text, practice_notes')
+        .in('section_ref', refs);
+      if (!error && data?.length) {
+        const order = new Map(refs.map((r, i) => [r, i]));
+        data.sort((a, b) => order.get(a.section_ref) - order.get(b.section_ref));
+        supporting = formatStatutoryReference(data);
+      }
+    }
+    return [act, supporting].filter(Boolean).join('\n\n') || null;
   } catch (err) {
     console.warn('[statutory-reference] lookup failed:', err.message);
     return null;

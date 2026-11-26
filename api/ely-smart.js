@@ -3680,7 +3680,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
     if (v2ArchitectureVersion === 'v2') {
       try {
         // Operating System retrieval: Act / Faculty / GOV.UK reference matched mechanically from the user's own words.
-        const statutoryReferenceText = await loadStatutoryReference(getSupabase(), prompt);
+        const statutoryReferenceText = await loadStatutoryReference(getSupabase(), prompt, { fullAct: !!brain?.knowledge_layer?.system_prompt });
         const { replyText, draft, diagnostics } = await runV2Pipeline({
           userId,
           surface: body.surface || '',
