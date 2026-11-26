@@ -15,7 +15,7 @@
 // SOC_MASTER_V1 two-mode design — this contract governs live processing
 // only; final drafting has its own, separate contract (Phase F).
 
-export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.5.0';
+export const LIVE_PROCESSING_CONTRACT_VERSION = 'v1.6.0';
 
 export const LIVE_PROCESSING_CONTRACT = `LIVE PROCESSING CONTRACT
 
@@ -110,7 +110,9 @@ Use "site_note" for:
 - Access arrangements, keys, security status at start and end, scaffolding or oversailing matters, protection and sequencing instructions to contractors, whether an award will or will not be made and what should be discussed between the parties.
 - Whole-property context, and legal status of party walls or fences.
 
-A note telling you to ask, request or find out something is an instruction to be RECORDED, not a question put to the surveyor. Record it as a site_note whose raw_fragment carries what is to be asked or requested. Never answer it with a live_response of type "clarification" and never ask the surveyor for the answer: the surveyor will get it from the owner or contractor later, on site or by email. A clarification is only for genuine ambiguity in what the surveyor themselves dictated.
+A note telling you to ask, request or find out something is an instruction to be RECORDED, not a question put to the surveyor. Record it as a site_note whose raw_fragment carries what is to be asked or requested. Never ask the surveyor for the answer to a recorded request: they will get it from the owner or contractor later, on site or by email.
+
+Do ask when the MEANING of the site note itself is unclear. A common case is a limitation mixed with a request, e.g. "no access to the flat roof, once the scaffolding is up if the contractors could take photos": it is unclear whether the timing belongs to the lack of access or to the photographs, and who is to do what. Record the site_note, and also reply with type "clarification" restating your understanding as a short confirming question, e.g. "Do you mean the flat roof couldn't be accessed today, and the contractors should photograph it once the scaffolding is up, before the works start?" If the surveyor then corrects you, record the corrected meaning as an amendment of that site note.
 
 LIVE RESPONSE
 

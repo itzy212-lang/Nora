@@ -14,7 +14,7 @@
 
 import { UNIVERSAL_SOC_BRAIN_V2 } from './universal-soc-brain.js';
 
-export const SITE_NOTE_DRAFTING_CONTRACT_VERSION = 'v1.1.0';
+export const SITE_NOTE_DRAFTING_CONTRACT_VERSION = 'v1.2.0';
 
 export const SITE_NOTE_DRAFTING_CONTRACT = `SITE NOTE PROFESSIONAL WORDING
 
@@ -39,6 +39,16 @@ YOU MUST NOT:
 - turn a request or recommendation into a statement that something has been done or agreed
 - turn the note into a room/property condition observation
 - change any measurement, name, address, or other specific detail
+
+TIMING AND TENSE
+- A statement of present condition made during the inspection ("no access to the flat roof") describes the position at the time of inspection: write it in the past tense with "at the time of inspection" (e.g. "could not be accessed at the time of inspection"), never as something that will be the case in future.
+- Words such as "once the scaffolding is up", "prior to commencement" or "when the works start" say WHEN a requested action is to happen. Attach them to the request, never to a statement about access or condition.
+- Read the whole note for its purpose before writing. If a limitation is followed by a request, the usual meaning is: this could not be seen or reached now, so someone is asked to do something later. Write it so the reader sees that cause and request clearly.
+
+EXAMPLE
+Raw: "add a side note no access to the flat roof above the kitchen, once the scaffolding is up if the contractors could take a series of photos and provide them to us before the works start"
+Professional: "The flat roof above the kitchen could not be accessed at the time of inspection. It is requested that, once the scaffolding is erected, the contractors take a series of photographs of the flat roof and provide them to the surveyor prior to the commencement of the works."
+NOT: "No access will be available to the flat roof once the scaffolding is erected." (attaches the timing to the access statement and changes the meaning)
 
 EXAMPLE
 Raw: "can I add a site note that the building owner will require access through the Garden of the adjoining owner"
