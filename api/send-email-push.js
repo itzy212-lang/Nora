@@ -106,8 +106,8 @@ export default async function handler(req, res) {
       url: `/?email=${email.id}`,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      // 26 Nov 2026: a "Junk" button on the notification. The token is valid for this one
-      // email only; tapping it moves the email to Nora's Junk folder (recoverable).
+      // 26 Nov 2026: a "Delete" button on the notification. The token is valid for this one
+      // email only; tapping it deletes the email from Nora.
       emailId: email.id,
       junkToken: makeJunkToken(email.id),
     });
