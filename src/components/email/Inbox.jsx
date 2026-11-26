@@ -2279,7 +2279,22 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         const { data, error } = await sb.rpc('search_emails', { search_term: term, result_limit: 300 });
         if (requestId !== searchRequestIdRef.current) return; // a newer search has since started — discard
         if (error) throw error;
-        setSearchResults(data || []);
+        // 26 Nov 2026: search_emails returns plain email rows, which carry no
+        // has_attachments flag (the normal inbox list works that out separately
+        // from email_attachments), so the paperclip never showed on search
+        // results. Work it out here the same way, in chunks to keep the request small.
+        let found = data || [];
+        try {
+          const ids = found.map(e => e.id).filter(Boolean);
+          const attached = new Set();
+          for (let i = 0; i < ids.length; i += 100) {
+            const { data: rows } = await sb.from('email_attachments').select('email_id').in('email_id', ids.slice(i, i + 100));
+            (rows || []).forEach(r => attached.add(r.email_id));
+          }
+          found = found.map(e => ({ ...e, has_attachments: attached.has(e.id) }));
+        } catch {}
+        if (requestId !== searchRequestIdRef.current) return; // a newer search started while checking attachments
+        setSearchResults(found);
         setSearchError(null);
         setIsSearching(false);
       } catch (err) {
