@@ -1956,7 +1956,7 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
               // Every other gpt-5.6-terra drafting call in this codebase
               // already uses 2000-4000; 600 was a real outlier, not a
               // deliberate choice.
-              max_completion_tokens: 2000,
+              max_completion_tokens: modelFor('email_draft_auto').maxCompletionTokens,
               messages: [
                 { role: 'developer', content: NORA_DRAFT_BRAIN },
                 { role: 'user', content: userPrompt },

@@ -168,7 +168,7 @@ describe('runQualityAudit — audit trail and issues for upstream review', () =>
 });
 
 describe('runQualityAudit — model/configuration', () => {
-  it('uses gpt-5.6-terra with its established invocation pattern', async () => {
+  it('uses gpt-6.2-sol with its established invocation pattern', async () => {
     let capturedBody;
     global.fetch = async (url, opts) => {
       capturedBody = JSON.parse(opts.body);
@@ -176,22 +176,22 @@ describe('runQualityAudit — model/configuration', () => {
     };
     const draft = draftWith([{ row_id: 'row-a', observation: 'x', element: 'e', source_item_ids: ['a'] }]);
     await runQualityAudit({}, { sessionId: 's1', draftResult: draft, apiKey: 'k' });
-    expect(capturedBody.model).toBe('gpt-5.6-terra');
+    expect(capturedBody.model).toBe('gpt-6.2-sol');
     expect(capturedBody.messages[0].role).toBe('developer');
     expect(capturedBody.max_completion_tokens).toBeDefined();
   });
 
-  it('falls back to gpt-4o if Terra fails', async () => {
+  it('falls back to gpt-4o if Sol fails', async () => {
     const models = [];
     global.fetch = async (url, opts) => {
       const body = JSON.parse(opts.body);
       models.push(body.model);
-      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      if (body.model === 'gpt-6.2-sol') return { ok: false, status: 500 };
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"status":"pass","edits":[],"issues_for_upstream_review":[]}' } }] }) };
     };
     const draft = draftWith([{ row_id: 'row-a', observation: 'x', element: 'e', source_item_ids: ['a'] }]);
     await runQualityAudit({}, { sessionId: 's1', draftResult: draft, apiKey: 'k' });
-    expect(models).toEqual(['gpt-5.6-terra', 'gpt-4o']);
+    expect(models).toEqual(['gpt-6.2-sol', 'gpt-4o']);
   });
 });
 

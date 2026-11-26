@@ -2,20 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { modelFor, isReasoningModel, tokenParams, instructionRole, normaliseEffort, FUNCTIONS } from '../model-config.js';
 
 describe('model-config', () => {
-  it('defaults reproduce the pre-centralisation models', () => {
-    expect(modelFor('chat_main', {}).model).toBe('gpt-5.6-terra');
-    expect(modelFor('soc_draft', {}).model).toBe('gpt-5.6-terra');
+  it('core functions default to Sol, utility functions are unchanged', () => {
+    expect(modelFor('chat_main', {}).model).toBe('gpt-6.2-sol');
+    expect(modelFor('soc_draft', {}).model).toBe('gpt-6.2-sol');
     expect(modelFor('soc_live', {}).model).toBe('gpt-4o');
     expect(modelFor('minutes_extract', {}).model).toBe('gpt-4o');
     expect(modelFor('chat_main', {}).fallbackModel).toBe('gpt-4o');
     expect(modelFor('chat_main', {}).reasoningEffort).toBe('medium');
   });
-  it('one variable switches every core function, and per-function overrides win', () => {
-    const env = { NORA_CORE_MODEL: 'gpt-6.2-sol' };
+  it('one variable switches every core function (rollback to Terra), and per-function overrides win', () => {
+    const env = { NORA_CORE_MODEL: 'gpt-5.6-terra' };
     for (const [fn, spec] of Object.entries(FUNCTIONS)) {
-      expect(modelFor(fn, env).model).toBe(spec.tier === 'core' ? 'gpt-6.2-sol' : modelFor(fn, {}).model);
+      expect(modelFor(fn, env).model).toBe(spec.tier === 'core' ? 'gpt-5.6-terra' : modelFor(fn, {}).model);
     }
-    expect(modelFor('minutes_draft', { ...env, NORA_MODEL_MINUTES_DRAFT: 'gpt-5.6-terra' }).model).toBe('gpt-5.6-terra');
+    expect(modelFor('minutes_draft', { ...env, NORA_MODEL_MINUTES_DRAFT: 'gpt-6.2-sol' }).model).toBe('gpt-6.2-sol');
   });
   it('recognises reasoning models including the 6.x family', () => {
     for (const m of ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6.2-sol', 'gpt-6.2-astra', 'o3']) expect(isReasoningModel(m)).toBe(true);

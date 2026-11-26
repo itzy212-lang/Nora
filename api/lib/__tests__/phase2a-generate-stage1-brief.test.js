@@ -128,7 +128,7 @@ beforeEach(() => {
 });
 
 describe('generateStage1Brief — model payload', () => {
-  it('sends gpt-5.6-terra, no temperature, response_format json_object', async () => {
+  it('sends gpt-6.2-sol, no temperature, response_format json_object', async () => {
     mockFetchOnce(200, terraResponse(minimalValidRawBrief()));
     await generateStage1Brief(baseArgs);
 
@@ -136,7 +136,7 @@ describe('generateStage1Brief — model payload', () => {
     const [, requestInit] = global.fetch.mock.calls[0];
     const payload = JSON.parse(requestInit.body);
 
-    expect(payload.model).toBe('gpt-5.6-terra');
+    expect(payload.model).toBe('gpt-6.2-sol');
     expect(payload).not.toHaveProperty('temperature');
     expect(payload.response_format).toEqual({ type: 'json_object' });
     expect(payload.messages).toHaveLength(2);
@@ -441,7 +441,7 @@ describe('generateStage1Brief — preflight correction: transient Terra retry', 
     const firstPayload = JSON.parse(global.fetch.mock.calls[0][1].body);
     const retryPayload = JSON.parse(global.fetch.mock.calls[1][1].body);
     expect(retryPayload).toEqual(firstPayload);
-    expect(retryPayload.model).toBe('gpt-5.6-terra');
+    expect(retryPayload.model).toBe('gpt-6.2-sol');
     expect(retryPayload).not.toHaveProperty('temperature');
   }, 10000);
 

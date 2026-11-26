@@ -261,7 +261,7 @@ describe('applyRepairs — targeted, evidence-bound, provenance-preserving', () 
 });
 
 describe('runFidelityAudit — model/configuration', () => {
-  it('uses gpt-5.6-terra with its established invocation pattern', async () => {
+  it('uses gpt-6.2-sol with its established invocation pattern', async () => {
     let capturedBody;
     global.fetch = async (url, opts) => {
       capturedBody = JSON.parse(opts.body);
@@ -269,21 +269,21 @@ describe('runFidelityAudit — model/configuration', () => {
     };
     const supabase = makeSupabase({ sections: authoritativeSections });
     await runFidelityAudit(supabase, { sessionId: 's1', draftResult: baseCorrectDraft(), apiKey: 'k' });
-    expect(capturedBody.model).toBe('gpt-5.6-terra');
+    expect(capturedBody.model).toBe('gpt-6.2-sol');
     expect(capturedBody.messages[0].role).toBe('developer');
     expect(capturedBody.max_completion_tokens).toBeDefined();
   });
 
-  it('falls back to gpt-4o if Terra fails', async () => {
+  it('falls back to gpt-4o if Sol fails', async () => {
     const models = [];
     global.fetch = async (url, opts) => {
       const body = JSON.parse(opts.body);
       models.push(body.model);
-      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      if (body.model === 'gpt-6.2-sol') return { ok: false, status: 500 };
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"findings":[]}' } }] }) };
     };
     const supabase = makeSupabase({ sections: authoritativeSections });
     await runFidelityAudit(supabase, { sessionId: 's1', draftResult: baseCorrectDraft(), apiKey: 'k' });
-    expect(models).toEqual(['gpt-5.6-terra', 'gpt-4o', 'gpt-5.6-terra', 'gpt-4o']);
+    expect(models).toEqual(['gpt-6.2-sol', 'gpt-4o', 'gpt-6.2-sol', 'gpt-4o']);
   });
 });

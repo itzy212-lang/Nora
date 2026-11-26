@@ -120,7 +120,7 @@ describe('reconcile() — false-negative fix: every substantive note is semantic
     global.fetch = async (url, opts) => {
       modelCalled = true;
       const body = JSON.parse(opts.body);
-      expect(body.model).toBe('gpt-5.6-terra'); // primary model, per acceptance correction
+      expect(body.model).toBe('gpt-6.2-sol'); // primary model, per acceptance correction
       expect(body.messages[0].role).toBe('developer'); // Terra's established invocation pattern
       expect(body.max_completion_tokens).toBeDefined();
       expect(body.response_format).toBeUndefined(); // Terra is not called with forced JSON mode anywhere in this codebase
@@ -145,12 +145,12 @@ describe('reconcile() — false-negative fix: every substantive note is semantic
     expect(recoveredItem.draftable).toBe(true);
   });
 
-  it('falls back to gpt-4o if Terra fails, matching the established drafting fallback pattern', async () => {
+  it('falls back to gpt-4o if Sol fails, matching the established drafting fallback pattern', async () => {
     let calls = [];
     global.fetch = async (url, opts) => {
       const body = JSON.parse(opts.body);
       calls.push(body.model);
-      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      if (body.model === 'gpt-6.2-sol') return { ok: false, status: 500 };
       return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ fully_covered: true, recovered: [] }) } }] }) };
     };
     const supabase = {
@@ -163,7 +163,7 @@ describe('reconcile() — false-negative fix: every substantive note is semantic
       },
     };
     await reconcile(supabase, { sessionId: 's1', apiKey: 'test-key' });
-    expect(calls).toEqual(['gpt-5.6-terra', 'gpt-4o']);
+    expect(calls).toEqual(['gpt-6.2-sol', 'gpt-4o']);
   });
 });
 

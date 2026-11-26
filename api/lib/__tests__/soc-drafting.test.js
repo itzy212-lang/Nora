@@ -149,7 +149,7 @@ describe('draft() — conversational material never reaches drafting', () => {
 });
 
 describe('draft() — model/configuration', () => {
-  it('uses gpt-5.6-terra with its established invocation pattern (developer role, max_completion_tokens, no forced response_format)', async () => {
+  it('uses gpt-6.2-sol with its established invocation pattern (developer role, max_completion_tokens, no forced response_format)', async () => {
     mockReconciliationResult({
       sections: [FB],
       items: [{ id: 'c-1', section_id: FB.id, element: 'party wall', resolved_content: 'x', disposition: 'active_evidence', draftable: true }],
@@ -160,13 +160,13 @@ describe('draft() — model/configuration', () => {
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"rows":[]}' } }] }) };
     };
     await draft({}, { sessionId: 's1', apiKey: 'k' });
-    expect(capturedBody.model).toBe('gpt-5.6-terra');
+    expect(capturedBody.model).toBe('gpt-6.2-sol');
     expect(capturedBody.messages[0].role).toBe('developer');
     expect(capturedBody.max_completion_tokens).toBeDefined();
     expect(capturedBody.response_format).toBeUndefined();
   });
 
-  it('falls back to gpt-4o if Terra fails', async () => {
+  it('falls back to gpt-4o if Sol fails', async () => {
     mockReconciliationResult({
       sections: [FB],
       items: [{ id: 'c-1', section_id: FB.id, element: 'party wall', resolved_content: 'x', disposition: 'active_evidence', draftable: true }],
@@ -175,11 +175,11 @@ describe('draft() — model/configuration', () => {
     global.fetch = async (url, opts) => {
       const body = JSON.parse(opts.body);
       models.push(body.model);
-      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      if (body.model === 'gpt-6.2-sol') return { ok: false, status: 500 };
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"rows":[]}' } }] }) };
     };
     await draft({}, { sessionId: 's1', apiKey: 'k' });
-    expect(models).toEqual(['gpt-5.6-terra', 'gpt-4o']);
+    expect(models).toEqual(['gpt-6.2-sol', 'gpt-4o']);
   });
 });
 

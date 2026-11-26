@@ -167,7 +167,7 @@ describe('runPostQualityGuard — section order integrity', () => {
 });
 
 describe('runPostQualityGuard — model/configuration', () => {
-  it('uses gpt-5.6-terra with its established invocation pattern', async () => {
+  it('uses gpt-6.2-sol with its established invocation pattern', async () => {
     const d4 = d4Draft([{ row_id: 'r1', observation: 'x', element: 'e', source_item_ids: ['c-1'] }]);
     const d5 = d5Draft([{ row_id: 'r1', observation: 'y', element: 'e', source_item_ids: ['c-1'] }]);
     let capturedBody;
@@ -176,21 +176,21 @@ describe('runPostQualityGuard — model/configuration', () => {
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"results":[{"reference":"r1","verdict":"FACTUALLY_EQUIVALENT","explanation":"ok"}]}' } }] }) };
     };
     await runPostQualityGuard({}, { sessionId: 's1', d4Draft: d4, d5Draft: d5, apiKey: 'k' });
-    expect(capturedBody.model).toBe('gpt-5.6-terra');
+    expect(capturedBody.model).toBe('gpt-6.2-sol');
     expect(capturedBody.messages[0].role).toBe('developer');
   });
 
-  it('falls back to gpt-4o if Terra fails', async () => {
+  it('falls back to gpt-4o if Sol fails', async () => {
     const d4 = d4Draft([{ row_id: 'r1', observation: 'x', element: 'e', source_item_ids: ['c-1'] }]);
     const d5 = d5Draft([{ row_id: 'r1', observation: 'y', element: 'e', source_item_ids: ['c-1'] }]);
     const models = [];
     global.fetch = async (url, opts) => {
       const body = JSON.parse(opts.body);
       models.push(body.model);
-      if (body.model === 'gpt-5.6-terra') return { ok: false, status: 500 };
+      if (body.model === 'gpt-6.2-sol') return { ok: false, status: 500 };
       return { ok: true, json: async () => ({ choices: [{ message: { content: '{"results":[{"reference":"r1","verdict":"FACTUALLY_EQUIVALENT","explanation":"ok"}]}' } }] }) };
     };
     await runPostQualityGuard({}, { sessionId: 's1', d4Draft: d4, d5Draft: d5, apiKey: 'k' });
-    expect(models).toEqual(['gpt-5.6-terra', 'gpt-4o']);
+    expect(models).toEqual(['gpt-6.2-sol', 'gpt-4o']);
   });
 });

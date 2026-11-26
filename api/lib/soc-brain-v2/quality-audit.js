@@ -38,7 +38,7 @@ async function callQualityModel({ apiKey, systemContent, userPrompt, primaryMode
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        ...(isTerra ? { max_completion_tokens: 4000 } : { max_tokens: 4000, response_format: { type: 'json_object' } }),
+        ...(isTerra ? { max_completion_tokens: modelFor('soc_quality_audit').maxCompletionTokens } : { max_tokens: 4000, response_format: { type: 'json_object' } }),
         messages: [
           { role: isTerra ? 'developer' : 'system', content: systemContent },
           { role: 'user', content: userPrompt },

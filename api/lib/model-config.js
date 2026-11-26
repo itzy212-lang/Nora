@@ -10,15 +10,15 @@
 //   NORA_MODEL_<FUNCTION>=...            one function only, e.g. NORA_MODEL_MINUTES_DRAFT
 //   NORA_EFFORT_<FUNCTION>=low|medium|high   one function's reasoning effort
 //   NORA_FALLBACK_MODEL=gpt-4o           the model every function falls back to
-// To roll back, remove the variable (or set it to gpt-5.6-terra). Change a default in this
-// file to make a switch permanent.
+// ROLLBACK to the previous model (gpt-5.6-terra): set NORA_CORE_MODEL=gpt-5.6-terra on Vercel and
+// redeploy, or revert the commit that changed TIER_DEFAULTS.core. Terra needs no other change.
 //
 // Older single-purpose variables still work where the code already read them:
 //   SOC_DRAFT_MODEL, MINUTES_DRAFT_MODEL, MINUTES_EXTRACT_MODEL, DRAFTING_REASONING_EFFORT,
 //   STAGE1_REASONING_EFFORT.
 
 export const TIER_DEFAULTS = {
-  core: 'gpt-5.6-terra',     // reasoning-heavy: chat, drafting, SOC, audits, disputes, minutes
+  core: 'gpt-6.2-sol',       // reasoning-heavy: chat, drafting, SOC, audits, disputes, minutes (was gpt-5.6-terra until 26 Nov 2026)
   light: 'gpt-5.6-luna',     // small extraction / classification jobs
   economy: 'gpt-4o',         // utility calls that need speed, not depth
 };
@@ -26,21 +26,24 @@ export const TIER_DEFAULTS = {
 export const DEFAULT_FALLBACK_MODEL = 'gpt-4o';
 
 // function key -> { tier, effort, maxCompletionTokens, note }
-// effort is only used for reasoning models. Token limits include the model's hidden reasoning.
+// effort is only used for reasoning models. Token limits include the model's hidden reasoning,
+// so they carry headroom: you only pay for tokens actually used, and a limit that is too tight
+// makes a reasoning model spend everything on thinking and return an EMPTY answer (seen with
+// gpt-6.2-sol at a 900-token limit on 26 Nov 2026).
 export const FUNCTIONS = {
-  chat_main:            { tier: 'core', effort: 'medium', maxCompletionTokens: 3500, note: 'Nora main conversation (ely-smart final answer)' },
+  chat_main:            { tier: 'core', effort: 'medium', maxCompletionTokens: 8000, note: 'Nora main conversation (ely-smart final answer)' },
   chat_stage1:          { tier: 'core', effort: 'medium', maxCompletionTokens: null, note: 'Nora Stage 1 case assessment (token limit set where it is called)' },
-  email_draft_auto:     { tier: 'core', effort: null,     maxCompletionTokens: 2000, note: 'Auto-response drafting (cron-auto-draft)' },
-  project_memory:       { tier: 'core', effort: null,     maxCompletionTokens: 900,  note: 'Interpreting what a document means for the brain (summarise-knowledge)' },
+  email_draft_auto:     { tier: 'core', effort: null,     maxCompletionTokens: 6000, note: 'Auto-response drafting (cron-auto-draft)' },
+  project_memory:       { tier: 'core', effort: null,     maxCompletionTokens: 3000,  note: 'Interpreting what a document means for the brain (summarise-knowledge)' },
   dispute_analysis:     { tier: 'core', effort: 'medium', maxCompletionTokens: 9000, note: 'Dispute synopsis / analysis' },
-  soc_draft:            { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 professional drafting' },
-  soc_reconcile:        { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 reconciliation' },
-  soc_site_notes:       { tier: 'core', effort: null,     maxCompletionTokens: 2000, note: 'SOC v2 site note wording' },
-  soc_fidelity_audit:   { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 fidelity audit' },
-  soc_quality_audit:    { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 quality audit' },
-  soc_factual_guard:    { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 factual guard' },
+  soc_draft:            { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 professional drafting' },
+  soc_reconcile:        { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 reconciliation' },
+  soc_site_notes:       { tier: 'core', effort: null,     maxCompletionTokens: 4000, note: 'SOC v2 site note wording' },
+  soc_fidelity_audit:   { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 fidelity audit' },
+  soc_quality_audit:    { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 quality audit' },
+  soc_factual_guard:    { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'SOC v2 factual guard' },
   soc_legacy_draft:     { tier: 'core', effort: null,     maxCompletionTokens: 128000, note: 'Legacy SOC pipeline Stage 2 (flag-only path)' },
-  minutes_draft:        { tier: 'core', effort: null,     maxCompletionTokens: 3000, note: 'Meeting minutes drafting' },
+  minutes_draft:        { tier: 'core', effort: null,     maxCompletionTokens: 8000, note: 'Meeting minutes drafting' },
   // Not moved: left on their current models until measured (see the upgrade report).
   soc_live:             { tier: 'economy', effort: null, maxCompletionTokens: null, note: 'SOC live note processing, runs on every dictated note (speed matters)' },
   minutes_extract:      { tier: 'economy', effort: null, maxCompletionTokens: 3000, note: 'Meeting minutes extraction' },
