@@ -39,8 +39,10 @@ function Hub() {
       <span className="lp-hub-ring lp-hub-ring-1" />
       <span className="lp-hub-ring lp-hub-ring-2" />
       <div className="lp-hub-core">
-        <span className="lp-hub-spark"><Icon name="sparkle" size={34} stroke={1.5} /></span>
-        <span className="lp-hub-word">nora</span>
+        <span className="lp-hub-wordrow">
+          <span className="lp-hub-word">nora</span>
+          <span className="lp-hub-dots" aria-hidden="true"><i /><i /><i /></span>
+        </span>
         <span className="lp-hub-sub">Your Party Wall Assistant</span>
       </div>
     </div>
