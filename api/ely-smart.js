@@ -13,6 +13,7 @@ import { assembleWorkingMemory, CATEGORY_BUDGETS, extractConfirmedProjectAnchors
 import { assembleV2Prompt, splitDraftFromCommentary, splitNewProjectProposal } from './lib/v2-prompt-assembly.js';
 // PHASE 2A — Stage 1 strategic reasoning modules (Phase 1 deliverables, unmodified).
 import { findNamedCorrespondentAddresses, formatRecipients, dedupeNearDuplicateEmails, emailEvidenceHeader } from './lib/named-correspondent.js';
+import { loadStatutoryReference } from './lib/statutory-reference.js';
 import { buildStage1Context } from './lib/stage1-context.js';
 import { validateBriefShape } from './lib/stage1-schema.js';
 import { applyDependencyValidation } from './lib/stage1-dependency-graph.js';
@@ -3677,6 +3678,8 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
 
     if (v2ArchitectureVersion === 'v2') {
       try {
+        // Operating System retrieval: Act / Faculty / GOV.UK reference matched mechanically from the user's own words.
+        const statutoryReferenceText = await loadStatutoryReference(getSupabase(), prompt);
         const { replyText, draft, diagnostics } = await runV2Pipeline({
           userId,
           surface: body.surface || '',
@@ -3690,7 +3693,7 @@ IMPORTANT: Include at the very end of your response, on its own line, this JSON 
           chatHistory: body.chatHistory || [],
           confirmedDraftText: body.context?.previousDraft || body.previousDraft || null,
           draftingExamples,
-          domainKnowledgeText: brain?.knowledge_layer?.system_prompt || null,
+          domainKnowledgeText: [brain?.knowledge_layer?.system_prompt || '', statutoryReferenceText || ''].filter(Boolean).join('\n\n') || null,
           contactsContext,
           clauseLibraryMatches,
           inboxSearchContext: inboxSearchContextForV2,
