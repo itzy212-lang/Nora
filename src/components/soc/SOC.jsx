@@ -1274,7 +1274,7 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
     sidebarNewBtn: { margin: '12px', padding: '10px', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--blue)', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center' },
     // Main content
     main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' },
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, gap: 8, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' },
     headerLeft: { display: 'flex', alignItems: 'center', gap: 10 },
     hamburger: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text)', fontSize: 20, lineHeight: 1 },
     titleBlock: { display: 'flex', flexDirection: 'column' },
@@ -1765,18 +1765,18 @@ export default function SOC({ onOpenComposer, defaultProjectId, defaultAOIndex, 
               on the review screen, so when generation was blocked (e.g. a note that failed
               to save) nothing at all appeared here and the button looked dead. */}
           {generationIncomplete && !processing && (
-            <div style={{ marginTop: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.45 }}>
+            <div style={{ flexBasis: '100%', marginTop: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, fontSize: 12.5, color: '#991b1b', lineHeight: 1.45 }}>
               ⚠ <strong>Could not generate the Schedule of Condition.</strong> {String(generationWarning || 'Generation incomplete — please retry.').replace(/^GENERATION_INCOMPLETE:\s*/, '')}
             </div>
           )}
           {processing && processingStatus && (
-            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ flexBasis: '100%', fontSize: 11, color: '#6b7280', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #9ca3af', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
               {processingStatus}
             </div>
           )}
           <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', marginTop: 8 }}>
+          <label style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', marginTop: 8 }}>
             <input
               type="checkbox"
               checked={dualAIEnabled}
