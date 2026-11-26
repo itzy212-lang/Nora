@@ -30,9 +30,6 @@
     }
   ],
   "functions": {
-    "api/model-diagnostic.js": {
-      "maxDuration": 300
-    },
     "api/save-attachments-to-storage.js": {
       "maxDuration": 60
     },
