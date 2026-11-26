@@ -955,6 +955,22 @@ function EmailTab() {
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Email signature</div>
         <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Your signature is built from your firm details and images in the Firm tab and attached automatically to outgoing emails.</div>
       </div>
+      {/* Moved here from the inbox top bar on 26 Nov 2026, on request. Clears the copy of the
+          inbox kept on this device (made so reopening the app is instant) and reloads it from
+          the database. Use it if the inbox shows stale or inconsistent content. */}
+      <div style={{ padding: '16px 18px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Fix inbox</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 10 }}>If the inbox is showing stale or wrong content, clear the copy stored on this device and reload it from the database. Nothing in your mailbox is affected.</div>
+        <button
+          onClick={async () => {
+            if (!confirm('Clear local email cache and reload from the database? This only clears what\'s stored on this device — nothing in your mailbox is affected.')) return;
+            await clearEmailCache().catch(() => {});
+            window.location.reload();
+          }}
+          style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, cursor: 'pointer', background: 'var(--bg2)', color: 'var(--text)', border: '1px solid var(--border)', fontWeight: 600 }}>
+          Clear cache and reload
+        </button>
+      </div>
     </div>
   );
 }
