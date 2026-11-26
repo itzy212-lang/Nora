@@ -28,7 +28,7 @@
 /* Header */
 .lp-header { position: sticky; top: 0; z-index: 20; background: rgba(255, 255, 255, .86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .lp-header-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 68px; }
-.lp-logo { font-family: 'Bahnschrift Light', 'DIN Alternate', 'Segoe UI Light', sans-serif; font-weight: 300; font-size: 34px; letter-spacing: -1px; color: var(--navy); text-decoration: none; display: inline-flex; align-items: baseline; line-height: 1; }
+.lp-logo { font-family: 'Bahnschrift Light', 'DIN Alternate', 'Segoe UI Light', sans-serif; font-weight: 300; font-size: 34px; letter-spacing: -1px; color: var(--purple); text-decoration: none; display: inline-flex; align-items: baseline; line-height: 1; }
 .lp-logo-sm { font-size: 24px; }
 .lp-logo-dots { display: inline-flex; gap: 3px; padding-left: 4px; }
 .lp-logo-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--purple); display: block; animation: lp-dot 1.6s ease-in-out infinite; }
