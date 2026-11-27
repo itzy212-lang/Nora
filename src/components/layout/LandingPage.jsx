@@ -7,6 +7,7 @@ import Icon from '../landing/icons';
 import HubDiagram from '../landing/HubDiagram';
 import ChatDemo from '../landing/ChatDemo';
 import { BrandLogo, DisputeVisual, Workflow, PhoneDemo, ScheduleDemo, GRID } from '../landing/Sections';
+import Pricing from '../landing/Pricing';
 import { usePrefersReducedMotion, useReveal } from '../landing/hooks';
 
 const TITLE = 'Nora | The intelligent assistant for party wall surveyors';
@@ -52,6 +53,7 @@ export default function LandingPage({ onSignIn, onSignUp }) {
             <a href="#memory" onClick={go('memory')}>Project memory</a>
             <a href="#how-it-works" onClick={go('how-it-works')}>How it works</a>
             <a href="#features" onClick={go('features')}>Features</a>
+            <a href="#pricing" onClick={go('pricing')}>Pricing</a>
           </nav>
           <div className="lp-header-cta">
             <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={onSignIn}>Sign in</button>
@@ -172,6 +174,8 @@ export default function LandingPage({ onSignIn, onSignUp }) {
             </div>
           </div>
         </section>
+
+        <Pricing onSignUp={onSignUp} />
 
         <section id="closing" className="lp-closing">
           <div className="lp-wrap lp-center">
