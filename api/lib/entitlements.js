@@ -33,6 +33,10 @@ export const FEATURES = {
   project_chat:      'assistant',
   main_chat:         'assistant',
   project_memory:    'assistant',
+  // Every other AI helper (reading documents, summaries, polishing wording, minutes, etc.): no AI without Assistant.
+  ai_tools:          'assistant',
+  // Voice dictation: chatting by voice (Assistant) or dictating a Schedule of Condition (Schedule of Condition).
+  voice:             ['assistant', 'soc'],
 };
 
 const clean = list => (Array.isArray(list) ? list.filter(a => ADDONS.includes(a)) : []);
@@ -93,7 +97,8 @@ export function evaluate(row, feature, now = new Date()) {
   if (!needs) return { allowed: false, reason: 'unknown_feature', addons: [], needs: null };
   const eff = effectiveAccess(row, now);
   if (!eff.core) return { allowed: false, reason: eff.reason, addons: [], needs };
-  const allowed = needs === 'core' || eff.addons.includes(needs);
+  // needs may be one bolt-on, or a list where any one of them is enough.
+  const allowed = needs === 'core' || [].concat(needs).some(n => eff.addons.includes(n));
   return { allowed, reason: allowed ? eff.reason : 'bolt_on_missing', addons: eff.addons, needs };
 }
 

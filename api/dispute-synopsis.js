@@ -18,7 +18,7 @@ function extractJson(text=''){
   return null;
 }
 
-export default async function handler(req,res){
+async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   try{
     const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
@@ -56,3 +56,6 @@ export default async function handler(req,res){
     return res.status(500).json({error:err.message||'Could not generate dispute synopsis'});
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('ai_tools', handler);

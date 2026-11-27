@@ -1,5 +1,6 @@
 import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import { createClient } from '@supabase/supabase-js';
+import { checkFeature } from './lib/entitlements.js';
 const db = createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);
 const aiKey = process.env.OPENAI_API_KEY;
 async function openai(path,body) {
@@ -11,6 +12,11 @@ async function openai(path,body) {
 async function processJob(job){
  const {data:email,error}=await db.from('emails').select('id,project_id,subject,body,direction,sender_email,received_at').eq('id',job.email_id).single();
  if(error||!email?.project_id) throw Error(error?.message||'Email not linked');
+ // Plan check (api/lib/entitlements.js) for the project's owner: project memory needs Nora Assistant.
+ // Record-only until ENTITLEMENTS_ENFORCE=1; once enforcing, other plans' emails are skipped (no AI call).
+ const {data:proj}=await db.from('projects').select('user_id').eq('id',email.project_id).maybeSingle();
+ const gate=await checkFeature(db,proj?.user_id,'project_memory');
+ if(!gate.allowed) return 'skipped_no_plan';
  const {data:existing}=await db.from('project_memory').select('id,summary,embedding').eq('source_id',email.id);
  if(existing?.length && existing.every(x=>x.embedding)){
   return 'already_indexed';

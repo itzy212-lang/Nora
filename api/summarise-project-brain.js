@@ -8,7 +8,7 @@ const supabase = createClient(
 const SUMMARISE_THRESHOLD = 40;  // summarise when unsummarised messages exceed this
 const KEEP_RECENT = 20;          // always keep this many recent messages unsummarised
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { project_id } = req.body || {};
@@ -134,3 +134,6 @@ ${entriesText}`;
     return res.status(500).json({ error: err.message || 'Summarisation failed' });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('project_memory', handler);

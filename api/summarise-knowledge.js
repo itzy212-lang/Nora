@@ -21,7 +21,7 @@ async function verifyBearerToken(req) {
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const userId = await verifyBearerToken(req);
   if (!userId) return res.status(401).json({ error: 'Please sign in again.' });
@@ -51,3 +51,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Could not summarise this file. Please try again.' });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('ai_tools', handler);

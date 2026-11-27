@@ -1401,7 +1401,7 @@ async function getSocDate(projectId, aoId, selectedAO) {
   return 'DATE OF INSPECTION NOT RECORDED — PLEASE CONFIRM';
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
@@ -1774,3 +1774,6 @@ export default async function handler(req, res) {
 
 
 
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('soc_ai', handler);

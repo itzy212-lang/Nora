@@ -8,7 +8,7 @@ import { extractMinutesClaims, draftMinutes } from './lib/minutes-pipeline.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
@@ -482,3 +482,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message || 'Weekly minutes request failed' });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('ai_tools', handler);

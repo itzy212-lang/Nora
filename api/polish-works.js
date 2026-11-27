@@ -2,7 +2,7 @@ import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/polish-works.js
 // Takes raw dictation of a notifiable work item and returns professional surveying language
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -55,3 +55,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('ai_tools', handler);

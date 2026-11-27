@@ -1,3 +1,4 @@
+import { checkFeature } from './lib/entitlements.js';
 import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import { attributeToProject } from './lib/ai-usage.js';
 import { createClient } from '@supabase/supabase-js';
@@ -61,6 +62,15 @@ export default async function handler(req, res) {
 
   }
   await attributeToProject(supabase, project_id); // AI token tracking
+
+  // Plan check (api/lib/entitlements.js) for the project's owner: this endpoint is also called by a database
+  // trigger with no user, so it checks the owner here instead of using the shared wrapper. Record-only until
+  // ENTITLEMENTS_ENFORCE=1; when enforcing, a plan without Nora Assistant skips the extraction quietly.
+  try {
+    const { data: owner } = await supabase.from('projects').select('user_id').eq('id', project_id).maybeSingle();
+    const gate = await checkFeature(supabase, owner?.user_id, 'project_memory');
+    if (!gate.allowed) return res.status(200).json({ skipped: true, reason: 'plan' });
+  } catch (e) { console.error('[extract-email-memory] plan check failed:', e.message); }
 
   try {
     const dateStr = received_at
@@ -195,3 +205,4 @@ ${body.slice(0, 6000)}`;
     return res.status(500).json({ error: err.message });
   }
 }
+

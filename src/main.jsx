@@ -8,7 +8,9 @@ import PublicLOASigning from './components/loa/PublicLOASigning';
 import './index.css';
 import { initCrashBreadcrumbs } from './utils/crashBreadcrumbs';
 import { initUpdateNotice } from './utils/updateNotice';
+import { installApiAuth } from './utils/apiAuth';
 
+installApiAuth();
 initCrashBreadcrumbs();
 initUpdateNotice();
 

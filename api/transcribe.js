@@ -60,7 +60,7 @@ function getMimeFromHeaders(headers) {
   return getHeaderValue(headers, 'content-type') || 'audio/webm';
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     return res.status(200).json({ ok: true });
   }
@@ -185,3 +185,6 @@ export default async function handler(req, res) {
   }
 }
 
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('voice', handler);

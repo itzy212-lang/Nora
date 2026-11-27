@@ -1,5 +1,6 @@
 import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import { setUsageContext } from './lib/ai-usage.js';
+import { checkFeature } from './lib/entitlements.js'; // the one plan check (record-only until ENTITLEMENTS_ENFORCE=1)
 // api/ely-smart.js
 // Ely/Nora smart route - project-hydrated collaboration version
 // Global behaviour: analyse first, draft only when clearly requested.
@@ -2864,6 +2865,14 @@ export default async function handler(req, res) {
     const prompt = String(body.prompt || '').trim();
     const isDraftWithEly = String(body.mode || body.workflowStage || '').toLowerCase().includes('draft_with_ely');
     console.log('[ely-smart] isDraftWithEly=', isDraftWithEly, 'mode=', body.mode, 'workflowStage=', body.workflowStage);
+
+    // ── Plan check: every Nora chat and drafting surface needs the Nora Assistant bolt-on. One check, in
+    // api/lib/entitlements.js. While not enforcing it never blocks; it only records what it would have refused.
+    {
+      const planFeature = isDraftWithEly ? 'ai_drafting' : (projectId ? 'project_chat' : 'main_chat');
+      const plan = await checkFeature(getSupabase(), userId, planFeature);
+      if (!plan.allowed) return res.status(402).json({ error: 'This needs Nora Assistant. You can add it to your plan.', feature: planFeature, needs: plan.needs });
+    }
 
     // ── Case review confirmation ──────────────────────────────────────────
     if (body.case_review_confirmed && body.case_review_topic && projectId) {

@@ -35,7 +35,7 @@ async function generateEmbedding(text) {
   return data.data[0].embedding;
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const sb = getSb();
@@ -106,3 +106,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err?.message || 'Clause library request failed' });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('ai_tools', handler);

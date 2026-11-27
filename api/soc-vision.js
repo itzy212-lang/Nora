@@ -283,7 +283,7 @@ Do not invent observations. Reconcile all amendments. Record every distinct obse
 Do not silently omit any note. Separate condition observations from award notes and actions.`;
 
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -368,3 +368,6 @@ ${SOC_SENTENCE_TEMPLATES}${context ? '\n\nContext from surveyor: ' + context : '
     return res.status(500).json({ error: err.message || 'Vision call failed' });
   }
 }
+
+import { withAiGate } from './lib/ai-gate.js'; // plan check (api/lib/entitlements.js); record-only until ENTITLEMENTS_ENFORCE=1
+export default withAiGate('soc_ai', handler);

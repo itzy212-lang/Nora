@@ -130,11 +130,13 @@ async function matchByPartyEmail(senderEmail, emailId) {
   }
 }
 
-async function embedEmail(emailId) {
+async function embedEmail(emailId, userId) {
   try {
+    // Identifies this server and the mailbox owner, so the plan check (api/lib/ai-gate.js) applies to that user.
+    const auth = process.env.CRON_SECRET && userId ? { Authorization: `Bearer ${process.env.CRON_SECRET}`, 'x-nora-user': String(userId) } : {};
     await fetch(`${APP_BASE_URL}/api/embed`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({ action: 'embed_record', record_id: emailId, table: 'emails' }),
     });
   } catch (err) {
@@ -329,7 +331,7 @@ async function syncGmailEmails(userId, accessToken) {
 
       processed++;
       if (isOther) continue; // Others: no embedding, attachments, project linking
-      embedEmail(inserted.id);
+      embedEmail(inserted.id, userId);
       await recordGmailAttachments(msgData, inserted.id);
 
       let linked = false;
