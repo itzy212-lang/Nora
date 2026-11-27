@@ -1,4 +1,5 @@
 import { useApp } from '../../state/appStore';
+import useMyPlan from '../../utils/useMyPlan';
 
 // Load saved theme on startup
 const savedTheme = localStorage.getItem('ely-theme') || 'light';
@@ -61,6 +62,12 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
 
   const isLight = document.body.classList.contains('light');
 
+  // Which plan this account is on, and (for the owner) the Admin page.
+  const myPlan = useMyPlan();
+  const navSections = myPlan?.is_admin
+    ? NAV.map(s => s.section === 'ACCOUNT' ? { ...s, items: [...s.items, { id: 'admin', icon: '🛠️', label: 'Admin' }] } : s)
+    : NAV;
+
   return (
     <aside style={{
       width: '100%', height: '100%', background: 'var(--bg2)',
@@ -96,7 +103,7 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '8px 0' }}>
-        {NAV.map(({ section, items }) => (
+        {navSections.map(({ section, items }) => (
           <div key={section}>
             <div style={{
               fontSize: 10, fontWeight: 600, color: 'var(--text3)',
@@ -139,6 +146,15 @@ export default function Sidebar({ currentView, onNavigate, onRaiseInvoice, onClo
           </div>
         ))}
       </nav>
+
+      {/* Current plan */}
+      {myPlan?.label && (
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: 3 }}>Your plan</div>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)', lineHeight: 1.35 }}>{myPlan.label}</div>
+          {myPlan.note && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{myPlan.note}</div>}
+        </div>
+      )}
 
       {/* Theme toggle */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>

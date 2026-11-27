@@ -57,6 +57,36 @@ export function effectiveAccess(row, now = new Date()) {
   return { core: true, addons: clean(row.addons), reason: 'subscription' };
 }
 
+export const ADDON_NAMES = { soc: 'Schedule of Condition', assistant: 'Nora Assistant' };
+
+/** Plain-words name for a set of bolt-ons: "Core", "Core + Nora Assistant", "Core + Nora Assistant + Schedule of Condition". */
+export function planLabel(addons) {
+  const have = clean(addons);
+  const parts = ['assistant', 'soc'].filter(a => have.includes(a)).map(a => ADDON_NAMES[a]);
+  return ['Core', ...parts].join(' + ');
+}
+
+/** What to show the customer (and the admin) for a plan row: { label, note, reason, core, addons, trialDaysLeft }. */
+export function describeAccess(row, now = new Date()) {
+  const eff = effectiveAccess(row, now);
+  const t = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const out = { core: eff.core, addons: eff.addons, reason: eff.reason, label: '', note: '', trialDaysLeft: null };
+  if (!eff.core) {
+    out.label = eff.reason === 'locked' ? 'Account locked' : eff.reason === 'trial_expired' ? 'Trial ended' : 'No active plan';
+    return out;
+  }
+  if (eff.reason === 'trial') {
+    out.trialDaysLeft = Math.max(1, Math.ceil((new Date(row.trial_ends_at).getTime() - t) / 864e5));
+    out.label = 'Free trial';
+    out.note = `Everything included, ${out.trialDaysLeft} day${out.trialDaysLeft === 1 ? '' : 's'} left`;
+    return out;
+  }
+  out.label = planLabel(eff.addons);
+  if (eff.reason === 'complimentary_indefinite') out.note = 'Complimentary';
+  else if (eff.reason === 'complimentary') out.note = `Complimentary until ${new Date(row.complimentary_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' })}`;
+  return out;
+}
+
 /** Pure check: { allowed, reason, addons, needs } for a feature. */
 export function evaluate(row, feature, now = new Date()) {
   const needs = FEATURES[feature];

@@ -12,6 +12,7 @@ import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
+import AdminUsers from './components/layout/AdminUsers';
 import LoginScreen, { markHasAccount } from './components/layout/LoginScreen';
 import LandingPage from './components/layout/LandingPage';
 import SplashScreen from './components/layout/SplashScreen';
@@ -685,6 +686,8 @@ export default function App() {
         return <AwardReview />;
       case 'settings':
         return <Settings onNavigate={handleNavigate} />;
+      case 'admin':
+        return <AdminUsers />;
       case 'calendar':
         return <Calendar onOpenProject={handleOpenProject} />;
       case 'accounting':

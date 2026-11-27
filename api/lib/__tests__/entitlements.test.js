@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveAccess, evaluate } from '../entitlements.js';
+import { effectiveAccess, evaluate, planLabel, describeAccess } from '../entitlements.js';
 
 const NOW = new Date('2026-12-01T10:00:00Z');
 const day = n => new Date(NOW.getTime() + n * 864e5).toISOString();
@@ -61,5 +61,21 @@ describe('feature check', () => {
   });
   it('an expired trial is refused with its reason', () => {
     expect(evaluate({ status: 'trial', trial_ends_at: day(-1) }, 'generators', NOW)).toMatchObject({ allowed: false, reason: 'trial_expired' });
+  });
+});
+
+describe('plan labels', () => {
+  it('names each combination in plain words', () => {
+    expect(planLabel([])).toBe('Core');
+    expect(planLabel(['assistant'])).toBe('Core + Nora Assistant');
+    expect(planLabel(['soc'])).toBe('Core + Schedule of Condition');
+    expect(planLabel(['soc', 'assistant'])).toBe('Core + Nora Assistant + Schedule of Condition');
+  });
+  it('shows the trial, free access and locked states', () => {
+    expect(describeAccess({ status: 'trial', trial_ends_at: day(9) }, NOW)).toMatchObject({ label: 'Free trial', note: 'Everything included, 9 days left' });
+    expect(describeAccess({ status: 'active', addons: [], complimentary_addons: ['assistant'] }, NOW)).toMatchObject({ label: 'Core + Nora Assistant', note: 'Complimentary' });
+    expect(describeAccess({ status: 'active', addons: [], complimentary_addons: [], complimentary_until: '2027-01-31T12:00:00Z' }, NOW)).toMatchObject({ label: 'Core', note: 'Complimentary until 31 Jan 2027' });
+    expect(describeAccess({ status: 'locked' }, NOW).label).toBe('Account locked');
+    expect(describeAccess({ status: 'trial', trial_ends_at: day(-1) }, NOW).label).toBe('Trial ended');
   });
 });
