@@ -1106,7 +1106,7 @@ export default async function handler(req, res) {
         .from('email_auto_drafts')
         .select('id')
         .eq('email_id', email.id)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'skipped'])
         .limit(1);
 
       if (existingRows?.length) { results.skipped++; continue; }
@@ -1986,6 +1986,28 @@ Itzik Darel is primarily a party wall surveyor but also handles general construc
         // anywhere in the thread, nothing else about the draft matters -
         // there should be no draft.
         if (rawDraftBody.includes('<<<SKIP_NOT_ADDRESSED>>>')) {
+          // Added 27 Nov 2026: remember this decision. Before, nothing was saved, so
+          // every 15-minute run asked the model the same question about the same
+          // email and paid for it again (the bulk of the overnight AI cost). A row
+          // with status 'skipped' is never shown as a draft (everything else only
+          // reads 'pending' / 'sent') and the check near the top of the loop skips
+          // it next time. A new email is a new id, so it is still assessed.
+          try {
+            await supabase.from('email_auto_drafts').insert({
+              email_id: email.id,
+              project_id: email.project_id || null,
+              thread_id: email.thread_id || null,
+              subject: email.subject || null,
+              body: null,
+              to_email: email.sender_email,
+              to_name: email.sender_name,
+              status: 'skipped',
+              generated_by: 'cron-auto-draft',
+              model: modelFor('email_draft_auto').model,
+            });
+          } catch (e) {
+            console.warn('[cron-auto-draft] could not remember skip decision:', e.message);
+          }
           results.skipped++;
           continue;
         }
