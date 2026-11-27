@@ -5,6 +5,7 @@ import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { noticeFileName } from '../../utils/noticeFileName';
 import { uploadDocument } from '../../utils/providers';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import PostTrackedDialog from './PostTrackedDialog';
 
 // Fixed 2026-09-17, real, confirmed bug reported live with a
 // screenshot: the mobile page preview relies on a browser feature,
@@ -356,6 +357,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const [selectedPageIds, setSelectedPageIds] = useState(() => new Set());
   const [showAttach, setShowAttach] = useState(false);
   const [showSave, setShowSave] = useState(false);
+  const [showPost, setShowPost] = useState(false);
   // Added 2026-09-11, on request, after reviewing a mockup together:
   // the desktop side-by-side layout (thumbnail rail + preview pane)
   // doesn't fit a phone screen at all. Below this breakpoint, the
@@ -625,6 +627,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
           {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <button onClick={() => setShowPost(true)} disabled={saving || generating || !pdfB64} style={btn('ghost', saving || generating || !pdfB64)}>Post tracked</button>
           <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Close</button>
         </div>
@@ -760,6 +763,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
       {showAttach && <AttachModal currentPageIdx={currentPageIdx} totalPages={pages.length} onConfirm={handleAttachConfirm} onClose={() => setShowAttach(false)} />}
       {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
+      {showPost && <PostTrackedDialog pdfB64={pdfB64} pageCount={pages.length} ao={currentEntry.ao} project={project} fileName={`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`} onClose={() => setShowPost(false)} />}
     </div>
   );
 }
