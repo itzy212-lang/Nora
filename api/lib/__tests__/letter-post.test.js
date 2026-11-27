@@ -56,3 +56,14 @@ describe('print request', () => {
     expect(buildPrintForm({ ...base, live: true }).get('testmode')).toBe('false');
   });
 });
+
+import { letterStatusLabel } from '../letter-post.js';
+describe('letter status label', () => {
+  it('turns provider statuses into plain English and stops asking once final', () => {
+    expect(letterStatusLabel('printed').label).toBe('Printed');
+    expect(letterStatusLabel('posted')).toEqual({ label: 'Posted', final: false });
+    expect(letterStatusLabel('delivered')).toEqual({ label: 'Delivered', final: true });
+    expect(letterStatusLabel('rejected').label).toBe('Not accepted');
+    expect(letterStatusLabel('on_hold').label).toBe('on_hold');
+  });
+});

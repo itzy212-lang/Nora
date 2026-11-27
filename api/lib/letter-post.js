@@ -69,3 +69,20 @@ export function costToPence(cost) {
   const n = Number(cost?.amount);
   return Number.isFinite(n) ? Math.round(n / 1e6) : null;
 }
+
+/**
+ * Plain-English label for the status Intelliprint reports for a letter. Their exact wording is matched loosely
+ * (by keyword) and anything unrecognised is shown as they sent it, so a new status never hides the letter.
+ * `final` means it will not change again, so the card can stop asking Intelliprint.
+ */
+export function letterStatusLabel(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (!s) return { label: 'Accepted', final: false };
+  if (/deliver/.test(s)) return { label: 'Delivered', final: true };
+  if (/cancel/.test(s)) return { label: 'Cancelled', final: true };
+  if (/reject|fail|error|return|undeliver|invalid/.test(s)) return { label: 'Not accepted', final: true };
+  if (/post|dispatch|despatch|mail|sent|ship/.test(s)) return { label: 'Posted', final: false };
+  if (/print/.test(s)) return { label: 'Printed', final: false };
+  if (/draft|pending|queue|accept|confirm|process/.test(s)) return { label: 'Accepted, waiting to print', final: false };
+  return { label: String(raw), final: false };
+}
