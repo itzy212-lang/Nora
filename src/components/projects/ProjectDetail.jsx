@@ -1979,6 +1979,8 @@ function AOCard({
               </button>
             )}
           </div>
+          {/* Phones only: the list of notices served sits here, under the buttons. On wide screens it sits in the status column above. */}
+          <NoticeActivity projectId={project?.id} ao={ao} placement="bottom" />
           <LOASignerLine request={loaRequest} prefix="AO" reserve={!loaRequest && aoLoaState(loaRequest, ao) === 'sent'} />
         </div>
       </div>

@@ -9,7 +9,10 @@ import sb from '../../supabaseClient';
 import { noticeSectionsLabel, noticeDeliveryInfo } from '../../../api/lib/notice-activity.js';
 import { letterStatusLabel } from '../../../api/lib/letter-post.js';
 
-export default function NoticeActivity({ projectId, ao }) {
+// placement 'side'   : the status column (wide screens only; hidden on a phone).
+// placement 'bottom' : under the Schedule of Condition button at the foot of the AO card (phones only).
+// The card renders both; only the one that fits the screen shows and loads, so nothing is fetched twice.
+export default function NoticeActivity({ projectId, ao, placement = 'side' }) {
   const aoKey = String(ao?.id || ao?.num || '');
   const [rows, setRows] = useState([]);
   // On a wide screen the list floats beside the address, so it never pushes the card's other lines down.
@@ -22,8 +25,10 @@ export default function NoticeActivity({ projectId, ao }) {
     return () => mq.removeEventListener?.('change', on);
   }, []);
 
+  const show = placement === 'bottom' ? !wide : wide;
+
   const load = useCallback(async () => {
-    if (!projectId || !aoKey) return;
+    if (!show || !projectId || !aoKey) return;
     const { data: notices } = await sb.from('notices')
       .select('id, run_number, notice_date, created_at, section_1, section_2, section_3, section_6, section_10, section_2_subsections, delivery_method, posted_letter_id, status')
       .eq('project_id', String(projectId)).eq('ao_id', aoKey).eq('status', 'served')
@@ -44,7 +49,7 @@ export default function NoticeActivity({ projectId, ao }) {
       }));
     }
     setRows(list.map(n => ({ notice: n, letter: n.posted_letter_id ? letters[n.posted_letter_id] || null : null })));
-  }, [projectId, aoKey]);
+  }, [projectId, aoKey, show]);
 
   useEffect(() => {
     load();
@@ -52,12 +57,16 @@ export default function NoticeActivity({ projectId, ao }) {
     return () => window.removeEventListener('ely:refresh-project-detail', load);
   }, [load]);
 
-  if (!rows.length) return null;
-  const floating = wide && rows.length <= 4;
+  if (!show || !rows.length) return null;
+  const floating = placement === 'side' && rows.length <= 4;
   return (
     <div style={{
-      fontSize: 12, color: 'var(--text3)', textAlign: 'right', lineHeight: 1.5,
-      ...(floating ? { position: 'absolute', top: '100%', right: 0, marginTop: 4, width: 'max-content', maxWidth: '60vw' } : { margin: '4px 0 0' }),
+      fontSize: 12, color: 'var(--text3)', lineHeight: 1.5,
+      ...(placement === 'bottom'
+        ? { textAlign: 'left', margin: '10px 0 0', overflowWrap: 'anywhere' }
+        : floating
+          ? { textAlign: 'right', position: 'absolute', top: '100%', right: 0, marginTop: 4, width: 'max-content', maxWidth: '60vw' }
+          : { textAlign: 'right', margin: '4px 0 0' }),
     }}>
       {rows.map(({ notice, letter }) => {
         const info = noticeDeliveryInfo(notice, letter);
