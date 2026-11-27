@@ -3419,7 +3419,8 @@ if (syncErr) throw syncErr;
             {domains.length > 0 && (
               <button style={btn} onClick={() => (junkDialog.kind === 'others' ? handleMoveToOthers('domain') : handleMarkJunk(true, 'domain'))}>{junkDialog.kind === 'others' ? 'Send everything from' : 'Block everything from'} {domains.slice(0, 3).join(', ')}{domains.length > 3 ? '…' : ''}{junkDialog.kind === 'others' ? ' to Others' : ''}</button>
             )}
-            <button style={btn} onClick={() => (junkDialog.kind === 'others' ? handleMoveToOthers('none') : handleMarkJunk(true, 'none'))}>Just move these emails</button>
+            {/* Others always remembers the sender (a one-off move would just let the next email back into the inbox); Junk keeps a one-off option because junked mail is deleted after 30 days anyway. */}
+            {junkDialog.kind === 'junk' && <button style={btn} onClick={() => handleMarkJunk(true, 'none')}>Just move these emails</button>}
             <button style={{ ...btn, background: 'transparent', fontWeight: 500, color: 'var(--text3)' }} onClick={() => setJunkDialog(null)}>Cancel</button>
           </div>
         </div>
