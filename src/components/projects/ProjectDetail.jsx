@@ -1523,7 +1523,7 @@ function AOCard({
               )}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* LOA status icons */}
               {ao.loa_signed_at ? (

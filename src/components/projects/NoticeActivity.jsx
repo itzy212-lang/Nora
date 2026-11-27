@@ -12,6 +12,15 @@ import { letterStatusLabel } from '../../../api/lib/letter-post.js';
 export default function NoticeActivity({ projectId, ao }) {
   const aoKey = String(ao?.id || ao?.num || '');
   const [rows, setRows] = useState([]);
+  // On a wide screen the list floats beside the address, so it never pushes the card's other lines down.
+  // On a phone, or with a long list, it sits in the normal flow instead so nothing overlaps.
+  const [wide, setWide] = useState(() => { try { return window.matchMedia('(min-width: 720px)').matches; } catch { return false; } });
+  useEffect(() => {
+    let mq; try { mq = window.matchMedia('(min-width: 720px)'); } catch { return undefined; }
+    const on = () => setWide(mq.matches);
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
 
   const load = useCallback(async () => {
     if (!projectId || !aoKey) return;
@@ -44,8 +53,12 @@ export default function NoticeActivity({ projectId, ao }) {
   }, [load]);
 
   if (!rows.length) return null;
+  const floating = wide && rows.length <= 4;
   return (
-    <div style={{ fontSize: 12, color: 'var(--text3)', margin: '4px 0 0', textAlign: 'right', lineHeight: 1.5 }}>
+    <div style={{
+      fontSize: 12, color: 'var(--text3)', textAlign: 'right', lineHeight: 1.5,
+      ...(floating ? { position: 'absolute', top: '100%', right: 0, marginTop: 4, width: 'max-content', maxWidth: '60vw' } : { margin: '4px 0 0' }),
+    }}>
       {rows.map(({ notice, letter }) => {
         const info = noticeDeliveryInfo(notice, letter);
         const date = notice.notice_date ? new Date(`${String(notice.notice_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB') : '';
