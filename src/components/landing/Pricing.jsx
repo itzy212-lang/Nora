@@ -14,6 +14,7 @@ export const PLANS = [
       'Notice, award and letter generators',
       'Project job statuses and deadline tracking',
       'Outlook or Gmail connected to your projects',
+      'Emails linked to the right project automatically, by your rules',
       'Automatic reminders and standard email templates',
       'OneDrive or Google Drive project folders',
     ],
@@ -41,7 +42,6 @@ export const PLANS = [
     features: [
       'Draft correspondence with Nora from email, project chat and main chat',
       'Project memory: ask anything about a matter’s history',
-      'Automatic linking of emails to the right project',
       'Monthly AI allowance, with top-ups if you need more',
     ],
     cta: 'Start free trial',

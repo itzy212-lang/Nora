@@ -41,16 +41,16 @@ describe('feature check', () => {
     expect(evaluate(core, 'generators', NOW).allowed).toBe(true);
     expect(evaluate(core, 'soc_ai', NOW)).toMatchObject({ allowed: false, reason: 'bolt_on_missing', needs: 'soc' });
     expect(evaluate(core, 'ai_drafting', NOW)).toMatchObject({ allowed: false, needs: 'assistant' });
-    expect(evaluate(core, 'auto_link_emails', NOW).allowed).toBe(false);
+    expect(evaluate(core, 'auto_link_emails', NOW).allowed).toBe(true);
   });
   it('the Schedule of Condition bolt-on adds only the AI schedule of condition', () => {
     const soc = { status: 'active', addons: ['soc'] };
     expect(evaluate(soc, 'soc_ai', NOW).allowed).toBe(true);
     expect(evaluate(soc, 'ai_drafting', NOW).allowed).toBe(false);
   });
-  it('the Nora Assistant bolt-on adds drafting, chat, memory and linking but not the schedule of condition', () => {
+  it('the Nora Assistant bolt-on adds drafting, chat and memory but not the schedule of condition', () => {
     const assistant = { status: 'active', addons: ['assistant'] };
-    for (const f of ['ai_drafting', 'project_chat', 'main_chat', 'project_memory', 'auto_link_emails']) expect(evaluate(assistant, f, NOW).allowed).toBe(true);
+    for (const f of ['ai_drafting', 'project_chat', 'main_chat', 'project_memory']) expect(evaluate(assistant, f, NOW).allowed).toBe(true);
     expect(evaluate(assistant, 'soc_ai', NOW).allowed).toBe(false);
   });
   it('all three together get everything, and an unknown feature is refused', () => {

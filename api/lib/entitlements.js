@@ -4,9 +4,10 @@
 // anywhere else; call canUse() / checkFeature() so every feature follows the same rule.
 //
 // Core plus bolt-ons (prices ex VAT):
-//   core      £20  : generators, job statuses, email and storage integrations. No AI.
+//   core      £20  : generators, job statuses, email and storage integrations, automatic linking of emails
+//                    to projects by rule. No AI.
 //   soc       +£20 : AI Schedule of Condition.
-//   assistant +£39 : AI drafting (email, project chat, main chat), project memory, automatic email linking.
+//   assistant +£39 : AI drafting (email, project chat, main chat) and project memory.
 //   All three = £79. (How much AI each includes is a separate allowance, added later.)
 //
 // Access, in order: locked -> none; complimentary (free) access (until its end date, or indefinitely when no end
@@ -26,12 +27,12 @@ export const FEATURES = {
   generators:        'core',
   job_statuses:      'core',
   email_integration: 'core',
-  soc_ai:            'soc',
+  auto_link_emails:  'core',
+  soc_ai:           'soc',
   ai_drafting:       'assistant',
   project_chat:      'assistant',
   main_chat:         'assistant',
   project_memory:    'assistant',
-  auto_link_emails:  'assistant',
 };
 
 const clean = list => (Array.isArray(list) ? list.filter(a => ADDONS.includes(a)) : []);
