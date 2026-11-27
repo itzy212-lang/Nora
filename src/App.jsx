@@ -13,6 +13,7 @@ import TopBar from './components/layout/TopBar';
 import Dashboard from './components/layout/Dashboard';
 import Settings from './components/layout/Settings';
 import AdminUsers from './components/layout/AdminUsers';
+import UpgradePrompt from './components/layout/UpgradePrompt';
 import LoginScreen, { markHasAccount } from './components/layout/LoginScreen';
 import LandingPage from './components/layout/LandingPage';
 import SplashScreen from './components/layout/SplashScreen';
@@ -819,6 +820,7 @@ export default function App() {
   return (
     <>
       {appBody}
+      <UpgradePrompt />
       {showNotepad && (
         <NotepadOverlay
           onClose={() => setShowNotepad(false)}

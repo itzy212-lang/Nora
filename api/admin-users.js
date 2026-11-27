@@ -34,6 +34,9 @@ async function listUsers() {
   }
   const { data: plans } = await supabase.from('user_plans').select('*');
   const byId = new Map((plans || []).map(p => [p.user_id, p]));
+  const { data: asked } = await supabase.from('upgrade_requests').select('user_id, addon').is('handled_at', null);
+  const requestsById = new Map();
+  for (const r of asked || []) requestsById.set(r.user_id, [...(requestsById.get(r.user_id) || []), r.addon]);
   return users.map(u => {
     const row = byId.get(u.id) || null;
     return {
@@ -42,6 +45,7 @@ async function listUsers() {
       complimentary_until: row?.complimentary_until || null, complimentary_note: row?.complimentary_note || '',
       trial_ends_at: row?.trial_ends_at || null, locked_reason: row?.locked_reason || '', is_admin: !!row?.is_admin,
       access: describeAccess(row),
+      upgrade_requests: requestsById.get(u.id) || [],
     };
   }).sort((a, b) => String(a.email).localeCompare(String(b.email)));
 }
@@ -92,6 +96,9 @@ export default async function handler(req, res) {
 
     const { error } = await supabase.from('user_plans').update({ ...patch, updated_at: new Date().toISOString() }).eq('user_id', userId);
     if (error) return res.status(500).json({ error: error.message });
+    // A bolt-on switched on (paid or free) answers any open request for it.
+    const nowOn = [...(patch.addons || []), ...(patch.complimentary_addons || [])];
+    if (nowOn.length) await supabase.from('upgrade_requests').update({ handled_at: new Date().toISOString() }).eq('user_id', userId).is('handled_at', null).in('addon', nowOn);
     return res.status(200).json({ ok: true, users: await listUsers() });
   } catch (err) {
     console.error('[admin-users]', err.message);

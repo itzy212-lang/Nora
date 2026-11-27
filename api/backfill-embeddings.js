@@ -5,6 +5,7 @@ import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 
 export const config = { maxDuration: 120 };
 import { createClient } from '@supabase/supabase-js';
+import { allowedOwnerKeys, allowedProjectIds } from './lib/plan-owners.js';
 
 export default async function handler(req, res) {
   if (req.headers['x-nora-manual'] !== 'true') return res.status(401).json({ error: 'Unauthorized' });
@@ -12,11 +13,15 @@ export default async function handler(req, res) {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   const openaiKey = process.env.OPENAI_API_KEY;
 
-  const { data: rows } = await supabase
+  let memoryQuery = supabase
     .from('project_memory')
     .select('id, summary')
     .is('embedding', null)
     .limit(50);
+  // Plan check (api/lib/plan-owners.js): once enforcing, only projects of accounts with Nora Assistant. No change before.
+  const allowedOwners = await allowedOwnerKeys(supabase, 'project_memory');
+  if (allowedOwners) memoryQuery = memoryQuery.in('project_id', await allowedProjectIds(supabase, allowedOwners));
+  const { data: rows } = await memoryQuery;
 
   let done = 0, failed = 0;
   for (const row of rows || []) {

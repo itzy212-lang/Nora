@@ -1,3 +1,4 @@
+import { allowedOwnerKeys } from './lib/plan-owners.js';
 import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 // api/backfill-email-embeddings.js
 // Recurring repair/recovery backfill of missing embeddings on the emails
@@ -124,6 +125,9 @@ export default async function handler(req, res) {
       .order('received_at', { ascending: false, nullsFirst: false })
       .limit(capped);
     if (project_id) query = query.eq('project_id', project_id);
+    // Plan check (api/lib/plan-owners.js): once enforcing, only accounts with Nora Assistant are indexed. No change before.
+    const allowedOwners = await allowedOwnerKeys(supabase, 'project_memory');
+    if (allowedOwners) query = query.in('user_id', allowedOwners.keys);
 
     const { data: rows, error: fetchErr } = await query;
     if (fetchErr) throw new Error(fetchErr.message);
@@ -177,6 +181,7 @@ export default async function handler(req, res) {
       .order('created_at', { ascending: false })
       .limit(capped);
     if (project_id) aiMsgQuery = aiMsgQuery.eq('project_id', project_id);
+    if (allowedOwners) aiMsgQuery = aiMsgQuery.in('user_id', allowedOwners.keys);
 
     const { data: aiMsgRows, error: aiMsgFetchErr } = await aiMsgQuery;
     if (aiMsgFetchErr) throw new Error(aiMsgFetchErr.message);

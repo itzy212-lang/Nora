@@ -84,6 +84,11 @@ function UserCard({ u, me, onUsers }) {
         {u.status === 'trial' && u.trial_ends_at ? ` · Trial ends ${fmt(u.trial_ends_at)}` : ''}
         {locked && u.locked_reason ? ` · ${u.locked_reason}` : ''}
       </div>
+      {u.upgrade_requests?.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--amber, #d97706)', fontWeight: 600 }}>
+          Asked for: {u.upgrade_requests.map(a => ADDONS.find(x => x.id === a)?.name || a).join(', ')}
+        </div>
+      )}
 
       <div style={box}>
         <div style={lbl}>Bolt-ons they pay for (Core is included)</div>

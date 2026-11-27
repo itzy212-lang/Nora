@@ -2,6 +2,7 @@ import './lib/ai-usage-install.js'; // AI token tracking (api/lib/ai-usage.js)
 import { setUsageContext } from './lib/ai-usage.js';
 import { configuredNoraEmail } from './_lib/loa-email.js';
 import { processLeadEmails, isFromLeadSender } from './lib/lead-autoreply.js';
+import { isAdminUser } from './lib/entitlements.js'; // automatic drafting is admins-only for now
 // api/cron-auto-draft.js
 // Runs every 15 minutes via Vercel cron.
 // Finds new inbound emails that need a draft response and generates them via Ely.
@@ -1067,12 +1068,21 @@ export default async function handler(req, res) {
       console.warn('[cron-auto-draft] lead auto-reply failed:', leadErr?.message || leadErr);
     }
 
+    // 28 Nov 2026: automatic drafting is for admins only for now (it is not offered on any plan yet). An email
+    // whose owner is not an admin is left alone: no classification, no draft. This is a fixed rule, not the
+    // record-only plan check. Remove it (and use the plan check) when auto-drafting is offered to customers.
+    const adminByOwner = new Map();
     for (const email of scopedEmails) {
       // AI token tracking: every AI call made while handling this email belongs to its owner.
       try { setUsageContext({ userId: await resolveOwnerUserId(email.user_id), projectId: email.project_id }); } catch { /* tracking only */ }
       // Local Surveyors Direct's own emails (leads, invoices, notices) are handled
       // above or are not for Nora to answer. Never draft or send a reply to them.
       if (isFromLeadSender(email)) { results.skipped++; continue; }
+      {
+        const draftOwnerId = await resolveOwnerUserId(email.user_id);
+        if (!adminByOwner.has(draftOwnerId)) adminByOwner.set(draftOwnerId, await isAdminUser(supabase, draftOwnerId));
+        if (!adminByOwner.get(draftOwnerId)) { results.skipped++; continue; }
+      }
       const automaticResponseAllowed = (await resolveOwnerUserId(email.user_id)) === '3bd1f331-e8ce-477a-8a5d-c5dcdd901434';
       // AOS invoice payment chases are handled by the dedicated two-stage
       // invoice workflow, never by the general automatic reply generator.

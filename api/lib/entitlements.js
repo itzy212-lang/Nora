@@ -124,6 +124,12 @@ export async function checkFeature(supabase, userId, feature) {
   return result;
 }
 
+/** True when this user is an admin (user_plans.is_admin). For features that are admin-only for now. */
+export async function isAdminUser(supabase, userId) {
+  const row = await loadPlan(supabase, userId);
+  return !!row?.is_admin;
+}
+
 export async function canUse(supabase, userId, feature) {
   return (await checkFeature(supabase, userId, feature)).allowed;
 }
