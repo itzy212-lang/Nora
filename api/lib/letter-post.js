@@ -81,8 +81,10 @@ export function letterStatusLabel(raw) {
   if (/deliver/.test(s)) return { label: 'Delivered', final: true };
   if (/cancel/.test(s)) return { label: 'Cancelled', final: true };
   if (/reject|fail|error|return|undeliver|invalid/.test(s)) return { label: 'Not accepted', final: true };
+  // Intelliprint's real first status for a live letter is "waiting_to_print": ordered, accepted, not printed yet.
+  if (/wait|pending|queue|draft|accept|confirm|process/.test(s)) return { label: 'Accepted, waiting to print', final: false };
+  if (/printing/.test(s)) return { label: 'Being printed', final: false };
   if (/post|dispatch|despatch|mail|sent|ship/.test(s)) return { label: 'Posted', final: false };
   if (/print/.test(s)) return { label: 'Printed', final: false };
-  if (/draft|pending|queue|accept|confirm|process/.test(s)) return { label: 'Accepted, waiting to print', final: false };
   return { label: String(raw), final: false };
 }
