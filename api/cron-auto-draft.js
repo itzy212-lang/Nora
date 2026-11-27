@@ -936,6 +936,7 @@ export default async function handler(req, res) {
       .eq('direction', 'incoming')
       .eq('is_draft', false)
       .is('junk_at', null)
+      .eq('is_other', false) // 27 Nov 2026: mail filed under Others is never auto-processed
       .gte('received_at', since)
       .order('received_at', { ascending: false })
       .limit(20);

@@ -87,3 +87,6 @@ A future specialist workspace (mediation, adjudication, litigation preparation, 
 ## 9. Governing evidence
 
 This document's content is built from, and must remain traceable to: the confirmed known-good period (26 June–5 July 2026), the byte-recovered `ely_master_v3_backup_20260624`, the ChatGPT-reviewed and approved `e4cbd432` additions, and the reconciliation diff run against today's live `ely_master_v3` (documented separately, `NORA_V2_RECONCILIATION.md`). Content not traceable to this evidence chain is not part of the Universal Brain or Default Voice Profile by default.
+
+## Email intake filters (27 Nov 2026)
+Plain code, no AI. (1) `blocked_senders`: senders/domains the user marked as junk are dropped by the mail sync before anything is saved (Outlook edge function `sync_outlook` v61 and `api/sync-gmail.js`; rules in `api/lib/email-filters.js`). (2) `emails.is_other`: mail the provider itself files outside the main inbox (Outlook Other, Gmail Promotions/Social/Forums) is saved for the Others folder only: no embedding, project linking, memory extraction, auto-draft, push notification or dashboard listing. (3) Project auto-linking by address/reference matches whole phrases only (`contains_whole_phrase`, `auto-link-emails` v5).

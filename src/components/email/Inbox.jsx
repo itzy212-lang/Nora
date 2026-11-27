@@ -7,6 +7,7 @@ import ChatInputBar from '../shared/ChatInputBar';
 import { buildFirmSignatureHTML } from '../../utils/emailSignature';
 import { useApp } from '../../state/appStore';
 import { findDeletedEmailIds } from '../../utils/findDeletedEmailIds';
+import { sendersOf, blockRowsFor } from '../../utils/senderBlock';
 import { loadCachedEmails, saveCachedEmails, clearEmailCache, updateCachedEmail, deleteCachedEmails, isCacheReconciledFor, markCacheReconciled } from '../../utils/emailCache';
 import { syncEmails, getUserIntegrations } from '../../utils/providers';
 import { getContactsForRequest, createAiSession, saveAiMessage } from '../../hooks/useEly';
@@ -46,7 +47,9 @@ function useWindowWidth() {
 
 const isMobileWidth = (w) => w < 768;
 
-const FOLDERS = ['Inbox', 'Unread', 'Flagged', 'Drafts', 'Sent', 'Junk'];
+// 'Others' (27 Nov 2026): mail Outlook files under "Other" (or Gmail's Promotions/Social/Forums tabs).
+// It is saved only so it can be read here; Nora does nothing else with it (see api/lib/email-filters.js).
+const FOLDERS = ['Inbox', 'Others', 'Unread', 'Flagged', 'Drafts', 'Sent', 'Junk'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function stripHtml(html) {
@@ -2464,6 +2467,9 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       // Added 2026-10-30: emails the user marked as junk live only in the Junk
       // folder (and are deleted automatically after 30 days by the database).
       q = folder === 'Junk' ? q.not('junk_at', 'is', null) : q.is('junk_at', null);
+      // 27 Nov 2026: Others holds only mail the provider filed outside the main inbox; every other folder hides it.
+      if (folder === 'Others') q = q.eq('is_other', true);
+      else if (folder !== 'Junk') q = q.eq('is_other', false);
       // Fixed 2026-09-08, real, confirmed root cause of the refresh
       // button reporting success (spinner ran, sync genuinely
       // succeeded, new emails genuinely existed in the database) but
@@ -2738,12 +2744,15 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     try {
       const LIMIT = 500;
       const { data, error } = await sb.from('emails')
-        .select('id, received_at, junk_at')
+        .select('id, received_at, junk_at, is_other')
         .order('received_at', { ascending: false, nullsFirst: false })
         .limit(LIMIT);
       if (error || !Array.isArray(data)) return; // never remove anything on a failed check
-      const inJunk = activeFolderRef.current === 'Junk';
-      const gone = findDeletedEmailIds(local, data, LIMIT, r => (inJunk ? !!r.junk_at : !r.junk_at));
+      const activeFolder = activeFolderRef.current;
+      const belongs = r => (activeFolder === 'Junk' ? !!r.junk_at
+        : activeFolder === 'Others' ? (!!r.is_other && !r.junk_at)
+        : (!r.junk_at && !r.is_other));
+      const gone = findDeletedEmailIds(local, data, LIMIT, belongs);
       if (!gone.length) return;
       const goneSet = new Set(gone);
       dispatch({ type: 'SET_EMAILS', payload: (emailsRef.current || []).filter(e => !goneSet.has(e.id)) });
@@ -3232,11 +3241,54 @@ if (syncErr) throw syncErr;
   // to the Junk folder and the database deletes them 30 days later (purge_junk_emails).
   // "Not junk" in the Junk folder puts them back. Works the same for every user and
   // either mail provider because it only changes Nora's own copy.
-  const handleMarkJunk = async (junk) => {
+  //
+  // 27 Nov 2026: marking as junk can also remember the sender (or the whole domain) in blocked_senders.
+  // The mail sync checks that table before saving anything, so later mail from them never arrives
+  // (no AI involved). "Not junk" removes the rule again. mode: 'none' | 'sender' | 'domain'.
+  const [junkDialog, setJunkDialog] = useState(null); // { senders: [...] } while choosing
+  const sendersForChecked = () => {
+    const idSet = new Set(checkedIds);
+    return sendersOf([...(state.emails || []), ...(searchResults || [])].filter(e => idSet.has(e.id)));
+  };
+  const askMarkJunk = () => {
+    const senders = sendersForChecked();
+    if (!senders.length) { handleMarkJunk(true, 'none'); return; }
+    setJunkDialog({ senders });
+  };
+  const handleMarkNotOther = async () => {
     if (!sb || checkedIds.size === 0) return;
     const ids = [...checkedIds];
+    const { error } = await sb.from('emails').update({ is_other: false }).in('id', ids);
+    if (error) { alert('Could not move these emails: ' + error.message); return; }
+    const idSet = new Set(ids);
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !idSet.has(e.id)) });
+    deleteCachedEmails(ids);
+    if (idSet.has(selectedEmail?.id)) setSelectedEmail(null);
+    setCheckedIds(new Set());
+  };
+  const handleMarkJunk = async (junk, mode = 'none') => {
+    if (!sb || checkedIds.size === 0) return;
+    const ids = [...checkedIds];
+    const senders = sendersForChecked();
     const { error } = await sb.from('emails').update({ junk_at: junk ? new Date().toISOString() : null }).in('id', ids);
     if (error) { alert('Could not update these emails: ' + error.message); return; }
+    try {
+      if (junk && mode !== 'none') {
+        const rows = blockRowsFor(senders, mode);
+        if (rows.length) {
+          const { error: blockErr } = await sb.from('blocked_senders').upsert(rows, { onConflict: 'user_id,kind,value' });
+          if (blockErr) alert('Moved to Junk, but could not remember the sender: ' + blockErr.message);
+        }
+      } else if (!junk) {
+        // Not junk: remove any rule for these senders (and their domains) so their mail arrives again.
+        for (const s of senders) {
+          if (!s.userId) continue;
+          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('kind', 'email').eq('value', s.address);
+          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('kind', 'domain').eq('value', s.domain);
+        }
+      }
+    } catch (err) { console.warn('[Inbox] blocked_senders update failed:', err?.message || err); }
+    setJunkDialog(null);
     const idSet = new Set(ids);
     dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !idSet.has(e.id)) });
     deleteCachedEmails(ids); // they leave the current folder either way; the next load fetches the right copy
@@ -3266,6 +3318,8 @@ if (syncErr) throw syncErr;
     // Junk is shown only in the Junk folder, and nothing else is shown there
     if (folder === 'Junk') return !!e.junk_at;
     if (e.junk_at) return false;
+    if (folder === 'Others') return !!e.is_other;
+    if (e.is_other) return false;
     // Filter by active folder first
     if (folder === 'Inbox') {
       const f = (e.folder || '').toLowerCase();
@@ -3306,11 +3360,33 @@ if (syncErr) throw syncErr;
   // the data arrived.
   filtered.sort((a, b) => new Date(b.received_at || b.created_at || 0) - new Date(a.received_at || a.created_at || 0));
 
-  const unreadCount = (state.emails || []).filter(e => !e.is_read && !e.junk_at).length;
+  const unreadCount = (state.emails || []).filter(e => !e.is_read && !e.junk_at && !e.is_other).length;
   const allChecked  = filtered.length > 0 && checkedIds.size === filtered.length;
 
   return (
     <>
+    {junkDialog && (() => {
+      const senders = junkDialog.senders;
+      const domains = [...new Set(senders.filter(s => s.canDomain).map(s => s.domain))];
+      const btn = { padding: '9px 12px', borderRadius: 10, fontSize: 13, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', fontWeight: 600 };
+      return (
+        <div onClick={() => setJunkDialog(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Move to Junk</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.45 }}>
+              Should future emails from {senders.length === 1 ? 'this sender' : 'these senders'} be blocked too? Blocked mail never reaches Nora at all.
+              <div style={{ marginTop: 6, color: 'var(--text3)', wordBreak: 'break-all' }}>{senders.slice(0, 4).map(s => s.address).join(', ')}{senders.length > 4 ? ` and ${senders.length - 4} more` : ''}</div>
+            </div>
+            <button style={btn} onClick={() => handleMarkJunk(true, 'sender')}>Block {senders.length === 1 ? 'this sender' : 'these senders'}</button>
+            {domains.length > 0 && (
+              <button style={btn} onClick={() => handleMarkJunk(true, 'domain')}>Block everything from {domains.slice(0, 3).join(', ')}{domains.length > 3 ? '…' : ''}</button>
+            )}
+            <button style={btn} onClick={() => handleMarkJunk(true, 'none')}>Just move these emails</button>
+            <button style={{ ...btn, background: 'transparent', fontWeight: 500, color: 'var(--text3)' }} onClick={() => setJunkDialog(null)}>Cancel</button>
+          </div>
+        </div>
+      );
+    })()}
     <div style={{ display: 'flex', height: 'calc(100vh - 57px)', overflow: 'hidden', background: 'var(--bg)' }}>
       {replyOverlay && selectedEmail && (
         <ReplyOverlay
@@ -3427,7 +3503,12 @@ if (syncErr) throw syncErr;
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
                   {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
                 </button>
-                <button onClick={() => handleMarkJunk(folder !== 'Junk')} title={folder === 'Junk' ? 'Move back out of Junk' : 'Move to Junk — deleted automatically after 30 days'} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
+                {folder === 'Others' && (
+                  <button onClick={handleMarkNotOther} title="Move back to the main Inbox" style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
+                    ↩ To Inbox {checkedIds.size}
+                  </button>
+                )}
+                <button onClick={() => (folder === 'Junk' ? handleMarkJunk(false) : askMarkJunk())} title={folder === 'Junk' ? 'Move back out of Junk (and stop blocking the sender)' : 'Move to Junk — deleted automatically after 30 days'} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
                   {folder === 'Junk' ? `↩ Not junk ${checkedIds.size}` : `🚫 Junk ${checkedIds.size}`}
                 </button>
                 <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>

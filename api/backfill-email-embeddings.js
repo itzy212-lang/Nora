@@ -120,6 +120,7 @@ export default async function handler(req, res) {
       .from('emails')
       .select('id, subject, body, body_preview')
       .is('embedding', null)
+      .eq('is_other', false) // 27 Nov 2026: Others mail is never embedded
       .order('received_at', { ascending: false, nullsFirst: false })
       .limit(capped);
     if (project_id) query = query.eq('project_id', project_id);

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isBlockedSender, isOtherFromGmailLabels } from './lib/email-filters.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -240,7 +241,15 @@ async function syncGmailEmails(userId, accessToken) {
   if (!messagesRes.ok) throw new Error(messagesData.error?.message || 'Failed to list messages');
 
   const messageIds = messagesData.messages || [];
-  let processed = 0, skipped = 0, failed = 0, threadLinked = 0, partyLinked = 0;
+  let processed = 0, skipped = 0, failed = 0, threadLinked = 0, partyLinked = 0, blocked = 0;
+
+  // 27 Nov 2026: senders this user has marked as junk. Mail from them is dropped before it is saved,
+  // so it is never stored, embedded, classified or notified. Plain lookup, no AI.
+  let blockedRows = [];
+  try {
+    const { data } = await supabase.from('blocked_senders').select('kind, value').eq('user_id', userId);
+    blockedRows = data || [];
+  } catch { /* if the lookup fails, sync as normal */ }
 
   for (const msg of messageIds) {
     try {
@@ -265,6 +274,10 @@ async function syncGmailEmails(userId, accessToken) {
       const getHeader = (name) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
 
       const from = parseEmailAddress(getHeader('From'));
+      const isOutgoing = (msgData.labelIds || []).includes('SENT');
+      if (!isOutgoing && isBlockedSender(blockedRows, from.email)) { blocked++; continue; }
+      // Promotions / Social / Forums tabs: kept for reading in the Others folder, nothing else is done with them.
+      const isOther = !isOutgoing && isOtherFromGmailLabels(msgData.labelIds);
       const toList = parseEmailList(getHeader('To'));
       const ccList = parseEmailList(getHeader('Cc'));
       const bccList = parseEmailList(getHeader('Bcc'));
@@ -303,6 +316,7 @@ async function syncGmailEmails(userId, accessToken) {
           received_at: receivedAt.toISOString(),
           is_read: !(msgData.labelIds || []).includes('UNREAD'),
           direction: (msgData.labelIds || []).includes('SENT') ? 'outgoing' : 'incoming',
+          is_other: isOther,
         })
         .select('id')
         .single();
@@ -314,6 +328,7 @@ async function syncGmailEmails(userId, accessToken) {
       }
 
       processed++;
+      if (isOther) continue; // Others: no embedding, attachments, project linking
       embedEmail(inserted.id);
       await recordGmailAttachments(msgData, inserted.id);
 
@@ -337,7 +352,7 @@ async function syncGmailEmails(userId, accessToken) {
     .update({ gmail_last_synced_at: new Date().toISOString() })
     .eq('user_id', userId);
 
-  return { processed, skipped, failed, threadLinked, partyLinked };
+  return { processed, skipped, failed, threadLinked, partyLinked, blocked };
 }
 
 // Extracted 2026-09-17 so the same real sync logic can be called both
