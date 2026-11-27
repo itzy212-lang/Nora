@@ -23,6 +23,7 @@ import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 import { daysSinceProgress } from '../../utils/aoProgress';
 import { splitDraftMessage } from './splitDraftMessage.js';
+import LetterTrackingLink from './LetterTrackingLink';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1520,6 +1521,7 @@ function AOCard({
                   {aoName2(ao)}
                 </div>
               )}
+              <LetterTrackingLink projectId={project?.id} ao={ao} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
