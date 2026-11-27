@@ -85,6 +85,9 @@ export function letterStatusLabel(raw) {
   // Intelliprint's real first status for a live letter is "waiting_to_print": ordered, accepted, not printed yet.
   if (/wait|pending|queue|draft|accept|confirm|process/.test(s)) return { label: 'Accepted, waiting to print', final: false };
   if (/printing/.test(s)) return { label: 'Being printed', final: false };
+  // Seen live: "enclosing" follows "waiting_to_print" (Intelliprint's own site calls this stage "Sent"). It is the
+  // stage where the printed letter is put into its envelope, just before it is handed to Royal Mail.
+  if (/enclos/.test(s)) return { label: 'Printed, being put in the envelope', final: false };
   if (/post|dispatch|despatch|mail|sent|ship/.test(s)) return { label: 'Posted', final: false };
   if (/print/.test(s)) return { label: 'Printed', final: false };
   // Unrecognised: show the provider's own word in plain form rather than guess what it means.

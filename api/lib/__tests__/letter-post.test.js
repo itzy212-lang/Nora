@@ -62,6 +62,7 @@ describe('letter status label', () => {
   it('turns provider statuses into plain English and stops asking once final', () => {
     expect(letterStatusLabel('waiting_to_print').label).toBe('Accepted, waiting to print');
     expect(letterStatusLabel('printing').label).toBe('Being printed');
+    expect(letterStatusLabel('enclosing').label).toBe('Printed, being put in the envelope');
     expect(letterStatusLabel('printed').label).toBe('Printed');
     expect(letterStatusLabel('posted')).toEqual({ label: 'Posted', final: false });
     expect(letterStatusLabel('delivered')).toEqual({ label: 'Delivered', final: true });
