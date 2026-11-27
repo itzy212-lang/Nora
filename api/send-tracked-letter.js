@@ -58,6 +58,7 @@ export default async function handler(req, res) {
       line: String(address_line).trim(), postcode: String(postcode).trim(), live,
       reference: `Nora ${project_id || ''} ${ao_id || ''}`.trim().slice(0, 100),
       blackAndWhite: process.env.INTELLIPRINT_BLACK_AND_WHITE === '1',
+      addressInDocument: process.env.INTELLIPRINT_ADDRESS_IN_DOCUMENT === '1',
       metadata: { nora_user: userId, nora_project: project_id || '', nora_ao: ao_id || '' },
     });
     const print = await createPrint(apiKey, form);

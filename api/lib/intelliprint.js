@@ -10,15 +10,21 @@ import { POSTAGE_SERVICE } from './letter-post.js';
 export const INTELLIPRINT_BASE = 'https://api.intelliprint.net/v1';
 
 /** Form fields for one tracked, single-sided letter. live=false sends it in test mode (not charged, not posted). */
-export function buildPrintForm({ pdfB64, fileName = 'notice.pdf', name = '', line, postcode = '', reference = '', live = false, blackAndWhite = false, metadata = {} }) {
+export function buildPrintForm({ pdfB64, fileName = 'notice.pdf', name = '', line, postcode = '', reference = '', live = false, blackAndWhite = false, metadata = {}, addressInDocument = false }) {
   const f = new FormData();
   f.set('type', 'letter');
   f.set('file[content]', pdfB64);
   f.set('file[name]', fileName);
-  if (name) f.set('recipients[0][address][name]', name);
-  f.set('recipients[0][address][line]', line);
-  if (postcode) f.set('recipients[0][address][postcode]', postcode);
-  f.set('recipients[0][address][country]', 'GB');
+  if (addressInDocument) {
+    // Experiment (set INTELLIPRINT_ADDRESS_IN_DOCUMENT=1): send no recipient, so Intelliprint uses the address
+    // already printed in the letter instead of adding its own address page. Their page says "pre-inserted addresses".
+    f.set('splitting[method]', 'none');
+  } else {
+    if (name) f.set('recipients[0][address][name]', name);
+    f.set('recipients[0][address][line]', line);
+    if (postcode) f.set('recipients[0][address][postcode]', postcode);
+    f.set('recipients[0][address][country]', 'GB');
+  }
   f.set('postage[service]', POSTAGE_SERVICE);
   f.set('printing[double_sided]', 'no');
   f.set('printing[black_and_white]', blackAndWhite ? 'true' : 'false');

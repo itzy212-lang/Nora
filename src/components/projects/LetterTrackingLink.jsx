@@ -35,7 +35,7 @@ export default function LetterTrackingLink({ projectId, ao }) {
   const url = royalMailTrackingUrl(letter.tracking_number);
   const posted = new Date(letter.created_at).toLocaleDateString('en-GB');
   return (
-    <div style={{ fontSize: 12, color: 'var(--text3)', margin: '2px 0 6px' }}>
+    <div style={{ fontSize: 12, color: 'var(--text3)', margin: '4px 0 0', textAlign: 'right' }}>
       {letter.testmode ? 'Test letter' : letterStatusLabel(letter.status).label} · sent from Nora {posted}
       {url
         ? <> · Tracking: <a href={url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #3b82f6)', fontWeight: 600 }}>{letter.tracking_number}</a></>

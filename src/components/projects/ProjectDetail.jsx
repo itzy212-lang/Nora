@@ -1521,10 +1521,10 @@ function AOCard({
                   {aoName2(ao)}
                 </div>
               )}
-              <LetterTrackingLink projectId={project?.id} ao={ao} />
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* LOA status icons */}
               {ao.loa_signed_at ? (
                 <span title={`LOA signed ${new Date(ao.loa_signed_at).toLocaleDateString('en-GB')}`}
@@ -1569,6 +1569,8 @@ function AOCard({
                 </span>
               )
             )}
+            </div>
+            <LetterTrackingLink projectId={project?.id} ao={ao} />
             </div>
           </div>
 
