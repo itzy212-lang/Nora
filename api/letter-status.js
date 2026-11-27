@@ -33,6 +33,8 @@ export default async function handler(req, res) {
     try {
       const print = await retrievePrint(process.env.INTELLIPRINT_API_KEY, row.provider_print_id);
       const letter = print?.letters?.[0] || {};
+      // Logged (no secrets, no addresses) so we can see exactly what Intelliprint reports for test and live letters.
+      console.log('[letter-status] intelliprint', JSON.stringify({ print_keys: Object.keys(print || {}), print_status: print?.status ?? null, confirmed: print?.confirmed ?? null, testmode: print?.testmode ?? null, letter_keys: Object.keys(letter), letter_status: letter.status ?? null }));
       tracking = letter.tracking_number || tracking;
       status = letter.status || status;
       if (tracking !== row.tracking_number || status !== row.status) {

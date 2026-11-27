@@ -15,7 +15,7 @@ export default function LetterTrackingLink({ projectId, ao }) {
     const { data } = await sb.from('posted_letters').select('id, tracking_number, status, testmode, created_at')
       .eq('project_id', String(projectId)).eq('ao_id', aoKey).order('created_at', { ascending: false }).limit(1);
     let row = data?.[0] || null;
-    if (row && !row.testmode && !letterStatusLabel(row.status).final) {
+    if (row && !letterStatusLabel(row.status).final) {
       try {
         const { data: { session } } = await sb.auth.getSession();
         const res = await fetch(`/api/letter-status?id=${encodeURIComponent(row.id)}`, { headers: { Authorization: `Bearer ${session?.access_token}` } });
