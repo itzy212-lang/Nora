@@ -67,3 +67,20 @@ describe('letter status label', () => {
     expect(letterStatusLabel('on_hold').label).toBe('on_hold');
   });
 });
+
+import { noticeSectionsLabel, noticeDeliveryInfo } from '../notice-activity.js';
+describe('served notice list', () => {
+  it('names the sections a notice covered', () => {
+    expect(noticeSectionsLabel({ section_6: true })).toBe('Section 6(1)');
+    expect(noticeSectionsLabel({ section_6: true, section_1: true, section_2: true, section_2_subsections: 'a' })).toBe('Sections 6(1), 1(5) and 2(2)(a)');
+    expect(noticeSectionsLabel({ section_10: true, section_1: true })).toBe('Section 10 notice');
+    expect(noticeSectionsLabel({})).toBe('Notice');
+  });
+  it('describes how each notice went out', () => {
+    expect(noticeDeliveryInfo({ delivery_method: 'emailed' }).text).toBe('Emailed');
+    expect(noticeDeliveryInfo({}).text).toBe('');
+    const posted = noticeDeliveryInfo({ delivery_method: 'posted' }, { status: 'sent', tracking_number: 'AB 12 GB', testmode: false });
+    expect(posted.trackingUrl).toContain('AB12GB');
+    expect(noticeDeliveryInfo({ delivery_method: 'posted' }, { testmode: true }).text).toMatch(/Test letter/);
+  });
+});

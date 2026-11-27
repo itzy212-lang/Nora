@@ -23,7 +23,7 @@ import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 import { daysSinceProgress } from '../../utils/aoProgress';
 import { splitDraftMessage } from './splitDraftMessage.js';
-import LetterTrackingLink from './LetterTrackingLink';
+import NoticeActivity from './NoticeActivity';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1570,7 +1570,7 @@ function AOCard({
               )
             )}
             </div>
-            <LetterTrackingLink projectId={project?.id} ao={ao} />
+            <NoticeActivity projectId={project?.id} ao={ao} />
             </div>
           </div>
 
@@ -4145,7 +4145,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
     }
   }, [project.id, sb]);
 
-  const saveNoticeRecord = useCallback(async ({ editingNoticeId = null, ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '' }) => {
+  const saveNoticeRecord = useCallback(async ({ editingNoticeId = null, ao, selectedSections, includeCover, noticeDate, section2Subsections = '', worksItems = [], safeguarding = false, tenure = '', deliveryMethod = null, postedLetterId = null }) => {
     // Calculate next run_number for this project/AO — only relevant
     // for a genuinely new notice; an edit keeps its original run_number.
     const aoId = ao?.id || String(ao?.num || '');
@@ -4178,6 +4178,9 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       notifiable_works: (() => { const items = worksItems.map(w => typeof w === 'object' ? w : { text: w, sections: [] }).filter(w => w.text?.trim()); return items.length ? items : null; })(),
       safeguarding: !!safeguarding,
       tenure: tenure || null,
+      // How it went out (posted / emailed / saved) and the tracked letter it was posted as. Only set when known,
+      // so editing an older notice never wipes what was recorded.
+      ...(deliveryMethod ? { delivery_method: deliveryMethod, posted_letter_id: postedLetterId || null } : {}),
     };
 
     try {
@@ -4978,7 +4981,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
         const activated=await activation.json();
         if(!activation.ok||!activated?.success)throw Error(activated?.error||'Could not archive original notice PDF');
       }
-      await saveNoticeRecord({ editingNoticeId: pack.noticeId||rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '' });
+      await saveNoticeRecord({ editingNoticeId: pack.noticeId||rq?.editingNoticeId, ao, selectedSections: aoSections, includeCover, noticeDate, section2Subsections: aoS2Subs, worksItems: aoWorksItems, safeguarding: aoSafeguarding, tenure: tenureMap[ak] || '', deliveryMethod: pack.deliveryMethod || null, postedLetterId: pack.postedLetterId || null });
 
               const nonS10 = aoSections.filter(s => ['s1','s2','s3','s6'].includes(s));
               if (nonS10.length > 0) {

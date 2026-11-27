@@ -608,6 +608,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     if (!pdfB64 || saving) return;
     setSaving(true);
     let action = requestedAction;
+    let postedLetterId = null;
 
     // Save & Post: order the tracked letter first. If that fails nothing is saved, so the user can fix it
     // and try again. If it works, the rest is an ordinary Save.
@@ -621,6 +622,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
         window.alert(posted.testmode
           ? `Test letter created (${posted.sheets} pages). Nothing was printed, posted or charged.`
           : `Tracked letter ordered: ${posted.sheets} pages. The tracking link will appear on the AO card.`);
+        postedLetterId = posted.id || null;
         action = 'save';
       } catch (err) {
         window.alert(`The letter was not sent and nothing was saved: ${err.message}`);
@@ -642,6 +644,9 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       fileName,
       saveTarget,
       completionAction: action,
+      // How this notice went out, recorded against it so the AO card can list it.
+      deliveryMethod: requestedAction === 'save_post' ? 'posted' : requestedAction === 'save_email' ? 'emailed' : 'saved',
+      postedLetterId,
     };
 
     try {
