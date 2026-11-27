@@ -47,6 +47,7 @@ export default async function handler(req, res) {
     const tracking = letter.tracking_number || row.tracking_number;
     const status = letter.status || row.status;
     await supabase.from('posted_letters').update({ tracking_number: tracking, status, last_status_at: new Date().toISOString() }).eq('id', row.id);
+    console.log('[intelliprint-webhook] status seen:', status);
     console.log('[intelliprint-webhook] updated', JSON.stringify({ id: row.id, status, hasTracking: !!tracking, shipped: letter.shipped_date ?? null }));
   } catch (err) {
     console.error('[intelliprint-webhook] refresh failed:', err.message);

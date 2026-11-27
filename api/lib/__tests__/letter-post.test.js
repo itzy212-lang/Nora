@@ -66,7 +66,7 @@ describe('letter status label', () => {
     expect(letterStatusLabel('posted')).toEqual({ label: 'Posted', final: false });
     expect(letterStatusLabel('delivered')).toEqual({ label: 'Delivered', final: true });
     expect(letterStatusLabel('rejected').label).toBe('Not accepted');
-    expect(letterStatusLabel('on_hold').label).toBe('on_hold');
+    expect(letterStatusLabel('on_hold').label).toBe('On hold');
   });
 });
 
