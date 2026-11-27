@@ -30,6 +30,11 @@ export default async function handler(req, res) {
   const userId = await userIdFrom(req);
   if (!userId) return res.status(401).json({ error: 'Not signed in' });
 
+  // 27 Nov 2026. Admins only for now: every posted letter spends the owner's Intelliprint credit, and letters are
+  // not billed to customers yet. Remove this check (and the matching one in NoticeReviewModal) when billing exists.
+  const { data: planRow } = await supabase.from('user_plans').select('is_admin').eq('user_id', userId).maybeSingle();
+  if (!planRow?.is_admin) return res.status(403).json({ error: 'Posting tracked letters is not available on your account yet' });
+
   const apiKey = process.env.INTELLIPRINT_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Letter posting is not set up yet' });
 

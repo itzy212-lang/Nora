@@ -6,6 +6,7 @@ import { noticeFileName } from '../../utils/noticeFileName';
 import { uploadDocument } from '../../utils/providers';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { postTrackedLetter } from '../../utils/postTrackedLetter';
+import useMyPlan from '../../utils/useMyPlan';
 import { MAX_SHEETS, letterPriceBreakdown, formatPounds, splitUkPostcode } from '../../../api/lib/letter-post.js';
 
 // Fixed 2026-09-17, real, confirmed bug reported live with a
@@ -318,6 +319,8 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
 
 function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
   const [saveTarget, setSaveTarget] = useState('ao_folder');
+  // Posting is admins only for now (the server enforces it too, api/send-tracked-letter.js).
+  const canUsePost = !!useMyPlan()?.is_admin;
   // Posting a tracked letter: address starts from the AO's service address; the price is shown on the button.
   const initialAddress = useMemo(() => splitUkPostcode(ao?.service_address || ao?.serviceAddress || ao?.reg_addr || ao?.premise || ao?.address || ''), [ao]);
   // Joint owners go on one envelope ("A Smith & B Smith"). A single stored word (e.g. just a first name) is not
@@ -347,9 +350,9 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
           </label>
         ))}
         <div style={{ fontSize: 12, color: '#64748b', margin: '12px 0 18px', lineHeight: 1.5 }}>
-          Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached. Save &amp; Post also sends it as a tracked letter.
+          Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached.{canUsePost ? ' Save & Post also sends it as a tracked letter.' : ''}
         </div>
-        <div style={{ padding: 10, background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#cbd5e1' }}>
+        {canUsePost && <div style={{ padding: 10, background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#cbd5e1' }}>
           {editAddress ? (
             <>
               <div style={{ marginBottom: 6, color: '#94a3b8' }}>Post to:</div>
@@ -365,16 +368,16 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
             </div>
           )}
           {tooManyPages && <div style={{ color: '#fca5a5', marginTop: 6 }}>This pack has {pageCount} pages; a letter can have at most {MAX_SHEETS}.</div>}
-        </div>
+        </div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Cancel</button>
           <button onClick={() => onConfirm(saveTarget, 'save')} disabled={saving} style={btn('ghost', saving)}>{saving ? 'Saving…' : 'Save'}</button>
           <button onClick={() => onConfirm(saveTarget, 'save_email')} disabled={saving} style={btn('success', saving)}>{saving ? 'Saving…' : 'Save & Email'}</button>
-          <button
+          {canUsePost && <button
             onClick={() => onConfirm(saveTarget, 'save_post', { name: postName, line: postLine, postcode, expectedPricePence: price?.net })}
             disabled={saving || !canPost}
             style={btn('primary', saving || !canPost)}
-          >{saving ? 'Saving…' : price ? `Save & Post tracked · ${formatPounds(price.net)} + VAT` : 'Save & Post tracked'}</button>
+          >{saving ? 'Saving…' : price ? `Save & Post tracked · ${formatPounds(price.net)} + VAT` : 'Save & Post tracked'}</button>}
         </div>
       </div>
     </div>
