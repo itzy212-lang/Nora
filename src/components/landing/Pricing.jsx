@@ -1,4 +1,4 @@
-// Pricing section for the public landing page. DRAFT: tiers and prices are placeholders until locked.
+// Pricing section for the public landing page. Prices are ex VAT; keep in step with the plan setup when it is built.
 // Keep the plan list in one place (PLANS) so the numbers can be changed without touching the layout.
 import Icon from './icons';
 
@@ -74,7 +74,7 @@ export default function Pricing({ onSignUp }) {
           </article>
         ))}
       </div>
-      <p className="lp-plans-note lp-reveal">After your trial you choose a plan. If you do not, your account is paused until you subscribe, and your data stays safe and downloadable. Prices shown are a draft.</p>
+      <p className="lp-plans-note lp-reveal">After your trial you choose a plan. If you do not, your account is paused until you subscribe, and your data stays safe and downloadable.</p>
     </section>
   );
 }
