@@ -84,3 +84,28 @@ describe('served notice list', () => {
     expect(noticeDeliveryInfo({ delivery_method: 'posted' }, { testmode: true }).text).toMatch(/Test letter/);
   });
 });
+
+import crypto from 'node:crypto';
+import { verifySvixSignature, findPrintId } from '../svix-verify.js';
+describe('webhook signature', () => {
+  const secretBytes = Buffer.from('a-test-secret-of-some-length');
+  const secret = `whsec_${secretBytes.toString('base64')}`;
+  const body = '{"type":"x","data":{"id":"print_ABC123"}}';
+  const now = 1_800_000_000;
+  const sign = (id, ts, b) => `v1,${crypto.createHmac('sha256', secretBytes).update(`${id}.${ts}.${b}`).digest('base64')}`;
+  const headers = (over = {}) => ({ 'svix-id': 'msg_1', 'svix-timestamp': String(now), 'svix-signature': sign('msg_1', now, body), ...over });
+  it('accepts a correctly signed event', () => {
+    expect(verifySvixSignature({ rawBody: body, headers: headers(), secret, nowSeconds: now }).ok).toBe(true);
+  });
+  it('refuses a changed body, a wrong secret, a stale timestamp and missing headers', () => {
+    expect(verifySvixSignature({ rawBody: body + ' ', headers: headers(), secret, nowSeconds: now }).ok).toBe(false);
+    expect(verifySvixSignature({ rawBody: body, headers: headers(), secret: 'whsec_' + Buffer.from('other').toString('base64'), nowSeconds: now }).ok).toBe(false);
+    expect(verifySvixSignature({ rawBody: body, headers: headers(), secret, nowSeconds: now + 3600 }).ok).toBe(false);
+    expect(verifySvixSignature({ rawBody: body, headers: {}, secret, nowSeconds: now }).ok).toBe(false);
+    expect(verifySvixSignature({ rawBody: body, headers: headers(), secret: '', nowSeconds: now }).ok).toBe(false);
+  });
+  it('finds the print id wherever it sits in the event', () => {
+    expect(findPrintId({ data: { print: { id: 'print_ABC123' } } })).toBe('print_ABC123');
+    expect(findPrintId({ data: { id: 'ltr_1' } })).toBeNull();
+  });
+});
