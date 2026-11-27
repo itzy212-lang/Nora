@@ -71,7 +71,7 @@ export default async function handler(req, res) {
       user_id: userId, project_id: project_id ? String(project_id) : null, ao_id: ao_id ? String(ao_id) : null,
       recipient_name: recipient_name || null, recipient_address: `${address_line}, ${postcode}`,
       sheets, price_net_pence: price.net, vat_pence: price.vat, cost_net_pence: theirCost ?? ourCost,
-      provider_print_id: print.id || null, tracking_number: tracking, status: letter.status || 'draft', testmode: !live,
+      provider_print_id: print.id || null, provider_letter_id: letter.id || null, tracking_number: tracking, status: letter.status || 'draft', testmode: !live,
       last_status_at: new Date().toISOString(),
     }).select('id').single();
     if (insertErr) console.error('[send-tracked-letter] could not record letter:', insertErr.message);

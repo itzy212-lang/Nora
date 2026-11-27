@@ -34,3 +34,12 @@ export function findPrintId(value, depth = 0) {
   if (typeof value === 'object') { for (const v of Object.values(value)) { const f = findPrintId(v, depth + 1); if (f) return f; } }
   return null;
 }
+
+/** First string anywhere in the payload that looks like an Intelliprint letter id (ltr_...). */
+export function findLetterId(value, depth = 0) {
+  if (depth > 6 || value == null) return null;
+  if (typeof value === 'string') return /^ltr_[A-Za-z0-9]+$/.test(value) ? value : null;
+  if (Array.isArray(value)) { for (const v of value) { const f = findLetterId(v, depth + 1); if (f) return f; } return null; }
+  if (typeof value === 'object') { for (const v of Object.values(value)) { const f = findLetterId(v, depth + 1); if (f) return f; } }
+  return null;
+}

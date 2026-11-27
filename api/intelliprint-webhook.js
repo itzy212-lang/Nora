@@ -6,7 +6,7 @@
 // the card is right whatever the event is called, and a forged or replayed event can change nothing.
 // Always answers 200 once the signature is good, so Svix does not keep retrying events we cannot match.
 import { createClient } from '@supabase/supabase-js';
-import { verifySvixSignature, findPrintId } from './lib/svix-verify.js';
+import { verifySvixSignature, findPrintId, findLetterId } from './lib/svix-verify.js';
 import { retrievePrint } from './lib/intelliprint.js';
 
 export const config = { api: { bodyParser: false } };
@@ -31,15 +31,18 @@ export default async function handler(req, res) {
   let event = {};
   try { event = JSON.parse(rawBody); } catch { return res.status(200).json({ ok: true, ignored: 'not JSON' }); }
   const printId = findPrintId(event);
+  const letterId = findLetterId(event);
   // Logged (no addresses or secrets) so the real event names and shape are visible while this is new.
-  console.log('[intelliprint-webhook] event', JSON.stringify({ type: event?.type ?? event?.event ?? null, keys: Object.keys(event || {}), data_keys: Object.keys(event?.data || {}), printId }));
-  if (!printId) return res.status(200).json({ ok: true, ignored: 'no print id' });
+  console.log('[intelliprint-webhook] event', JSON.stringify({ type: event?.type ?? event?.event ?? null, keys: Object.keys(event || {}), data_keys: Object.keys(event?.data || {}), printId, letterId }));
+  if (!printId && !letterId) return res.status(200).json({ ok: true, ignored: 'no print or letter id' });
 
-  const { data: row } = await supabase.from('posted_letters').select('id, tracking_number, status').eq('provider_print_id', printId).maybeSingle();
+  // Match on the print id when the event has one, otherwise on the letter's own id.
+  const column = printId ? 'provider_print_id' : 'provider_letter_id';
+  const { data: row } = await supabase.from('posted_letters').select('id, tracking_number, status, provider_print_id').eq(column, printId || letterId).maybeSingle();
   if (!row) return res.status(200).json({ ok: true, ignored: 'not one of ours' });
 
   try {
-    const print = await retrievePrint(process.env.INTELLIPRINT_API_KEY, printId);
+    const print = await retrievePrint(process.env.INTELLIPRINT_API_KEY, row.provider_print_id || printId);
     const letter = print?.letters?.[0] || {};
     const tracking = letter.tracking_number || row.tracking_number;
     const status = letter.status || row.status;
