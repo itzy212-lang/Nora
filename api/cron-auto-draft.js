@@ -1216,8 +1216,11 @@ export default async function handler(req, res) {
       // work at all. Only skips on a confident classification -
       // anything the model itself is unsure about is left to draft
       // normally rather than risk silently dropping something real.
-      let emailCategory = null;
-      try {
+      // 27 Nov 2026: reuse a category already saved on the email (only ever saved when the
+      // model was confident) instead of paying to classify the same email every run.
+      const knownCategory = ['business', 'marketing', 'acknowledgment_only'].includes(email.ai_category) ? email.ai_category : null;
+      let emailCategory = knownCategory;
+      if (!knownCategory) try {
         const classifyRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
@@ -1243,7 +1246,7 @@ export default async function handler(req, res) {
         console.warn('[cron-auto-draft] Classification failed for', email.id, '- proceeding to draft as normal:', classifyErr.message);
       }
 
-      if (emailCategory) {
+      if (emailCategory && !knownCategory) {
         // Fixed: .catch() chained directly on a Supabase query builder
         // is not reliably supported in this environment - confirmed
         // live, this exact line was throwing "TypeError: ...catch is
