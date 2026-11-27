@@ -51,3 +51,21 @@ export function royalMailTrackingUrl(trackingNumber) {
   if (!t) return null;
   return `https://www.royalmail.com/track-your-item#/tracking-results/${encodeURIComponent(t)}`;
 }
+
+const UK_POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i;
+
+/** Splits "12 High St, London N1 2AB" into { line: '12 High St, London', postcode: 'N1 2AB' }. No postcode found: postcode is ''. */
+export function splitUkPostcode(address) {
+  const text = String(address || '').replace(/\s+/g, ' ').trim();
+  const m = text.match(UK_POSTCODE);
+  if (!m) return { line: text.replace(/[,\s]+$/, ''), postcode: '' };
+  const postcode = `${m[1]} ${m[2]}`.toUpperCase();
+  const line = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).replace(/\s+/g, ' ').replace(/[,\s]+$/, '').replace(/^[,\s]+/, '');
+  return { line, postcode };
+}
+
+/** Intelliprint cost objects are integers scaled by 10^8 (pounds). Returns pence, or null. */
+export function costToPence(cost) {
+  const n = Number(cost?.amount);
+  return Number.isFinite(n) ? Math.round(n / 1e6) : null;
+}

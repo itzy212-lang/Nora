@@ -26,3 +26,33 @@ describe('tracking link', () => {
     expect(royalMailTrackingUrl('')).toBeNull();
   });
 });
+
+import { splitUkPostcode, costToPence } from '../letter-post.js';
+import { buildPrintForm } from '../intelliprint.js';
+
+describe('address and cost helpers', () => {
+  it('splits a UK postcode off the end of an address', () => {
+    expect(splitUkPostcode('12 High Street, London N1 2AB')).toEqual({ line: '12 High Street, London', postcode: 'N1 2AB' });
+    expect(splitUkPostcode('1 Nether Street, London, n12 8ez')).toEqual({ line: '1 Nether Street, London', postcode: 'N12 8EZ' });
+    expect(splitUkPostcode('Flat 2, 5 Park Rd, SW1A1AA')).toEqual({ line: 'Flat 2, 5 Park Rd', postcode: 'SW1A 1AA' });
+    expect(splitUkPostcode('No postcode here')).toEqual({ line: 'No postcode here', postcode: '' });
+  });
+  it('turns Intelliprint cost amounts (pounds x 10^8) into pence', () => {
+    expect(costToPence({ amount: 322000000 })).toBe(322);
+    expect(costToPence({ amount: 358000000 })).toBe(358);
+    expect(costToPence(null)).toBeNull();
+  });
+});
+
+describe('print request', () => {
+  const base = { pdfB64: 'JVBERi0=', name: 'Mr A Owner', line: '12 High Street, London', postcode: 'N1 2AB' };
+  it('asks for a tracked, single-sided letter and stays in test mode unless live', () => {
+    const f = buildPrintForm(base);
+    expect(f.get('postage[service]')).toBe('tracked_48');
+    expect(f.get('printing[double_sided]')).toBe('no');
+    expect(f.get('recipients[0][address][postcode]')).toBe('N1 2AB');
+    expect(f.get('testmode')).toBe('true');
+    expect(f.get('confirmed')).toBe('true');
+    expect(buildPrintForm({ ...base, live: true }).get('testmode')).toBe('false');
+  });
+});
