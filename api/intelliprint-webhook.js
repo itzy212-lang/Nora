@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   const printId = findPrintId(event);
   const letterId = findLetterId(event);
   // Logged (no addresses or secrets) so the real event names and shape are visible while this is new.
-  console.log('[intelliprint-webhook] event', JSON.stringify({ type: event?.type ?? event?.event ?? null, keys: Object.keys(event || {}), data_keys: Object.keys(event?.data || {}), printId, letterId }));
+  console.log('[intelliprint-webhook] event', JSON.stringify({ type: event?.type ?? event?.event ?? null, keys: Object.keys(event || {}), data_keys: Object.keys(event?.data || {}), printId, letterId, status: event?.status ?? null, returned: event?.returned ?? null, shipped_date: event?.shipped_date ?? null }));
   if (!printId && !letterId) return res.status(200).json({ ok: true, ignored: 'no print or letter id' });
 
   // Match on the print id when the event has one, otherwise on the letter's own id.
