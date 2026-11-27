@@ -3516,7 +3516,7 @@ if (syncErr) throw syncErr;
               Search error: {searchError}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, marginTop: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div onClick={() => setCheckedIds(allChecked ? new Set() : new Set(filtered.map(e => e.id)))} style={{ width: 16, height: 16, borderRadius: 4, cursor: 'pointer', border: `1.5px solid ${allChecked ? 'var(--blue)' : 'var(--border2)'}`, background: allChecked ? 'var(--blue)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {allChecked && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
@@ -3529,34 +3529,47 @@ if (syncErr) throw syncErr;
               )}
             </div>
             {checkedIds.size > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <select value={bulkProjectId} onChange={e => setBulkProjectId(e.target.value)}
-                  style={{ maxWidth: 180, padding: '3px 8px', borderRadius: 99, fontSize: 11.5, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
-                  <option value="">Link to project…</option>
-                  {bulkProjects.map(p => (
-                    <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
-                  ))}
-                </select>
-                <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
-                  style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
-                  {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
-                </button>
-                {folder !== 'Others' && folder !== 'Junk' && (
-                  <button onClick={askMoveToOthers} title="File under Others — Nora keeps it for reading but does nothing else with it" style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
-                    📥 To Others {checkedIds.size}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                {/* Row 1: link the selected emails to a project */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <select value={bulkProjectId} onChange={e => setBulkProjectId(e.target.value)}
+                    style={{ flex: 1, minWidth: 0, padding: '4px 8px', borderRadius: 99, fontSize: 11.5, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text2)' }}>
+                    <option value="">Link to project…</option>
+                    {bulkProjects.map(p => (
+                      <option key={p.id} value={p.id}>{p.bo_premise_address || p.address || p.bo || 'Unknown'}</option>
+                    ))}
+                  </select>
+                  <button onClick={handleBulkLinkToProject} disabled={!bulkProjectId || bulkLinking}
+                    style={{ padding: '4px 12px', borderRadius: 99, fontSize: 11.5, whiteSpace: 'nowrap', cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
+                    {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
                   </button>
-                )}
-                {folder === 'Others' && (
-                  <button onClick={handleMarkNotOther} title="Move back to the main Inbox" style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
-                    ↩ To Inbox {checkedIds.size}
-                  </button>
-                )}
-                <button onClick={() => (folder === 'Junk' ? handleMarkJunk(false) : askMarkJunk())} title={folder === 'Junk' ? 'Move back out of Junk (and stop blocking the sender)' : 'Move to Junk — deleted automatically after 30 days'} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
-                  {folder === 'Junk' ? `↩ Not junk ${checkedIds.size}` : `🚫 Junk ${checkedIds.size}`}
-                </button>
-                <button onClick={handleMassDelete} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)', fontWeight: 600 }}>
-                  🗑 Delete {checkedIds.size}
-                </button>
+                </div>
+                {/* Row 2: Others / Junk / Delete always share one line */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                  {(() => {
+                    const pill = { flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 99, fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'center', cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 };
+                    return (
+                      <>
+                        {folder !== 'Others' && folder !== 'Junk' && (
+                          <button onClick={askMoveToOthers} title="File under Others — Nora keeps it for reading but does nothing else with it" style={pill}>
+                            📥 To Others {checkedIds.size}
+                          </button>
+                        )}
+                        {folder === 'Others' && (
+                          <button onClick={handleMarkNotOther} title="Move back to the main Inbox" style={pill}>
+                            ↩ To Inbox {checkedIds.size}
+                          </button>
+                        )}
+                        <button onClick={() => (folder === 'Junk' ? handleMarkJunk(false) : askMarkJunk())} title={folder === 'Junk' ? 'Move back out of Junk (and stop blocking the sender)' : 'Move to Junk — deleted automatically after 30 days'} style={pill}>
+                          {folder === 'Junk' ? `↩ Not junk ${checkedIds.size}` : `🚫 Junk ${checkedIds.size}`}
+                        </button>
+                        <button onClick={handleMassDelete} style={{ ...pill, background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
+                          🗑 Delete {checkedIds.size}
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             )}
           </div>
