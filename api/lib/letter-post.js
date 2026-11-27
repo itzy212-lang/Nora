@@ -1,0 +1,53 @@
+// api/lib/letter-post.js
+//
+// 27 Nov 2026. Tracked letters posted through Intelliprint (hybrid mail). Pure helpers only: price,
+// limits and the Royal Mail tracking link. Nothing here talks to Intelliprint or any storage/mail
+// provider, so it works the same for every user (Outlook or Gmail, OneDrive or Google Drive).
+//
+// Service: one option only, "Tracked" (Intelliprint postage.service = 'tracked_48'), printed single-sided.
+// What the customer is charged (before VAT): £3.32 for the first sheet (envelope, print and postage included)
+// plus 6p for each extra sheet. Single-sided, so one page = one sheet. Intelliprint's own cost is £3.22 plus
+// 6p per extra sheet, so the margin is 10p a letter. Change the numbers here only.
+
+export const POSTAGE_SERVICE = 'tracked_48';
+export const MAX_SHEETS = 50;                 // Intelliprint's limit per letter
+export const FIRST_SHEET_PENCE = 332;         // charged to the customer, ex VAT
+export const EXTRA_SHEET_PENCE = 6;
+export const OUR_COST_FIRST_SHEET_PENCE = 322; // what Intelliprint charges us, ex VAT
+export const OUR_COST_EXTRA_SHEET_PENCE = 6;
+export const VAT_RATE = 0.2;
+
+function checkSheets(sheets) {
+  const n = Number(sheets);
+  if (!Number.isInteger(n) || n < 1) throw new Error('A letter needs at least one page');
+  if (n > MAX_SHEETS) throw new Error(`A letter can have at most ${MAX_SHEETS} pages`);
+  return n;
+}
+
+/** What the customer pays, in pence, before VAT. */
+export function letterPricePence(sheets) {
+  const n = checkSheets(sheets);
+  return FIRST_SHEET_PENCE + (n - 1) * EXTRA_SHEET_PENCE;
+}
+
+/** What it costs us, in pence, before VAT (for our own margin records). */
+export function letterCostPence(sheets) {
+  const n = checkSheets(sheets);
+  return OUR_COST_FIRST_SHEET_PENCE + (n - 1) * OUR_COST_EXTRA_SHEET_PENCE;
+}
+
+/** Price breakdown in pence: { net, vat, gross }. VAT is rounded to the nearest penny. */
+export function letterPriceBreakdown(sheets) {
+  const net = letterPricePence(sheets);
+  const vat = Math.round(net * VAT_RATE);
+  return { net, vat, gross: net + vat };
+}
+
+export const formatPounds = pence => `£${(pence / 100).toFixed(2)}`;
+
+/** Royal Mail's tracking page for a tracking number, already filled in. */
+export function royalMailTrackingUrl(trackingNumber) {
+  const t = String(trackingNumber || '').replace(/\s+/g, '');
+  if (!t) return null;
+  return `https://www.royalmail.com/track-your-item#/tracking-results/${encodeURIComponent(t)}`;
+}
