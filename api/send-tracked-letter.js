@@ -38,7 +38,14 @@ export default async function handler(req, res) {
   const apiKey = process.env.INTELLIPRINT_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Letter posting is not set up yet' });
 
-  const { pdf_b64, project_id, ao_id, recipient_name, address_line, postcode, expected_price_pence, file_name } = req.body || {};
+  const { pdf_b64, project_id, ao_id, recipient_name, address_line, postcode, expected_price_pence, file_name, notice_id } = req.body || {};
+  // A hard copy of an already-served notice: link the letter to that notice (which must be this user's).
+  let linkedNoticeId = null;
+  if (notice_id) {
+    const { data: n } = await supabase.from('notices').select('id').eq('id', String(notice_id)).eq('user_id', userId).maybeSingle();
+    if (!n) return res.status(404).json({ error: 'That notice was not found' });
+    linkedNoticeId = n.id;
+  }
   if (!pdf_b64 || !String(address_line || '').trim()) return res.status(400).json({ error: 'A PDF and a postal address are needed' });
   if (!String(postcode || '').trim()) return res.status(400).json({ error: 'A postcode is needed so Royal Mail can deliver it' });
 
@@ -77,7 +84,7 @@ export default async function handler(req, res) {
       recipient_name: recipient_name || null, recipient_address: `${address_line}, ${postcode}`,
       sheets, price_net_pence: price.net, vat_pence: price.vat, cost_net_pence: theirCost ?? ourCost,
       provider_print_id: print.id || null, provider_letter_id: letter.id || null, tracking_number: tracking, status: letter.status || 'draft', testmode: !live,
-      last_status_at: new Date().toISOString(),
+      last_status_at: new Date().toISOString(), notice_id: linkedNoticeId,
     }).select('id').single();
     if (insertErr) console.error('[send-tracked-letter] could not record letter:', insertErr.message);
 

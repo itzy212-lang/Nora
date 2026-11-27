@@ -3286,6 +3286,27 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
   // is currently being viewed, or null when closed.
   const [noticeHistoryAO, setNoticeHistoryAO] = useState(null);
   const [reviewQueue, setReviewQueue] = useState(null);
+  // Clicking a served notice on the AO card: reopen the exact PDF that was served in the editor so a hard copy can
+  // be posted (or emailed again). Works for every user: the copy is kept in Nora's own storage, not the user's.
+  useEffect(() => {
+    const open = async e => {
+      const { noticeId, aoKey } = e.detail || {};
+      const ao = (project?.aos || []).find(x => String(x.id || x.num || '') === String(aoKey));
+      if (!noticeId || !ao) return;
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const res = await fetch('/api/notice-served-pdf', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ notice_id: noticeId }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.pdf_b64) { alert(json.error === 'No saved copy of this notice is available' ? 'Nora has no saved copy of this older notice, so it cannot be reopened here.' : (json.error || 'Could not open the notice')); return; }
+        setReviewQueue({ aoQueue: [{ ao, sortedDocs: [], aoSections: [], aoWorksItems: [], aoS2Subs: '', existingPdfB64: json.pdf_b64, copyOfNoticeId: noticeId }], project });
+      } catch (err) { alert(`Could not open the notice: ${err.message}`); }
+    };
+    window.addEventListener('ely:open-notice-copy', open);
+    return () => window.removeEventListener('ely:open-notice-copy', open);
+  }, [project]);
   const [generatingNotice, setGeneratingNotice] = useState(false);
   const [emailResponseTasks, setEmailResponseTasks] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]);

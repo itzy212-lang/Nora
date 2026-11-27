@@ -48,7 +48,23 @@ export default function NoticeActivity({ projectId, ao, placement = 'side' }) {
         } catch { /* keep the saved status */ }
       }));
     }
-    setRows(list.map(n => ({ notice: n, letter: n.posted_letter_id ? letters[n.posted_letter_id] || null : null })));
+    // Hard copies posted later for an already-served notice: own letter, own status and tracking.
+    const copies = {};
+    if (list.length) {
+      const { data: copyRows } = await sb.from('posted_letters')
+        .select('id, notice_id, created_at, tracking_number, status, testmode, shipped_at, returned_reason')
+        .in('notice_id', list.map(n => n.id)).order('created_at', { ascending: true });
+      const { data: { session } } = await sb.auth.getSession();
+      const fresh = await Promise.all((copyRows || []).map(async l => {
+        if (letterStatusLabel(l.status).final) return l;
+        try {
+          const res = await fetch(`/api/letter-status?id=${encodeURIComponent(l.id)}`, { headers: { Authorization: `Bearer ${session?.access_token}` } });
+          return res.ok ? { ...l, ...(await res.json()) } : l;
+        } catch { return l; }
+      }));
+      for (const l of fresh) (copies[l.notice_id] = copies[l.notice_id] || []).push(l);
+    }
+    setRows(list.map(n => ({ notice: n, letter: n.posted_letter_id ? letters[n.posted_letter_id] || null : null, copies: copies[n.id] || [] })));
   }, [projectId, aoKey, show]);
 
   useEffect(() => {
@@ -68,16 +84,33 @@ export default function NoticeActivity({ projectId, ao, placement = 'side' }) {
           ? { textAlign: 'right', position: 'absolute', top: '100%', right: 0, marginTop: 4, width: 'max-content', maxWidth: '60vw' }
           : { textAlign: 'right', margin: '4px 0 0' }),
     }}>
-      {rows.map(({ notice, letter }) => {
+      {rows.map(({ notice, letter, copies }) => {
         const info = noticeDeliveryInfo(notice, letter);
         const date = notice.notice_date ? new Date(`${String(notice.notice_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB') : '';
         return (
           <div key={notice.id}>
-            {noticeSectionsLabel(notice)} served{date ? ` ${date}` : ''}
-            {info.text && <> · {info.text}</>}
+            <span
+              role="button" tabIndex={0} title="Open this notice to post a hard copy"
+              onClick={() => window.dispatchEvent(new CustomEvent('ely:open-notice-copy', { detail: { noticeId: notice.id, aoKey } }))}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.click(); }}
+              style={{ cursor: 'pointer', color: 'var(--accent, #3b82f6)', textDecoration: 'underline' }}
+            >
+              {noticeSectionsLabel(notice)} served{date ? ` ${date}` : ''}{info.text ? ` · ${info.text}` : ''}
+            </span>
             {notice.delivery_method === 'posted' && !letter?.testmode && (info.trackingUrl
               ? <> · Tracking: <a href={info.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #3b82f6)', fontWeight: 600 }}>{info.trackingNumber}</a></>
               : ' · tracking number to follow')}
+            {copies.map(c => {
+              const ci = noticeDeliveryInfo({ delivery_method: 'posted' }, c);
+              return (
+                <div key={c.id} style={{ paddingLeft: 12 }}>
+                  ↳ Hard copy posted {new Date(c.created_at).toLocaleDateString('en-GB')} · {ci.text}
+                  {!c.testmode && (ci.trackingUrl
+                    ? <> · Tracking: <a href={ci.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #3b82f6)', fontWeight: 600 }}>{ci.trackingNumber}</a></>
+                    : ' · tracking number to follow')}
+                </div>
+              );
+            })}
           </div>
         );
       })}

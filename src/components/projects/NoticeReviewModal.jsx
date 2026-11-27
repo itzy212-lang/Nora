@@ -317,7 +317,7 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
   );
 }
 
-function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
+function SaveModal({ project, ao, saving, pageCount, copyMode = false, onConfirm, onClose }) {
   const [saveTarget, setSaveTarget] = useState('ao_folder');
   // Posting is admins only for now (the server enforces it too, api/send-tracked-letter.js).
   const canUsePost = !!useMyPlan()?.is_admin;
@@ -342,16 +342,16 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
       <div style={{ background: '#161820', border: '1px solid #2a2d3a', borderRadius: 12, padding: 24, width: 430, maxWidth: '92vw' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', marginBottom: 6 }}>Finalise document</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>Choose where the final PDF should be saved.</div>
-        {options.map(opt => (
+        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>{copyMode ? 'This notice has already been served. A hard copy is sent as a separate letter; the served date does not change.' : 'Choose where the final PDF should be saved.'}</div>
+        {!copyMode && options.map(opt => (
           <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: saveTarget === opt.value ? '#1a2340' : '#1e2130', border: `1.5px solid ${saveTarget === opt.value ? '#3b82f6' : '#2a2d3a'}`, borderRadius: 8, marginBottom: 8, cursor: 'pointer' }}>
             <input type="radio" name="saveTarget" value={opt.value} checked={saveTarget === opt.value} onChange={() => setSaveTarget(opt.value)} style={{ accentColor: '#3b82f6', marginTop: 2 }} />
             <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>{opt.label}</div>
           </label>
         ))}
-        <div style={{ fontSize: 12, color: '#64748b', margin: '12px 0 18px', lineHeight: 1.5 }}>
+        {!copyMode && <div style={{ fontSize: 12, color: '#64748b', margin: '12px 0 18px', lineHeight: 1.5 }}>
           Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached.{canUsePost ? ' Save & Post also sends it as a tracked letter.' : ''}
-        </div>
+        </div>}
         {canUsePost && <div style={{ padding: 10, background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#cbd5e1' }}>
           {editAddress ? (
             <>
@@ -371,13 +371,13 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
         </div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Cancel</button>
-          <button onClick={() => onConfirm(saveTarget, 'save')} disabled={saving} style={btn('ghost', saving)}>{saving ? 'Saving…' : 'Save'}</button>
-          <button onClick={() => onConfirm(saveTarget, 'save_email')} disabled={saving} style={btn('success', saving)}>{saving ? 'Saving…' : 'Save & Email'}</button>
+          {!copyMode && <button onClick={() => onConfirm(saveTarget, 'save')} disabled={saving} style={btn('ghost', saving)}>{saving ? 'Saving…' : 'Save'}</button>}
+          <button onClick={() => onConfirm(saveTarget, 'save_email')} disabled={saving} style={btn('success', saving)}>{saving ? 'Saving…' : copyMode ? 'Email again' : 'Save & Email'}</button>
           {canUsePost && <button
             onClick={() => onConfirm(saveTarget, 'save_post', { name: postName, line: postLine, postcode, expectedPricePence: price?.net })}
             disabled={saving || !canPost}
             style={btn('primary', saving || !canPost)}
-          >{saving ? 'Saving…' : price ? `Save & Post tracked · ${formatPounds(price.net)} + VAT` : 'Save & Post tracked'}</button>}
+          >{saving ? 'Saving…' : price ? `${copyMode ? 'Post tracked' : 'Save & Post tracked'} · ${formatPounds(price.net)} + VAT` : (copyMode ? 'Post tracked' : 'Save & Post tracked')}</button>}
         </div>
       </div>
     </div>
@@ -439,13 +439,19 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
 
     (async () => {
       try {
-        const mergeRes = await fetch('/api/merge-notice-pdfs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documents: currentEntry.sortedDocs, outputFileName: safeFileName(`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`) }),
-        });
-        const merged = await mergeRes.json();
-        if (!mergeRes.ok || !merged?.pdf_b64) throw new Error(merged?.error || 'PDF generation failed');
+        // Posting a hard copy of an already-served notice: start from the exact PDF that was served.
+        let merged;
+        if (currentEntry.existingPdfB64) {
+          merged = { pdf_b64: currentEntry.existingPdfB64 };
+        } else {
+          const mergeRes = await fetch('/api/merge-notice-pdfs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ documents: currentEntry.sortedDocs, outputFileName: safeFileName(`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`) }),
+          });
+          merged = await mergeRes.json();
+          if (!mergeRes.ok || !merged?.pdf_b64) throw new Error(merged?.error || 'PDF generation failed');
+        }
 
         const splitRes = await fetch('/api/split-pdf', {
           method: 'POST',
@@ -613,6 +619,33 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     let action = requestedAction;
     let postedLetterId = null;
 
+    // Hard copy of a notice that was already served: post (or email) it, record it against that notice, and stop.
+    // Nothing is saved to storage and the notice's own record and served date are left exactly as they were.
+    if (currentEntry?.copyOfNoticeId) {
+      try {
+        if (requestedAction === 'save_post') {
+          const posted = await postTrackedLetter({
+            pdfB64, project, ao: currentEntry.ao, name: postDetails?.name, line: postDetails?.line,
+            postcode: postDetails?.postcode, expectedPricePence: postDetails?.expectedPricePence,
+            fileName: `${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`, noticeId: currentEntry.copyOfNoticeId,
+          });
+          window.alert(posted.testmode
+            ? `Test letter created (${posted.sheets} pages). Nothing was printed, posted or charged.`
+            : `Tracked letter ordered: ${posted.sheets} pages. It now shows under the notice on the AO card.`);
+        } else {
+          openNoticeComposer(project, [{ ao: currentEntry.ao, fileName: safeFileName(`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`), pdf_b64: pdfB64 }]);
+        }
+        window.dispatchEvent(new CustomEvent('ely:refresh-project-detail'));
+        setShowSave(false);
+        onClose?.();
+      } catch (err) {
+        window.alert(`The letter was not sent: ${err.message}`);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     // Save & Post: order the tracked letter first. If that fails nothing is saved, so the user can fix it
     // and try again. If it works, the rest is an ordinary Save.
     if (requestedAction === 'save_post') {
@@ -690,7 +723,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
           {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-          <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>
+          {!currentEntry.copyOfNoticeId && <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>}
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Close</button>
         </div>
       </div>
@@ -824,7 +857,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       )}
 
       {showAttach && <AttachModal currentPageIdx={currentPageIdx} totalPages={pages.length} onConfirm={handleAttachConfirm} onClose={() => setShowAttach(false)} />}
-      {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} pageCount={pages.length} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
+      {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} pageCount={pages.length} copyMode={!!currentEntry.copyOfNoticeId} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
     </div>
   );
 }
