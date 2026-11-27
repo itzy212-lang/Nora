@@ -32,7 +32,11 @@ export function noticeDeliveryInfo(notice = {}, letter = null) {
     if (letter?.testmode) return { text: 'Test letter (nothing posted)', trackingNumber: '', trackingUrl: null, final: true };
     const s = letterStatusLabel(letter?.status);
     const tracking = letter?.tracking_number || '';
-    return { text: s.label, trackingNumber: tracking, trackingUrl: royalMailTrackingUrl(tracking), final: s.final };
+    // A posted date with no later status means it has left Intelliprint, so say so.
+    let label = s.label;
+    if (letter?.shipped_at && /waiting|accepted/i.test(label)) label = 'Posted';
+    if (letter?.returned_reason && s.label === 'Returned') label = `Returned (${letter.returned_reason})`;
+    return { text: label, trackingNumber: tracking, trackingUrl: royalMailTrackingUrl(tracking), final: s.final };
   }
   if (method === 'emailed') return { text: 'Emailed', trackingNumber: '', trackingUrl: null, final: true };
   if (method === 'saved') return { text: 'Saved', trackingNumber: '', trackingUrl: null, final: true };

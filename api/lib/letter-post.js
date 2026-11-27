@@ -80,7 +80,8 @@ export function letterStatusLabel(raw) {
   if (!s) return { label: 'Accepted', final: false };
   if (/deliver/.test(s)) return { label: 'Delivered', final: true };
   if (/cancel/.test(s)) return { label: 'Cancelled', final: true };
-  if (/reject|fail|error|return|undeliver|invalid/.test(s)) return { label: 'Not accepted', final: true };
+  if (/return/.test(s)) return { label: 'Returned', final: true };
+  if (/reject|fail|error|undeliver|invalid/.test(s)) return { label: 'Not accepted', final: true };
   // Intelliprint's real first status for a live letter is "waiting_to_print": ordered, accepted, not printed yet.
   if (/wait|pending|queue|draft|accept|confirm|process/.test(s)) return { label: 'Accepted, waiting to print', final: false };
   if (/printing/.test(s)) return { label: 'Being printed', final: false };
@@ -89,4 +90,10 @@ export function letterStatusLabel(raw) {
   // Unrecognised: show the provider's own word in plain form rather than guess what it means.
   const plain = String(raw).replace(/[_-]+/g, ' ').trim();
   return { label: plain.charAt(0).toUpperCase() + plain.slice(1), final: false };
+}
+
+/** Intelliprint dates are unix seconds. Returns an ISO string, or null. */
+export function unixToIso(seconds) {
+  const n = Number(seconds);
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : null;
 }

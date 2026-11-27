@@ -66,6 +66,7 @@ describe('letter status label', () => {
     expect(letterStatusLabel('posted')).toEqual({ label: 'Posted', final: false });
     expect(letterStatusLabel('delivered')).toEqual({ label: 'Delivered', final: true });
     expect(letterStatusLabel('rejected').label).toBe('Not accepted');
+    expect(letterStatusLabel('returned')).toEqual({ label: 'Returned', final: true });
     expect(letterStatusLabel('on_hold').label).toBe('On hold');
   });
 });
@@ -109,5 +110,18 @@ describe('webhook signature', () => {
   it('finds the print id wherever it sits in the event', () => {
     expect(findPrintId({ data: { print: { id: 'print_ABC123' } } })).toBe('print_ABC123');
     expect(findPrintId({ data: { id: 'ltr_1' } })).toBeNull();
+  });
+});
+
+import { unixToIso } from '../letter-post.js';
+describe('returned and shipped letters', () => {
+  it('shows the returned reason and the posted state', () => {
+    expect(noticeDeliveryInfo({ delivery_method: 'posted' }, { status: 'returned', returned_reason: 'Delivery Refused', testmode: false }).text).toBe('Returned (Delivery Refused)');
+    expect(noticeDeliveryInfo({ delivery_method: 'posted' }, { status: 'waiting_to_print', shipped_at: '2026-11-28T10:00:00Z', testmode: false }).text).toBe('Posted');
+    expect(noticeDeliveryInfo({ delivery_method: 'posted' }, { status: 'waiting_to_print', testmode: false }).text).toBe('Accepted, waiting to print');
+  });
+  it('turns unix seconds into a date', () => {
+    expect(unixToIso(1701869673)).toBe('2023-12-06T13:34:33.000Z');
+    expect(unixToIso(null)).toBeNull();
   });
 });

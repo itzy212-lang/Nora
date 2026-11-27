@@ -32,7 +32,7 @@ export default function NoticeActivity({ projectId, ao }) {
     const ids = list.map(n => n.posted_letter_id).filter(Boolean);
     const letters = {};
     if (ids.length) {
-      const { data } = await sb.from('posted_letters').select('id, tracking_number, status, testmode').in('id', ids);
+      const { data } = await sb.from('posted_letters').select('id, tracking_number, status, testmode, shipped_at, returned_reason').in('id', ids);
       for (const l of data || []) letters[l.id] = l;
       // Ask the provider for fresh status/tracking on letters that are still moving.
       const { data: { session } } = await sb.auth.getSession();
