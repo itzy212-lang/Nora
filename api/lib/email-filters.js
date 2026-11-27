@@ -27,19 +27,26 @@ export function canBlockDomain(address) {
   return !!d && !PUBLIC_MAIL_DOMAINS.has(d);
 }
 
-/** rows: [{ kind: 'email'|'domain', value }]. A domain rule also covers its sub-domains (mail.linkedin.com). */
-export function isBlockedSender(rows, senderAddress) {
+function ruleMatches(r, addr, dom) {
+  const v = String(r.value || '').trim().toLowerCase();
+  if (!v) return false;
+  if (r.kind === 'email') return v === addr;
+  if (r.kind === 'domain') return !!dom && !PUBLIC_MAIL_DOMAINS.has(dom) && (dom === v || dom.endsWith('.' + v));
+  return false;
+}
+
+function hasRule(rows, senderAddress, action) {
   const addr = String(senderAddress || '').trim().toLowerCase();
   if (!addr || !Array.isArray(rows) || !rows.length) return false;
   const dom = domainOf(addr);
-  return rows.some(r => {
-    const v = String(r.value || '').trim().toLowerCase();
-    if (!v) return false;
-    if (r.kind === 'email') return v === addr;
-    if (r.kind === 'domain') return !!dom && !PUBLIC_MAIL_DOMAINS.has(dom) && (dom === v || dom.endsWith('.' + v));
-    return false;
-  });
+  return rows.some(r => (r.action || 'block') === action && ruleMatches(r, addr, dom));
 }
+
+/** rows: [{ kind: 'email'|'domain', value, action }]. A domain rule also covers sub-domains (mail.linkedin.com). */
+export function isBlockedSender(rows, senderAddress) { return hasRule(rows, senderAddress, 'block'); }
+
+/** Senders the user asked to have filed under Others (mail is still saved, but never processed). */
+export function isRoutedToOthers(rows, senderAddress) { return hasRule(rows, senderAddress, 'others'); }
 
 /** Outlook Graph: message.inferenceClassification is 'focused' or 'other'. */
 export function isOtherFromOutlook(inferenceClassification) {

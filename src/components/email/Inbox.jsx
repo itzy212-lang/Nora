@@ -3245,7 +3245,7 @@ if (syncErr) throw syncErr;
   // 27 Nov 2026: marking as junk can also remember the sender (or the whole domain) in blocked_senders.
   // The mail sync checks that table before saving anything, so later mail from them never arrives
   // (no AI involved). "Not junk" removes the rule again. mode: 'none' | 'sender' | 'domain'.
-  const [junkDialog, setJunkDialog] = useState(null); // { senders: [...] } while choosing
+  const [junkDialog, setJunkDialog] = useState(null); // { kind: 'junk' | 'others', senders: [...] } while choosing
   const sendersForChecked = () => {
     const idSet = new Set(checkedIds);
     return sendersOf([...(state.emails || []), ...(searchResults || [])].filter(e => idSet.has(e.id)));
@@ -3253,13 +3253,49 @@ if (syncErr) throw syncErr;
   const askMarkJunk = () => {
     const senders = sendersForChecked();
     if (!senders.length) { handleMarkJunk(true, 'none'); return; }
-    setJunkDialog({ senders });
+    setJunkDialog({ kind: 'junk', senders });
+  };
+  const askMoveToOthers = () => {
+    const senders = sendersForChecked();
+    if (!senders.length) { handleMoveToOthers('none'); return; }
+    setJunkDialog({ kind: 'others', senders });
+  };
+  // Move the selected emails to Others, and (optionally) file future mail from the same sender/domain there too.
+  const handleMoveToOthers = async (mode = 'none') => {
+    if (!sb || checkedIds.size === 0) return;
+    const ids = [...checkedIds];
+    const senders = sendersForChecked();
+    const { error } = await sb.from('emails').update({ is_other: true }).in('id', ids);
+    if (error) { alert('Could not move these emails: ' + error.message); return; }
+    try {
+      if (mode !== 'none') {
+        const rows = blockRowsFor(senders, mode, 'others');
+        if (rows.length) {
+          const { error: ruleErr } = await sb.from('blocked_senders').upsert(rows, { onConflict: 'user_id,kind,value' });
+          if (ruleErr) alert('Moved to Others, but could not remember the sender: ' + ruleErr.message);
+        }
+      }
+    } catch (err) { console.warn('[Inbox] sender rule save failed:', err?.message || err); }
+    setJunkDialog(null);
+    const idSet = new Set(ids);
+    dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !idSet.has(e.id)) });
+    deleteCachedEmails(ids);
+    if (idSet.has(selectedEmail?.id)) setSelectedEmail(null);
+    setCheckedIds(new Set());
   };
   const handleMarkNotOther = async () => {
     if (!sb || checkedIds.size === 0) return;
     const ids = [...checkedIds];
+    const senders = sendersForChecked();
     const { error } = await sb.from('emails').update({ is_other: false }).in('id', ids);
     if (error) { alert('Could not move these emails: ' + error.message); return; }
+    try { // stop filing this sender (and its domain) under Others
+      for (const s of senders) {
+        if (!s.userId) continue;
+        await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('action', 'others').eq('kind', 'email').eq('value', s.address);
+        await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('action', 'others').eq('kind', 'domain').eq('value', s.domain);
+      }
+    } catch (err) { console.warn('[Inbox] sender rule removal failed:', err?.message || err); }
     const idSet = new Set(ids);
     dispatch({ type: 'SET_EMAILS', payload: state.emails.filter(e => !idSet.has(e.id)) });
     deleteCachedEmails(ids);
@@ -3283,8 +3319,8 @@ if (syncErr) throw syncErr;
         // Not junk: remove any rule for these senders (and their domains) so their mail arrives again.
         for (const s of senders) {
           if (!s.userId) continue;
-          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('kind', 'email').eq('value', s.address);
-          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('kind', 'domain').eq('value', s.domain);
+          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('action', 'block').eq('kind', 'email').eq('value', s.address);
+          await sb.from('blocked_senders').delete().eq('user_id', s.userId).eq('action', 'block').eq('kind', 'domain').eq('value', s.domain);
         }
       }
     } catch (err) { console.warn('[Inbox] blocked_senders update failed:', err?.message || err); }
@@ -3372,16 +3408,18 @@ if (syncErr) throw syncErr;
       return (
         <div onClick={() => setJunkDialog(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Move to Junk</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{junkDialog.kind === 'others' ? 'Move to Others' : 'Move to Junk'}</div>
             <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.45 }}>
-              Should future emails from {senders.length === 1 ? 'this sender' : 'these senders'} be blocked too? Blocked mail never reaches Nora at all.
+              {junkDialog.kind === 'others'
+                ? <>Should future emails from {senders.length === 1 ? 'this sender' : 'these senders'} go to Others too? They are still saved so you can read them, but Nora does nothing else with them.</>
+                : <>Should future emails from {senders.length === 1 ? 'this sender' : 'these senders'} be blocked too? Blocked mail never reaches Nora at all.</>}
               <div style={{ marginTop: 6, color: 'var(--text3)', wordBreak: 'break-all' }}>{senders.slice(0, 4).map(s => s.address).join(', ')}{senders.length > 4 ? ` and ${senders.length - 4} more` : ''}</div>
             </div>
-            <button style={btn} onClick={() => handleMarkJunk(true, 'sender')}>Block {senders.length === 1 ? 'this sender' : 'these senders'}</button>
+            <button style={btn} onClick={() => (junkDialog.kind === 'others' ? handleMoveToOthers('sender') : handleMarkJunk(true, 'sender'))}>{junkDialog.kind === 'others' ? 'Send' : 'Block'} {senders.length === 1 ? 'this sender' : 'these senders'}{junkDialog.kind === 'others' ? ' to Others' : ''}</button>
             {domains.length > 0 && (
-              <button style={btn} onClick={() => handleMarkJunk(true, 'domain')}>Block everything from {domains.slice(0, 3).join(', ')}{domains.length > 3 ? '…' : ''}</button>
+              <button style={btn} onClick={() => (junkDialog.kind === 'others' ? handleMoveToOthers('domain') : handleMarkJunk(true, 'domain'))}>{junkDialog.kind === 'others' ? 'Send everything from' : 'Block everything from'} {domains.slice(0, 3).join(', ')}{domains.length > 3 ? '…' : ''}{junkDialog.kind === 'others' ? ' to Others' : ''}</button>
             )}
-            <button style={btn} onClick={() => handleMarkJunk(true, 'none')}>Just move these emails</button>
+            <button style={btn} onClick={() => (junkDialog.kind === 'others' ? handleMoveToOthers('none') : handleMarkJunk(true, 'none'))}>Just move these emails</button>
             <button style={{ ...btn, background: 'transparent', fontWeight: 500, color: 'var(--text3)' }} onClick={() => setJunkDialog(null)}>Cancel</button>
           </div>
         </div>
@@ -3503,6 +3541,11 @@ if (syncErr) throw syncErr;
                   style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: bulkProjectId ? 'pointer' : 'not-allowed', background: 'var(--blue)', color: '#fff', border: '1px solid var(--blue)', fontWeight: 600, opacity: bulkProjectId ? 1 : 0.5 }}>
                   {bulkLinking ? 'Linking…' : `🔗 Link ${checkedIds.size}`}
                 </button>
+                {folder !== 'Others' && folder !== 'Junk' && (
+                  <button onClick={askMoveToOthers} title="File under Others — Nora keeps it for reading but does nothing else with it" style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
+                    📥 To Others {checkedIds.size}
+                  </button>
+                )}
                 {folder === 'Others' && (
                   <button onClick={handleMarkNotOther} title="Move back to the main Inbox" style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11.5, cursor: 'pointer', background: 'var(--bg3)', color: 'var(--text2)', border: '1px solid var(--border)', fontWeight: 600 }}>
                     ↩ To Inbox {checkedIds.size}

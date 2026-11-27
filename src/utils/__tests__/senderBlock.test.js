@@ -14,14 +14,17 @@ describe('sender block helpers', () => {
   });
   it('sender mode saves exact addresses', () => {
     expect(blockRowsFor(sendersOf(emails), 'sender')).toEqual([
-      { user_id: 'u1', kind: 'email', value: 'news@linkedin.com' },
-      { user_id: 'u1', kind: 'email', value: 'someone@gmail.com' },
+      { user_id: 'u1', kind: 'email', value: 'news@linkedin.com', action: 'block' },
+      { user_id: 'u1', kind: 'email', value: 'someone@gmail.com', action: 'block' },
     ]);
+  });
+  it('the same selection can be saved as route-to-Others rules', () => {
+    expect(blockRowsFor(sendersOf(emails).slice(0, 1), 'domain', 'others')).toEqual([{ user_id: 'u1', kind: 'domain', value: 'linkedin.com', action: 'others' }]);
   });
   it('domain mode blocks whole domains but falls back to the address for shared mailboxes', () => {
     expect(blockRowsFor(sendersOf(emails), 'domain')).toEqual([
-      { user_id: 'u1', kind: 'domain', value: 'linkedin.com' },
-      { user_id: 'u1', kind: 'email', value: 'someone@gmail.com' },
+      { user_id: 'u1', kind: 'domain', value: 'linkedin.com', action: 'block' },
+      { user_id: 'u1', kind: 'email', value: 'someone@gmail.com', action: 'block' },
     ]);
     expect(canBlockDomain('x@gmail.com')).toBe(false);
   });

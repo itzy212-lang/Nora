@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { isBlockedSender, isOtherFromGmailLabels } from './lib/email-filters.js';
+import { isBlockedSender, isRoutedToOthers, isOtherFromGmailLabels } from './lib/email-filters.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -247,7 +247,7 @@ async function syncGmailEmails(userId, accessToken) {
   // so it is never stored, embedded, classified or notified. Plain lookup, no AI.
   let blockedRows = [];
   try {
-    const { data } = await supabase.from('blocked_senders').select('kind, value').eq('user_id', userId);
+    const { data } = await supabase.from('blocked_senders').select('kind, value, action').eq('user_id', userId);
     blockedRows = data || [];
   } catch { /* if the lookup fails, sync as normal */ }
 
@@ -277,7 +277,7 @@ async function syncGmailEmails(userId, accessToken) {
       const isOutgoing = (msgData.labelIds || []).includes('SENT');
       if (!isOutgoing && isBlockedSender(blockedRows, from.email)) { blocked++; continue; }
       // Promotions / Social / Forums tabs: kept for reading in the Others folder, nothing else is done with them.
-      const isOther = !isOutgoing && isOtherFromGmailLabels(msgData.labelIds);
+      const isOther = !isOutgoing && (isOtherFromGmailLabels(msgData.labelIds) || isRoutedToOthers(blockedRows, from.email));
       const toList = parseEmailList(getHeader('To'));
       const ccList = parseEmailList(getHeader('Cc'));
       const bccList = parseEmailList(getHeader('Bcc'));

@@ -32,13 +32,13 @@ export function sendersOf(emails) {
   return [...seen.values()];
 }
 
-/** Rows to save in blocked_senders for the chosen mode: 'sender' (exact addresses) or 'domain' (whole domains where allowed). */
-export function blockRowsFor(senders, mode) {
+/** Rows to save in blocked_senders ('block' = drop future mail, 'others' = file future mail under Others) for the chosen mode: 'sender' (exact addresses) or 'domain' (whole domains where allowed). */
+export function blockRowsFor(senders, mode, action = 'block') {
   const rows = new Map();
   for (const s of senders) {
     if (!s.userId) continue;
-    if (mode === 'domain' && s.canDomain) rows.set(`${s.userId}|domain|${s.domain}`, { user_id: s.userId, kind: 'domain', value: s.domain });
-    else rows.set(`${s.userId}|email|${s.address}`, { user_id: s.userId, kind: 'email', value: s.address });
+    if (mode === 'domain' && s.canDomain) rows.set(`${s.userId}|domain|${s.domain}`, { user_id: s.userId, kind: 'domain', value: s.domain, action });
+    else rows.set(`${s.userId}|email|${s.address}`, { user_id: s.userId, kind: 'email', value: s.address, action });
   }
   return [...rows.values()];
 }
