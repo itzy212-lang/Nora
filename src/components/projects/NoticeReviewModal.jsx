@@ -320,13 +320,16 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
   const [saveTarget, setSaveTarget] = useState('ao_folder');
   // Posting a tracked letter: address starts from the AO's service address; the price is shown on the button.
   const initialAddress = useMemo(() => splitUkPostcode(ao?.service_address || ao?.serviceAddress || ao?.reg_addr || ao?.premise || ao?.address || ''), [ao]);
-  const [postName, setPostName] = useState(ao?.name || '');
+  // Joint owners go on one envelope ("A Smith & B Smith"). A single stored word (e.g. just a first name) is not
+  // enough for a postal address, so the editor opens and asks for the full name.
+  const [postName, setPostName] = useState([ao?.name, ao?.name2].map(n => String(n || '').trim()).filter(Boolean).join(' & '));
+  const nameIsShort = postName.trim().split(/\s+/).filter(Boolean).length < 2;
   const [postLine, setPostLine] = useState(initialAddress.line);
   const [postcode, setPostcode] = useState(initialAddress.postcode);
-  const [editAddress, setEditAddress] = useState(!initialAddress.postcode);
+  const [editAddress, setEditAddress] = useState(!initialAddress.postcode || postName.trim().split(/\s+/).filter(Boolean).length < 2);
   const tooManyPages = pageCount > MAX_SHEETS;
   const price = !tooManyPages && pageCount >= 1 ? letterPriceBreakdown(pageCount) : null;
-  const canPost = !!price && postLine.trim() && postcode.trim();
+  const canPost = !!price && !nameIsShort && postLine.trim() && postcode.trim();
   const options = [
     { value: 'ao_folder', label: `AO folder — ${ao?.premise || ao?.address || ao?.name || 'Adjoining Owner'}` },
     { value: 'project_folder', label: `Project folder — ${project?.bo_premise_address || project?.ref || 'Project'}` },
@@ -350,7 +353,8 @@ function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
           {editAddress ? (
             <>
               <div style={{ marginBottom: 6, color: '#94a3b8' }}>Post to:</div>
-              <input value={postName} onChange={e => setPostName(e.target.value)} placeholder="Name" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 6, padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
+              <input value={postName} onChange={e => setPostName(e.target.value)} placeholder="Full name (as it should appear on the envelope)" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 6, padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
+              {nameIsShort && <div style={{ color: '#fbbf24', marginBottom: 6 }}>Please enter the full name for the envelope.</div>}
               <input value={postLine} onChange={e => setPostLine(e.target.value)} placeholder="Number, street, town" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 6, padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
               <input value={postcode} onChange={e => setPostcode(e.target.value)} placeholder="Postcode" style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
             </>
