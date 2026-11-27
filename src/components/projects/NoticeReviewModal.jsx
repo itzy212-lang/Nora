@@ -5,7 +5,8 @@ import { saveAdjoiningOwners } from '../../utils/adjoiningOwners';
 import { noticeFileName } from '../../utils/noticeFileName';
 import { uploadDocument } from '../../utils/providers';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import PostTrackedDialog from './PostTrackedDialog';
+import { postTrackedLetter } from '../../utils/postTrackedLetter';
+import { MAX_SHEETS, letterPriceBreakdown, formatPounds, splitUkPostcode } from '../../../api/lib/letter-post.js';
 
 // Fixed 2026-09-17, real, confirmed bug reported live with a
 // screenshot: the mobile page preview relies on a browser feature,
@@ -315,8 +316,17 @@ function AttachModal({ currentPageIdx, totalPages, onConfirm, onClose }) {
   );
 }
 
-function SaveModal({ project, ao, saving, onConfirm, onClose }) {
+function SaveModal({ project, ao, saving, pageCount, onConfirm, onClose }) {
   const [saveTarget, setSaveTarget] = useState('ao_folder');
+  // Posting a tracked letter: address starts from the AO's service address; the price is shown on the button.
+  const initialAddress = useMemo(() => splitUkPostcode(ao?.service_address || ao?.serviceAddress || ao?.reg_addr || ao?.premise || ao?.address || ''), [ao]);
+  const [postName, setPostName] = useState(ao?.name || '');
+  const [postLine, setPostLine] = useState(initialAddress.line);
+  const [postcode, setPostcode] = useState(initialAddress.postcode);
+  const [editAddress, setEditAddress] = useState(!initialAddress.postcode);
+  const tooManyPages = pageCount > MAX_SHEETS;
+  const price = !tooManyPages && pageCount >= 1 ? letterPriceBreakdown(pageCount) : null;
+  const canPost = !!price && postLine.trim() && postcode.trim();
   const options = [
     { value: 'ao_folder', label: `AO folder — ${ao?.premise || ao?.address || ao?.name || 'Adjoining Owner'}` },
     { value: 'project_folder', label: `Project folder — ${project?.bo_premise_address || project?.ref || 'Project'}` },
@@ -334,12 +344,33 @@ function SaveModal({ project, ao, saving, onConfirm, onClose }) {
           </label>
         ))}
         <div style={{ fontSize: 12, color: '#64748b', margin: '12px 0 18px', lineHeight: 1.5 }}>
-          Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached.
+          Save records the completed document and updates the AO card. Save &amp; Email also opens the project email composer with the final PDF attached. Save &amp; Post also sends it as a tracked letter.
+        </div>
+        <div style={{ padding: 10, background: '#1e2130', border: '1px solid #2a2d3a', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#cbd5e1' }}>
+          {editAddress ? (
+            <>
+              <div style={{ marginBottom: 6, color: '#94a3b8' }}>Post to:</div>
+              <input value={postName} onChange={e => setPostName(e.target.value)} placeholder="Name" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 6, padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
+              <input value={postLine} onChange={e => setPostLine(e.target.value)} placeholder="Number, street, town" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 6, padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
+              <input value={postcode} onChange={e => setPostcode(e.target.value)} placeholder="Postcode" style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', background: '#0f1117', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', fontSize: 13 }} />
+            </>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>Post to: {postName ? `${postName}, ` : ''}{postLine}, {postcode}</span>
+              <button type="button" onClick={() => setEditAddress(true)} style={{ background: 'none', border: 0, color: '#93c5fd', cursor: 'pointer', fontSize: 12 }}>Change</button>
+            </div>
+          )}
+          {tooManyPages && <div style={{ color: '#fca5a5', marginTop: 6 }}>This pack has {pageCount} pages; a letter can have at most {MAX_SHEETS}.</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Cancel</button>
           <button onClick={() => onConfirm(saveTarget, 'save')} disabled={saving} style={btn('ghost', saving)}>{saving ? 'Saving…' : 'Save'}</button>
           <button onClick={() => onConfirm(saveTarget, 'save_email')} disabled={saving} style={btn('success', saving)}>{saving ? 'Saving…' : 'Save & Email'}</button>
+          <button
+            onClick={() => onConfirm(saveTarget, 'save_post', { name: postName, line: postLine, postcode, expectedPricePence: price?.net })}
+            disabled={saving || !canPost}
+            style={btn('primary', saving || !canPost)}
+          >{saving ? 'Saving…' : price ? `Save & Post tracked · ${formatPounds(price.net)} + VAT` : 'Save & Post tracked'}</button>
         </div>
       </div>
     </div>
@@ -357,7 +388,6 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
   const [selectedPageIds, setSelectedPageIds] = useState(() => new Set());
   const [showAttach, setShowAttach] = useState(false);
   const [showSave, setShowSave] = useState(false);
-  const [showPost, setShowPost] = useState(false);
   // Added 2026-09-11, on request, after reviewing a mockup together:
   // the desktop side-by-side layout (thumbnail rail + preview pane)
   // doesn't fit a phone screen at all. Below this breakpoint, the
@@ -570,9 +600,30 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
     }
   }, [currentEntry, project]);
 
-  const handleSaveConfirm = useCallback(async (saveTarget, action) => {
+  const handleSaveConfirm = useCallback(async (saveTarget, requestedAction, postDetails) => {
     if (!pdfB64 || saving) return;
     setSaving(true);
+    let action = requestedAction;
+
+    // Save & Post: order the tracked letter first. If that fails nothing is saved, so the user can fix it
+    // and try again. If it works, the rest is an ordinary Save.
+    if (requestedAction === 'save_post') {
+      try {
+        const posted = await postTrackedLetter({
+          pdfB64, project, ao: currentEntry.ao, name: postDetails?.name, line: postDetails?.line,
+          postcode: postDetails?.postcode, expectedPricePence: postDetails?.expectedPricePence,
+          fileName: `${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`,
+        });
+        window.alert(posted.testmode
+          ? `Test letter created (${posted.sheets} pages). Nothing was printed, posted or charged.`
+          : `Tracked letter ordered: ${posted.sheets} pages. The tracking link will appear on the AO card.`);
+        action = 'save';
+      } catch (err) {
+        window.alert(`The letter was not sent and nothing was saved: ${err.message}`);
+        setSaving(false);
+        return;
+      }
+    }
 
     const is104b = (currentEntry?.aoSections || []).includes('s10_4b');
     const fileName = safeFileName(noticeFileName(project?.bo_premise_address, currentEntry.ao?.premise, currentEntry.ao?.name, is104b ? '10_4b_Appointment' : 'Notice_Pack'));
@@ -627,7 +678,6 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
           {aoQueue.length > 1 && <span style={{ fontSize: 11, padding: '2px 8px', background: '#1a2340', border: '1px solid #1d4ed8', borderRadius: 4, color: '#93c5fd', flexShrink: 0 }}>AO {queueIndex + 1} of {aoQueue.length}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-          <button onClick={() => setShowPost(true)} disabled={saving || generating || !pdfB64} style={btn('ghost', saving || generating || !pdfB64)}>Post tracked</button>
           <button onClick={onBack} disabled={saving} style={btn('ghost', saving)}>← Back to Edit</button>
           <button onClick={onClose} disabled={saving} style={btn('ghost', saving)}>Close</button>
         </div>
@@ -762,8 +812,7 @@ export default function NoticeReviewModal({ aoQueue = [], project, onComplete, o
       )}
 
       {showAttach && <AttachModal currentPageIdx={currentPageIdx} totalPages={pages.length} onConfirm={handleAttachConfirm} onClose={() => setShowAttach(false)} />}
-      {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
-      {showPost && <PostTrackedDialog pdfB64={pdfB64} pageCount={pages.length} ao={currentEntry.ao} project={project} fileName={`${currentEntry.ao?.premise || 'Notice'}_Pack.pdf`} onClose={() => setShowPost(false)} />}
+      {showSave && <SaveModal project={project} ao={currentEntry.ao} saving={saving} pageCount={pages.length} onConfirm={handleSaveConfirm} onClose={() => setShowSave(false)} />}
     </div>
   );
 }
