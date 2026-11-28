@@ -367,6 +367,7 @@ function SaveModal({ project, ao, saving, pageCount, copyMode = false, onConfirm
               <button type="button" onClick={() => setEditAddress(true)} style={{ background: 'none', border: 0, color: '#93c5fd', cursor: 'pointer', fontSize: 12 }}>Change</button>
             </div>
           )}
+          <div style={{ color: '#94a3b8', marginTop: 6 }}>Posted the same working day if ordered before 3pm Monday to Friday, otherwise the next working day. Royal Mail Tracked 48 then usually delivers within 2 working days.</div>
           {tooManyPages && <div style={{ color: '#fca5a5', marginTop: 6 }}>This pack has {pageCount} pages; a letter can have at most {MAX_SHEETS}.</div>}
         </div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
