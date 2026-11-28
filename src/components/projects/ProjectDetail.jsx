@@ -1626,9 +1626,14 @@ function AOCard({
 
           {(() => {
             const st2 = (ao.status || '').toLowerCase();
-            const actionTaken = ['consent','dissent','s10','s104b','complete'].includes(st2)
+            // 28 Nov 2026: also counts as dealt with once the owner has dissented, a surveyor is appointed or an award has
+            // been drafted. The consent deadline is expected to have passed by then, so it must not show as overdue.
+            const actionTaken = ['consent','dissent','s10','s104b','award','award_served','surveyor_appointed','complete'].includes(st2)
               || !!aoS10Served(ao) || !!ao104BServed(ao)
-              || !!(ao?.award_served_date || ao?.awardServedDate);
+              || !!(ao?.award_served_date || ao?.awardServedDate)
+              || !!(ao?.award_generated_at || ao?.awardGeneratedAt)
+              || !!(ao?.dissent_received_date || ao?.dissentReceivedDate)
+              || !!(aoSurvName(ao) || ao?.agreed_surveyor);
 
             // Consent deadline badge — only show if no action taken yet
             if (!isAOAppointment && noticed && cd && !actionTaken) {
