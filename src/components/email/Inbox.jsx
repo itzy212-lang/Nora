@@ -3532,7 +3532,11 @@ if (syncErr) throw syncErr;
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text3)' }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail…"
-              style={{ width: '100%', padding: '7px 10px 7px 30px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 99, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '7px 32px 7px 30px', fontSize: 13, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 99, color: 'var(--text)', outline: 'none', boxSizing: 'border-box' }} />
+            {search && (
+              <button type="button" onClick={() => setSearch('')} aria-label="Clear search" title="Clear search"
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--border)', color: 'var(--text2)', fontSize: 12, lineHeight: '22px', padding: 0, cursor: 'pointer' }}>✕</button>
+            )}
           </div>
           {searchError && (
             <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: 'var(--red-bg, #fef2f2)', border: '1px solid var(--red, #ef4444)', color: 'var(--red, #ef4444)', fontSize: 11.5, wordBreak: 'break-word' }}>
