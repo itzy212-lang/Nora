@@ -18,6 +18,7 @@ const EVENT_TYPES = {
 };
 
 const DAY_NAMES   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function toYMD(d) {
@@ -544,6 +545,14 @@ export default function Calendar({ onOpenProject }) {
   // clicked any date - you're implicitly "looking at" today until you
   // pick somewhere else.
   const [selectedDate, setSelectedDate] = useState(todayYMD());
+  // Month view: tapping a day opens that day's list in a panel (a bottom sheet on a phone).
+  const [sheetDate, setSheetDate] = useState(null);
+  const [narrow, setNarrow] = useState(() => { try { return window.innerWidth < 720; } catch { return false; } });
+  useEffect(() => {
+    const on = () => setNarrow(window.innerWidth < 720);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
   const [taskEvents, setTaskEvents] = useState([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskModalDate, setTaskModalDate] = useState(todayYMD());
@@ -636,12 +645,14 @@ export default function Calendar({ onOpenProject }) {
   const allEvents = [...projectEvents, ...taskEvents];
 
   const openAddTask = (dateStr) => {
+    setSheetDate(null);
     setTaskModalDate(dateStr || selectedDate || todayYMD());
     setEditingTask(null);
     setShowTaskModal(true);
   };
 
   const openEditTask = (task) => {
+    setSheetDate(null);
     if (!task) return;
     setEditingTask(task);
     setTaskModalDate(normalDate(task.due_date || task.date || selectedDate || todayYMD()));
@@ -743,7 +754,8 @@ export default function Calendar({ onOpenProject }) {
   const renderMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
+    // Weeks start on Monday.
+    const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     const cells = [];
@@ -762,60 +774,56 @@ export default function Calendar({ onOpenProject }) {
       cells.push({ date: toYMD(d), day: d.getDate(), faded: true });
     }
 
+    const todayDow = (new Date().getDay() + 6) % 7;
+    const cellH = Math.max(96, Math.floor((window.innerHeight * 0.74 - 120) / 6));
+    const maxChips = Math.max(2, Math.floor((cellH - 32) / 19));
+
     return (
       <div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
-          {DAY_NAMES.map(n => (
-            <div key={n} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text3)', padding: '6px 0', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{n}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
+          {MONDAY_NAMES.map((n, i) => (
+            <div key={n} style={{ textAlign: 'center', fontSize: 13, fontWeight: 500, color: i === todayDow ? 'var(--blue)' : 'var(--text2)', padding: '4px 0' }}>{n}</div>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4 }}>
           {cells.map(({ date, day, faded }) => {
             const isToday = date === todayYMD();
-            const isSelected = date === selectedDate;
-            const dayEvts = allEvents.filter(e => e.date === date);
-            // 6 rows of cells; fit within ~65vh minus headers (~140px)
-            const cellH = Math.max(72, Math.floor((window.innerHeight * 0.72 - 140) / 6));
+            const dayEvts = allEvents.filter(e => e.date === date)
+              .sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+            const shown = dayEvts.length > maxChips ? dayEvts.slice(0, maxChips - 1) : dayEvts;
+            const hidden = dayEvts.length - shown.length;
 
             return (
-              <div key={date} onClick={() => handleDayClick(date)} style={{
-                height: cellH,
-                background: '#fafafa',
-                // The outline tracks whichever day is selected (i.e.
-                // shown in the day panel below) and moves with it -
-                // it used to be tied to isToday instead, so today's
-                // cell always looked "selected" even after clicking a
-                // different date. The blue fill on the date number
-                // below is the separate, permanent "today" indicator
-                // and never moves.
-                border: `${isSelected ? '2px solid var(--blue)' : '1px solid #ececec'}`,
-                borderRadius: 10, padding: '5px 6px',
-                cursor: 'pointer', overflow: 'hidden',
-                opacity: faded ? 0.35 : 1,
+              <div key={date} onClick={() => { setSelectedDate(date); setSheetDate(date); }} style={{
+                height: cellH, background: 'var(--bg2, #f4f5f7)', borderRadius: 12,
+                padding: '6px 3px 4px', cursor: 'pointer', overflow: 'hidden',
+                opacity: faded ? 0.6 : 1, minWidth: 0,
               }}>
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: 22, height: 22, borderRadius: '50%', marginBottom: 4,
-                  background: isToday ? 'var(--blue)' : 'transparent',
-                  fontSize: 12, fontWeight: isToday ? 700 : 400,
-                  color: isToday ? '#fff' : 'var(--text)',
-                }}>{day}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    minWidth: 26, height: 26, borderRadius: 13, padding: '0 4px',
+                    background: isToday ? 'var(--blue)' : 'transparent',
+                    fontSize: 14, fontWeight: isToday ? 700 : 500,
+                    color: isToday ? '#fff' : 'var(--text)',
+                  }}>{day}</div>
+                </div>
 
-                {dayEvts.slice(0, 3).map((ev, i) => {
+                {shown.map((ev, i) => {
                   const cfg = EVENT_TYPES[ev.type] || EVENT_TYPES.todo;
                   return (
                     <div key={i} style={{
-                      fontSize: 9.5, padding: '1px 4px', borderRadius: 4, marginBottom: 2,
-                      background: cfg.bg, color: cfg.colour, fontWeight: 500,
+                      fontSize: 11, lineHeight: '16px', height: 16, padding: '0 4px', borderRadius: 5, marginBottom: 3,
+                      background: cfg.colour, color: '#fff', fontWeight: 500,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {ev.label}
                     </div>
                   );
                 })}
-                {dayEvts.length > 3 && (
-                  <div style={{ fontSize: 9.5, color: 'var(--text3)', marginTop: 1 }}>+{dayEvts.length - 3} more</div>
+                {hidden > 0 && (
+                  <div style={{ fontSize: 10.5, color: 'var(--text3)', textAlign: 'center' }}>+{hidden} more</div>
                 )}
               </div>
             );
@@ -826,7 +834,7 @@ export default function Calendar({ onOpenProject }) {
   };
 
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ padding: narrow ? '16px 8px' : '24px 28px' }}>
       {showTaskModal && (
         <TaskModal
           task={editingTask}
@@ -885,7 +893,7 @@ export default function Calendar({ onOpenProject }) {
       {view === 'week' && <WeekView currentDate={currentDate} events={allEvents} onDayClick={handleDayClick} selectedDate={selectedDate} />}
       {view === 'day' && <DayView currentDate={currentDate} events={allEvents} onAddTask={openAddTask} onOpenTask={openEditTask} onOpenProject={handleOpenProj} />}
 
-      {selectedDate && view !== 'day' && (
+      {selectedDate && view === 'week' && (
         <DayDetail
           dateStr={selectedDate}
           events={allEvents}
@@ -893,6 +901,16 @@ export default function Calendar({ onOpenProject }) {
           onOpenTask={openEditTask}
           onOpenProject={handleOpenProj}
         />
+      )}
+      {view === 'month' && sheetDate && (
+        <div onClick={() => setSheetDate(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 250, display: 'flex', alignItems: narrow ? 'flex-end' : 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg, #fff)', width: '100%', maxWidth: 520, maxHeight: '78vh', overflowY: 'auto', borderRadius: narrow ? '18px 18px 0 0' : 18, padding: '6px 8px 12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setSheetDate(null)} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer', padding: '4px 10px' }}>✕</button>
+            </div>
+            <DayDetail dateStr={sheetDate} events={allEvents} onAddTask={openAddTask} onOpenTask={openEditTask} onOpenProject={(id) => { setSheetDate(null); handleOpenProj(id); }} />
+          </div>
+        </div>
       )}
     </div>
   );
