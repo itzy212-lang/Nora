@@ -2510,10 +2510,11 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       };
       const FOLDER_LIMITS = [['Inbox', 500], ['Sent', 300], ['Others', 200], ['Drafts', 100], ['Junk', 100], ['Flagged', 100]];
       const q = Promise.all(FOLDER_LIMITS.map(([f, limit]) => buildQuery(f, limit))).then(results => {
-        const failed = results.find(r => r.error);
-        if (failed) return { data: null, error: failed.error };
+        // The inbox itself must load; a side folder failing just leaves that folder as it was.
+        if (results[0].error) return { data: null, error: results[0].error };
+        results.slice(1).forEach(r => { if (r.error) console.warn('[loadEmails] a folder did not load:', r.error.message); });
         const byId = new Map();
-        for (const r of results) for (const e of r.data || []) byId.set(e.id, e);
+        for (const r of results) if (!r.error) for (const e of r.data || []) byId.set(e.id, e);
         const merged = [...byId.values()].sort((x, y) => String(y.received_at || '').localeCompare(String(x.received_at || '')));
         return { data: merged, error: null };
       });
