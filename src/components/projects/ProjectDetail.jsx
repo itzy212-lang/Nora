@@ -294,7 +294,7 @@ function consentPeriodExpired(ao) {
   return new Date(cd).getTime() < Date.now();
 }
 
-function getAOStatusMeta(ao, projectRole = 'BO') {
+function getAOStatusMeta(ao, projectRole = 'BO', addedAt = null) {
   const st = (ao?.status || '').toLowerCase();
   const noticed = !!aoNotice(ao);
   const s10Served = hasS10BeenServed(ao);
@@ -378,6 +378,14 @@ function getAOStatusMeta(ao, projectRole = 'BO') {
     return { label: 'Notice served', colour: '#22c55e', action: null };
   }
 
+  // 28 Nov 2026, on request: an adjoining owner who has been added but had no notice served within 7 days goes red,
+  // so a job cannot be forgotten. The generic Serve notice card below the AO cards is still where it gets served.
+  const addedMs = new Date(ao?.added_at || ao?.created_at || addedAt || 0).getTime();
+  if (!noticed && !isAOResolved(ao) && addedMs > 0) {
+    const daysSince = Math.floor((Date.now() - addedMs) / 86400000);
+    if (daysSince >= 7) return { label: `No notice served (${daysSince}d)`, colour: '#ef4444', action: null };
+  }
+
   // Fixed 2026-09-11, on request: this used to prompt "Serve notice"
   // on the AO card itself for an AO nothing has happened to yet —
   // but the whole point of the generic, always-available Serve
@@ -395,8 +403,8 @@ function fmtGBP(v) {
   })}`;
 }
 
-function getAOColour(ao, projectRole = 'BO') {
-  return getAOStatusMeta(ao, projectRole).colour || '#9ca3af';
+function getAOColour(ao, projectRole = 'BO', addedAt = null) {
+  return getAOStatusMeta(ao, projectRole, addedAt).colour || '#9ca3af';
 }
 
 function getProjectColour(project) {
@@ -1458,7 +1466,7 @@ function AOCard({
   emailResponseTasks = [],
 }) {
   const isAOAppointment = projectRole === 'AO' && ao.appointed_by_me;
-  const colour = getAOColour(ao, projectRole);
+  const colour = getAOColour(ao, projectRole, project?.created_at);
   const address = aoAddress(ao);
   const cd = aoConsent(ao);
   const days = daysUntil(cd);
@@ -1468,7 +1476,7 @@ function AOCard({
   const survEmail = aoSurvEmail(ao);
   const survPhone = aoSurvPhone(ao);
 
-  const statusMeta = getAOStatusMeta(ao, projectRole);
+  const statusMeta = getAOStatusMeta(ao, projectRole, project?.created_at);
 
   // Find open email_response task for this AO (matched by surveyor email or any task on this project)
   const aoEmail = ao?.surv_email || ao?.surveyorEmail || ao?.email || '';
@@ -3842,6 +3850,7 @@ export default function ProjectDetail({ project: initialProject, onBack, onOpenC
       // valid UUID for the adjoining_owners table.
       id: existingAO?.id || crypto.randomUUID(),
       num: existingAO?.num || currentAOs.length + 1,
+      added_at: existingAO?.added_at || new Date().toISOString(),
 
       premise: form.premise || '',
       address: form.premise || '',

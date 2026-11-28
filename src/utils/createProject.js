@@ -45,6 +45,7 @@ export function buildAORecord(form, aoService) {
     // real UUID from the start.
     id: crypto.randomUUID(),
     num: 1,
+    added_at: new Date().toISOString(),
 
     premise: form.aoPremise.trim(),
     address: form.aoPremise.trim(),
