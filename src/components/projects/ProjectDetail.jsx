@@ -24,7 +24,7 @@ import PizZip from 'pizzip';
 import ChatInputBar from '../shared/ChatInputBar';
 import { daysSinceProgress } from '../../utils/aoProgress';
 import { splitDraftMessage } from './splitDraftMessage.js';
-import NoticeActivity from './NoticeActivity';
+import AOTrail from './AOTrail';
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1531,18 +1531,6 @@ function AOCard({
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {/* LOA status icons */}
-              {ao.loa_signed_at ? (
-                <span title={`LOA signed ${new Date(ao.loa_signed_at).toLocaleDateString('en-GB')}`}
-                  style={{ fontSize: 16, cursor: ao.loa_signed_pdf_url ? 'pointer' : 'default' }}
-                  onClick={() => ao.loa_signed_pdf_url && window.open(ao.loa_signed_pdf_url, '_blank')}
-                >✅</span>
-              ) : ao.loa_sent_at ? (
-                <span title={`LOA sent ${new Date(ao.loa_sent_at).toLocaleDateString('en-GB')} -- awaiting signature`}
-                  style={{ fontSize: 16 }}
-                >📤</span>
-              ) : null}
-
               {statusLabel && (
                 statusMeta.action ? (
                 <button
@@ -1576,9 +1564,11 @@ function AOCard({
               )
             )}
             </div>
-            <NoticeActivity projectId={project?.id} ao={ao} />
             </div>
           </div>
+
+          {/* Wide screens: the dated progress timeline sits on the right, under the status. */}
+          <AOTrail projectId={project?.id} ao={ao} loaRequest={loaRequest} onOpenSOC={onOpenSOCForAO} placement="side" />
 
           {/* Fixed 2026-09-10, on request: removed — genuinely
               redundant with the dynamic status button above (which
@@ -1986,8 +1976,7 @@ function AOCard({
             )}
           </div>
           {/* Phones only: the list of notices served sits here, under the buttons. On wide screens it sits in the status column above. */}
-          <NoticeActivity projectId={project?.id} ao={ao} placement="bottom" />
-          <LOASignerLine request={loaRequest} prefix="AO" reserve={!loaRequest && aoLoaState(loaRequest, ao) === 'sent'} />
+          <AOTrail projectId={project?.id} ao={ao} loaRequest={loaRequest} onOpenSOC={onOpenSOCForAO} placement="bottom" />
         </div>
       </div>
     </div>
