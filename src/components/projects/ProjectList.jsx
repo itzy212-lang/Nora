@@ -1,3 +1,4 @@
+import { aoNoNoticeDays } from '../../utils/aoAttention';
 import { useEffect, useState } from 'react';
 import { useApp } from '../../state/appStore';
 import { useProjects } from '../../hooks/useProjects';
@@ -38,6 +39,8 @@ export function getProjectColour(project) {
     if (hasSurveyor) return false;
     // 10(4)(b) served — not red
     if (ao.s104b_served_date || ao.s104bServedDate) return false;
+    // Added 7+ days ago with no notice served
+    if (aoNoNoticeDays(ao, project.created_at, now) !== null) return true;
     // Overdue consent deadline (only if not dissent)
     if (cd && new Date(cd).getTime() < now && !['consent','dissent'].includes(st)) return true;
     // Overdue S10 deadline (only if not dissent with surveyor)
@@ -160,6 +163,7 @@ function ProjectCard({ project, onClick }) {
       if (st === 'dissent' && !ao.surv_name && !ao.surveyorName && !ao.ao_surveyor_name && !ao.aoSurveyorName && !ao.agreed_surveyor) return { label: 'Dissent — no surveyor', colour: '#ef4444' };
       if (st === 'dissent') return null; // surveyor appointed — no urgent action
       if (st === 'consent') return { label: 'Consent received', colour: '#22c55e' };
+      { const nn = aoNoNoticeDays(ao, project.created_at); if (nn !== null) return { label: `No notice served (${nn}d)`, colour: '#ef4444' }; }
       if (st === 's10') {
         const sd = ao?.s10_deadline || ao?.s10Deadline || '';
         const days = sd ? Math.ceil((new Date(sd) - new Date()) / 86400000) : null;

@@ -1,3 +1,4 @@
+import { aoNoNoticeDays } from '../../utils/aoAttention';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../state/appStore';
 import sb from '../../supabaseClient';
@@ -135,9 +136,10 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const isProjectPaused = (p) => !!(p.paused_until && new Date(p.paused_until) > new Date());
 
   // Helper — does an AO show as RED on the project list (i.e. needs urgent attention)
-  const aoIsRed = (ao) => {
+  const aoIsRed = (ao, projectCreatedAt) => {
     const st = (ao?.status || '').toLowerCase();
     const now = Date.now();
+    if (aoNoNoticeDays(ao, projectCreatedAt, now) !== null) return true;
     if (ao?.award_served_date || ao?.awardServedDate || st === 'complete') return false;
     if (ao?.s104b_served_date || ao?.s104bServedDate) return false;
     const hasSurveyor = !!(ao?.surv_name || ao?.surveyorName || ao?.ao_surveyor_name || ao?.aoSurveyorName || ao?.agreed_surveyor || ao?.agreedSurveyor);
@@ -165,7 +167,7 @@ export default function Dashboard({ onNavigate, onOpenProject }) {
   const activeProjects = projects.filter(p => !isProjectClosed(p)).length;
 
   const needsAttention = projects.filter(p => !isProjectClosed(p) && !isProjectPaused(p)).reduce((sum, p) =>
-    sum + (p.aos || []).filter(aoIsRed).length, 0);
+    sum + (p.aos || []).filter(ao => aoIsRed(ao, p.created_at)).length, 0);
 
   // 2026-10-26: leads are stored as projects (stage 'lead') but have their
   // own Lead pipeline - they must not also count in the fee pipeline.
@@ -506,7 +508,10 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
 
             let level = null, reason = null, action = null;
 
-            if (st === 'award' && adDays !== null && adDays < 0) {
+            const noNoticeDays = aoNoNoticeDays(ao, p.created_at, now);
+            if (noNoticeDays !== null) {
+              level = 'red'; reason = `No notice served yet (${noNoticeDays}d since added)`; action = 'serve_notice';
+            } else if (st === 'award' && adDays !== null && adDays < 0) {
               level = 'red'; reason = `Award draft overdue (${Math.abs(adDays)}d)`; action = 'extend_award';
             } else if (st === 'award' && adDays !== null && adDays >= 0 && adDays <= 2) {
               level = 'amber'; reason = `Award draft due in ${adDays}d`; action = 'serve_award';
@@ -581,13 +586,13 @@ Give Itzik a concise briefing in 2-3 sentences. Start with "${greeting}, Itzik."
                           <span style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>✓ Done</span>
                         ) : (
                           <>
-                            <button
+                            {action !== 'serve_notice' && <button
                               disabled={actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading'}
                               onClick={() => handleGenerateNotice({ project: p, ao, action })}
                               style={{ fontSize: 11.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: level === 'red' ? '#ef4444' : '#f59e0b', color: '#fff', whiteSpace: 'nowrap', opacity: actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading' ? 0.6 : 1 }}
                             >
                               {actioningAOs[`${p.id}:${ao?.id || ao?.num}`] === 'loading' ? '…' : action === 's104b' ? '⚡ Confirm s.10(4)(b)' : action === 's10' ? '📋 Generate Section 10' : '👤 Add Surveyor'}
-                            </button>
+                            </button>}
                             <button
                               onClick={() => onOpenProject?.(p)}
                               style={{ fontSize: 11.5, fontWeight: 500, padding: '6px 10px', borderRadius: 8, border: '1px solid #e8eaed', cursor: 'pointer', background: '#fff', color: 'var(--text3)' }}

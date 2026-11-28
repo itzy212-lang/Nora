@@ -1,3 +1,4 @@
+import { aoNoNoticeDays } from '../../utils/aoAttention';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import NoraTyping from '../shared/NoraTyping';
 import { useApp } from '../../state/appStore';
@@ -380,11 +381,8 @@ function getAOStatusMeta(ao, projectRole = 'BO', addedAt = null) {
 
   // 28 Nov 2026, on request: an adjoining owner who has been added but had no notice served within 7 days goes red,
   // so a job cannot be forgotten. The generic Serve notice card below the AO cards is still where it gets served.
-  const addedMs = new Date(ao?.added_at || ao?.created_at || addedAt || 0).getTime();
-  if (!noticed && !isAOResolved(ao) && addedMs > 0) {
-    const daysSince = Math.floor((Date.now() - addedMs) / 86400000);
-    if (daysSince >= 7) return { label: `No notice served (${daysSince}d)`, colour: '#ef4444', action: null };
-  }
+  const noNotice = noticed ? null : aoNoNoticeDays(ao, addedAt);
+  if (noNotice !== null) return { label: `No notice served (${noNotice}d)`, colour: '#ef4444', action: null };
 
   // Fixed 2026-09-11, on request: this used to prompt "Serve notice"
   // on the AO card itself for an AO nothing has happened to yet —
