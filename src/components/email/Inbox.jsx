@@ -2459,7 +2459,13 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
     // background auto-sync, both light this up the same way.
     if (doIncremental) setCheckingForUpdates(true);
     try {
-      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(500);
+      // 28 Nov 2026: every folder is loaded together (each with its own limit) and the list on screen picks the
+      // folder locally. It used to load only the folder being viewed and reuse that list for all of them, so Sent and
+      // Others showed "No emails" until refresh, and refresh only fetched mail newer than the newest inbox email.
+      const ownEmail = state.currentUser?.email;
+      const incrementalFrom = doIncremental && newestDate ? new Date(new Date(newestDate).getTime() - 10 * 60 * 1000).toISOString() : null;
+      const buildQuery = (folder, limit) => {
+      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(limit);
       if (folder === 'Unread')  q = q.eq('is_read', false);
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
@@ -2497,10 +2503,20 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
         // "hide my own sent mail from Inbox" correct across every user
         // rather than just the one account this was originally written
         // for; a fixed string here silently misfires for anyone else.
-        const ownEmail = state.currentUser?.email;
         if (ownEmail) q = q.neq('sender_email', ownEmail);
       }
-      if (doIncremental && newestDate) q = q.gt('received_at', newestDate).limit(50);
+      if (incrementalFrom) q = q.gt('received_at', incrementalFrom).limit(50);
+      return q;
+      };
+      const FOLDER_LIMITS = [['Inbox', 500], ['Sent', 300], ['Others', 200], ['Drafts', 100], ['Junk', 100], ['Flagged', 100]];
+      const q = Promise.all(FOLDER_LIMITS.map(([f, limit]) => buildQuery(f, limit))).then(results => {
+        const failed = results.find(r => r.error);
+        if (failed) return { data: null, error: failed.error };
+        const byId = new Map();
+        for (const r of results) for (const e of r.data || []) byId.set(e.id, e);
+        const merged = [...byId.values()].sort((x, y) => String(y.received_at || '').localeCompare(String(x.received_at || '')));
+        return { data: merged, error: null };
+      });
       // Fixed 2026-09-17, defense-in-depth alongside the IndexedDB
       // fix above: this is the actual live Supabase query, and it had
       // no timeout at all — if the client's internal auth/session
@@ -2564,6 +2580,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       } else {
         dispatch({ type: 'SET_EMAILS', payload: newEmails });
         saveCachedEmails(newEmails); // persist the full load — added 2026-08-14
+        try { localStorage.setItem('nora_email_cache_scope', 'all-v1'); } catch {}
       }
       dispatch({ type: 'SET_EMAILS_LOADED_AT', payload: Date.now() });
     } catch (err) {
@@ -2638,10 +2655,12 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       // hasn't resolved in 4s, proceed as if the cache were empty
       // (falls through to a genuine fetch below) rather than leaving
       // the person staring at a spinner forever, regardless of cause.
-      const cached = await Promise.race([
+      let cached = await Promise.race([
         loadCachedEmails(),
         new Promise(resolve => setTimeout(() => resolve([]), 4000)),
       ]);
+      // A cache saved before every folder was loaded together only holds the inbox, so start again from the server once.
+      try { if (localStorage.getItem('nora_email_cache_scope') !== 'all-v1') cached = []; } catch { /* no storage: use as is */ }
       if (cancelled) return;
       setLoading(false);
       if (cached.length > 0) {
