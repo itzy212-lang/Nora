@@ -49,6 +49,8 @@ const isMobileWidth = (w) => w < 768;
 
 // 'Others' (27 Nov 2026): mail Outlook files under "Other" (or Gmail's Promotions/Social/Forums tabs).
 // It is saved only so it can be read here; Nora does nothing else with it (see api/lib/email-filters.js).
+// Everything except the search embedding and search index, which the list never uses and which made up a quarter of the data.
+const EMAIL_LIST_COLUMNS = 'id,created_at,user_id,provider,external_id,thread_id,subject,sender_name,body_preview,body,received_at,is_read,project_id,ai_summary,ai_category,sent_at,is_draft,folder,sender_email,to_emails,is_sent,is_replied,replied_at,reply_message_id,direction,is_reply,to_email,linked_by,link_confidence,link_reason,linked_at,cc_emails,bcc_emails,reply_to_emails,raw_recipients,link_status,project_match_confidence,project_match_source,manually_linked,flagged,flag_reason,ai_auto_responded,ai_auto_responded_at,nora_no_reply,junk_at,is_other';
 const FOLDERS = ['Inbox', 'Others', 'Unread', 'Flagged', 'Drafts', 'Sent', 'Junk'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2465,7 +2467,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       const ownEmail = state.currentUser?.email;
       const incrementalFrom = doIncremental && newestDate ? new Date(new Date(newestDate).getTime() - 10 * 60 * 1000).toISOString() : null;
       const buildQuery = (folder, limit) => {
-      let q = sb.from('emails').select('*').order('received_at', { ascending: false, nullsFirst: false }).limit(limit);
+      let q = sb.from('emails').select(EMAIL_LIST_COLUMNS).order('received_at', { ascending: false, nullsFirst: false }).limit(limit);
       if (folder === 'Unread')  q = q.eq('is_read', false);
       if (folder === 'Flagged') q = q.eq('flagged', true);
       if (folder === 'Drafts')  q = q.eq('is_draft', true);
@@ -2508,7 +2510,7 @@ export default function Inbox({ onOpenComposer, onNavigate, resetKey, onLoadMore
       if (incrementalFrom) q = q.gt('received_at', incrementalFrom).limit(50);
       return q;
       };
-      const FOLDER_LIMITS = [['Inbox', 500], ['Sent', 300], ['Others', 200], ['Drafts', 100], ['Junk', 100], ['Flagged', 100]];
+      const FOLDER_LIMITS = [['Inbox', 500], ['Sent', 100], ['Others', 50], ['Drafts', 50], ['Junk', 50], ['Flagged', 50]];
       const q = Promise.all(FOLDER_LIMITS.map(([f, limit]) => buildQuery(f, limit))).then(results => {
         // The inbox itself must load; a side folder failing just leaves that folder as it was.
         if (results[0].error) return { data: null, error: results[0].error };
