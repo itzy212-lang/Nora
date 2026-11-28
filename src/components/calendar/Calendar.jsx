@@ -775,7 +775,8 @@ export default function Calendar({ onOpenProject }) {
     }
 
     const todayDow = (new Date().getDay() + 6) % 7;
-    const cellH = Math.max(96, Math.floor((window.innerHeight * 0.74 - 120) / 6));
+    // Sized so the whole month fits on one screen without scrolling.
+    const cellH = Math.max(76, Math.floor((window.innerHeight - 260) / 6));
     const maxChips = Math.max(2, Math.floor((cellH - 32) / 19));
 
     return (
@@ -875,18 +876,6 @@ export default function Calendar({ onOpenProject }) {
             ))}
           </div>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14, padding: '10px 14px', background: '#fcfcfc', border: '1px solid #ececec', borderRadius: 10 }}>
-        {[['consent_deadline','Deadline'],['soc','SOC'],['meeting','Meeting/Call'],['todo','Task'],['notice_served','Notice served'],['site_visit','Site visit']].map(([k, lbl]) => {
-          const cfg = EVENT_TYPES[k];
-          return (
-            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--text2)' }}>
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: cfg.colour, flexShrink: 0 }} />
-              {lbl}
-            </div>
-          );
-        })}
       </div>
 
       {view === 'month' && renderMonth()}
