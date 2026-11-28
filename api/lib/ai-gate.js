@@ -27,9 +27,11 @@ export async function aiGate(req, res, feature) {
     const token = h.startsWith('Bearer ') ? h.slice(7).trim() : null;
     let userId = null;
     // Nora's own server (for example the Gmail sync asking for an email to be indexed) proves itself with the
-    // internal secret and names the user it is acting for; the check then applies to that user. With no user
+    // internal secret (or, from a Supabase function, the service key) and names the user it is acting for; the check then applies to that user. With no user
     // named there is nobody to check, so the call goes through.
-    if (token && process.env.CRON_SECRET && token === process.env.CRON_SECRET) {
+    // The Supabase functions (for example the Outlook sync) prove themselves with the service key they already hold.
+    const isInternal = !!token && ((process.env.CRON_SECRET && token === process.env.CRON_SECRET) || (process.env.SUPABASE_SERVICE_ROLE_KEY && token === process.env.SUPABASE_SERVICE_ROLE_KEY));
+    if (isInternal) {
       const named = String(req.headers?.['x-nora-user'] || '').trim();
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(named)) return { ok: true, userId: null };
       const result = await checkFeature(sb(), named, feature);

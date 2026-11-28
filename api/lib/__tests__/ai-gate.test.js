@@ -97,6 +97,16 @@ describe('enforcing', () => {
     state.plans[UID_TARGET].addons = ['assistant'];
     expect((await run('project_memory', mkReq({ authorization: 'Bearer internal-secret', 'x-nora-user': UID_TARGET }))).called).toBe(1);
   });
+  it('a Supabase function (service key) is checked as the user it names, like the internal secret', async () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key';
+    process.env.ENTITLEMENTS_ENFORCE = '1';
+    const asTarget = await run('project_memory', mkReq({ authorization: 'Bearer service-key', 'x-nora-user': UID_TARGET }));
+    expect(asTarget.called).toBe(0);
+    expect(asTarget.res.code).toBe(402);
+    const noUser = await run('project_memory', mkReq({ authorization: 'Bearer service-key' }));
+    expect(noUser.called).toBe(1);
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  });
   it('a wrong internal secret is just treated as a bad sign-in', async () => {
     const { res, called } = await run('ai_tools', mkReq({ authorization: 'Bearer not-the-secret', 'x-nora-user': UID_ASSIST }));
     expect(called).toBe(0);
